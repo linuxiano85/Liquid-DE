@@ -1,0 +1,6299 @@
+{
+ "versione": 1,
+ "comandi": [
+  {
+   "comando": "pwd",
+   "descrizione": "Stampa la cartella in cui ti trovi (print working directory).",
+   "categoria": "file",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-P",
+     "spiegazione": "il percorso fisico, con i collegamenti simbolici risolti"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "pwd",
+     "spiegazione": "dice dove sei, per esteso"
+    }
+   ]
+  },
+  {
+   "comando": "ls",
+   "descrizione": "Elenca i file e le cartelle. Da solo mostra quelli della cartella in cui sei.",
+   "categoria": "file",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-l",
+     "spiegazione": "una riga per file, con permessi, proprietario, dimensione e data"
+    },
+    {
+     "flag": "-a",
+     "spiegazione": "anche i file nascosti (quelli che cominciano con un punto)"
+    },
+    {
+     "flag": "-h",
+     "spiegazione": "dimensioni leggibili: K, M, G invece di byte"
+    },
+    {
+     "flag": "-t",
+     "spiegazione": "in ordine di data, i più recenti prima"
+    },
+    {
+     "flag": "-r",
+     "spiegazione": "in ordine inverso"
+    },
+    {
+     "flag": "-S",
+     "spiegazione": "in ordine di dimensione, i più grandi prima"
+    },
+    {
+     "flag": "-R",
+     "spiegazione": "anche dentro le sottocartelle, ricorsivamente"
+    },
+    {
+     "flag": "-d",
+     "spiegazione": "la cartella stessa, non il suo contenuto"
+    },
+    {
+     "flag": "--color=auto",
+     "spiegazione": "colora i nomi per tipo, solo su un terminale"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "ls -la",
+     "spiegazione": "tutto, anche i nascosti, una riga per file"
+    },
+    {
+     "comando": "ls -lh",
+     "spiegazione": "con le dimensioni in K, M, G"
+    },
+    {
+     "comando": "ls -lt",
+     "spiegazione": "i file toccati più di recente in cima"
+    },
+    {
+     "comando": "ls -lS",
+     "spiegazione": "i più grandi in cima"
+    },
+    {
+     "comando": "ls Documenti",
+     "spiegazione": "il contenuto di un'altra cartella"
+    }
+   ],
+   "vedi": [
+    "tree",
+    "find",
+    "stat"
+   ]
+  },
+  {
+   "comando": "cd",
+   "descrizione": "Cambia cartella. Da solo torna a casa (`~`); `cd -` torna a quella di prima.",
+   "categoria": "file",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-",
+     "spiegazione": "torna alla cartella precedente"
+    },
+    {
+     "flag": "..",
+     "spiegazione": "sale alla cartella che contiene questa"
+    },
+    {
+     "flag": "~",
+     "spiegazione": "la tua cartella personale"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "cd Documenti",
+     "spiegazione": "entra in Documenti"
+    },
+    {
+     "comando": "cd ..",
+     "spiegazione": "sale di un livello"
+    },
+    {
+     "comando": "cd",
+     "spiegazione": "torna a casa"
+    },
+    {
+     "comando": "cd -",
+     "spiegazione": "torna dov'eri prima"
+    },
+    {
+     "comando": "cd /etc",
+     "spiegazione": "va in una cartella per percorso assoluto"
+    }
+   ],
+   "vedi": [
+    "pwd",
+    "ls",
+    "pushd"
+   ]
+  },
+  {
+   "comando": "mkdir",
+   "descrizione": "Crea una cartella.",
+   "categoria": "file",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-p",
+     "spiegazione": "crea anche le cartelle intermedie, e non protesta se esiste già"
+    },
+    {
+     "flag": "-v",
+     "spiegazione": "dice cosa ha creato"
+    },
+    {
+     "flag": "-m MODO",
+     "spiegazione": "con questi permessi (per esempio 700)"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "mkdir prove",
+     "spiegazione": "una cartella nuova"
+    },
+    {
+     "comando": "mkdir -p progetti/2026/settembre",
+     "spiegazione": "tutta la catena in un colpo"
+    },
+    {
+     "comando": "mkdir -m 700 privata",
+     "spiegazione": "una cartella che solo tu puoi aprire"
+    }
+   ],
+   "vedi": [
+    "rmdir",
+    "cd",
+    "ls"
+   ]
+  },
+  {
+   "comando": "rmdir",
+   "descrizione": "Toglie una cartella, solo se è vuota.",
+   "categoria": "file",
+   "livello": 1,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-p",
+     "spiegazione": "toglie anche le cartelle intermedie rimaste vuote"
+    },
+    {
+     "flag": "-v",
+     "spiegazione": "dice cosa ha tolto"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "rmdir prove",
+     "spiegazione": "via la cartella, se non c'è niente dentro"
+    }
+   ],
+   "vedi": [
+    "rm",
+    "mkdir"
+   ]
+  },
+  {
+   "comando": "touch",
+   "descrizione": "Crea un file vuoto, o aggiorna la data di uno che esiste già.",
+   "categoria": "file",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-a",
+     "spiegazione": "aggiorna solo la data di accesso"
+    },
+    {
+     "flag": "-m",
+     "spiegazione": "aggiorna solo la data di modifica"
+    },
+    {
+     "flag": "-c",
+     "spiegazione": "non crea il file se non esiste"
+    },
+    {
+     "flag": "-d DATA",
+     "spiegazione": "imposta questa data invece di adesso"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "touch appunti.txt",
+     "spiegazione": "un file vuoto nuovo"
+    },
+    {
+     "comando": "touch -d '2026-01-01' vecchio.txt",
+     "spiegazione": "gli dà una data a scelta"
+    }
+   ],
+   "vedi": [
+    "mkdir",
+    "stat"
+   ]
+  },
+  {
+   "comando": "cp",
+   "descrizione": "Copia file e cartelle.",
+   "categoria": "file",
+   "livello": 1,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-r",
+     "spiegazione": "ricorsivo: serve per copiare una cartella con tutto dentro"
+    },
+    {
+     "flag": "-i",
+     "spiegazione": "chiede prima di sovrascrivere"
+    },
+    {
+     "flag": "-n",
+     "spiegazione": "non sovrascrive mai"
+    },
+    {
+     "flag": "-v",
+     "spiegazione": "dice cosa sta copiando"
+    },
+    {
+     "flag": "-a",
+     "spiegazione": "archivio: conserva permessi, date e collegamenti (come una copia fedele)"
+    },
+    {
+     "flag": "-u",
+     "spiegazione": "solo se la sorgente è più nuova della destinazione"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "cp appunti.txt copia.txt",
+     "spiegazione": "una copia con un altro nome"
+    },
+    {
+     "comando": "cp appunti.txt Documenti/",
+     "spiegazione": "una copia dentro un'altra cartella"
+    },
+    {
+     "comando": "cp -r progetto progetto-backup",
+     "spiegazione": "tutta una cartella"
+    },
+    {
+     "comando": "cp -a /etc/nginx nginx-salvato",
+     "spiegazione": "una copia fedele, con permessi e date"
+    }
+   ],
+   "vedi": [
+    "mv",
+    "rsync",
+    "scp"
+   ]
+  },
+  {
+   "comando": "mv",
+   "descrizione": "Sposta o rinomina file e cartelle.",
+   "categoria": "file",
+   "livello": 1,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-i",
+     "spiegazione": "chiede prima di sovrascrivere"
+    },
+    {
+     "flag": "-n",
+     "spiegazione": "non sovrascrive mai"
+    },
+    {
+     "flag": "-v",
+     "spiegazione": "dice cosa sta spostando"
+    },
+    {
+     "flag": "-b",
+     "spiegazione": "fa una copia di sicurezza di quello che sovrascrive"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "mv vecchio.txt nuovo.txt",
+     "spiegazione": "rinomina"
+    },
+    {
+     "comando": "mv appunti.txt Documenti/",
+     "spiegazione": "sposta in un'altra cartella"
+    },
+    {
+     "comando": "mv -i *.jpg Immagini/",
+     "spiegazione": "tutte le foto, chiedendo se ce n'è già una uguale"
+    }
+   ],
+   "vedi": [
+    "cp",
+    "rename"
+   ]
+  },
+  {
+   "comando": "rm",
+   "descrizione": "Cancella file. Non passa dal cestino: quello che togli non torna.",
+   "categoria": "file",
+   "livello": 1,
+   "pericolo": 3,
+   "opzioni": [
+    {
+     "flag": "-r",
+     "spiegazione": "ricorsivo: cancella una cartella con tutto quello che contiene"
+    },
+    {
+     "flag": "-f",
+     "spiegazione": "forza: non chiede e non protesta se un file non c'è"
+    },
+    {
+     "flag": "-i",
+     "spiegazione": "chiede conferma per ogni file"
+    },
+    {
+     "flag": "-I",
+     "spiegazione": "chiede conferma una volta sola quando i file sono più di tre"
+    },
+    {
+     "flag": "-v",
+     "spiegazione": "dice cosa sta cancellando"
+    },
+    {
+     "flag": "--",
+     "spiegazione": "da qui in poi sono nomi, anche se cominciano con un trattino"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "rm appunti.txt",
+     "spiegazione": "un file"
+    },
+    {
+     "comando": "rm -i *.tmp",
+     "spiegazione": "tutti i .tmp, chiedendo uno per uno"
+    },
+    {
+     "comando": "rm -r prove",
+     "spiegazione": "una cartella intera"
+    },
+    {
+     "comando": "rm -rf build",
+     "spiegazione": "una cartella intera senza chiedere: da usare sapendo cosa c'è dentro"
+    }
+   ],
+   "vedi": [
+    "rmdir",
+    "trash",
+    "shred"
+   ]
+  },
+  {
+   "comando": "cat",
+   "descrizione": "Mostra il contenuto di uno o più file, tutto di fila. Concatenati (da qui il nome).",
+   "categoria": "testo",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-n",
+     "spiegazione": "numera le righe"
+    },
+    {
+     "flag": "-b",
+     "spiegazione": "numera solo le righe non vuote"
+    },
+    {
+     "flag": "-A",
+     "spiegazione": "mostra anche i caratteri invisibili (tab, fine riga)"
+    },
+    {
+     "flag": "-s",
+     "spiegazione": "comprime le righe vuote consecutive in una"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "cat appunti.txt",
+     "spiegazione": "il file, sullo schermo"
+    },
+    {
+     "comando": "cat -n script.sh",
+     "spiegazione": "con i numeri di riga"
+    },
+    {
+     "comando": "cat a.txt b.txt > tutto.txt",
+     "spiegazione": "due file uniti in un terzo"
+    }
+   ],
+   "vedi": [
+    "less",
+    "head",
+    "tail",
+    "tac"
+   ]
+  },
+  {
+   "comando": "less",
+   "descrizione": "Mostra un file una pagina alla volta. Spazio avanti, `b` indietro, `/` cerca, `q` esce.",
+   "categoria": "testo",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-N",
+     "spiegazione": "numera le righe"
+    },
+    {
+     "flag": "-S",
+     "spiegazione": "non manda a capo le righe lunghe"
+    },
+    {
+     "flag": "-i",
+     "spiegazione": "la ricerca ignora maiuscole e minuscole"
+    },
+    {
+     "flag": "+F",
+     "spiegazione": "segue il file mentre cresce (come tail -f, con Ctrl+C per fermarsi)"
+    },
+    {
+     "flag": "-R",
+     "spiegazione": "lascia passare i colori"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "less registro.log",
+     "spiegazione": "sfoglia un file lungo"
+    },
+    {
+     "comando": "less -N config.txt",
+     "spiegazione": "con i numeri di riga"
+    },
+    {
+     "comando": "ls -la | less",
+     "spiegazione": "l'uscita di un altro comando, a pagine"
+    }
+   ],
+   "vedi": [
+    "more",
+    "cat",
+    "tail"
+   ]
+  },
+  {
+   "comando": "more",
+   "descrizione": "Come `less`, ma più semplice: va solo avanti.",
+   "categoria": "testo",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-d",
+     "spiegazione": "mostra i suggerimenti su cosa premere"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "more appunti.txt",
+     "spiegazione": "il file, una pagina alla volta"
+    }
+   ],
+   "vedi": [
+    "less"
+   ]
+  },
+  {
+   "comando": "man",
+   "descrizione": "Il manuale di un comando: cosa fa e tutte le sue opzioni. `q` per uscire.",
+   "categoria": "aiuto",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-k PAROLA",
+     "spiegazione": "cerca una parola in tutti i manuali"
+    },
+    {
+     "flag": "-f COMANDO",
+     "spiegazione": "una riga sola: cos'è"
+    },
+    {
+     "flag": "N COMANDO",
+     "spiegazione": "la sezione N (1 comandi, 5 file di configurazione, 8 amministrazione)"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "man ls",
+     "spiegazione": "il manuale di ls"
+    },
+    {
+     "comando": "man -k copia",
+     "spiegazione": "quali manuali parlano di copiare"
+    },
+    {
+     "comando": "man 5 passwd",
+     "spiegazione": "il formato del file /etc/passwd, non il comando"
+    }
+   ],
+   "vedi": [
+    "--help",
+    "info",
+    "tldr",
+    "whatis"
+   ]
+  },
+  {
+   "comando": "--help",
+   "descrizione": "Quasi ogni comando risponde a `--help` con un riassunto delle sue opzioni.",
+   "categoria": "aiuto",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "ls --help",
+     "spiegazione": "le opzioni di ls, in breve"
+    },
+    {
+     "comando": "git commit --help",
+     "spiegazione": "per git apre il manuale della sottoparola"
+    }
+   ],
+   "vedi": [
+    "man"
+   ]
+  },
+  {
+   "comando": "whatis",
+   "descrizione": "Una riga: cos'è questo comando.",
+   "categoria": "aiuto",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "whatis grep",
+     "spiegazione": "«grep - print lines that match patterns»"
+    }
+   ],
+   "vedi": [
+    "man",
+    "which"
+   ]
+  },
+  {
+   "comando": "which",
+   "descrizione": "Dice quale programma verrà eseguito scrivendo quel nome: il suo percorso nel PATH.",
+   "categoria": "aiuto",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-a",
+     "spiegazione": "tutti quelli che trova, non solo il primo"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "which python",
+     "spiegazione": "per esempio /usr/bin/python"
+    },
+    {
+     "comando": "which -a pip",
+     "spiegazione": "tutte le copie nel PATH"
+    }
+   ],
+   "vedi": [
+    "type",
+    "whereis",
+    "command"
+   ]
+  },
+  {
+   "comando": "type",
+   "descrizione": "Dice cos'è un nome per la shell: un alias, una funzione, un comando interno, o un programma.",
+   "categoria": "aiuto",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-a",
+     "spiegazione": "tutte le definizioni, non solo la prima"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "type ls",
+     "spiegazione": "spesso «ls is aliased to ls --color=auto»"
+    },
+    {
+     "comando": "type cd",
+     "spiegazione": "«cd is a shell builtin»"
+    }
+   ],
+   "vedi": [
+    "which",
+    "alias"
+   ]
+  },
+  {
+   "comando": "tree",
+   "descrizione": "L'albero di una cartella, disegnato.",
+   "categoria": "file",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-L N",
+     "spiegazione": "solo fino a N livelli di profondità"
+    },
+    {
+     "flag": "-a",
+     "spiegazione": "anche i file nascosti"
+    },
+    {
+     "flag": "-d",
+     "spiegazione": "solo le cartelle"
+    },
+    {
+     "flag": "-h",
+     "spiegazione": "con le dimensioni"
+    },
+    {
+     "flag": "-I MOTIVO",
+     "spiegazione": "ignora i nomi che corrispondono (per esempio node_modules)"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "tree -L 2",
+     "spiegazione": "due livelli, non di più"
+    },
+    {
+     "comando": "tree -d",
+     "spiegazione": "solo le cartelle"
+    },
+    {
+     "comando": "tree -I 'node_modules|.git'",
+     "spiegazione": "senza le cartelle pesanti"
+    }
+   ],
+   "vedi": [
+    "ls",
+    "find"
+   ]
+  },
+  {
+   "comando": "file",
+   "descrizione": "Dice che tipo di file è, guardandone il contenuto e non il nome.",
+   "categoria": "file",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-b",
+     "spiegazione": "senza ripetere il nome del file"
+    },
+    {
+     "flag": "-i",
+     "spiegazione": "il tipo MIME (text/plain, image/png…)"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "file foto.jpg",
+     "spiegazione": "«JPEG image data, 4000x3000»"
+    },
+    {
+     "comando": "file -i documento",
+     "spiegazione": "il tipo MIME"
+    }
+   ],
+   "vedi": [
+    "stat",
+    "ls"
+   ]
+  },
+  {
+   "comando": "stat",
+   "descrizione": "Tutto su un file: dimensione, permessi, proprietario, le tre date, gli inode.",
+   "categoria": "file",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-c FORMATO",
+     "spiegazione": "solo i campi che chiedi (%s dimensione, %U proprietario, %y data)"
+    },
+    {
+     "flag": "-f",
+     "spiegazione": "informazioni sul filesystem invece che sul file"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "stat appunti.txt",
+     "spiegazione": "tutto"
+    },
+    {
+     "comando": "stat -c '%s %n' *",
+     "spiegazione": "dimensione e nome di ogni file"
+    }
+   ],
+   "vedi": [
+    "ls",
+    "file",
+    "du"
+   ]
+  },
+  {
+   "comando": "echo",
+   "descrizione": "Stampa quello che gli dai. Serve per vedere variabili, e per scrivere in un file con `>`.",
+   "categoria": "testo",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-n",
+     "spiegazione": "senza andare a capo alla fine"
+    },
+    {
+     "flag": "-e",
+     "spiegazione": "interpreta le sequenze come \\n (a capo) e \\t (tab)"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "echo ciao",
+     "spiegazione": "stampa «ciao»"
+    },
+    {
+     "comando": "echo $HOME",
+     "spiegazione": "il valore di una variabile"
+    },
+    {
+     "comando": "echo 'riga nuova' >> appunti.txt",
+     "spiegazione": "aggiunge una riga in fondo a un file"
+    },
+    {
+     "comando": "echo -e 'uno\\ndue'",
+     "spiegazione": "due righe"
+    }
+   ],
+   "vedi": [
+    "printf",
+    "cat"
+   ]
+  },
+  {
+   "comando": "printf",
+   "descrizione": "Come `echo`, ma con un formato: numeri allineati, decimali, colonne.",
+   "categoria": "testo",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "%s",
+     "spiegazione": "una stringa"
+    },
+    {
+     "flag": "%d",
+     "spiegazione": "un intero"
+    },
+    {
+     "flag": "%.2f",
+     "spiegazione": "un decimale con due cifre"
+    },
+    {
+     "flag": "%-10s",
+     "spiegazione": "una stringa allineata a sinistra in dieci caratteri"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "printf '%s\\n' ciao",
+     "spiegazione": "stampa e va a capo"
+    },
+    {
+     "comando": "printf '%-10s %5d\\n' mele 12",
+     "spiegazione": "colonne allineate"
+    }
+   ],
+   "vedi": [
+    "echo"
+   ]
+  },
+  {
+   "comando": "clear",
+   "descrizione": "Pulisce lo schermo del terminale. Anche Ctrl+L.",
+   "categoria": "terminale",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "clear",
+     "spiegazione": "schermo vuoto, il cursore in alto"
+    }
+   ],
+   "vedi": [
+    "reset"
+   ]
+  },
+  {
+   "comando": "reset",
+   "descrizione": "Rimette il terminale in sesto quando un programma l'ha lasciato strano (caratteri illeggibili, niente eco).",
+   "categoria": "terminale",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "reset",
+     "spiegazione": "dopo un `cat` di un file binario finito male"
+    }
+   ],
+   "vedi": [
+    "clear",
+    "stty"
+   ]
+  },
+  {
+   "comando": "history",
+   "descrizione": "La storia dei comandi che hai dato. `!N` ripete il numero N, `!!` l'ultimo.",
+   "categoria": "terminale",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "N",
+     "spiegazione": "solo gli ultimi N"
+    },
+    {
+     "flag": "-c",
+     "spiegazione": "cancella la storia (bash)"
+    },
+    {
+     "flag": "| grep PAROLA",
+     "spiegazione": "cerca nella storia"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "history",
+     "spiegazione": "tutto"
+    },
+    {
+     "comando": "history 20",
+     "spiegazione": "gli ultimi venti"
+    },
+    {
+     "comando": "history | grep ssh",
+     "spiegazione": "tutte le volte che hai usato ssh"
+    }
+   ],
+   "vedi": [
+    "fc",
+    "alias"
+   ]
+  },
+  {
+   "comando": "alias",
+   "descrizione": "Un nome corto per un comando lungo. Da solo elenca quelli definiti.",
+   "categoria": "terminale",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "alias ll='ls -la'",
+     "spiegazione": "da ora `ll` fa `ls -la`"
+    },
+    {
+     "comando": "alias",
+     "spiegazione": "quali alias ci sono"
+    },
+    {
+     "comando": "unalias ll",
+     "spiegazione": "lo toglie"
+    }
+   ],
+   "vedi": [
+    "type",
+    "unalias"
+   ]
+  },
+  {
+   "comando": "exit",
+   "descrizione": "Chiude la shell (e la scheda del terminale). Anche Ctrl+D.",
+   "categoria": "terminale",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "N",
+     "spiegazione": "esce con il codice N (0 = tutto bene)"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "exit",
+     "spiegazione": "chiude"
+    },
+    {
+     "comando": "exit 1",
+     "spiegazione": "chiude dicendo che qualcosa è andato storto"
+    }
+   ],
+   "vedi": [
+    "logout"
+   ]
+  },
+  {
+   "comando": "grep",
+   "descrizione": "Cerca un testo (o un'espressione regolare) dentro i file, e stampa le righe che lo contengono.",
+   "categoria": "testo",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-i",
+     "spiegazione": "ignora maiuscole e minuscole"
+    },
+    {
+     "flag": "-r",
+     "spiegazione": "ricorsivo: in tutti i file dentro una cartella"
+    },
+    {
+     "flag": "-n",
+     "spiegazione": "con il numero di riga"
+    },
+    {
+     "flag": "-v",
+     "spiegazione": "al contrario: le righe che NON contengono il testo"
+    },
+    {
+     "flag": "-l",
+     "spiegazione": "solo i nomi dei file che contengono il testo"
+    },
+    {
+     "flag": "-c",
+     "spiegazione": "quante righe corrispondono, per file"
+    },
+    {
+     "flag": "-w",
+     "spiegazione": "solo parole intere"
+    },
+    {
+     "flag": "-E",
+     "spiegazione": "espressioni regolari estese (con | + ? { })"
+    },
+    {
+     "flag": "-A N / -B N / -C N",
+     "spiegazione": "N righe dopo / prima / intorno a ogni corrispondenza"
+    },
+    {
+     "flag": "--include='*.py'",
+     "spiegazione": "solo i file con questo nome"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "grep errore registro.log",
+     "spiegazione": "le righe con «errore»"
+    },
+    {
+     "comando": "grep -i errore registro.log",
+     "spiegazione": "anche «Errore» ed «ERRORE»"
+    },
+    {
+     "comando": "grep -rn 'TODO' src/",
+     "spiegazione": "in tutti i file di src, con file e riga"
+    },
+    {
+     "comando": "grep -v '^#' config.txt",
+     "spiegazione": "senza i commenti"
+    },
+    {
+     "comando": "ps aux | grep firefox",
+     "spiegazione": "cerca nell'uscita di un altro comando"
+    },
+    {
+     "comando": "grep -E 'gatto|cane' animali.txt",
+     "spiegazione": "l'una o l'altra parola"
+    }
+   ],
+   "vedi": [
+    "rg",
+    "find",
+    "sed",
+    "awk"
+   ]
+  },
+  {
+   "comando": "rg",
+   "descrizione": "ripgrep: come `grep -r`, ma molto più veloce e ignora da solo .git e i file binari.",
+   "categoria": "testo",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-i",
+     "spiegazione": "ignora maiuscole e minuscole"
+    },
+    {
+     "flag": "-l",
+     "spiegazione": "solo i nomi dei file"
+    },
+    {
+     "flag": "-t TIPO",
+     "spiegazione": "solo i file di un tipo (py, js, md…)"
+    },
+    {
+     "flag": "-g MOTIVO",
+     "spiegazione": "solo i file con questo nome"
+    },
+    {
+     "flag": "--hidden",
+     "spiegazione": "anche i file nascosti"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "rg 'TODO'",
+     "spiegazione": "in tutto il progetto"
+    },
+    {
+     "comando": "rg -t py 'import os'",
+     "spiegazione": "solo nei .py"
+    }
+   ],
+   "vedi": [
+    "grep"
+   ]
+  },
+  {
+   "comando": "find",
+   "descrizione": "Cerca file per nome, tipo, dimensione, data — e può fare qualcosa a ognuno di quelli trovati.",
+   "categoria": "file",
+   "livello": 2,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-name MOTIVO",
+     "spiegazione": "per nome (con * e ?; fra virgolette)"
+    },
+    {
+     "flag": "-iname MOTIVO",
+     "spiegazione": "per nome, ignorando maiuscole e minuscole"
+    },
+    {
+     "flag": "-type f / d",
+     "spiegazione": "solo file / solo cartelle"
+    },
+    {
+     "flag": "-size +100M",
+     "spiegazione": "più grandi di 100 MB (-100M più piccoli)"
+    },
+    {
+     "flag": "-mtime -7",
+     "spiegazione": "modificati negli ultimi sette giorni"
+    },
+    {
+     "flag": "-newer FILE",
+     "spiegazione": "più nuovi di quel file"
+    },
+    {
+     "flag": "-empty",
+     "spiegazione": "vuoti"
+    },
+    {
+     "flag": "-exec CMD {} \\;",
+     "spiegazione": "esegue CMD su ogni file trovato ({} è il nome)"
+    },
+    {
+     "flag": "-delete",
+     "spiegazione": "cancella quelli trovati: da provare PRIMA senza"
+    },
+    {
+     "flag": "-maxdepth N",
+     "spiegazione": "non scende oltre N livelli"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "find . -name '*.jpg'",
+     "spiegazione": "tutte le foto da qui in giù"
+    },
+    {
+     "comando": "find /var/log -type f -size +10M",
+     "spiegazione": "i file di registro pesanti"
+    },
+    {
+     "comando": "find . -mtime -1",
+     "spiegazione": "toccati nell'ultimo giorno"
+    },
+    {
+     "comando": "find . -name '*.tmp' -delete",
+     "spiegazione": "cancella i temporanei (prima guarda cosa trova, senza -delete)"
+    },
+    {
+     "comando": "find . -type f -exec wc -l {} \\;",
+     "spiegazione": "conta le righe di ogni file"
+    }
+   ],
+   "vedi": [
+    "locate",
+    "fd",
+    "grep",
+    "xargs"
+   ]
+  },
+  {
+   "comando": "fd",
+   "descrizione": "Un `find` più semplice e veloce: `fd MOTIVO` e basta.",
+   "categoria": "file",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-e EST",
+     "spiegazione": "solo questa estensione"
+    },
+    {
+     "flag": "-t f / d",
+     "spiegazione": "solo file / cartelle"
+    },
+    {
+     "flag": "-H",
+     "spiegazione": "anche i nascosti"
+    },
+    {
+     "flag": "-x CMD",
+     "spiegazione": "esegue CMD su ognuno"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "fd '\\.jpg$'",
+     "spiegazione": "tutte le foto"
+    },
+    {
+     "comando": "fd -e py",
+     "spiegazione": "tutti i .py"
+    }
+   ],
+   "vedi": [
+    "find"
+   ]
+  },
+  {
+   "comando": "locate",
+   "descrizione": "Trova file per nome in un indice di tutto il disco: istantaneo, ma l'indice si aggiorna con `updatedb`.",
+   "categoria": "file",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-i",
+     "spiegazione": "ignora maiuscole e minuscole"
+    },
+    {
+     "flag": "-c",
+     "spiegazione": "solo quanti"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "locate appunti.txt",
+     "spiegazione": "dove sta, ovunque sia"
+    }
+   ],
+   "vedi": [
+    "find",
+    "updatedb"
+   ]
+  },
+  {
+   "comando": "wc",
+   "descrizione": "Conta righe, parole e caratteri (word count).",
+   "categoria": "testo",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-l",
+     "spiegazione": "solo le righe"
+    },
+    {
+     "flag": "-w",
+     "spiegazione": "solo le parole"
+    },
+    {
+     "flag": "-c",
+     "spiegazione": "solo i byte"
+    },
+    {
+     "flag": "-m",
+     "spiegazione": "solo i caratteri"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "wc -l appunti.txt",
+     "spiegazione": "quante righe"
+    },
+    {
+     "comando": "ls | wc -l",
+     "spiegazione": "quanti file nella cartella"
+    },
+    {
+     "comando": "cat *.txt | wc -w",
+     "spiegazione": "quante parole in tutto"
+    }
+   ],
+   "vedi": [
+    "grep -c",
+    "du"
+   ]
+  },
+  {
+   "comando": "head",
+   "descrizione": "Le prime righe di un file (dieci, di serie).",
+   "categoria": "testo",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-n N",
+     "spiegazione": "le prime N righe"
+    },
+    {
+     "flag": "-c N",
+     "spiegazione": "i primi N byte"
+    },
+    {
+     "flag": "-n -N",
+     "spiegazione": "tutto tranne le ultime N"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "head registro.log",
+     "spiegazione": "le prime dieci"
+    },
+    {
+     "comando": "head -n 3 appunti.txt",
+     "spiegazione": "le prime tre"
+    },
+    {
+     "comando": "ls -S | head -n 5",
+     "spiegazione": "i cinque file più grandi"
+    }
+   ],
+   "vedi": [
+    "tail",
+    "less",
+    "sed"
+   ]
+  },
+  {
+   "comando": "tail",
+   "descrizione": "Le ultime righe di un file. Con `-f` continua a mostrare quello che arriva: il modo di guardare un registro dal vivo.",
+   "categoria": "testo",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-n N",
+     "spiegazione": "le ultime N righe"
+    },
+    {
+     "flag": "-f",
+     "spiegazione": "segue il file mentre cresce (Ctrl+C per smettere)"
+    },
+    {
+     "flag": "-F",
+     "spiegazione": "come -f, ma riapre il file se viene ricreato"
+    },
+    {
+     "flag": "-n +N",
+     "spiegazione": "dalla riga N in poi"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "tail registro.log",
+     "spiegazione": "le ultime dieci"
+    },
+    {
+     "comando": "tail -f /var/log/syslog",
+     "spiegazione": "il registro dal vivo"
+    },
+    {
+     "comando": "tail -n 50 errori.log",
+     "spiegazione": "le ultime cinquanta"
+    }
+   ],
+   "vedi": [
+    "head",
+    "less +F",
+    "journalctl -f"
+   ]
+  },
+  {
+   "comando": "sort",
+   "descrizione": "Mette in ordine le righe.",
+   "categoria": "testo",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-n",
+     "spiegazione": "in ordine numerico (10 dopo 9, non dopo 1)"
+    },
+    {
+     "flag": "-r",
+     "spiegazione": "al contrario"
+    },
+    {
+     "flag": "-u",
+     "spiegazione": "senza doppioni"
+    },
+    {
+     "flag": "-k N",
+     "spiegazione": "per la colonna N"
+    },
+    {
+     "flag": "-t SEP",
+     "spiegazione": "le colonne sono separate da SEP"
+    },
+    {
+     "flag": "-h",
+     "spiegazione": "numeri leggibili (2K, 1G)"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sort nomi.txt",
+     "spiegazione": "alfabetico"
+    },
+    {
+     "comando": "sort -n numeri.txt",
+     "spiegazione": "numerico"
+    },
+    {
+     "comando": "du -h | sort -h",
+     "spiegazione": "le cartelle per dimensione"
+    },
+    {
+     "comando": "sort -t: -k3 -n /etc/passwd",
+     "spiegazione": "gli utenti per numero"
+    }
+   ],
+   "vedi": [
+    "uniq",
+    "wc"
+   ]
+  },
+  {
+   "comando": "uniq",
+   "descrizione": "Toglie le righe doppie CONSECUTIVE: si usa dopo `sort`.",
+   "categoria": "testo",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-c",
+     "spiegazione": "conta quante volte compare ogni riga"
+    },
+    {
+     "flag": "-d",
+     "spiegazione": "solo le righe duplicate"
+    },
+    {
+     "flag": "-u",
+     "spiegazione": "solo le righe uniche"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sort parole.txt | uniq",
+     "spiegazione": "ogni parola una volta"
+    },
+    {
+     "comando": "sort parole.txt | uniq -c | sort -rn",
+     "spiegazione": "le parole più frequenti in cima"
+    }
+   ],
+   "vedi": [
+    "sort"
+   ]
+  },
+  {
+   "comando": "cut",
+   "descrizione": "Prende solo alcune colonne da ogni riga.",
+   "categoria": "testo",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-d SEP",
+     "spiegazione": "le colonne sono separate da SEP"
+    },
+    {
+     "flag": "-f N",
+     "spiegazione": "la colonna N (o 1,3 o 2-4)"
+    },
+    {
+     "flag": "-c N-M",
+     "spiegazione": "i caratteri da N a M"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "cut -d: -f1 /etc/passwd",
+     "spiegazione": "solo i nomi utente"
+    },
+    {
+     "comando": "cut -c1-10 file.txt",
+     "spiegazione": "i primi dieci caratteri di ogni riga"
+    }
+   ],
+   "vedi": [
+    "awk",
+    "tr",
+    "paste"
+   ]
+  },
+  {
+   "comando": "tr",
+   "descrizione": "Sostituisce o toglie caratteri (translate).",
+   "categoria": "testo",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-d SET",
+     "spiegazione": "toglie questi caratteri"
+    },
+    {
+     "flag": "-s SET",
+     "spiegazione": "comprime le ripetizioni"
+    },
+    {
+     "flag": "a-z A-Z",
+     "spiegazione": "da minuscole a maiuscole"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "echo ciao | tr a-z A-Z",
+     "spiegazione": "CIAO"
+    },
+    {
+     "comando": "tr -d '\\r' < dos.txt > unix.txt",
+     "spiegazione": "toglie i ritorni a capo di Windows"
+    }
+   ],
+   "vedi": [
+    "sed",
+    "cut"
+   ]
+  },
+  {
+   "comando": "tee",
+   "descrizione": "Scrive l'uscita di un comando in un file E la mostra a schermo, insieme.",
+   "categoria": "testo",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-a",
+     "spiegazione": "aggiunge in fondo invece di sovrascrivere"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "make 2>&1 | tee compila.log",
+     "spiegazione": "vedi la compilazione e la salvi"
+    },
+    {
+     "comando": "echo riga | sudo tee -a /etc/hosts",
+     "spiegazione": "scrive in un file di root da un comando tuo"
+    }
+   ],
+   "vedi": [
+    ">",
+    ">>"
+   ]
+  },
+  {
+   "comando": "diff",
+   "descrizione": "Le differenze fra due file, riga per riga.",
+   "categoria": "testo",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-u",
+     "spiegazione": "formato unificato, quello delle patch e di git"
+    },
+    {
+     "flag": "-r",
+     "spiegazione": "confronta due cartelle"
+    },
+    {
+     "flag": "-q",
+     "spiegazione": "dice solo SE sono diversi"
+    },
+    {
+     "flag": "-w",
+     "spiegazione": "ignora gli spazi"
+    },
+    {
+     "flag": "--color",
+     "spiegazione": "colorato"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "diff -u vecchio.txt nuovo.txt",
+     "spiegazione": "cosa è cambiato"
+    },
+    {
+     "comando": "diff -rq cartella1 cartella2",
+     "spiegazione": "quali file differiscono"
+    }
+   ],
+   "vedi": [
+    "cmp",
+    "git diff",
+    "patch"
+   ]
+  },
+  {
+   "comando": "xargs",
+   "descrizione": "Prende le righe in arrivo e le dà come argomenti a un comando. Il ponte fra `find` e tutto il resto.",
+   "categoria": "shell",
+   "livello": 3,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-0",
+     "spiegazione": "le righe sono separate da NUL (con `find -print0`: regge i nomi con spazi)"
+    },
+    {
+     "flag": "-n N",
+     "spiegazione": "N argomenti per volta"
+    },
+    {
+     "flag": "-I {}",
+     "spiegazione": "{} sta per ogni riga"
+    },
+    {
+     "flag": "-p",
+     "spiegazione": "chiede prima di ogni comando"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "find . -name '*.log' | xargs rm",
+     "spiegazione": "cancella i registri trovati"
+    },
+    {
+     "comando": "find . -name '*.jpg' -print0 | xargs -0 du -ch",
+     "spiegazione": "quanto pesano le foto, anche con spazi nel nome"
+    },
+    {
+     "comando": "cat elenco.txt | xargs -I {} cp {} backup/",
+     "spiegazione": "copia ogni file dell'elenco"
+    }
+   ],
+   "vedi": [
+    "find -exec",
+    "parallel"
+   ]
+  },
+  {
+   "comando": "|",
+   "descrizione": "La pipe: l'uscita del comando a sinistra diventa l'ingresso di quello a destra.",
+   "categoria": "shell",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "ls | wc -l",
+     "spiegazione": "conta i file"
+    },
+    {
+     "comando": "cat registro.log | grep errore | less",
+     "spiegazione": "tre comandi in fila"
+    },
+    {
+     "comando": "ps aux | sort -k3 -rn | head",
+     "spiegazione": "i processi che usano più CPU"
+    }
+   ],
+   "vedi": [
+    "xargs",
+    "tee",
+    ">"
+   ]
+  },
+  {
+   "comando": ">",
+   "descrizione": "Manda l'uscita in un file, SOVRASCRIVENDOLO. `>>` aggiunge in fondo. `2>` l'errore, `&>` tutti e due.",
+   "categoria": "shell",
+   "livello": 2,
+   "pericolo": 1,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "ls > elenco.txt",
+     "spiegazione": "l'elenco in un file (sostituito)"
+    },
+    {
+     "comando": "echo riga >> appunti.txt",
+     "spiegazione": "una riga in più in fondo"
+    },
+    {
+     "comando": "make 2> errori.txt",
+     "spiegazione": "solo gli errori in un file"
+    },
+    {
+     "comando": "comando &> tutto.txt",
+     "spiegazione": "uscita ed errori insieme"
+    },
+    {
+     "comando": "comando > /dev/null 2>&1",
+     "spiegazione": "butta via tutto, in silenzio"
+    }
+   ],
+   "vedi": [
+    "|",
+    "tee",
+    "<"
+   ]
+  },
+  {
+   "comando": "<",
+   "descrizione": "Prende l'ingresso da un file invece che dalla tastiera.",
+   "categoria": "shell",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "sort < nomi.txt",
+     "spiegazione": "ordina le righe del file"
+    },
+    {
+     "comando": "wc -l < appunti.txt",
+     "spiegazione": "conta senza stampare il nome"
+    }
+   ],
+   "vedi": [
+    ">",
+    "|"
+   ]
+  },
+  {
+   "comando": "&&",
+   "descrizione": "Esegue il secondo comando SOLO se il primo è riuscito. `||` solo se è fallito. `;` sempre.",
+   "categoria": "shell",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "mkdir prove && cd prove",
+     "spiegazione": "entra solo se l'ha creata"
+    },
+    {
+     "comando": "make && ./programma",
+     "spiegazione": "lancia solo se compila"
+    },
+    {
+     "comando": "ping -c1 8.8.8.8 || echo 'niente rete'",
+     "spiegazione": "un messaggio se non risponde"
+    }
+   ],
+   "vedi": [
+    "|",
+    ";"
+   ]
+  },
+  {
+   "comando": "export",
+   "descrizione": "Rende una variabile visibile ai programmi lanciati da questa shell.",
+   "categoria": "shell",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-n",
+     "spiegazione": "toglie l'esportazione"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "export EDITOR=vim",
+     "spiegazione": "da ora i programmi useranno vim per modificare"
+    },
+    {
+     "comando": "export PATH=$PATH:~/bin",
+     "spiegazione": "aggiunge una cartella ai posti dove si cercano i comandi"
+    },
+    {
+     "comando": "export",
+     "spiegazione": "elenca le variabili esportate"
+    }
+   ],
+   "vedi": [
+    "env",
+    "unset",
+    "printenv"
+   ]
+  },
+  {
+   "comando": "env",
+   "descrizione": "Le variabili d'ambiente, tutte. O esegue un comando con variabili diverse.",
+   "categoria": "shell",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-i",
+     "spiegazione": "con un ambiente vuoto"
+    },
+    {
+     "flag": "VAR=val CMD",
+     "spiegazione": "esegue CMD con VAR impostata"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "env",
+     "spiegazione": "tutte le variabili"
+    },
+    {
+     "comando": "env | grep PATH",
+     "spiegazione": "solo il PATH"
+    },
+    {
+     "comando": "env LANG=C ls",
+     "spiegazione": "ls con i messaggi in inglese"
+    }
+   ],
+   "vedi": [
+    "export",
+    "printenv"
+   ]
+  },
+  {
+   "comando": "printenv",
+   "descrizione": "Il valore di una variabile d'ambiente (o tutte).",
+   "categoria": "shell",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "printenv HOME",
+     "spiegazione": "la tua cartella"
+    },
+    {
+     "comando": "printenv",
+     "spiegazione": "tutte"
+    }
+   ],
+   "vedi": [
+    "env",
+    "echo"
+   ]
+  },
+  {
+   "comando": "unset",
+   "descrizione": "Toglie una variabile.",
+   "categoria": "shell",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "unset PROVA",
+     "spiegazione": "PROVA non esiste più"
+    }
+   ],
+   "vedi": [
+    "export"
+   ]
+  },
+  {
+   "comando": "read",
+   "descrizione": "Legge una riga dalla tastiera dentro una variabile (negli script).",
+   "categoria": "shell",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-p TESTO",
+     "spiegazione": "mostra TESTO come domanda"
+    },
+    {
+     "flag": "-s",
+     "spiegazione": "senza mostrare quello che si scrive (password)"
+    },
+    {
+     "flag": "-r",
+     "spiegazione": "non interpreta le barre rovesciate"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "read -p 'Nome: ' nome",
+     "spiegazione": "chiede e salva in $nome"
+    },
+    {
+     "comando": "read -s -p 'Password: ' pw",
+     "spiegazione": "senza eco"
+    }
+   ],
+   "vedi": [
+    "echo"
+   ]
+  },
+  {
+   "comando": "seq",
+   "descrizione": "Una sequenza di numeri.",
+   "categoria": "testo",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-w",
+     "spiegazione": "tutti della stessa larghezza (01 02 … 10)"
+    },
+    {
+     "flag": "-s SEP",
+     "spiegazione": "separati da SEP"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "seq 5",
+     "spiegazione": "1 2 3 4 5"
+    },
+    {
+     "comando": "seq 0 10 100",
+     "spiegazione": "0 10 20 … 100"
+    },
+    {
+     "comando": "for i in $(seq 3); do echo $i; done",
+     "spiegazione": "un ciclo"
+    }
+   ],
+   "vedi": [
+    "for"
+   ]
+  },
+  {
+   "comando": "date",
+   "descrizione": "La data e l'ora. Con un formato stampa solo quello che chiedi.",
+   "categoria": "sistema",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "+%Y-%m-%d",
+     "spiegazione": "anno-mese-giorno"
+    },
+    {
+     "flag": "+%H:%M",
+     "spiegazione": "ore:minuti"
+    },
+    {
+     "flag": "+%s",
+     "spiegazione": "i secondi dal 1970"
+    },
+    {
+     "flag": "-d 'DATA'",
+     "spiegazione": "una data a scelta, anche «yesterday» o «next monday»"
+    },
+    {
+     "flag": "-u",
+     "spiegazione": "in UTC"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "date",
+     "spiegazione": "adesso"
+    },
+    {
+     "comando": "date +%Y-%m-%d",
+     "spiegazione": "2026-09-15"
+    },
+    {
+     "comando": "date -d yesterday",
+     "spiegazione": "ieri"
+    },
+    {
+     "comando": "cp appunti.txt appunti-$(date +%F).txt",
+     "spiegazione": "una copia con la data nel nome"
+    }
+   ],
+   "vedi": [
+    "cal",
+    "timedatectl"
+   ]
+  },
+  {
+   "comando": "cal",
+   "descrizione": "Il calendario del mese.",
+   "categoria": "sistema",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-y",
+     "spiegazione": "tutto l'anno"
+    },
+    {
+     "flag": "-3",
+     "spiegazione": "il mese scorso, questo e il prossimo"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "cal",
+     "spiegazione": "questo mese"
+    },
+    {
+     "comando": "cal 12 2026",
+     "spiegazione": "dicembre 2026"
+    }
+   ],
+   "vedi": [
+    "date"
+   ]
+  },
+  {
+   "comando": "bc",
+   "descrizione": "Una calcolatrice a riga di comando, con i decimali.",
+   "categoria": "sistema",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-l",
+     "spiegazione": "con la libreria matematica e i decimali"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "echo '2^10' | bc",
+     "spiegazione": "1024"
+    },
+    {
+     "comando": "echo 'scale=2; 10/3' | bc",
+     "spiegazione": "3.33"
+    }
+   ],
+   "vedi": [
+    "expr",
+    "python"
+   ]
+  },
+  {
+   "comando": "chmod",
+   "descrizione": "Cambia i permessi di un file: chi può leggerlo (r), scriverlo (w), eseguirlo (x).",
+   "categoria": "permessi",
+   "livello": 3,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "+x",
+     "spiegazione": "lo rende eseguibile"
+    },
+    {
+     "flag": "-w",
+     "spiegazione": "toglie la scrittura"
+    },
+    {
+     "flag": "u/g/o/a",
+     "spiegazione": "a chi: utente, gruppo, altri, tutti (u+x, go-w)"
+    },
+    {
+     "flag": "755",
+     "spiegazione": "in numeri: 7=rwx 6=rw- 5=r-x 4=r-- (proprietario, gruppo, altri)"
+    },
+    {
+     "flag": "-R",
+     "spiegazione": "ricorsivo, su tutta una cartella: da usare con attenzione"
+    },
+    {
+     "flag": "-v",
+     "spiegazione": "dice cosa ha cambiato"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "chmod +x script.sh",
+     "spiegazione": "ora si può eseguire"
+    },
+    {
+     "comando": "chmod 600 chiave.pem",
+     "spiegazione": "solo tu puoi leggerla e scriverla"
+    },
+    {
+     "comando": "chmod 755 programma",
+     "spiegazione": "tutti eseguono, solo tu scrivi"
+    },
+    {
+     "comando": "chmod -R go-w progetto",
+     "spiegazione": "toglie la scrittura agli altri, in tutta la cartella"
+    }
+   ],
+   "vedi": [
+    "chown",
+    "ls -l",
+    "umask"
+   ]
+  },
+  {
+   "comando": "chown",
+   "descrizione": "Cambia il proprietario (e il gruppo) di un file. Di solito serve `sudo`.",
+   "categoria": "permessi",
+   "livello": 3,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "UTENTE:GRUPPO",
+     "spiegazione": "proprietario e gruppo insieme"
+    },
+    {
+     "flag": "-R",
+     "spiegazione": "ricorsivo"
+    },
+    {
+     "flag": "-v",
+     "spiegazione": "dice cosa ha cambiato"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sudo chown giacomo file.txt",
+     "spiegazione": "ora è tuo"
+    },
+    {
+     "comando": "sudo chown -R giacomo:giacomo ~/progetto",
+     "spiegazione": "tutta la cartella tua"
+    }
+   ],
+   "vedi": [
+    "chmod",
+    "chgrp"
+   ]
+  },
+  {
+   "comando": "umask",
+   "descrizione": "Quali permessi NON dare ai file nuovi. 022 = gli altri non scrivono; 077 = gli altri non vedono niente.",
+   "categoria": "permessi",
+   "livello": 4,
+   "pericolo": 1,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "umask",
+     "spiegazione": "quella attuale"
+    },
+    {
+     "comando": "umask 077",
+     "spiegazione": "da ora i file nuovi sono solo tuoi"
+    }
+   ],
+   "vedi": [
+    "chmod"
+   ]
+  },
+  {
+   "comando": "sudo",
+   "descrizione": "Esegue un comando come amministratore (root). Chiede la TUA password.",
+   "categoria": "permessi",
+   "livello": 3,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "-i",
+     "spiegazione": "apre una shell di root"
+    },
+    {
+     "flag": "-u UTENTE",
+     "spiegazione": "come un altro utente"
+    },
+    {
+     "flag": "-k",
+     "spiegazione": "dimentica la password: la prossima volta la richiede"
+    },
+    {
+     "flag": "-e FILE",
+     "spiegazione": "modifica un file di sistema con l'editor"
+    },
+    {
+     "flag": "!!",
+     "spiegazione": "`sudo !!` ripete l'ultimo comando con sudo davanti"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sudo pacman -Syu",
+     "spiegazione": "aggiorna il sistema"
+    },
+    {
+     "comando": "sudo systemctl restart nginx",
+     "spiegazione": "riavvia un servizio"
+    },
+    {
+     "comando": "sudo -e /etc/hosts",
+     "spiegazione": "modifica un file di sistema"
+    },
+    {
+     "comando": "sudo !!",
+     "spiegazione": "l'ultimo comando, ma con i permessi"
+    }
+   ],
+   "vedi": [
+    "su",
+    "doas",
+    "pkexec"
+   ]
+  },
+  {
+   "comando": "su",
+   "descrizione": "Diventa un altro utente (root, senza argomenti). Chiede la password di QUELL'utente.",
+   "categoria": "permessi",
+   "livello": 3,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "-",
+     "spiegazione": "con l'ambiente dell'altro utente, come un accesso vero"
+    },
+    {
+     "flag": "-c CMD",
+     "spiegazione": "un comando solo"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "su -",
+     "spiegazione": "root, con il suo ambiente"
+    },
+    {
+     "comando": "su - anna",
+     "spiegazione": "diventa anna"
+    }
+   ],
+   "vedi": [
+    "sudo"
+   ]
+  },
+  {
+   "comando": "passwd",
+   "descrizione": "Cambia la password (la tua; con sudo, quella di un altro).",
+   "categoria": "permessi",
+   "livello": 3,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-l UTENTE",
+     "spiegazione": "blocca l'utente"
+    },
+    {
+     "flag": "-u UTENTE",
+     "spiegazione": "lo sblocca"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "passwd",
+     "spiegazione": "la tua"
+    },
+    {
+     "comando": "sudo passwd anna",
+     "spiegazione": "quella di anna"
+    }
+   ],
+   "vedi": [
+    "chage",
+    "useradd"
+   ]
+  },
+  {
+   "comando": "whoami",
+   "descrizione": "Chi sei, per il sistema.",
+   "categoria": "permessi",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "whoami",
+     "spiegazione": "il tuo nome utente"
+    },
+    {
+     "comando": "sudo whoami",
+     "spiegazione": "«root»"
+    }
+   ],
+   "vedi": [
+    "id",
+    "who"
+   ]
+  },
+  {
+   "comando": "id",
+   "descrizione": "Il tuo numero utente, il gruppo, e tutti i gruppi di cui fai parte.",
+   "categoria": "permessi",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-u",
+     "spiegazione": "solo il numero utente"
+    },
+    {
+     "flag": "-Gn",
+     "spiegazione": "solo i nomi dei gruppi"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "id",
+     "spiegazione": "tutto"
+    },
+    {
+     "comando": "id -Gn",
+     "spiegazione": "i gruppi: se c'è «wheel» puoi usare sudo"
+    }
+   ],
+   "vedi": [
+    "whoami",
+    "groups"
+   ]
+  },
+  {
+   "comando": "groups",
+   "descrizione": "I gruppi di cui fa parte un utente.",
+   "categoria": "permessi",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "groups",
+     "spiegazione": "i tuoi"
+    },
+    {
+     "comando": "groups anna",
+     "spiegazione": "quelli di anna"
+    }
+   ],
+   "vedi": [
+    "id",
+    "usermod"
+   ]
+  },
+  {
+   "comando": "useradd",
+   "descrizione": "Crea un utente. Con `-m` gli fa anche la cartella di casa.",
+   "categoria": "permessi",
+   "livello": 4,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "-m",
+     "spiegazione": "crea la cartella personale"
+    },
+    {
+     "flag": "-G GRUPPI",
+     "spiegazione": "lo mette in questi gruppi"
+    },
+    {
+     "flag": "-s SHELL",
+     "spiegazione": "la sua shell"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sudo useradd -m -G wheel anna",
+     "spiegazione": "un utente nuovo, che può usare sudo"
+    },
+    {
+     "comando": "sudo passwd anna",
+     "spiegazione": "poi la password"
+    }
+   ],
+   "vedi": [
+    "usermod",
+    "userdel",
+    "passwd"
+   ]
+  },
+  {
+   "comando": "usermod",
+   "descrizione": "Cambia un utente: gruppi, shell, nome.",
+   "categoria": "permessi",
+   "livello": 4,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "-aG GRUPPO",
+     "spiegazione": "AGGIUNGE al gruppo (senza -a lo toglie da tutti gli altri!)"
+    },
+    {
+     "flag": "-s SHELL",
+     "spiegazione": "cambia la shell"
+    },
+    {
+     "flag": "-L / -U",
+     "spiegazione": "blocca / sblocca"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sudo usermod -aG docker giacomo",
+     "spiegazione": "può usare docker senza sudo (da rifare l'accesso)"
+    }
+   ],
+   "vedi": [
+    "useradd",
+    "groups"
+   ]
+  },
+  {
+   "comando": "ps",
+   "descrizione": "I processi in esecuzione.",
+   "categoria": "processi",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "aux",
+     "spiegazione": "tutti, di tutti gli utenti, con CPU e memoria"
+    },
+    {
+     "flag": "-ef",
+     "spiegazione": "tutti, con il padre di ognuno"
+    },
+    {
+     "flag": "-u UTENTE",
+     "spiegazione": "solo quelli di un utente"
+    },
+    {
+     "flag": "-p PID",
+     "spiegazione": "uno solo"
+    },
+    {
+     "flag": "--forest",
+     "spiegazione": "ad albero"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "ps aux",
+     "spiegazione": "tutto"
+    },
+    {
+     "comando": "ps aux | grep firefox",
+     "spiegazione": "solo firefox"
+    },
+    {
+     "comando": "ps -u giacomo --forest",
+     "spiegazione": "i tuoi, ad albero"
+    }
+   ],
+   "vedi": [
+    "top",
+    "htop",
+    "pgrep",
+    "kill"
+   ]
+  },
+  {
+   "comando": "top",
+   "descrizione": "I processi dal vivo, ordinati per CPU. `q` esce, `M` ordina per memoria, `k` uccide.",
+   "categoria": "processi",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-u UTENTE",
+     "spiegazione": "solo i suoi"
+    },
+    {
+     "flag": "-p PID",
+     "spiegazione": "solo questo"
+    },
+    {
+     "flag": "-d N",
+     "spiegazione": "aggiorna ogni N secondi"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "top",
+     "spiegazione": "chi sta lavorando"
+    },
+    {
+     "comando": "top -u giacomo",
+     "spiegazione": "solo i tuoi"
+    }
+   ],
+   "vedi": [
+    "htop",
+    "btop",
+    "ps"
+   ]
+  },
+  {
+   "comando": "htop",
+   "descrizione": "Come `top`, ma a colori e con il mouse: F9 uccide, F6 ordina, F4 filtra, / cerca.",
+   "categoria": "processi",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-u UTENTE",
+     "spiegazione": "solo i suoi"
+    },
+    {
+     "flag": "-t",
+     "spiegazione": "ad albero"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "htop",
+     "spiegazione": "il monitor"
+    },
+    {
+     "comando": "htop -t",
+     "spiegazione": "ad albero"
+    }
+   ],
+   "vedi": [
+    "top",
+    "btop"
+   ]
+  },
+  {
+   "comando": "kill",
+   "descrizione": "Manda un segnale a un processo: di serie TERM, «chiuditi per favore». `-9` è KILL: senza appello.",
+   "categoria": "processi",
+   "livello": 3,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "-15 / -TERM",
+     "spiegazione": "chiudi con garbo (di serie)"
+    },
+    {
+     "flag": "-9 / -KILL",
+     "spiegazione": "termina subito, senza salvare niente"
+    },
+    {
+     "flag": "-HUP",
+     "spiegazione": "ricarica la configurazione (per molti demoni)"
+    },
+    {
+     "flag": "-STOP / -CONT",
+     "spiegazione": "sospendi / riprendi"
+    },
+    {
+     "flag": "-l",
+     "spiegazione": "l'elenco dei segnali"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "kill 1234",
+     "spiegazione": "chiede al processo 1234 di chiudersi"
+    },
+    {
+     "comando": "kill -9 1234",
+     "spiegazione": "lo termina a forza"
+    },
+    {
+     "comando": "kill -HUP $(pidof nginx)",
+     "spiegazione": "nginx rilegge la configurazione"
+    }
+   ],
+   "vedi": [
+    "pkill",
+    "killall",
+    "pgrep",
+    "ps"
+   ]
+  },
+  {
+   "comando": "pkill",
+   "descrizione": "Come `kill`, ma per nome invece che per numero.",
+   "categoria": "processi",
+   "livello": 3,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "-f",
+     "spiegazione": "cerca in tutta la riga di comando, non solo nel nome"
+    },
+    {
+     "flag": "-9",
+     "spiegazione": "a forza"
+    },
+    {
+     "flag": "-u UTENTE",
+     "spiegazione": "solo i suoi"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "pkill firefox",
+     "spiegazione": "chiude firefox"
+    },
+    {
+     "comando": "pkill -9 -f 'python script.py'",
+     "spiegazione": "termina quello script"
+    }
+   ],
+   "vedi": [
+    "kill",
+    "killall",
+    "pgrep"
+   ]
+  },
+  {
+   "comando": "pgrep",
+   "descrizione": "Il numero (PID) dei processi con quel nome.",
+   "categoria": "processi",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-f",
+     "spiegazione": "cerca in tutta la riga di comando"
+    },
+    {
+     "flag": "-a",
+     "spiegazione": "anche la riga di comando"
+    },
+    {
+     "flag": "-u UTENTE",
+     "spiegazione": "solo i suoi"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "pgrep firefox",
+     "spiegazione": "i suoi PID"
+    },
+    {
+     "comando": "pgrep -a python",
+     "spiegazione": "quali python girano, e con cosa"
+    }
+   ],
+   "vedi": [
+    "ps",
+    "pidof",
+    "pkill"
+   ]
+  },
+  {
+   "comando": "killall",
+   "descrizione": "Termina tutti i processi con quel nome esatto.",
+   "categoria": "processi",
+   "livello": 3,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "-9",
+     "spiegazione": "a forza"
+    },
+    {
+     "flag": "-i",
+     "spiegazione": "chiede conferma"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "killall firefox",
+     "spiegazione": "tutte le finestre di firefox"
+    }
+   ],
+   "vedi": [
+    "pkill",
+    "kill"
+   ]
+  },
+  {
+   "comando": "jobs",
+   "descrizione": "I lavori di questa shell messi in sottofondo (con `&` o Ctrl+Z).",
+   "categoria": "processi",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-l",
+     "spiegazione": "con i PID"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "jobs",
+     "spiegazione": "l'elenco"
+    },
+    {
+     "comando": "fg %1",
+     "spiegazione": "riporta il primo in primo piano"
+    },
+    {
+     "comando": "bg %1",
+     "spiegazione": "lo fa continuare in sottofondo"
+    }
+   ],
+   "vedi": [
+    "fg",
+    "bg",
+    "&",
+    "nohup"
+   ]
+  },
+  {
+   "comando": "&",
+   "descrizione": "In fondo a un comando: lo lancia in sottofondo e ti ridà subito il prompt.",
+   "categoria": "processi",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "sleep 60 &",
+     "spiegazione": "aspetta un minuto, ma tu continui"
+    },
+    {
+     "comando": "firefox &",
+     "spiegazione": "apre firefox senza bloccare il terminale"
+    },
+    {
+     "comando": "comando > uscita.txt 2>&1 &",
+     "spiegazione": "in sottofondo, con l'uscita in un file"
+    }
+   ],
+   "vedi": [
+    "jobs",
+    "fg",
+    "nohup",
+    "disown"
+   ]
+  },
+  {
+   "comando": "fg",
+   "descrizione": "Riporta in primo piano un lavoro in sottofondo.",
+   "categoria": "processi",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "fg",
+     "spiegazione": "l'ultimo"
+    },
+    {
+     "comando": "fg %2",
+     "spiegazione": "il secondo dell'elenco di jobs"
+    }
+   ],
+   "vedi": [
+    "bg",
+    "jobs"
+   ]
+  },
+  {
+   "comando": "bg",
+   "descrizione": "Fa continuare in sottofondo un lavoro sospeso con Ctrl+Z.",
+   "categoria": "processi",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "bg",
+     "spiegazione": "l'ultimo sospeso"
+    }
+   ],
+   "vedi": [
+    "fg",
+    "jobs"
+   ]
+  },
+  {
+   "comando": "nohup",
+   "descrizione": "Lancia un comando che sopravvive alla chiusura del terminale.",
+   "categoria": "processi",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "nohup ./lungo.sh &",
+     "spiegazione": "continua anche se chiudi la scheda; l'uscita va in nohup.out"
+    }
+   ],
+   "vedi": [
+    "&",
+    "disown",
+    "tmux",
+    "systemd-run"
+   ]
+  },
+  {
+   "comando": "sleep",
+   "descrizione": "Aspetta. Un numero di secondi (o 5m, 2h).",
+   "categoria": "processi",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "sleep 5",
+     "spiegazione": "cinque secondi"
+    },
+    {
+     "comando": "sleep 10m && notify-send 'pronto'",
+     "spiegazione": "un promemoria fra dieci minuti"
+    }
+   ],
+   "vedi": [
+    "timeout",
+    "watch"
+   ]
+  },
+  {
+   "comando": "watch",
+   "descrizione": "Ripete un comando ogni due secondi e mostra l'uscita: per guardare qualcosa che cambia.",
+   "categoria": "processi",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-n N",
+     "spiegazione": "ogni N secondi"
+    },
+    {
+     "flag": "-d",
+     "spiegazione": "evidenzia le differenze"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "watch -n 1 df -h",
+     "spiegazione": "lo spazio, ogni secondo"
+    },
+    {
+     "comando": "watch -d ls -l",
+     "spiegazione": "una cartella che si riempie"
+    }
+   ],
+   "vedi": [
+    "tail -f"
+   ]
+  },
+  {
+   "comando": "timeout",
+   "descrizione": "Lancia un comando e lo termina se dura più di tanto.",
+   "categoria": "processi",
+   "livello": 3,
+   "pericolo": 1,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "timeout 10 ./prova.sh",
+     "spiegazione": "al massimo dieci secondi"
+    },
+    {
+     "comando": "timeout 1m ping 8.8.8.8",
+     "spiegazione": "un minuto di ping"
+    }
+   ],
+   "vedi": [
+    "sleep",
+    "kill"
+   ]
+  },
+  {
+   "comando": "df",
+   "descrizione": "Quanto spazio è usato e libero su ogni disco montato (disk free).",
+   "categoria": "dischi",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-h",
+     "spiegazione": "in K, M, G"
+    },
+    {
+     "flag": "-T",
+     "spiegazione": "con il tipo di filesystem"
+    },
+    {
+     "flag": "-i",
+     "spiegazione": "gli inode invece dello spazio"
+    },
+    {
+     "flag": "PERCORSO",
+     "spiegazione": "solo il disco che contiene quel percorso"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "df -h",
+     "spiegazione": "tutti i dischi, leggibile"
+    },
+    {
+     "comando": "df -h .",
+     "spiegazione": "il disco dove sei"
+    }
+   ],
+   "vedi": [
+    "du",
+    "lsblk",
+    "mount"
+   ]
+  },
+  {
+   "comando": "du",
+   "descrizione": "Quanto pesa una cartella con tutto quello che contiene (disk usage).",
+   "categoria": "dischi",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-h",
+     "spiegazione": "in K, M, G"
+    },
+    {
+     "flag": "-s",
+     "spiegazione": "solo il totale"
+    },
+    {
+     "flag": "-d N",
+     "spiegazione": "fino a N livelli"
+    },
+    {
+     "flag": "-c",
+     "spiegazione": "con un totale generale"
+    },
+    {
+     "flag": "--max-depth=1",
+     "spiegazione": "una riga per sottocartella"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "du -sh Documenti",
+     "spiegazione": "quanto pesa"
+    },
+    {
+     "comando": "du -h -d1 . | sort -h",
+     "spiegazione": "le sottocartelle per peso"
+    },
+    {
+     "comando": "du -sh * | sort -rh | head",
+     "spiegazione": "le dieci cose più pesanti qui"
+    }
+   ],
+   "vedi": [
+    "df",
+    "ncdu",
+    "ls -S"
+   ]
+  },
+  {
+   "comando": "ncdu",
+   "descrizione": "Un `du` interattivo: naviga le cartelle per peso e cancella da lì.",
+   "categoria": "dischi",
+   "livello": 3,
+   "pericolo": 1,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "ncdu ~",
+     "spiegazione": "cosa pesa in casa tua"
+    },
+    {
+     "comando": "ncdu -x /",
+     "spiegazione": "tutto il disco, senza gli altri montaggi"
+    }
+   ],
+   "vedi": [
+    "du"
+   ]
+  },
+  {
+   "comando": "mount",
+   "descrizione": "Monta un disco (lo rende visibile in una cartella). Da solo elenca cosa è montato.",
+   "categoria": "dischi",
+   "livello": 4,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "-t TIPO",
+     "spiegazione": "il tipo di filesystem"
+    },
+    {
+     "flag": "-o OPZIONI",
+     "spiegazione": "ro sola lettura, remount…"
+    },
+    {
+     "flag": "| column -t",
+     "spiegazione": "l'elenco allineato"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "mount | column -t",
+     "spiegazione": "cosa è montato"
+    },
+    {
+     "comando": "sudo mount /dev/sdb1 /mnt",
+     "spiegazione": "una chiavetta in /mnt"
+    },
+    {
+     "comando": "sudo mount -o remount,rw /",
+     "spiegazione": "rimonta la radice in scrittura"
+    }
+   ],
+   "vedi": [
+    "umount",
+    "lsblk",
+    "findmnt",
+    "udisksctl"
+   ]
+  },
+  {
+   "comando": "umount",
+   "descrizione": "Smonta un disco. Da fare prima di staccare una chiavetta.",
+   "categoria": "dischi",
+   "livello": 4,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-l",
+     "spiegazione": "pigro: quando nessuno lo usa più"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sudo umount /mnt",
+     "spiegazione": "smonta"
+    }
+   ],
+   "vedi": [
+    "mount",
+    "udisksctl"
+   ]
+  },
+  {
+   "comando": "lsblk",
+   "descrizione": "I dischi e le partizioni, ad albero, con dimensione e dove sono montati.",
+   "categoria": "dischi",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-f",
+     "spiegazione": "con il filesystem e le etichette"
+    },
+    {
+     "flag": "-o NAME,SIZE,MOUNTPOINT",
+     "spiegazione": "solo queste colonne"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "lsblk",
+     "spiegazione": "l'albero"
+    },
+    {
+     "comando": "lsblk -f",
+     "spiegazione": "con i tipi e gli UUID"
+    }
+   ],
+   "vedi": [
+    "df",
+    "mount",
+    "fdisk -l",
+    "blkid"
+   ]
+  },
+  {
+   "comando": "free",
+   "descrizione": "La memoria: usata, libera, cache, swap.",
+   "categoria": "sistema",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-h",
+     "spiegazione": "in M e G"
+    },
+    {
+     "flag": "-s N",
+     "spiegazione": "ogni N secondi"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "free -h",
+     "spiegazione": "leggibile: la colonna «available» è quella che conta"
+    }
+   ],
+   "vedi": [
+    "top",
+    "vmstat"
+   ]
+  },
+  {
+   "comando": "uptime",
+   "descrizione": "Da quanto è acceso, quanti utenti, il carico medio (1, 5 e 15 minuti).",
+   "categoria": "sistema",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-p",
+     "spiegazione": "solo da quanto, a parole"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "uptime",
+     "spiegazione": "una riga"
+    },
+    {
+     "comando": "uptime -p",
+     "spiegazione": "«up 3 days, 2 hours»"
+    }
+   ],
+   "vedi": [
+    "w",
+    "top"
+   ]
+  },
+  {
+   "comando": "uname",
+   "descrizione": "Il kernel: nome, versione, architettura.",
+   "categoria": "sistema",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-a",
+     "spiegazione": "tutto"
+    },
+    {
+     "flag": "-r",
+     "spiegazione": "la versione del kernel"
+    },
+    {
+     "flag": "-m",
+     "spiegazione": "l'architettura (x86_64, aarch64)"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "uname -a",
+     "spiegazione": "tutto"
+    },
+    {
+     "comando": "uname -r",
+     "spiegazione": "che kernel gira"
+    }
+   ],
+   "vedi": [
+    "hostnamectl",
+    "lsb_release",
+    "cat /etc/os-release"
+   ]
+  },
+  {
+   "comando": "hostname",
+   "descrizione": "Il nome di questo computer.",
+   "categoria": "sistema",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-I",
+     "spiegazione": "i suoi indirizzi IP"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "hostname",
+     "spiegazione": "il nome"
+    },
+    {
+     "comando": "hostname -I",
+     "spiegazione": "gli IP"
+    }
+   ],
+   "vedi": [
+    "hostnamectl",
+    "ip"
+   ]
+  },
+  {
+   "comando": "lscpu",
+   "descrizione": "Il processore: modello, core, frequenze, cache.",
+   "categoria": "sistema",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "lscpu",
+     "spiegazione": "tutto"
+    },
+    {
+     "comando": "lscpu | grep -i 'model name'",
+     "spiegazione": "solo il modello"
+    }
+   ],
+   "vedi": [
+    "nproc",
+    "cat /proc/cpuinfo"
+   ]
+  },
+  {
+   "comando": "nproc",
+   "descrizione": "Quanti core ha il processore.",
+   "categoria": "sistema",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "nproc",
+     "spiegazione": "per esempio 8"
+    },
+    {
+     "comando": "make -j$(nproc)",
+     "spiegazione": "compila usando tutti i core"
+    }
+   ],
+   "vedi": [
+    "lscpu"
+   ]
+  },
+  {
+   "comando": "lspci",
+   "descrizione": "Le schede collegate al bus PCI: video, rete, audio.",
+   "categoria": "sistema",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-k",
+     "spiegazione": "con il driver che le gestisce"
+    },
+    {
+     "flag": "-v",
+     "spiegazione": "più dettagli"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "lspci | grep -i vga",
+     "spiegazione": "la scheda video"
+    },
+    {
+     "comando": "lspci -k",
+     "spiegazione": "chi gestisce cosa"
+    }
+   ],
+   "vedi": [
+    "lsusb",
+    "lshw"
+   ]
+  },
+  {
+   "comando": "lsusb",
+   "descrizione": "I dispositivi USB collegati.",
+   "categoria": "sistema",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-t",
+     "spiegazione": "ad albero"
+    },
+    {
+     "flag": "-v",
+     "spiegazione": "tutti i dettagli"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "lsusb",
+     "spiegazione": "l'elenco"
+    }
+   ],
+   "vedi": [
+    "lspci",
+    "dmesg"
+   ]
+  },
+  {
+   "comando": "dmesg",
+   "descrizione": "I messaggi del kernel: dischi trovati, USB inseriti, errori dell'hardware.",
+   "categoria": "sistema",
+   "livello": 4,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-T",
+     "spiegazione": "con l'ora leggibile"
+    },
+    {
+     "flag": "-w",
+     "spiegazione": "dal vivo"
+    },
+    {
+     "flag": "-l err",
+     "spiegazione": "solo gli errori"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sudo dmesg -T | tail",
+     "spiegazione": "gli ultimi messaggi"
+    },
+    {
+     "comando": "sudo dmesg -w",
+     "spiegazione": "cosa succede inserendo una chiavetta"
+    }
+   ],
+   "vedi": [
+    "journalctl -k"
+   ]
+  },
+  {
+   "comando": "systemctl",
+   "descrizione": "Comanda systemd: i servizi (avvia, ferma, abilita) e il sistema (riavvia, spegni).",
+   "categoria": "sistema",
+   "livello": 4,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "status SERVIZIO",
+     "spiegazione": "com'è messo, con le ultime righe di registro"
+    },
+    {
+     "flag": "start / stop / restart",
+     "spiegazione": "avvia / ferma / riavvia"
+    },
+    {
+     "flag": "enable / disable",
+     "spiegazione": "parte / non parte all'accensione (`--now` anche adesso)"
+    },
+    {
+     "flag": "list-units --type=service",
+     "spiegazione": "tutti i servizi"
+    },
+    {
+     "flag": "--failed",
+     "spiegazione": "solo quelli falliti"
+    },
+    {
+     "flag": "--user",
+     "spiegazione": "i servizi del tuo utente, non del sistema"
+    },
+    {
+     "flag": "daemon-reload",
+     "spiegazione": "rilegge i file dei servizi dopo averli modificati"
+    },
+    {
+     "flag": "poweroff / reboot / suspend",
+     "spiegazione": "spegne / riavvia / sospende"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "systemctl status bluetooth",
+     "spiegazione": "come sta il bluetooth"
+    },
+    {
+     "comando": "sudo systemctl restart NetworkManager",
+     "spiegazione": "riavvia la rete"
+    },
+    {
+     "comando": "sudo systemctl enable --now sshd",
+     "spiegazione": "ssh parte adesso e a ogni avvio"
+    },
+    {
+     "comando": "systemctl --failed",
+     "spiegazione": "cosa non è partito"
+    },
+    {
+     "comando": "systemctl --user status pipewire",
+     "spiegazione": "l'audio, che è un servizio tuo"
+    }
+   ],
+   "vedi": [
+    "journalctl",
+    "service",
+    "loginctl"
+   ]
+  },
+  {
+   "comando": "journalctl",
+   "descrizione": "Il registro di sistema: tutto quello che i servizi e il kernel hanno detto.",
+   "categoria": "sistema",
+   "livello": 4,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-u SERVIZIO",
+     "spiegazione": "solo quel servizio"
+    },
+    {
+     "flag": "-f",
+     "spiegazione": "dal vivo"
+    },
+    {
+     "flag": "-b",
+     "spiegazione": "da questo avvio (-b -1 quello prima)"
+    },
+    {
+     "flag": "-p err",
+     "spiegazione": "solo gli errori (o warning, crit)"
+    },
+    {
+     "flag": "--since '1 hour ago'",
+     "spiegazione": "da quando"
+    },
+    {
+     "flag": "-k",
+     "spiegazione": "solo il kernel"
+    },
+    {
+     "flag": "-n 50",
+     "spiegazione": "le ultime cinquanta righe"
+    },
+    {
+     "flag": "--user",
+     "spiegazione": "i servizi tuoi"
+    },
+    {
+     "flag": "--disk-usage",
+     "spiegazione": "quanto spazio occupa"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "journalctl -u sshd -f",
+     "spiegazione": "ssh dal vivo"
+    },
+    {
+     "comando": "journalctl -b -p err",
+     "spiegazione": "gli errori da quando hai acceso"
+    },
+    {
+     "comando": "journalctl --since today",
+     "spiegazione": "tutto oggi"
+    },
+    {
+     "comando": "journalctl -k | tail",
+     "spiegazione": "gli ultimi messaggi del kernel"
+    }
+   ],
+   "vedi": [
+    "systemctl",
+    "dmesg"
+   ]
+  },
+  {
+   "comando": "pacman",
+   "descrizione": "Il gestore dei pacchetti di Arch: installa, aggiorna, cerca, rimuove.",
+   "categoria": "pacchetti",
+   "livello": 4,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "-S PACCHETTO",
+     "spiegazione": "installa"
+    },
+    {
+     "flag": "-Syu",
+     "spiegazione": "aggiorna tutto il sistema"
+    },
+    {
+     "flag": "-Ss PAROLA",
+     "spiegazione": "cerca nei depositi"
+    },
+    {
+     "flag": "-Qs PAROLA",
+     "spiegazione": "cerca fra gli installati"
+    },
+    {
+     "flag": "-Qi PACCHETTO",
+     "spiegazione": "informazioni su uno installato"
+    },
+    {
+     "flag": "-R PACCHETTO",
+     "spiegazione": "rimuove (-Rns anche dipendenze e configurazione)"
+    },
+    {
+     "flag": "-Ql PACCHETTO",
+     "spiegazione": "quali file ha messo"
+    },
+    {
+     "flag": "-Qo FILE",
+     "spiegazione": "a quale pacchetto appartiene un file"
+    },
+    {
+     "flag": "-Qdt",
+     "spiegazione": "i pacchetti orfani"
+    },
+    {
+     "flag": "-Sc",
+     "spiegazione": "pulisce la cache"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sudo pacman -Syu",
+     "spiegazione": "aggiorna tutto"
+    },
+    {
+     "comando": "sudo pacman -S htop",
+     "spiegazione": "installa htop"
+    },
+    {
+     "comando": "pacman -Ss terminale",
+     "spiegazione": "cerca"
+    },
+    {
+     "comando": "sudo pacman -Rns pacchetto",
+     "spiegazione": "rimuove per bene"
+    },
+    {
+     "comando": "pacman -Qo /usr/bin/ls",
+     "spiegazione": "chi ha messo ls (coreutils)"
+    }
+   ],
+   "vedi": [
+    "yay",
+    "paru",
+    "apt",
+    "flatpak"
+   ]
+  },
+  {
+   "comando": "yay",
+   "descrizione": "Come pacman, ma con anche l'AUR (i pacchetti fatti dagli utenti). Stesse lettere.",
+   "categoria": "pacchetti",
+   "livello": 4,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "PAROLA",
+     "spiegazione": "cerca e installa, interattivo"
+    },
+    {
+     "flag": "-Syu",
+     "spiegazione": "aggiorna tutto, AUR compreso"
+    },
+    {
+     "flag": "-Yc",
+     "spiegazione": "rimuove le dipendenze inutili"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "yay -Syu",
+     "spiegazione": "aggiorna tutto"
+    },
+    {
+     "comando": "yay spotify",
+     "spiegazione": "cerca e propone"
+    }
+   ],
+   "vedi": [
+    "pacman",
+    "paru"
+   ]
+  },
+  {
+   "comando": "apt",
+   "descrizione": "Il gestore dei pacchetti di Debian e Ubuntu.",
+   "categoria": "pacchetti",
+   "livello": 4,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "update",
+     "spiegazione": "aggiorna gli elenchi"
+    },
+    {
+     "flag": "upgrade",
+     "spiegazione": "aggiorna i pacchetti"
+    },
+    {
+     "flag": "install",
+     "spiegazione": "installa"
+    },
+    {
+     "flag": "remove / purge",
+     "spiegazione": "rimuove / anche la configurazione"
+    },
+    {
+     "flag": "search",
+     "spiegazione": "cerca"
+    },
+    {
+     "flag": "show",
+     "spiegazione": "informazioni"
+    },
+    {
+     "flag": "autoremove",
+     "spiegazione": "toglie le dipendenze inutili"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sudo apt update && sudo apt upgrade",
+     "spiegazione": "aggiorna tutto"
+    },
+    {
+     "comando": "sudo apt install htop",
+     "spiegazione": "installa"
+    }
+   ],
+   "vedi": [
+    "pacman",
+    "dpkg"
+   ]
+  },
+  {
+   "comando": "flatpak",
+   "descrizione": "Applicazioni in sandbox, uguali su ogni distribuzione (da Flathub).",
+   "categoria": "pacchetti",
+   "livello": 4,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "install",
+     "spiegazione": "installa"
+    },
+    {
+     "flag": "run",
+     "spiegazione": "avvia"
+    },
+    {
+     "flag": "update",
+     "spiegazione": "aggiorna"
+    },
+    {
+     "flag": "list",
+     "spiegazione": "quelle installate"
+    },
+    {
+     "flag": "uninstall --unused",
+     "spiegazione": "toglie i runtime inutili"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "flatpak install flathub org.gimp.GIMP",
+     "spiegazione": "GIMP"
+    },
+    {
+     "comando": "flatpak update",
+     "spiegazione": "aggiorna tutte"
+    }
+   ],
+   "vedi": [
+    "pacman",
+    "snap"
+   ]
+  },
+  {
+   "comando": "ip",
+   "descrizione": "La rete: indirizzi, interfacce, rotte. Ha sostituito ifconfig.",
+   "categoria": "rete",
+   "livello": 4,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "a / addr",
+     "spiegazione": "gli indirizzi di ogni interfaccia"
+    },
+    {
+     "flag": "link",
+     "spiegazione": "le interfacce e se sono su"
+    },
+    {
+     "flag": "r / route",
+     "spiegazione": "le rotte (dove va il traffico)"
+    },
+    {
+     "flag": "-c",
+     "spiegazione": "a colori"
+    },
+    {
+     "flag": "-br a",
+     "spiegazione": "in breve, una riga per interfaccia"
+    },
+    {
+     "flag": "link set DEV up/down",
+     "spiegazione": "accende / spegne un'interfaccia"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "ip -c a",
+     "spiegazione": "gli indirizzi, a colori"
+    },
+    {
+     "comando": "ip -br a",
+     "spiegazione": "in breve"
+    },
+    {
+     "comando": "ip r",
+     "spiegazione": "il gateway è la riga «default»"
+    }
+   ],
+   "vedi": [
+    "ss",
+    "ping",
+    "nmcli",
+    "ifconfig"
+   ]
+  },
+  {
+   "comando": "ss",
+   "descrizione": "Le connessioni di rete aperte e le porte in ascolto. Ha sostituito netstat.",
+   "categoria": "rete",
+   "livello": 4,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-t",
+     "spiegazione": "TCP"
+    },
+    {
+     "flag": "-u",
+     "spiegazione": "UDP"
+    },
+    {
+     "flag": "-l",
+     "spiegazione": "solo in ascolto"
+    },
+    {
+     "flag": "-n",
+     "spiegazione": "numeri, senza risolvere i nomi"
+    },
+    {
+     "flag": "-p",
+     "spiegazione": "con il programma (serve sudo)"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "ss -tulnp",
+     "spiegazione": "chi ascolta su quali porte"
+    },
+    {
+     "comando": "ss -t",
+     "spiegazione": "le connessioni TCP attive"
+    }
+   ],
+   "vedi": [
+    "netstat",
+    "lsof -i",
+    "nmap"
+   ]
+  },
+  {
+   "comando": "ping",
+   "descrizione": "Manda pacchetti a un indirizzo e misura quanto ci mette a rispondere. Il primo test se «c'è rete».",
+   "categoria": "rete",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-c N",
+     "spiegazione": "solo N pacchetti (altrimenti va avanti finché Ctrl+C)"
+    },
+    {
+     "flag": "-i N",
+     "spiegazione": "ogni N secondi"
+    },
+    {
+     "flag": "-4 / -6",
+     "spiegazione": "IPv4 / IPv6"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "ping -c 4 8.8.8.8",
+     "spiegazione": "quattro pacchetti a Google: se rispondono, la rete c'è"
+    },
+    {
+     "comando": "ping -c 4 archlinux.org",
+     "spiegazione": "se questo fallisce e l'IP no, è il DNS"
+    }
+   ],
+   "vedi": [
+    "ip",
+    "traceroute",
+    "curl"
+   ]
+  },
+  {
+   "comando": "curl",
+   "descrizione": "Scarica o interroga un URL: pagine, API, file. Stampa a schermo se non gli dici dove salvare.",
+   "categoria": "rete",
+   "livello": 3,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-O",
+     "spiegazione": "salva con il nome del file remoto"
+    },
+    {
+     "flag": "-o FILE",
+     "spiegazione": "salva con questo nome"
+    },
+    {
+     "flag": "-L",
+     "spiegazione": "segue i reindirizzamenti"
+    },
+    {
+     "flag": "-s",
+     "spiegazione": "silenzioso, senza barra"
+    },
+    {
+     "flag": "-I",
+     "spiegazione": "solo le intestazioni"
+    },
+    {
+     "flag": "-X POST",
+     "spiegazione": "il metodo"
+    },
+    {
+     "flag": "-H 'K: V'",
+     "spiegazione": "un'intestazione"
+    },
+    {
+     "flag": "-d DATI",
+     "spiegazione": "il corpo della richiesta"
+    },
+    {
+     "flag": "-u UTENTE:PASS",
+     "spiegazione": "autenticazione"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "curl -O https://esempio.it/file.zip",
+     "spiegazione": "scarica"
+    },
+    {
+     "comando": "curl -I https://archlinux.org",
+     "spiegazione": "solo le intestazioni: è su?"
+    },
+    {
+     "comando": "curl -s https://api.github.com/users/torvalds | jq .",
+     "spiegazione": "un'API, formattata"
+    },
+    {
+     "comando": "curl ifconfig.me",
+     "spiegazione": "il tuo IP pubblico"
+    }
+   ],
+   "vedi": [
+    "wget",
+    "jq",
+    "ping"
+   ]
+  },
+  {
+   "comando": "wget",
+   "descrizione": "Scarica file da un URL, anche interi siti, riprendendo se si interrompe.",
+   "categoria": "rete",
+   "livello": 3,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-O FILE",
+     "spiegazione": "salva con questo nome"
+    },
+    {
+     "flag": "-c",
+     "spiegazione": "riprende uno scaricamento interrotto"
+    },
+    {
+     "flag": "-q",
+     "spiegazione": "silenzioso"
+    },
+    {
+     "flag": "-r",
+     "spiegazione": "ricorsivo (un sito intero)"
+    },
+    {
+     "flag": "-P DIR",
+     "spiegazione": "salva in questa cartella"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "wget https://esempio.it/file.iso",
+     "spiegazione": "scarica"
+    },
+    {
+     "comando": "wget -c https://esempio.it/grande.iso",
+     "spiegazione": "riprende"
+    }
+   ],
+   "vedi": [
+    "curl",
+    "aria2c"
+   ]
+  },
+  {
+   "comando": "ssh",
+   "descrizione": "Apre una shell su un altro computer, cifrata.",
+   "categoria": "rete",
+   "livello": 4,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "UTENTE@HOST",
+     "spiegazione": "chi e dove"
+    },
+    {
+     "flag": "-p PORTA",
+     "spiegazione": "una porta diversa da 22"
+    },
+    {
+     "flag": "-i CHIAVE",
+     "spiegazione": "con questa chiave privata"
+    },
+    {
+     "flag": "-L LOCALE:HOST:REMOTA",
+     "spiegazione": "un tunnel: la porta locale arriva a quella remota"
+    },
+    {
+     "flag": "-N",
+     "spiegazione": "solo il tunnel, senza shell"
+    },
+    {
+     "flag": "-J SALTO",
+     "spiegazione": "passando da un altro host"
+    },
+    {
+     "flag": "HOST CMD",
+     "spiegazione": "esegue solo un comando e torna"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "ssh giacomo@192.168.1.10",
+     "spiegazione": "entra"
+    },
+    {
+     "comando": "ssh -p 2222 utente@server.it",
+     "spiegazione": "su un'altra porta"
+    },
+    {
+     "comando": "ssh server 'df -h'",
+     "spiegazione": "un comando e basta"
+    },
+    {
+     "comando": "ssh -L 8080:localhost:80 server",
+     "spiegazione": "il sito del server su http://localhost:8080"
+    }
+   ],
+   "vedi": [
+    "scp",
+    "ssh-keygen",
+    "ssh-copy-id",
+    "rsync"
+   ]
+  },
+  {
+   "comando": "ssh-keygen",
+   "descrizione": "Crea una coppia di chiavi per entrare via ssh senza password.",
+   "categoria": "rete",
+   "livello": 4,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-t ed25519",
+     "spiegazione": "il tipo moderno"
+    },
+    {
+     "flag": "-C COMMENTO",
+     "spiegazione": "un'etichetta (di solito l'email)"
+    },
+    {
+     "flag": "-f FILE",
+     "spiegazione": "dove salvarla"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "ssh-keygen -t ed25519 -C 'giacomo@portatile'",
+     "spiegazione": "una chiave nuova in ~/.ssh/"
+    }
+   ],
+   "vedi": [
+    "ssh-copy-id",
+    "ssh"
+   ]
+  },
+  {
+   "comando": "ssh-copy-id",
+   "descrizione": "Copia la tua chiave pubblica su un server: da lì in poi entri senza password.",
+   "categoria": "rete",
+   "livello": 4,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "ssh-copy-id giacomo@server",
+     "spiegazione": "chiede la password un'ultima volta"
+    }
+   ],
+   "vedi": [
+    "ssh-keygen",
+    "ssh"
+   ]
+  },
+  {
+   "comando": "scp",
+   "descrizione": "Copia file da e verso un altro computer, via ssh.",
+   "categoria": "rete",
+   "livello": 4,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-r",
+     "spiegazione": "una cartella intera"
+    },
+    {
+     "flag": "-P PORTA",
+     "spiegazione": "una porta diversa (P maiuscola)"
+    },
+    {
+     "flag": "-p",
+     "spiegazione": "conserva le date"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "scp foto.jpg giacomo@server:~/",
+     "spiegazione": "un file al server"
+    },
+    {
+     "comando": "scp giacomo@server:~/registro.log .",
+     "spiegazione": "un file dal server a qui"
+    },
+    {
+     "comando": "scp -r progetto server:~/",
+     "spiegazione": "una cartella"
+    }
+   ],
+   "vedi": [
+    "rsync",
+    "ssh",
+    "sftp"
+   ]
+  },
+  {
+   "comando": "rsync",
+   "descrizione": "Sincronizza cartelle, anche fra computer: copia solo quello che è cambiato.",
+   "categoria": "file",
+   "livello": 4,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "-a",
+     "spiegazione": "archivio: ricorsivo, con permessi, date, collegamenti"
+    },
+    {
+     "flag": "-v",
+     "spiegazione": "dice cosa fa"
+    },
+    {
+     "flag": "-z",
+     "spiegazione": "comprime"
+    },
+    {
+     "flag": "-n / --dry-run",
+     "spiegazione": "PROVA: dice cosa farebbe senza farlo"
+    },
+    {
+     "flag": "--delete",
+     "spiegazione": "toglie dalla destinazione quello che non c'è più nella sorgente"
+    },
+    {
+     "flag": "--progress",
+     "spiegazione": "con la barra"
+    },
+    {
+     "flag": "-e ssh",
+     "spiegazione": "via ssh"
+    },
+    {
+     "flag": "--exclude=MOTIVO",
+     "spiegazione": "salta questi"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "rsync -av Documenti/ /media/backup/Documenti/",
+     "spiegazione": "un backup (la barra finale conta: dentro, non la cartella)"
+    },
+    {
+     "comando": "rsync -avn --delete a/ b/",
+     "spiegazione": "prova a specchiare, senza toccare"
+    },
+    {
+     "comando": "rsync -avz progetto/ server:~/progetto/",
+     "spiegazione": "verso un server"
+    }
+   ],
+   "vedi": [
+    "cp",
+    "scp",
+    "tar"
+   ]
+  },
+  {
+   "comando": "tar",
+   "descrizione": "Impacchetta cartelle in un archivio (e le tira fuori). Con `z` comprime in gzip, con `J` in xz.",
+   "categoria": "file",
+   "livello": 4,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-c",
+     "spiegazione": "crea"
+    },
+    {
+     "flag": "-x",
+     "spiegazione": "estrae"
+    },
+    {
+     "flag": "-t",
+     "spiegazione": "elenca senza estrarre"
+    },
+    {
+     "flag": "-v",
+     "spiegazione": "dice i file"
+    },
+    {
+     "flag": "-f FILE",
+     "spiegazione": "l'archivio (sempre per ultimo, prima del nome)"
+    },
+    {
+     "flag": "-z",
+     "spiegazione": "gzip (.tar.gz)"
+    },
+    {
+     "flag": "-J",
+     "spiegazione": "xz (.tar.xz)"
+    },
+    {
+     "flag": "-C DIR",
+     "spiegazione": "estrae in questa cartella"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "tar -czvf backup.tar.gz Documenti/",
+     "spiegazione": "crea un archivio compresso"
+    },
+    {
+     "comando": "tar -xzvf backup.tar.gz",
+     "spiegazione": "lo estrae"
+    },
+    {
+     "comando": "tar -tzf backup.tar.gz",
+     "spiegazione": "guarda cosa c'è dentro"
+    },
+    {
+     "comando": "tar -xzf archivio.tar.gz -C /tmp",
+     "spiegazione": "estrae altrove"
+    }
+   ],
+   "vedi": [
+    "zip",
+    "unzip",
+    "gzip",
+    "bsdtar"
+   ]
+  },
+  {
+   "comando": "zip",
+   "descrizione": "Crea un archivio .zip, che si apre ovunque.",
+   "categoria": "file",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-r",
+     "spiegazione": "una cartella intera"
+    },
+    {
+     "flag": "-e",
+     "spiegazione": "con password"
+    },
+    {
+     "flag": "-9",
+     "spiegazione": "compressione massima"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "zip -r progetto.zip progetto/",
+     "spiegazione": "una cartella"
+    },
+    {
+     "comando": "zip foto.zip *.jpg",
+     "spiegazione": "le foto"
+    }
+   ],
+   "vedi": [
+    "unzip",
+    "tar"
+   ]
+  },
+  {
+   "comando": "unzip",
+   "descrizione": "Estrae un .zip.",
+   "categoria": "file",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-l",
+     "spiegazione": "elenca senza estrarre"
+    },
+    {
+     "flag": "-d DIR",
+     "spiegazione": "estrae in questa cartella"
+    },
+    {
+     "flag": "-o",
+     "spiegazione": "sovrascrive senza chiedere"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "unzip archivio.zip",
+     "spiegazione": "qui"
+    },
+    {
+     "comando": "unzip -l archivio.zip",
+     "spiegazione": "cosa c'è dentro"
+    }
+   ],
+   "vedi": [
+    "zip",
+    "tar"
+   ]
+  },
+  {
+   "comando": "gzip",
+   "descrizione": "Comprime un file (diventa .gz e l'originale sparisce). `gunzip` o `gzip -d` per tornare indietro.",
+   "categoria": "file",
+   "livello": 3,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-d",
+     "spiegazione": "decomprime"
+    },
+    {
+     "flag": "-k",
+     "spiegazione": "tiene anche l'originale"
+    },
+    {
+     "flag": "-9",
+     "spiegazione": "massimo"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "gzip registro.log",
+     "spiegazione": "registro.log.gz"
+    },
+    {
+     "comando": "gzip -dk registro.log.gz",
+     "spiegazione": "torna, tenendo il .gz"
+    }
+   ],
+   "vedi": [
+    "tar",
+    "xz",
+    "zstd"
+   ]
+  },
+  {
+   "comando": "crontab",
+   "descrizione": "Comandi a orario: ogni notte, ogni lunedì. `min ora giorno mese giorno-sett comando`.",
+   "categoria": "sistema",
+   "livello": 4,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-e",
+     "spiegazione": "modifica la tua tabella"
+    },
+    {
+     "flag": "-l",
+     "spiegazione": "la mostra"
+    },
+    {
+     "flag": "-r",
+     "spiegazione": "la cancella tutta (senza chiedere!)"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "crontab -e",
+     "spiegazione": "apre l'editor"
+    },
+    {
+     "comando": "crontab -l",
+     "spiegazione": "cosa c'è"
+    },
+    {
+     "comando": "0 3 * * * /home/giacomo/backup.sh",
+     "spiegazione": "(nella tabella) ogni notte alle tre"
+    }
+   ],
+   "vedi": [
+    "systemctl list-timers",
+    "at"
+   ]
+  },
+  {
+   "comando": "timedatectl",
+   "descrizione": "Data, ora, fuso orario e sincronizzazione.",
+   "categoria": "sistema",
+   "livello": 3,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "set-timezone ZONA",
+     "spiegazione": "il fuso"
+    },
+    {
+     "flag": "set-ntp true",
+     "spiegazione": "l'ora dalla rete"
+    },
+    {
+     "flag": "list-timezones",
+     "spiegazione": "i fusi possibili"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "timedatectl",
+     "spiegazione": "com'è messo"
+    },
+    {
+     "comando": "sudo timedatectl set-timezone Europe/Rome",
+     "spiegazione": "l'Italia"
+    }
+   ],
+   "vedi": [
+    "date",
+    "hwclock"
+   ]
+  },
+  {
+   "comando": "nmcli",
+   "descrizione": "La rete di NetworkManager: Wi-Fi, connessioni, stato.",
+   "categoria": "rete",
+   "livello": 4,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "device wifi list",
+     "spiegazione": "le reti Wi-Fi che vede"
+    },
+    {
+     "flag": "device wifi connect SSID password PW",
+     "spiegazione": "si collega"
+    },
+    {
+     "flag": "connection show",
+     "spiegazione": "le connessioni salvate"
+    },
+    {
+     "flag": "device status",
+     "spiegazione": "le interfacce"
+    },
+    {
+     "flag": "radio wifi on/off",
+     "spiegazione": "accende / spegne il Wi-Fi"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "nmcli device wifi list",
+     "spiegazione": "le reti"
+    },
+    {
+     "comando": "nmcli device wifi connect Casa password segreta",
+     "spiegazione": "si collega"
+    }
+   ],
+   "vedi": [
+    "ip",
+    "iwctl"
+   ]
+  },
+  {
+   "comando": "dig",
+   "descrizione": "Interroga il DNS: quale IP ha un nome.",
+   "categoria": "rete",
+   "livello": 4,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "+short",
+     "spiegazione": "solo la risposta"
+    },
+    {
+     "flag": "@SERVER",
+     "spiegazione": "chiedi a questo DNS"
+    },
+    {
+     "flag": "MX / NS / TXT",
+     "spiegazione": "il tipo di record"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "dig +short archlinux.org",
+     "spiegazione": "il suo IP"
+    },
+    {
+     "comando": "dig @1.1.1.1 esempio.it",
+     "spiegazione": "chiedendo a Cloudflare"
+    }
+   ],
+   "vedi": [
+    "nslookup",
+    "host",
+    "resolvectl"
+   ]
+  },
+  {
+   "comando": "traceroute",
+   "descrizione": "La strada che fanno i pacchetti per arrivare a un indirizzo, salto per salto.",
+   "categoria": "rete",
+   "livello": 4,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-n",
+     "spiegazione": "senza risolvere i nomi"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "traceroute 8.8.8.8",
+     "spiegazione": "dove si ferma la rete"
+    }
+   ],
+   "vedi": [
+    "ping",
+    "mtr"
+   ]
+  },
+  {
+   "comando": "lsof",
+   "descrizione": "Quali file (e porte) ha aperto ogni processo. «Chi sta usando questa cosa?»",
+   "categoria": "sistema",
+   "livello": 4,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-i :PORTA",
+     "spiegazione": "chi usa questa porta"
+    },
+    {
+     "flag": "-p PID",
+     "spiegazione": "cosa ha aperto un processo"
+    },
+    {
+     "flag": "FILE",
+     "spiegazione": "chi ha aperto questo file"
+    },
+    {
+     "flag": "-u UTENTE",
+     "spiegazione": "i file di un utente"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sudo lsof -i :80",
+     "spiegazione": "chi ascolta sulla 80"
+    },
+    {
+     "comando": "lsof /mnt",
+     "spiegazione": "chi impedisce di smontare /mnt"
+    }
+   ],
+   "vedi": [
+    "ss",
+    "fuser"
+   ]
+  },
+  {
+   "comando": "fdisk",
+   "descrizione": "Le partizioni di un disco: le vede (-l) e le cambia. Cambiarle cancella dati.",
+   "categoria": "dischi",
+   "livello": 5,
+   "pericolo": 3,
+   "opzioni": [
+    {
+     "flag": "-l",
+     "spiegazione": "elenca (sicuro)"
+    },
+    {
+     "flag": "/dev/sdX",
+     "spiegazione": "apre il disco in modifica (interattivo)"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sudo fdisk -l",
+     "spiegazione": "tutti i dischi e le partizioni"
+    }
+   ],
+   "vedi": [
+    "lsblk",
+    "parted",
+    "gdisk"
+   ]
+  },
+  {
+   "comando": "mkfs",
+   "descrizione": "Formatta una partizione (crea un filesystem). CANCELLA tutto quello che c'era.",
+   "categoria": "dischi",
+   "livello": 5,
+   "pericolo": 3,
+   "opzioni": [
+    {
+     "flag": ".ext4 / .btrfs / .vfat",
+     "spiegazione": "il tipo (mkfs.ext4 …)"
+    },
+    {
+     "flag": "-L ETICHETTA",
+     "spiegazione": "un nome"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sudo mkfs.ext4 -L dati /dev/sdb1",
+     "spiegazione": "formatta la chiavetta in ext4 (verificando PRIMA con lsblk che sia lei)"
+    }
+   ],
+   "vedi": [
+    "lsblk",
+    "fdisk",
+    "wipefs"
+   ]
+  },
+  {
+   "comando": "dd",
+   "descrizione": "Copia byte grezzi da un posto a un altro: immagini di dischi, chiavette avviabili. Non chiede conferma.",
+   "categoria": "dischi",
+   "livello": 5,
+   "pericolo": 3,
+   "opzioni": [
+    {
+     "flag": "if=FILE",
+     "spiegazione": "da dove"
+    },
+    {
+     "flag": "of=FILE",
+     "spiegazione": "a dove (se è un disco, lo sovrascrive tutto)"
+    },
+    {
+     "flag": "bs=4M",
+     "spiegazione": "a blocchi di 4 MB"
+    },
+    {
+     "flag": "status=progress",
+     "spiegazione": "con l'avanzamento"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sudo dd if=arch.iso of=/dev/sdX bs=4M status=progress",
+     "spiegazione": "una chiavetta avviabile (sdX è QUELLA chiavetta, da verificare con lsblk)"
+    },
+    {
+     "comando": "dd if=/dev/zero of=prova.img bs=1M count=100",
+     "spiegazione": "un file di 100 MB di zeri"
+    }
+   ],
+   "vedi": [
+    "lsblk",
+    "cp",
+    "pv"
+   ]
+  },
+  {
+   "comando": "shutdown",
+   "descrizione": "Spegne o riavvia il computer, subito o a un'ora.",
+   "categoria": "sistema",
+   "livello": 3,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "now",
+     "spiegazione": "adesso"
+    },
+    {
+     "flag": "-r",
+     "spiegazione": "riavvia"
+    },
+    {
+     "flag": "+10",
+     "spiegazione": "fra dieci minuti"
+    },
+    {
+     "flag": "-c",
+     "spiegazione": "annulla"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "shutdown now",
+     "spiegazione": "spegne"
+    },
+    {
+     "comando": "shutdown -r now",
+     "spiegazione": "riavvia"
+    },
+    {
+     "comando": "shutdown +30",
+     "spiegazione": "fra mezz'ora"
+    }
+   ],
+   "vedi": [
+    "systemctl poweroff",
+    "reboot"
+   ]
+  },
+  {
+   "comando": "reboot",
+   "descrizione": "Riavvia il computer, adesso.",
+   "categoria": "sistema",
+   "livello": 3,
+   "pericolo": 2,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "reboot",
+     "spiegazione": "riavvia"
+    }
+   ],
+   "vedi": [
+    "shutdown",
+    "systemctl reboot"
+   ]
+  },
+  {
+   "comando": "ln",
+   "descrizione": "Un collegamento: `-s` simbolico (un rimando al percorso), senza `-s` fisico (lo stesso file con due nomi).",
+   "categoria": "file",
+   "livello": 5,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-s",
+     "spiegazione": "simbolico: quello che si usa quasi sempre"
+    },
+    {
+     "flag": "-f",
+     "spiegazione": "sovrascrive se esiste"
+    },
+    {
+     "flag": "-v",
+     "spiegazione": "dice cosa ha fatto"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "ln -s /percorso/lungo/progetto ~/p",
+     "spiegazione": "un'abbreviazione"
+    },
+    {
+     "comando": "ln -s ~/dotfiles/.zshrc ~/.zshrc",
+     "spiegazione": "la configurazione tenuta altrove"
+    },
+    {
+     "comando": "ln -sf nuovo.txt attuale.txt",
+     "spiegazione": "sposta il rimando"
+    }
+   ],
+   "vedi": [
+    "readlink",
+    "ls -l"
+   ]
+  },
+  {
+   "comando": "readlink",
+   "descrizione": "Dove punta un collegamento simbolico.",
+   "categoria": "file",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-f",
+     "spiegazione": "il percorso finale, assoluto, risolto tutto"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "readlink -f ~/p",
+     "spiegazione": "il percorso vero"
+    }
+   ],
+   "vedi": [
+    "ln",
+    "realpath"
+   ]
+  },
+  {
+   "comando": "sed",
+   "descrizione": "Modifica testo al volo, riga per riga: sostituisce, cancella, stampa. L'editor a flusso.",
+   "categoria": "testo",
+   "livello": 5,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "s/VECCHIO/NUOVO/",
+     "spiegazione": "sostituisce la prima occorrenza per riga (con /g tutte)"
+    },
+    {
+     "flag": "-i",
+     "spiegazione": "modifica il file SUL POSTO (con -i.bak fa prima una copia)"
+    },
+    {
+     "flag": "-n",
+     "spiegazione": "non stampa niente se non glielo chiedi (con p)"
+    },
+    {
+     "flag": "-e",
+     "spiegazione": "più comandi"
+    },
+    {
+     "flag": "Nd",
+     "spiegazione": "cancella la riga N (/motivo/d le righe che corrispondono)"
+    },
+    {
+     "flag": "-E",
+     "spiegazione": "espressioni regolari estese"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sed 's/gatto/cane/g' testo.txt",
+     "spiegazione": "tutti i gatti diventano cani, a schermo"
+    },
+    {
+     "comando": "sed -i.bak 's/http:/https:/g' config.txt",
+     "spiegazione": "nel file, con copia di sicurezza"
+    },
+    {
+     "comando": "sed -n '10,20p' file.txt",
+     "spiegazione": "solo le righe da 10 a 20"
+    },
+    {
+     "comando": "sed '/^#/d' config.txt",
+     "spiegazione": "senza i commenti"
+    },
+    {
+     "comando": "sed -n '/errore/p' registro.log",
+     "spiegazione": "come grep"
+    }
+   ],
+   "vedi": [
+    "awk",
+    "grep",
+    "tr"
+   ]
+  },
+  {
+   "comando": "awk",
+   "descrizione": "Un piccolo linguaggio per le righe a colonne: stampa la colonna 3, somma, filtra. `$1` è la prima colonna, `$NF` l'ultima.",
+   "categoria": "testo",
+   "livello": 5,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "'{print $N}'",
+     "spiegazione": "la colonna N"
+    },
+    {
+     "flag": "-F SEP",
+     "spiegazione": "le colonne sono separate da SEP"
+    },
+    {
+     "flag": "'/motivo/ {…}'",
+     "spiegazione": "solo le righe che corrispondono"
+    },
+    {
+     "flag": "'{s+=$1} END {print s}'",
+     "spiegazione": "somma la prima colonna"
+    },
+    {
+     "flag": "NR",
+     "spiegazione": "il numero di riga"
+    },
+    {
+     "flag": "NF",
+     "spiegazione": "quante colonne"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "awk '{print $1}' file.txt",
+     "spiegazione": "la prima colonna"
+    },
+    {
+     "comando": "awk -F: '{print $1, $7}' /etc/passwd",
+     "spiegazione": "utente e shell"
+    },
+    {
+     "comando": "ps aux | awk '{s+=$6} END {print s/1024 \" MB\"}'",
+     "spiegazione": "la memoria di tutti i processi"
+    },
+    {
+     "comando": "awk 'NR>1' dati.csv",
+     "spiegazione": "salta l'intestazione"
+    },
+    {
+     "comando": "awk '$3 > 100' dati.txt",
+     "spiegazione": "solo le righe con la terza colonna oltre 100"
+    }
+   ],
+   "vedi": [
+    "sed",
+    "cut",
+    "sort"
+   ]
+  },
+  {
+   "comando": "git",
+   "descrizione": "Il controllo di versione: la storia di un progetto, i rami, la collaborazione.",
+   "categoria": "sviluppo",
+   "livello": 5,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "status",
+     "spiegazione": "cosa è cambiato"
+    },
+    {
+     "flag": "add FILE",
+     "spiegazione": "prepara per il commit (`add -A` tutto)"
+    },
+    {
+     "flag": "commit -m 'MSG'",
+     "spiegazione": "salva uno scatto con un messaggio"
+    },
+    {
+     "flag": "log --oneline",
+     "spiegazione": "la storia, una riga per commit"
+    },
+    {
+     "flag": "diff",
+     "spiegazione": "le modifiche non ancora preparate"
+    },
+    {
+     "flag": "pull / push",
+     "spiegazione": "scarica / manda al server"
+    },
+    {
+     "flag": "clone URL",
+     "spiegazione": "scarica un progetto"
+    },
+    {
+     "flag": "checkout -b RAMO",
+     "spiegazione": "un ramo nuovo (o `switch -c`)"
+    },
+    {
+     "flag": "stash",
+     "spiegazione": "mette da parte le modifiche"
+    },
+    {
+     "flag": "restore FILE",
+     "spiegazione": "annulla le modifiche a un file"
+    },
+    {
+     "flag": "reset --hard",
+     "spiegazione": "butta via TUTTE le modifiche non salvate"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "git status",
+     "spiegazione": "il punto della situazione"
+    },
+    {
+     "comando": "git add -A && git commit -m 'Sistemato il menù'",
+     "spiegazione": "salva tutto con un messaggio"
+    },
+    {
+     "comando": "git log --oneline -10",
+     "spiegazione": "gli ultimi dieci commit"
+    },
+    {
+     "comando": "git diff",
+     "spiegazione": "cosa hai cambiato"
+    },
+    {
+     "comando": "git clone https://github.com/utente/progetto.git",
+     "spiegazione": "scarica un progetto"
+    },
+    {
+     "comando": "git switch -c prova",
+     "spiegazione": "un ramo per provare"
+    }
+   ],
+   "vedi": [
+    "gh",
+    "diff",
+    "patch"
+   ]
+  },
+  {
+   "comando": "bash",
+   "descrizione": "La shell di Bourne, ovunque. Esegue script (`bash file.sh`) o comandi (`-c`).",
+   "categoria": "shell",
+   "livello": 5,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-c 'CMD'",
+     "spiegazione": "esegue una riga"
+    },
+    {
+     "flag": "-x",
+     "spiegazione": "stampa ogni comando prima di eseguirlo (per capire uno script)"
+    },
+    {
+     "flag": "-e",
+     "spiegazione": "si ferma al primo errore"
+    },
+    {
+     "flag": "-n",
+     "spiegazione": "controlla la sintassi senza eseguire"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "bash script.sh",
+     "spiegazione": "esegue"
+    },
+    {
+     "comando": "bash -x script.sh",
+     "spiegazione": "esegue mostrando ogni passo"
+    },
+    {
+     "comando": "bash -n script.sh",
+     "spiegazione": "solo controllo"
+    }
+   ],
+   "vedi": [
+    "sh",
+    "zsh",
+    "chmod +x",
+    "shellcheck"
+   ]
+  },
+  {
+   "comando": "if",
+   "descrizione": "Negli script: fa una cosa solo se una condizione è vera. `[ ]` o `[[ ]]` per i confronti.",
+   "categoria": "shell",
+   "livello": 5,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-f FILE",
+     "spiegazione": "il file esiste"
+    },
+    {
+     "flag": "-d DIR",
+     "spiegazione": "la cartella esiste"
+    },
+    {
+     "flag": "-z STR",
+     "spiegazione": "la stringa è vuota"
+    },
+    {
+     "flag": "-eq / -lt / -gt",
+     "spiegazione": "numeri: uguale / minore / maggiore"
+    },
+    {
+     "flag": "==",
+     "spiegazione": "stringhe uguali"
+    },
+    {
+     "flag": "elif / else",
+     "spiegazione": "altrimenti"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "if [ -f appunti.txt ]; then echo 'c è'; fi",
+     "spiegazione": "se il file esiste"
+    },
+    {
+     "comando": "if [[ $n -gt 10 ]]; then echo grande; else echo piccolo; fi",
+     "spiegazione": "un numero"
+    },
+    {
+     "comando": "if grep -q errore registro.log; then echo 'ci sono errori'; fi",
+     "spiegazione": "il risultato di un comando"
+    }
+   ],
+   "vedi": [
+    "test",
+    "case",
+    "for",
+    "while"
+   ]
+  },
+  {
+   "comando": "for",
+   "descrizione": "Un ciclo: ripete per ogni elemento di un elenco.",
+   "categoria": "shell",
+   "livello": 5,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "in ELENCO",
+     "spiegazione": "gli elementi"
+    },
+    {
+     "flag": "in *.txt",
+     "spiegazione": "i file che corrispondono"
+    },
+    {
+     "flag": "in $(seq 5)",
+     "spiegazione": "i numeri da 1 a 5"
+    },
+    {
+     "flag": "(( i=0; i<5; i++ ))",
+     "spiegazione": "in stile C"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "for f in *.jpg; do echo \"$f\"; done",
+     "spiegazione": "ogni foto"
+    },
+    {
+     "comando": "for f in *.txt; do mv \"$f\" \"${f%.txt}.md\"; done",
+     "spiegazione": "rinomina .txt in .md"
+    },
+    {
+     "comando": "for i in $(seq 3); do echo \"giro $i\"; done",
+     "spiegazione": "tre volte"
+    }
+   ],
+   "vedi": [
+    "while",
+    "if",
+    "seq",
+    "xargs"
+   ]
+  },
+  {
+   "comando": "while",
+   "descrizione": "Un ciclo: ripete finché una condizione è vera. Con `read` legge un file riga per riga.",
+   "categoria": "shell",
+   "livello": 5,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "read -r riga",
+     "spiegazione": "una riga alla volta"
+    },
+    {
+     "flag": "true",
+     "spiegazione": "per sempre (con break per uscire)"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "while read -r r; do echo \"-> $r\"; done < elenco.txt",
+     "spiegazione": "ogni riga del file"
+    },
+    {
+     "comando": "while true; do date; sleep 1; done",
+     "spiegazione": "l'ora ogni secondo"
+    }
+   ],
+   "vedi": [
+    "for",
+    "until",
+    "if"
+   ]
+  },
+  {
+   "comando": "case",
+   "descrizione": "Negli script: sceglie fra più casi in base a un valore. Più pulito di tanti `if`.",
+   "categoria": "shell",
+   "livello": 5,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "case $1 in start) echo via;; stop) echo alt;; *) echo '?';; esac",
+     "spiegazione": "tre casi e un ripiego"
+    }
+   ],
+   "vedi": [
+    "if"
+   ]
+  },
+  {
+   "comando": "function",
+   "descrizione": "Una funzione della shell: un pezzo di script con un nome. `$1` è il primo argomento.",
+   "categoria": "shell",
+   "livello": 5,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "saluta() { echo \"ciao $1\"; }",
+     "spiegazione": "la definisce"
+    },
+    {
+     "comando": "saluta Giacomo",
+     "spiegazione": "la usa"
+    }
+   ],
+   "vedi": [
+    "alias",
+    "bash"
+   ]
+  },
+  {
+   "comando": "test",
+   "descrizione": "Verifica una condizione: file, stringhe, numeri. `[ ]` è lo stesso comando.",
+   "categoria": "shell",
+   "livello": 5,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-f / -d / -e",
+     "spiegazione": "file / cartella / qualcosa esiste"
+    },
+    {
+     "flag": "-r / -w / -x",
+     "spiegazione": "leggibile / scrivibile / eseguibile"
+    },
+    {
+     "flag": "-z / -n",
+     "spiegazione": "stringa vuota / non vuota"
+    },
+    {
+     "flag": "-eq -ne -lt -le -gt -ge",
+     "spiegazione": "confronti fra numeri"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "test -f appunti.txt && echo esiste",
+     "spiegazione": "c'è?"
+    },
+    {
+     "comando": "[ $# -eq 0 ] && echo 'manca un argomento'",
+     "spiegazione": "negli script"
+    }
+   ],
+   "vedi": [
+    "if"
+   ]
+  },
+  {
+   "comando": "chsh",
+   "descrizione": "Cambia la tua shell di accesso (zsh, fish, bash).",
+   "categoria": "terminale",
+   "livello": 3,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-s SHELL",
+     "spiegazione": "quale"
+    },
+    {
+     "flag": "-l",
+     "spiegazione": "quelle permesse"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "chsh -s /usr/bin/fish",
+     "spiegazione": "fish dal prossimo accesso"
+    }
+   ],
+   "vedi": [
+    "cat /etc/shells"
+   ]
+  },
+  {
+   "comando": "source",
+   "descrizione": "Esegue un file NELLA shell attuale (non in una nuova): serve per ricaricare la configurazione. Anche `.`.",
+   "categoria": "shell",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "source ~/.zshrc",
+     "spiegazione": "ricarica la configurazione senza riaprire"
+    },
+    {
+     "comando": ". venv/bin/activate",
+     "spiegazione": "attiva un ambiente Python"
+    }
+   ],
+   "vedi": [
+    "bash",
+    "export"
+   ]
+  },
+  {
+   "comando": "xdg-open",
+   "descrizione": "Apre un file o un URL con il programma predefinito, come un doppio clic.",
+   "categoria": "sistema",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "xdg-open foto.jpg",
+     "spiegazione": "nel visualizzatore"
+    },
+    {
+     "comando": "xdg-open https://archlinux.org",
+     "spiegazione": "nel browser"
+    },
+    {
+     "comando": "xdg-open .",
+     "spiegazione": "questa cartella nel gestore file"
+    }
+   ],
+   "vedi": [
+    "open"
+   ]
+  },
+  {
+   "comando": "jq",
+   "descrizione": "Legge e trasforma JSON: estrae campi, filtra, formatta.",
+   "categoria": "testo",
+   "livello": 5,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": ".",
+     "spiegazione": "tutto, formattato"
+    },
+    {
+     "flag": ".campo",
+     "spiegazione": "un campo"
+    },
+    {
+     "flag": ".[]",
+     "spiegazione": "ogni elemento di una lista"
+    },
+    {
+     "flag": "-r",
+     "spiegazione": "stringhe senza virgolette"
+    },
+    {
+     "flag": "'.[] | select(.x > 1)'",
+     "spiegazione": "filtra"
+    },
+    {
+     "flag": "-c",
+     "spiegazione": "compatto"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "cat dati.json | jq .",
+     "spiegazione": "formattato e colorato"
+    },
+    {
+     "comando": "jq -r '.nome' dati.json",
+     "spiegazione": "un campo"
+    },
+    {
+     "comando": "jq '.[] | .id' elenco.json",
+     "spiegazione": "gli id"
+    }
+   ],
+   "vedi": [
+    "curl",
+    "python -m json.tool"
+   ]
+  },
+  {
+   "comando": "python",
+   "descrizione": "L'interprete Python. Da solo apre una calcolatrice interattiva (Ctrl+D per uscire).",
+   "categoria": "sviluppo",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "FILE.py",
+     "spiegazione": "esegue uno script"
+    },
+    {
+     "flag": "-c 'CODICE'",
+     "spiegazione": "una riga"
+    },
+    {
+     "flag": "-m MODULO",
+     "spiegazione": "un modulo (http.server, venv, pip)"
+    },
+    {
+     "flag": "-i",
+     "spiegazione": "interattivo dopo lo script"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "python script.py",
+     "spiegazione": "esegue"
+    },
+    {
+     "comando": "python -m http.server 8000",
+     "spiegazione": "serve questa cartella sul web"
+    },
+    {
+     "comando": "python -m venv venv",
+     "spiegazione": "un ambiente isolato"
+    }
+   ],
+   "vedi": [
+    "pip",
+    "bc"
+   ]
+  },
+  {
+   "comando": "make",
+   "descrizione": "Costruisce un progetto seguendo un Makefile: sa cosa è cambiato e rifà solo quello.",
+   "categoria": "sviluppo",
+   "livello": 4,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-j N",
+     "spiegazione": "N lavori in parallelo"
+    },
+    {
+     "flag": "BERSAGLIO",
+     "spiegazione": "un bersaglio (install, clean, test)"
+    },
+    {
+     "flag": "-n",
+     "spiegazione": "dice cosa farebbe"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "make",
+     "spiegazione": "costruisce"
+    },
+    {
+     "comando": "make -j$(nproc)",
+     "spiegazione": "con tutti i core"
+    },
+    {
+     "comando": "sudo make install",
+     "spiegazione": "installa"
+    }
+   ],
+   "vedi": [
+    "meson",
+    "ninja",
+    "cmake"
+   ]
+  },
+  {
+   "comando": "strace",
+   "descrizione": "Mostra ogni chiamata di sistema che un programma fa: file aperti, rete, errori. Per capire perché un programma non parte.",
+   "categoria": "sviluppo",
+   "livello": 5,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-e trace=file",
+     "spiegazione": "solo i file"
+    },
+    {
+     "flag": "-f",
+     "spiegazione": "anche i processi figli"
+    },
+    {
+     "flag": "-o FILE",
+     "spiegazione": "salva in un file"
+    },
+    {
+     "flag": "-p PID",
+     "spiegazione": "si aggancia a un processo che gira"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "strace -e trace=openat ./programma",
+     "spiegazione": "quali file cerca"
+    },
+    {
+     "comando": "strace -f -o traccia.txt make",
+     "spiegazione": "tutto, in un file"
+    }
+   ],
+   "vedi": [
+    "ltrace",
+    "lsof"
+   ]
+  },
+  {
+   "comando": "tmux",
+   "descrizione": "Più terminali in una finestra, che sopravvivono alla disconnessione. Ctrl+B è il prefisso.",
+   "categoria": "terminale",
+   "livello": 5,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "new -s NOME",
+     "spiegazione": "una sessione nuova"
+    },
+    {
+     "flag": "attach -t NOME",
+     "spiegazione": "rientra"
+    },
+    {
+     "flag": "ls",
+     "spiegazione": "le sessioni"
+    },
+    {
+     "flag": "Ctrl+B d",
+     "spiegazione": "stacca (la sessione continua)"
+    },
+    {
+     "flag": "Ctrl+B c",
+     "spiegazione": "una finestra nuova"
+    },
+    {
+     "flag": "Ctrl+B %",
+     "spiegazione": "divide in due"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "tmux new -s lavoro",
+     "spiegazione": "una sessione"
+    },
+    {
+     "comando": "tmux attach -t lavoro",
+     "spiegazione": "rientra dopo la disconnessione"
+    }
+   ],
+   "vedi": [
+    "screen",
+    "nohup"
+   ]
+  },
+  {
+   "comando": "screen",
+   "descrizione": "Come tmux, più vecchio: terminali che restano aperti anche se ti scolleghi. Ctrl+A è il prefisso.",
+   "categoria": "terminale",
+   "livello": 5,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-S NOME",
+     "spiegazione": "una sessione"
+    },
+    {
+     "flag": "-r",
+     "spiegazione": "rientra"
+    },
+    {
+     "flag": "-ls",
+     "spiegazione": "le sessioni"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "screen -S lungo",
+     "spiegazione": "una sessione"
+    },
+    {
+     "comando": "screen -r lungo",
+     "spiegazione": "rientra"
+    }
+   ],
+   "vedi": [
+    "tmux"
+   ]
+  },
+  {
+   "comando": "vim",
+   "descrizione": "L'editor che c'è su ogni macchina. `i` per scrivere, Esc per tornare ai comandi, `:wq` salva ed esce, `:q!` esce senza salvare.",
+   "categoria": "sviluppo",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "FILE",
+     "spiegazione": "apre"
+    },
+    {
+     "flag": "+N",
+     "spiegazione": "alla riga N"
+    },
+    {
+     "flag": "-R",
+     "spiegazione": "sola lettura"
+    },
+    {
+     "flag": "-d A B",
+     "spiegazione": "confronta due file"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "vim appunti.txt",
+     "spiegazione": "apre"
+    },
+    {
+     "comando": "vim +20 script.sh",
+     "spiegazione": "alla riga 20"
+    },
+    {
+     "comando": "vimtutor",
+     "spiegazione": "trenta minuti per imparare"
+    }
+   ],
+   "vedi": [
+    "nano",
+    "nvim",
+    "vimtutor"
+   ]
+  },
+  {
+   "comando": "nano",
+   "descrizione": "Un editor semplice: i comandi sono scritti in basso. Ctrl+O salva, Ctrl+X esce.",
+   "categoria": "sviluppo",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-l",
+     "spiegazione": "con i numeri di riga"
+    },
+    {
+     "flag": "+N",
+     "spiegazione": "alla riga N"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "nano appunti.txt",
+     "spiegazione": "apre"
+    },
+    {
+     "comando": "sudo nano /etc/hosts",
+     "spiegazione": "un file di sistema"
+    }
+   ],
+   "vedi": [
+    "vim",
+    "micro"
+   ]
+  },
+  {
+   "comando": "shred",
+   "descrizione": "Sovrascrive un file più volte prima di cancellarlo, così non si recupera. Non torna.",
+   "categoria": "file",
+   "livello": 5,
+   "pericolo": 3,
+   "opzioni": [
+    {
+     "flag": "-u",
+     "spiegazione": "cancella dopo"
+    },
+    {
+     "flag": "-n N",
+     "spiegazione": "N passate"
+    },
+    {
+     "flag": "-v",
+     "spiegazione": "dice a che punto è"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "shred -u segreto.txt",
+     "spiegazione": "sparisce per davvero"
+    }
+   ],
+   "vedi": [
+    "rm"
+   ]
+  },
+  {
+   "comando": "trash",
+   "descrizione": "Manda un file nel cestino invece di cancellarlo: si può ripescare.",
+   "categoria": "file",
+   "livello": 1,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "trash vecchio.txt",
+     "spiegazione": "nel cestino"
+    },
+    {
+     "comando": "trash-list",
+     "spiegazione": "cosa c'è nel cestino"
+    },
+    {
+     "comando": "trash-restore",
+     "spiegazione": "ripesca"
+    }
+   ],
+   "vedi": [
+    "rm"
+   ]
+  },
+  {
+   "comando": "column",
+   "descrizione": "Allinea in colonne.",
+   "categoria": "testo",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-t",
+     "spiegazione": "in tabella"
+    },
+    {
+     "flag": "-s SEP",
+     "spiegazione": "il separatore"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "mount | column -t",
+     "spiegazione": "leggibile"
+    },
+    {
+     "comando": "column -t -s, dati.csv",
+     "spiegazione": "un csv in colonne"
+    }
+   ],
+   "vedi": [
+    "awk",
+    "paste"
+   ]
+  },
+  {
+   "comando": "paste",
+   "descrizione": "Affianca le righe di due file, colonna a colonna.",
+   "categoria": "testo",
+   "livello": 4,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-d SEP",
+     "spiegazione": "il separatore"
+    },
+    {
+     "flag": "-s",
+     "spiegazione": "in una riga sola"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "paste nomi.txt eta.txt",
+     "spiegazione": "due colonne"
+    },
+    {
+     "comando": "paste -sd, elenco.txt",
+     "spiegazione": "tutto in una riga separato da virgole"
+    }
+   ],
+   "vedi": [
+    "cut",
+    "column"
+   ]
+  },
+  {
+   "comando": "basename",
+   "descrizione": "Solo il nome del file, senza il percorso (e senza l'estensione, se gliela dai).",
+   "categoria": "shell",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "basename /a/b/foto.jpg",
+     "spiegazione": "foto.jpg"
+    },
+    {
+     "comando": "basename foto.jpg .jpg",
+     "spiegazione": "foto"
+    }
+   ],
+   "vedi": [
+    "dirname",
+    "realpath"
+   ]
+  },
+  {
+   "comando": "dirname",
+   "descrizione": "Solo il percorso, senza il nome del file.",
+   "categoria": "shell",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "dirname /a/b/foto.jpg",
+     "spiegazione": "/a/b"
+    }
+   ],
+   "vedi": [
+    "basename"
+   ]
+  },
+  {
+   "comando": "realpath",
+   "descrizione": "Il percorso assoluto e risolto di un file.",
+   "categoria": "shell",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "realpath ../foto.jpg",
+     "spiegazione": "per esteso"
+    }
+   ],
+   "vedi": [
+    "readlink",
+    "pwd"
+   ]
+  },
+  {
+   "comando": "md5sum",
+   "descrizione": "L'impronta MD5 di un file: due file con la stessa impronta sono uguali. Per controllo, non per sicurezza.",
+   "categoria": "file",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-c FILE",
+     "spiegazione": "verifica le impronte scritte in un file"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "md5sum arch.iso",
+     "spiegazione": "l'impronta"
+    },
+    {
+     "comando": "md5sum -c sums.md5",
+     "spiegazione": "verifica"
+    }
+   ],
+   "vedi": [
+    "sha256sum",
+    "cmp"
+   ]
+  },
+  {
+   "comando": "sha256sum",
+   "descrizione": "L'impronta SHA-256 di un file: è quella che i siti pubblicano per verificare uno scaricamento.",
+   "categoria": "file",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-c FILE",
+     "spiegazione": "verifica"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "sha256sum arch.iso",
+     "spiegazione": "da confrontare con quella del sito"
+    }
+   ],
+   "vedi": [
+    "md5sum",
+    "b2sum"
+   ]
+  },
+  {
+   "comando": "xxd",
+   "descrizione": "Un file in esadecimale, byte per byte.",
+   "categoria": "sviluppo",
+   "livello": 5,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-l N",
+     "spiegazione": "solo i primi N byte"
+    },
+    {
+     "flag": "-r",
+     "spiegazione": "al contrario: da esadecimale a binario"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "xxd foto.jpg | head",
+     "spiegazione": "i primi byte (FF D8 = JPEG)"
+    }
+   ],
+   "vedi": [
+    "hexdump",
+    "od",
+    "file"
+   ]
+  },
+  {
+   "comando": "nc",
+   "descrizione": "netcat: legge e scrive su una connessione di rete. Un coltellino: server di prova, test di porte, trasferimenti.",
+   "categoria": "rete",
+   "livello": 5,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-l PORTA",
+     "spiegazione": "ascolta"
+    },
+    {
+     "flag": "-z",
+     "spiegazione": "solo controlla se la porta è aperta"
+    },
+    {
+     "flag": "-v",
+     "spiegazione": "dice cosa fa"
+    },
+    {
+     "flag": "-u",
+     "spiegazione": "UDP"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "nc -zv server.it 22",
+     "spiegazione": "la porta 22 è aperta?"
+    },
+    {
+     "comando": "nc -l 1234 > ricevuto.txt",
+     "spiegazione": "riceve un file"
+    },
+    {
+     "comando": "nc server 1234 < file.txt",
+     "spiegazione": "lo manda"
+    }
+   ],
+   "vedi": [
+    "ss",
+    "curl",
+    "socat"
+   ]
+  },
+  {
+   "comando": "nmap",
+   "descrizione": "Scandaglia una rete: quali macchine ci sono e quali porte hanno aperte. Solo su reti tue.",
+   "categoria": "rete",
+   "livello": 5,
+   "pericolo": 2,
+   "opzioni": [
+    {
+     "flag": "-sn RETE",
+     "spiegazione": "solo chi c'è, senza porte"
+    },
+    {
+     "flag": "-p PORTE",
+     "spiegazione": "quali porte"
+    },
+    {
+     "flag": "-A",
+     "spiegazione": "tutto: servizi, versioni, sistema"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "nmap -sn 192.168.1.0/24",
+     "spiegazione": "chi c'è in casa"
+    },
+    {
+     "comando": "nmap -p 22,80,443 server.it",
+     "spiegazione": "tre porte"
+    }
+   ],
+   "vedi": [
+    "ss",
+    "arp-scan"
+   ]
+  },
+  {
+   "comando": "loginctl",
+   "descrizione": "Le sessioni di accesso: chi è collegato, blocca, termina.",
+   "categoria": "sistema",
+   "livello": 4,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "list-sessions",
+     "spiegazione": "le sessioni"
+    },
+    {
+     "flag": "lock-session",
+     "spiegazione": "blocca"
+    },
+    {
+     "flag": "terminate-user UTENTE",
+     "spiegazione": "lo scollega"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "loginctl list-sessions",
+     "spiegazione": "chi c'è"
+    },
+    {
+     "comando": "loginctl lock-session",
+     "spiegazione": "blocca lo schermo"
+    }
+   ],
+   "vedi": [
+    "systemctl",
+    "who"
+   ]
+  },
+  {
+   "comando": "who",
+   "descrizione": "Chi è collegato a questo computer, e da dove.",
+   "categoria": "sistema",
+   "livello": 2,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-a",
+     "spiegazione": "tutto"
+    },
+    {
+     "flag": "am i",
+     "spiegazione": "solo tu"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "who",
+     "spiegazione": "gli utenti collegati"
+    }
+   ],
+   "vedi": [
+    "w",
+    "whoami",
+    "last"
+   ]
+  },
+  {
+   "comando": "last",
+   "descrizione": "Gli ultimi accessi e riavvii.",
+   "categoria": "sistema",
+   "livello": 4,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-n N",
+     "spiegazione": "gli ultimi N"
+    },
+    {
+     "flag": "reboot",
+     "spiegazione": "solo i riavvii"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "last -n 10",
+     "spiegazione": "gli ultimi dieci accessi"
+    },
+    {
+     "comando": "last reboot",
+     "spiegazione": "i riavvii"
+    }
+   ],
+   "vedi": [
+    "who",
+    "journalctl"
+   ]
+  },
+  {
+   "comando": "stty",
+   "descrizione": "Le impostazioni del terminale: eco, misura, tasti di controllo.",
+   "categoria": "terminale",
+   "livello": 5,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "-a",
+     "spiegazione": "tutto"
+    },
+    {
+     "flag": "size",
+     "spiegazione": "righe e colonne"
+    },
+    {
+     "flag": "sane",
+     "spiegazione": "rimette i valori sensati"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "stty size",
+     "spiegazione": "«40 120»"
+    },
+    {
+     "comando": "stty sane",
+     "spiegazione": "dopo che un programma l'ha lasciato strano"
+    }
+   ],
+   "vedi": [
+    "reset",
+    "tput"
+   ]
+  },
+  {
+   "comando": "tput",
+   "descrizione": "Comanda il terminale: colori, cursore, misure.",
+   "categoria": "terminale",
+   "livello": 5,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "cols / lines",
+     "spiegazione": "le colonne / le righe"
+    },
+    {
+     "flag": "setaf N",
+     "spiegazione": "colore del testo"
+    },
+    {
+     "flag": "sgr0",
+     "spiegazione": "azzera"
+    },
+    {
+     "flag": "clear",
+     "spiegazione": "pulisci"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "tput cols",
+     "spiegazione": "quante colonne"
+    },
+    {
+     "comando": "echo \"$(tput setaf 2)verde$(tput sgr0)\"",
+     "spiegazione": "testo verde"
+    }
+   ],
+   "vedi": [
+    "stty",
+    "echo -e"
+   ]
+  },
+  {
+   "comando": "pushd",
+   "descrizione": "Entra in una cartella ricordando quella di prima; `popd` torna. Una pila di cartelle.",
+   "categoria": "file",
+   "livello": 4,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "pushd /etc",
+     "spiegazione": "va in /etc"
+    },
+    {
+     "comando": "popd",
+     "spiegazione": "torna dov'eri"
+    },
+    {
+     "comando": "dirs",
+     "spiegazione": "la pila"
+    }
+   ],
+   "vedi": [
+    "cd",
+    "popd"
+   ]
+  },
+  {
+   "comando": "udisksctl",
+   "descrizione": "Monta e smonta dischi rimovibili SENZA sudo, passando dal servizio del sistema.",
+   "categoria": "dischi",
+   "livello": 4,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "mount -b DEV",
+     "spiegazione": "monta"
+    },
+    {
+     "flag": "unmount -b DEV",
+     "spiegazione": "smonta"
+    },
+    {
+     "flag": "power-off -b DEV",
+     "spiegazione": "spegne (per staccare)"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "udisksctl mount -b /dev/sdb1",
+     "spiegazione": "la chiavetta, in /run/media/…"
+    },
+    {
+     "comando": "udisksctl unmount -b /dev/sdb1",
+     "spiegazione": "smonta"
+    }
+   ],
+   "vedi": [
+    "mount",
+    "lsblk"
+   ]
+  },
+  {
+   "comando": "bluetoothctl",
+   "descrizione": "Il Bluetooth da terminale: scan, accoppia, connetti.",
+   "categoria": "sistema",
+   "livello": 4,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "scan on",
+     "spiegazione": "cerca"
+    },
+    {
+     "flag": "devices",
+     "spiegazione": "quelli visti"
+    },
+    {
+     "flag": "pair MAC",
+     "spiegazione": "accoppia"
+    },
+    {
+     "flag": "connect MAC",
+     "spiegazione": "connetti"
+    },
+    {
+     "flag": "power on",
+     "spiegazione": "accende"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "bluetoothctl",
+     "spiegazione": "interattivo"
+    },
+    {
+     "comando": "bluetoothctl devices",
+     "spiegazione": "quelli noti"
+    }
+   ],
+   "vedi": [
+    "rfkill"
+   ]
+  },
+  {
+   "comando": "rfkill",
+   "descrizione": "Accende e spegne le radio: Wi-Fi e Bluetooth.",
+   "categoria": "sistema",
+   "livello": 4,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "list",
+     "spiegazione": "lo stato"
+    },
+    {
+     "flag": "block / unblock wifi|bluetooth|all",
+     "spiegazione": "spegne / accende"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "rfkill list",
+     "spiegazione": "cosa è spento"
+    },
+    {
+     "comando": "rfkill unblock all",
+     "spiegazione": "accende tutto"
+    }
+   ],
+   "vedi": [
+    "nmcli",
+    "bluetoothctl"
+   ]
+  },
+  {
+   "comando": "sensors",
+   "descrizione": "Le temperature e le ventole (da lm_sensors).",
+   "categoria": "sistema",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "sensors",
+     "spiegazione": "tutte le sonde"
+    },
+    {
+     "comando": "watch -n 2 sensors",
+     "spiegazione": "dal vivo"
+    }
+   ],
+   "vedi": [
+    "cat /sys/class/thermal"
+   ]
+  },
+  {
+   "comando": "upower",
+   "descrizione": "La batteria: percentuale, stato, salute.",
+   "categoria": "sistema",
+   "livello": 3,
+   "pericolo": 0,
+   "opzioni": [
+    {
+     "flag": "-i DISP",
+     "spiegazione": "un dispositivo"
+    },
+    {
+     "flag": "-e",
+     "spiegazione": "l'elenco"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "upower -i $(upower -e | grep BAT)",
+     "spiegazione": "tutto sulla batteria"
+    }
+   ],
+   "vedi": [
+    "acpi"
+   ]
+  },
+  {
+   "comando": "xrandr",
+   "descrizione": "Gli schermi sotto X11: risoluzione, posizione, spegnimento. (Sotto Wayland: wlr-randr o le Impostazioni.)",
+   "categoria": "sistema",
+   "livello": 4,
+   "pericolo": 1,
+   "opzioni": [
+    {
+     "flag": "--output NOME --auto",
+     "spiegazione": "accende"
+    },
+    {
+     "flag": "--off",
+     "spiegazione": "spegne"
+    },
+    {
+     "flag": "--mode WxH",
+     "spiegazione": "la risoluzione"
+    }
+   ],
+   "esempi": [
+    {
+     "comando": "xrandr",
+     "spiegazione": "cosa c'è"
+    }
+   ],
+   "vedi": [
+    "wlr-randr"
+   ]
+  },
+  {
+   "comando": "yes",
+   "descrizione": "Stampa «y» (o quello che gli dai) per sempre: per rispondere sì a un programma che chiede.",
+   "categoria": "shell",
+   "livello": 3,
+   "pericolo": 1,
+   "opzioni": [],
+   "esempi": [
+    {
+     "comando": "yes | comando-che-chiede",
+     "spiegazione": "risponde sì a tutto"
+    },
+    {
+     "comando": "yes | head -n 5",
+     "spiegazione": "cinque y"
+    }
+   ],
+   "vedi": [
+    "head"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Blocco schermo di Minerva
+Name[en]=Minerva screen lock
+Comment=Blocca lo schermo con la schermata di Minerva
+Exec=minerva-blocca
+Icon=system-lock-screen
+# Non è un programma da menu: si chiama con Super+L o da solo quando la
+# macchina resta ferma. Il file esiste solo perché senza, il portale scrive
+# a ogni blocco «App info not found for 'minerva-blocco'».
+NoDisplay=true

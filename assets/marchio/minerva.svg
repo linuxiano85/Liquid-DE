@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Il marchio di Minerva.
+
+  È lo stesso disegno che sta sulla barra (`minerva-shell/spine/MinervaMark.qml`),
+  con gli stessi due tracciati: l'esagono e la feritoia dentro — l'occhio della
+  civetta, animale di Minerva, ridotto alla sua geometria minima. Due forme e un
+  vuoto in mezzo, perché deve funzionare anche a venti pixel.
+
+  Qui è nello stato ACCESO, quello che sulla barra compare quando il menù è
+  aperto: esagono e feritoia dell'accento, con l'alone intorno.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="512" height="512">
+  <defs>
+    <radialGradient id="alone" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#22D3EE" stop-opacity="0.30"/>
+      <stop offset="60%"  stop-color="#22D3EE" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Il fondo: il carbone della scrivania. Pieno e non trasparente, perché
+       GitHub mostra il marchio sia su chiaro sia su scuro. -->
+  <rect width="24" height="24" fill="#0E1116"/>
+
+  <!-- L'alone che sulla barra pulsa quando è acceso. -->
+  <circle cx="12" cy="12" r="11" fill="url(#alone)"/>
+
+  <!-- L'esagono, vertice in alto. -->
+  <path d="M12 2.4l8.3 4.8v9.6L12 21.6l-8.3-4.8V7.2z"
+        fill="none" stroke="#22D3EE" stroke-width="1.6"
+        stroke-linejoin="round" stroke-linecap="round"/>
+
+  <!-- La feritoia: la pupilla stilizzata. -->
+  <path d="M12 8.2l3.6 2.1v3.4L12 15.8l-3.6-2.1v-3.4z" fill="#22D3EE"/>
+</svg>

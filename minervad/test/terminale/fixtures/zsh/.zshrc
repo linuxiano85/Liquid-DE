@@ -1,0 +1,3 @@
+PROMPT='MINERVA_TEST> '
+RPROMPT=''
+HISTFILE=/dev/null

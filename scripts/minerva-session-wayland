@@ -1,0 +1,13 @@
+#!/bin/sh
+# minerva-session-wayland — Ponte senza spazi verso la sessione sul nostro
+# compositore.
+#
+# Gemello di `minerva-session`, e per la stessa ragione: certi gestori di
+# accesso finiscono con `exec $@` SENZA virgolette, e un percorso come
+# «…/Minerva Shell/scripts/…» si spezza in due parole. Il percorso di QUESTO
+# file non ha spazi, quindi sopravvive a quel taglio.
+#
+# `@MINERVA_DIR@` non è un errore: questo file è un MODELLO, e
+# `install-minerva.sh` lo copia in /usr/local/bin sostituendo quel segno con
+# la cartella vera. Vedi `minerva-session`, dove sta scritto per esteso.
+exec "@MINERVA_DIR@/scripts/start-minerva-wayland.sh" "$@"

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Permessi di Minerva
+Name[en]=Minerva permissions
+Comment=Chiede la password quando serve il permesso di amministratore
+Exec=minerva-polkit
+Icon=dialog-password
+# Non è un programma da menu: lo apre `minerva-polkit` quando polkit chiede
+# un'autenticazione. Il file esiste solo perché senza, il portale scrive a ogni
+# richiesta «App info not found for 'minerva-permessi'» — e quella riga finisce
+# nel registro proprio mentre qualcuno sta digitando una password, cioè nel
+# momento in cui si guarda il registro per capire cosa non va.
+NoDisplay=true

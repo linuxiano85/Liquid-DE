@@ -1,0 +1,8 @@
+module files
+singleton Files 1.0 Files.qml
+FileManager 1.0 FileManager.qml
+Pane        1.0 Pane.qml
+Transfers   1.0 Transfers.qml
+SideEntry   1.0 SideEntry.qml
+FileProperties 1.0 FileProperties.qml
+Briciole 1.0 Briciole.qml

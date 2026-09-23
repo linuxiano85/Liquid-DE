@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Attività
+Name[en]=Activity
+GenericName=Gestore attività
+GenericName[en]=Task manager
+Comment=Chi sta girando e quanto costa
+Comment[en]=What is running and what it costs
+Exec=minerva-monitor
+Icon=minerva-monitor
+StartupWMClass=minerva-monitor
+Terminal=false
+StartupNotify=false
+Categories=System;Monitor;
+Keywords=processi;attività;monitor;cpu;memoria;ram;task;manager;processes;

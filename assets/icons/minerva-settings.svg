@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Impostazioni di Minerva — tre cursori, non l'ingranaggio: qui non si
+       ripara un meccanismo, si regola. -->
+  <defs>
+    <linearGradient id="tinta" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="luce" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".22"/>
+      <stop offset=".55" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="3" y="3" width="42" height="42" rx="12.5" fill="url(#tinta)"/>
+  <rect x="3" y="3" width="42" height="42" rx="12.5" fill="url(#luce)"/>
+  <g stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round" opacity=".6">
+    <path d="M13.2 16.6h21.6"/>
+    <path d="M13.2 24h21.6"/>
+    <path d="M13.2 31.4h21.6"/>
+  </g>
+  <g fill="#FFFFFF">
+    <circle cx="21" cy="16.6" r="4.7"/>
+    <circle cx="30.4" cy="24" r="4.7"/>
+    <circle cx="17.4" cy="31.4" r="4.7"/>
+  </g>
+</svg>

@@ -1,0 +1,103 @@
+#!/bin/sh
+# minerva-utente — Le operazioni sul proprio account che richiedono i permessi.
+#
+#   minerva-utente conferma <utente>     dice solo «autorizzato»
+#   minerva-utente password <utente>     legge la nuova password da stdin
+#
+# ── Perché uno script separato e non un comando dentro Minerva ─────────────
+#
+# Perché questo file viene eseguito da `pkexec`, cioè come amministratore. Ciò
+# che gira con quei permessi dev'essere corto abbastanza da leggerlo tutto in
+# un minuto e capire che non fa altro. Una riga di shell costruita altrove e
+# passata a `pkexec` non si può controllare così.
+#
+# ── Perché la password arriva da stdin ─────────────────────────────────────
+#
+# Perché gli ARGOMENTI DI UN PROCESSO SI VEDONO. Chiunque sul computer può
+# leggere `/proc/<pid>/cmdline` mentre il comando gira, e la password
+# comparirebbe lì dentro — e nella cronologia della shell, e nel registro di
+# chi lo ha lanciato. Su stdin no: non tocca nessun file e non compare in
+# nessun elenco di processi.
+#
+# ── Perché non `passwd` ────────────────────────────────────────────────────
+#
+# `passwd` legge da `/dev/tty` e non dallo standard input: dentro un
+# programma con l'interfaccia grafica non c'è nessun terminale da cui leggere,
+# e resterebbe appeso per sempre. `chpasswd` è fatto apposta per questo.
+#
+# Chi conferma di essere autorizzato è polkit, che chiede la password ATTUALE
+# prima di lasciar partire questo file. È lo stesso controllo che farebbe
+# `passwd` — solo, lo fa il sistema invece di noi.
+#
+# ── SI CAMBIA SOLO LA PROPRIA, E IL CONTROLLO STA QUI ──────────────────────
+#
+# `config/polkit/org.minerva.utente.policy` chiede `auth_self`: la password
+# che compare è la TUA, non quella di un amministratore. È giusto — cambiare
+# la propria password non è un'operazione da amministratore, e `passwd` non ha
+# mai chiesto altro — ma apre un buco se questo file non lo chiude: chiunque
+# potrebbe autenticarsi con la propria e passare qui il nome di un ALTRO
+# utente, cambiando la password di qualcun altro.
+#
+# Il nome dell'utente quindi non si crede: dev'essere quello di CHI HA
+# CHIAMATO. `pkexec` lo dice in `PKEXEC_UID`, ed è l'unica cosa qui dentro che
+# non arriva dagli argomenti.
+#
+# ── Perché `conferma` esiste ───────────────────────────────────────────────
+#
+# Perché il pannello mostri i campi della password nuova solo DOPO che il
+# sistema ha verificato chi sei. Non fa niente: serve a far comparire la
+# finestrella di polkit. Con `auth_self_keep` la verifica vale qualche minuto,
+# quindi il cambio vero che segue non la richiede una seconda volta.
+
+set -eu
+
+AZIONE="${1:-}"
+CHI="${2:-}"
+
+errore() { printf '%s\n' "$1" >&2; exit 1; }
+
+[ "$(id -u)" -eq 0 ] || errore "minerva-utente va eseguito con pkexec."
+
+# ── Di chi si sta parlando ─────────────────────────────────────────────────
+#
+# Una volta sola, prima di ogni azione: le due che ci sono lavorano entrambe
+# su un utente, e un controllo scritto due volte è un controllo che una volta
+# si dimentica.
+controlla_utente() {
+    [ -n "$CHI" ] || errore "Manca il nome dell'utente."
+
+    # L'utente dev'essere una PERSONA. Senza questo controllo, chi riuscisse a
+    # chiamare questo file potrebbe cambiare la password di `root` — che è
+    # esattamente ciò che polkit sta proteggendo.
+    UID_CHI=$(id -u "$CHI" 2>/dev/null) || errore "L'utente «$CHI» non esiste."
+    [ "$UID_CHI" -ge 1000 ] || errore "«$CHI» non è un utente normale."
+    [ "$UID_CHI" -le 60000 ] || errore "«$CHI» non è un utente normale."
+
+    # E dev'essere CHI HA CHIAMATO. Vedi la nota in cima: senza questa riga,
+    # `auth_self` diventerebbe il permesso di cambiare la password altrui.
+    [ -n "${PKEXEC_UID:-}" ] || errore "Manca PKEXEC_UID: va lanciato da pkexec."
+    [ "$UID_CHI" -eq "$PKEXEC_UID" ] \
+        || errore "Si può cambiare solo la propria password."
+}
+
+case "$AZIONE" in
+    conferma)
+        controlla_utente
+        printf 'autorizzato\n'
+        ;;
+
+    password)
+        controlla_utente
+
+        # Una riga sola, senza a-capo dentro: `chpasswd` legge «utente:password».
+        read -r NUOVA || errore "Nessuna password ricevuta."
+        [ -n "$NUOVA" ] || errore "La password è vuota."
+
+        printf '%s:%s\n' "$CHI" "$NUOVA" | chpasswd
+        printf 'fatto\n'
+        ;;
+
+    *)
+        errore "Azione sconosciuta: «$AZIONE». Ce ne sono due: conferma, password."
+        ;;
+esac

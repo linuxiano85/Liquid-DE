@@ -1,0 +1,50 @@
+#!/bin/sh
+# minerva-media — Avvia Minerva Media.
+#
+# Come `minerva-files`: un programma a sé, un secondo processo `quickshell`
+# che esegue `minerva-shell/minervamedia.qml`. Se è già aperto gli si chiede
+# di aprire il percorso; altrimenti si avvia con il percorso nell'ambiente.
+set -e
+
+# ── 1. Dov'è Minerva ────────────────────────────────────────────────────────
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+CONFIG="$ROOT/minerva-shell/minervamedia.qml"
+
+if [ ! -f "$CONFIG" ]; then
+    echo "minerva-media: non trovo $CONFIG" >&2
+    exit 1
+fi
+
+# ── 2. Il percorso da aprire ────────────────────────────────────────────────
+TARGET=${1:-}
+case "$TARGET" in
+    file://*)
+        TARGET=${TARGET#file://}
+        TARGET=$(printf '%b' "$(printf '%s' "$TARGET" | sed 's/%\(..\)/\\x\1/g')")
+        ;;
+esac
+
+# ── 3. Aperto? Allora gli si chiede ─────────────────────────────────────────
+if qs ipc -p "$CONFIG" call media ping >/dev/null 2>&1; then
+    if [ -n "$TARGET" ]; then
+        exec qs ipc -p "$CONFIG" call media apri "$TARGET" >/dev/null
+    fi
+    exec qs ipc -p "$CONFIG" call media apri >/dev/null
+fi
+
+# ── 4. Altrimenti si parte ──────────────────────────────────────────────────
+MINERVA_MEDIA_APRI="$TARGET"
+export MINERVA_MEDIA_APRI
+
+# ── L'unica nostra app che chiede la scheda video ───────────────────────────
+#
+# `VideoOutput` di Qt Multimedia col renderer software non disegna niente:
+# l'audio parte, il tempo scorre, e l'immagine non c'è. Nessun errore. È il
+# motivo per cui questo lettore, fino al 4 settembre 2026, sembrava un lettore
+# di sola musica — mostrava lo spettro perché il video non poteva mostrarlo.
+MINERVA_APP_GPU=1
+export MINERVA_APP_GPU
+. "$ROOT/scripts/minerva-ambiente-app"
+
+exec qs -d -n -p "$CONFIG"

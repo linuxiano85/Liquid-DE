@@ -1,0 +1,22 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=File
+Name[en]=Files
+GenericName=Gestore file
+GenericName[en]=File manager
+Comment=Il gestore file di Minerva
+Comment[en]=The Minerva file manager
+# %u e non %U: si apre una scheda alla volta, e chiedere venti cartelle
+# insieme aprirebbe venti schede senza che nessuno l'abbia chiesto.
+Exec=minerva-files %u
+Icon=minerva-files
+StartupWMClass=minerva-files
+Terminal=false
+StartupNotify=false
+Categories=System;Utility;FileTools;FileManager;
+# Senza questa riga il nostro gestore file non compare nemmeno fra le scelte
+# possibili per aprire una cartella, e a fare quel mestiere in una sessione
+# Minerva resta Dolphin.
+MimeType=inode/directory;
+Keywords=file;cartelle;cartella;folders;explorer;gestore;

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
+
+<!--
+  org.minerva.utente — Cambiare la password del proprio account.
+
+  ── Perché questa regola esiste ──────────────────────────────────────────
+
+  Senza, `pkexec scripts/minerva-utente` ricade sull'azione generica
+  `org.freedesktop.policykit.exec`, che su Arch è `auth_admin`: per cambiare
+  LA PROPRIA password compariva la richiesta della password di un
+  AMMINISTRATORE. Due cose storte in una:
+
+   · chiede più di quanto serve. `passwd` non ha mai domandato altro che la
+     tua password attuale, e questo è esattamente `passwd` con una finestra
+     davanti;
+   · chi non è amministratore non poteva cambiare la propria password, che è
+     il caso in cui servirebbe di più.
+
+  `auth_self_keep` chiede la password di CHI STA CHIEDENDO, e la ricorda per
+  qualche minuto. Il ricordo non è comodità: il pannello fa due passaggi —
+  prima `conferma`, che serve a far comparire questa finestrella, poi
+  `password` — e senza il ricordo la si vedrebbe due volte di fila per una
+  cosa sola.
+
+  ── Il buco che apre, e chi lo chiude ────────────────────────────────────
+
+  `auth_self` verifica CHI SEI, non SU CHI stai agendo: autenticandosi con la
+  propria password si potrebbe passare il nome di un altro utente. Il
+  controllo sta in `scripts/minerva-utente`, che confronta l'utente richiesto
+  con `PKEXEC_UID` e si ferma se non coincidono. Le due cose vanno insieme:
+  toccare l'una senza l'altra rimette il buco.
+
+  ── Il percorso è quello INSTALLATO ──────────────────────────────────────
+
+  `exec.path` deve combaciare carattere per carattere con quello che `pkexec`
+  esegue, quindi vale solo per la copia in `/usr/local/bin` che mette
+  `scripts/install-minerva.sh`. Lanciando lo script dalla cartella del
+  progetto questa regola non si applica e si torna ad `auth_admin`: funziona
+  lo stesso, chiede solo di più.
+-->
+<policyconfig>
+
+  <vendor>Minerva</vendor>
+  <vendor_url>https://github.com/minerva-shell</vendor_url>
+
+  <action id="org.minerva.utente.password">
+    <description>Change your own account password</description>
+    <description xml:lang="it">Cambiare la password del proprio account</description>
+    <message>Authentication is required to change your password</message>
+    <message xml:lang="it">Per cambiare la password serve quella attuale</message>
+    <defaults>
+      <allow_any>auth_self_keep</allow_any>
+      <allow_inactive>auth_self_keep</allow_inactive>
+      <allow_active>auth_self_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/bin/minerva-utente</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+
+</policyconfig>

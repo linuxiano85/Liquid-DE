@@ -1,0 +1,304 @@
+#!/bin/sh
+# minerva-demone — Tiene vivo il demone di Minerva per tutta la sessione.
+#
+# ── Perché esiste ──────────────────────────────────────────────────────────
+#
+# Il demone partiva con un `exec-once` di Hyprland: una volta, e basta. Se
+# moriva — per un errore, per un `kill` sbagliato, per un aggiornamento a
+# sessione aperta — non tornava più, e nessuno lo diceva.
+#
+# Quello che si vedeva non era una finestra di errore: era peggio. Ogni
+# finestra di Minerva continuava a funzionare mostrando i valori PREDEFINITI
+# al posto dei propri. Le Impostazioni dicevano «icone: Minerva» con le icone
+# classiche accese, «barra del titolo: 34 px» con le barre alte 39, «la dock
+# non si nasconde» con la dock che si nascondeva. Tutto plausibile, tutto
+# falso — e toccando un qualsiasi comando si sarebbe scritto il valore finto
+# sopra a quello vero.
+#
+# Trovato il 29 luglio provando l'ambiente: il demone era morto e ci sono
+# volute venti minuti per capire che il difetto non era in ciò che guardavo.
+#
+# ── Come si comporta ───────────────────────────────────────────────────────
+#
+# Riparte SEMPRE, comunque il demone sia uscito.
+#
+# La prima versione non ripartiva se l'esito era 0, ragionando che un'uscita
+# pulita volesse dire «me l'hanno chiesto». È sbagliato, e l'ho scoperto
+# usandolo: il demone intercetta SIGTERM e si spegne con garbo, quindi
+# QUALUNQUE `kill` — il mio per riavviarlo, un aggiornamento di sistema, uno
+# script distratto — dà esito 0. Il risultato era un ambiente senza demone
+# per il resto della sessione, che è esattamente ciò che questo file esiste
+# per impedire.
+#
+# Fermarlo davvero si fa fermando il guardiano, che porta giù anche il demone
+# (vedi il `trap` qui sotto). È la stessa regola di ogni supervisore serio:
+# si spegne il padre, non il figlio.
+#
+# Le pause crescono, perché un demone che non riesce a partire e ci riprova
+# sessanta volte al minuto è peggio di un demone spento: mangia la batteria e
+# riempie il registro. E dopo troppi tentativi ravvicinati ci si ferma sul
+# serio: un guasto vero (una porta occupata, un file di impostazioni rotto)
+# non si risolve riprovando, e continuare all'infinito nasconderebbe la causa.
+
+SELF="$(readlink -f "$0")"
+ROOT="$(dirname "$(dirname "$SELF")")"
+
+cd "$ROOT/minervad" || exit 1
+
+# Quanti riavvii si accettano prima di arrendersi, e in quanti secondi.
+MAX=5
+FINESTRA=120
+
+tentativi=0
+inizio=$(date +%s)
+pausa=1
+
+# Fermando il guardiano si ferma anche il demone. Senza, resterebbe in piedi
+# un demone orfano che tiene occupata la porta 11432, e il guardiano dopo non
+# riuscirebbe più a farne partire uno.
+figlio=""
+sentinella=""
+fermati() {
+    [ -n "$sentinella" ] && kill "$sentinella" 2>/dev/null
+    [ -n "$figlio" ] && kill "$figlio" 2>/dev/null
+    # Il biglietto da visita di questa sessione non deve restare in giro: chi
+    # lo trovasse si collegherebbe a un socket morto credendolo vivo. Il
+    # registro invece resta: serve a capire perché siamo usciti.
+    [ -n "${STATO:-}" ] && rm -f "$STATO/canale" "$PIDFILE" 2>/dev/null
+    exit 0
+}
+trap fermati TERM INT
+
+# ── E non si sopravvive alla propria sessione ─────────────────────────────
+#
+# Il 7 settembre 2026 sulla macchina giravano DUE `minervad`: quello della
+# sessione in corso e quello di quella prima, ognuno col suo guardiano, e il
+# padre del vecchio era `init`. Un demone che risponde su un socket per una
+# scrivania che non esiste più — fino al riavvio del computer.
+#
+# La causa è `minerva-reload.sh`, che rilancia il guardiano con `nohup` per
+# farlo sopravvivere allo script: da lì in poi viene adottato da `init`, e
+# l'uscita dalla sessione non se lo porta via. È giusto che sopravviva allo
+# SCRIPT; non alla SESSIONE.
+#
+# Quindi non ci si affida all'albero dei processi — che con `nohup` in mezzo
+# non dice più niente — ma al compositore: si cerca una volta sola quale
+# `minerva-wayland` serve QUESTA sessione, e lo si guarda ogni cinque secondi.
+# Cinque e non uno: è una sveglia ogni cinque secondi per tutta la sessione, e
+# un guardiano che si sveglia di continuo sarebbe lo stesso spreco che è venuto
+# a togliere.
+#
+# ── Ci si riconosce da MINERVA_SESSIONE, non da WAYLAND_DISPLAY ──────────
+#
+# Il primo tentativo cercava il compositore che serviva il nostro
+# `WAYLAND_DISPLAY`, e non trovava mai niente: quella variabile **il
+# compositore non ce l'ha**, perché è lui a crearla — ce l'hanno i suoi
+# clienti. Il registro lo diceva a chiare lettere («Nessun compositore di
+# sessione da guardare (WAYLAND_DISPLAY=minerva-0)») ed è così che si è
+# scoperto, otto minuti dopo averlo scritto.
+#
+# La prova invece passava, e vale la pena dire perché: il finto compositore
+# della prova quella variabile ce l'aveva, perché gliela metteva la prova
+# stessa. Un'impalcatura più comoda della realtà non prova la realtà.
+#
+# `MINERVA_SESSIONE` invece ce l'hanno tutti e due — il compositore la riceve
+# dallo script di sessione, il guardiano la ricava da `minerva-posti.sh` — ed è
+# proprio la cosa che vogliamo confrontare: siamo della stessa scrivania?
+compositore_della_sessione() {
+    [ -n "${MINERVA_SESSIONE:-}" ] || return 1
+    for d in /proc/[0-9]*; do
+        [ "$(cat "$d/comm" 2>/dev/null)" = "minerva-wayland" ] || continue
+        tr '\0' '\n' < "$d/environ" 2>/dev/null \
+            | grep -qxF "MINERVA_SESSIONE=$MINERVA_SESSIONE" || continue
+        printf '%s' "${d#/proc/}"
+        return 0
+    done
+    return 1
+}
+
+# ── Compilato se c'è, interpretato se no ───────────────────────────────────
+#
+# `dart run` non esegue il demone: lo compila e poi lo esegue, ogni volta, e
+# si porta dietro la macchina virtuale con dentro il compilatore. Misurato il
+# 30 luglio 2026 su questa macchina, dal lancio al momento in cui risponde
+# sulla porta 11432:
+#
+#     dart run bin/minervad.dart      1317 ms      210 MB di memoria
+#     build/minervad (compilato)       261 ms       19 MB
+#
+# Cinque volte più svelto ad accendersi e undici volte più leggero, per lo
+# stesso programma. Duecento megabyte su un portatile non sono un dettaglio, e
+# quel secondo e mezzo è proprio il momento in cui si guarda lo schermo dopo
+# aver fatto l'accesso.
+#
+# Si sceglie da soli e non si obbliga a compilare: durante lo sviluppo si
+# cambia un file .dart e si vuole che il riavvio lo prenda, non che riparta il
+# binario di ieri. Quindi il compilato si usa SOLO se è più recente di ogni
+# sorgente. Altrimenti si torna a `dart run`, dicendolo.
+# Non restituisce una stringa da spezzare in parole: il percorso del progetto
+# contiene uno spazio, e «Minerva Shell» diventerebbe due comandi inesistenti.
+# Mette a posto una variabile e basta.
+ESE="$ROOT/minervad/build/minervad"
+scegli_comando() {
+    COMPILATO=no
+    [ -x "$ESE" ] || return
+    PIU_NUOVO=$(find "$ROOT/minervad/lib" "$ROOT/minervad/bin" \
+                     -name '*.dart' -newer "$ESE" -print -quit 2>/dev/null)
+    if [ -n "$PIU_NUOVO" ]; then
+        # ── `tee -a` e non `>&2`, ed è la differenza fra dirlo e non dirlo ──
+        #
+        # Lo stderr del guardiano non è il registro: il registro lo scrivono le
+        # righe che ci ridirigono dentro apposta. Fino al 31 agosto 2026 questa
+        # frase usciva sullo stderr e basta — sotto una sessione vera finiva
+        # nel nulla.
+        #
+        # Il costo di quel silenzio, misurato quella sera: il demone girava in
+        # JIT e pesava 223 MB invece di 19, con la scrivania a 435 MB contro un
+        # bersaglio di 250. Il ripiego faceva il suo lavoro; solo, nessuno
+        # poteva saperlo. Un ripiego silenzioso è come non averlo.
+        echo "[MINERVA][DEMONE] Sorgenti più recenti del compilato" \
+             "($PIU_NUOVO): uso dart run — parte più lento e pesa ~200 MB in" \
+             "più. Ricompilo in sottofondo: il prossimo accesso sarà svelto." \
+             | tee -a "$REGISTRO" >&2
+        ricompila_in_sottofondo
+        return
+    fi
+    COMPILATO=si
+}
+
+# ── E poi lo si ricompila, da soli ─────────────────────────────────────────
+#
+# Il ripiego su `dart run` costa 1965 ms all'avvio contro 162 del compilato, e
+# ~200 MB di memoria per tutta la sessione (misurato il 1º settembre 2026). Fin
+# qui il messaggio diceva «per tornare svelto, lancia minerva-compila» — cioè
+# lasciava il conto a chi legge il registro, e chi legge il registro è già
+# dentro un'altra caccia.
+#
+# Su questa macchina i sorgenti sono più recenti del compilato **ogni volta che
+# si tocca un file .dart**, cioè quasi sempre: quel secondo e otto decimi si
+# pagava a ogni accesso, e nel momento peggiore — quello in cui si guarda lo
+# schermo aspettando la scrivania.
+#
+# ── Perché DOPO e non PRIMA ────────────────────────────────────────────────
+#
+# Perché compilare sono quaranta secondi. Farlo prima di avviare il demone
+# vuol dire una sessione che ci mette quaranta secondi a comparire, e la cura
+# sarebbe peggio del male. Si parte subito interpretati — la scrivania c'è —
+# e si compila in sottofondo per la volta dopo.
+#
+# ── E perché non si tocca il binario in uso ────────────────────────────────
+#
+# `minerva-compila` scrive di fianco e RINOMINA: il demone acceso continua sul
+# suo inode. Senza, il sistema rifiuterebbe con «Text file busy» — ed è già
+# successo.
+#
+# `nice`/`ionice`: la compilazione non deve rubare il processore alla
+# scrivania che sta nascendo. Vale il contrario di tutto il resto — questo è
+# l'unico lavoro della sessione che nessuno sta aspettando.
+ricompila_in_sottofondo() {
+    command -v dart >/dev/null 2>&1 || return
+    [ -x "$ROOT/scripts/minerva-compila" ] || return
+    # Uno solo alla volta: il guardiano può far ripartire il demone più volte
+    # in una sessione, e due `dart compile` insieme sulla stessa cartella si
+    # pestano i piedi.
+    [ -e "$STATO/compilazione.pid" ] \
+        && kill -0 "$(cat "$STATO/compilazione.pid" 2>/dev/null)" 2>/dev/null \
+        && return
+    (
+        nice -n 19 "$ROOT/scripts/minerva-compila" >> "$REGISTRO" 2>&1
+        rm -f "$STATO/compilazione.pid"
+    ) &
+    # `$!` e non `$$`: dentro una sottoshell `$$` resta il pid del guardiano,
+    # che è vivo per tutta la sessione — il lucchetto non si aprirebbe mai più
+    # e la ricompilazione si farebbe una volta sola, la prima.
+    echo $! > "$STATO/compilazione.pid"
+}
+
+# ── Dove finisce quello che il demone dice ──────────────────────────────────
+#
+# Da nessuna parte, fino al 2 agosto 2026: l'`exec-once` di Hyprland eredita
+# un'uscita che è `/dev/null`, e il demone ci scriveva dentro tutto — errori
+# compresi. Verificato guardando `/proc/<pid>/fd/1` e `fd/2`: tutti e due
+# puntavano a `/dev/null`.
+#
+# Il risultato è che quando il demone cadeva — ed è caduto — non restava una
+# riga da nessuna parte. La shell la sua uscita la salva da sempre (vedi
+# `config/hyprland.conf`); lui no, ed era l'unico pezzo cieco.
+#
+# Si tronca a ogni avvio di sessione e si accoda a ogni riavvio del demone
+# dentro la sessione: così il file resta leggibile invece di crescere per mesi,
+# ma un demone che riparte cinque volte lascia tutte e cinque le storie.
+# Di QUESTA sessione, non dell'utente. Con la cartella condivisa, la seconda
+# Minerva trovava il guardiano della prima, lo credeva suo e si faceva da
+# parte: sessione senza demone e senza shell, schermo nero. Vedi
+# `scripts/minerva-posti.sh`.
+. "$(dirname "$(readlink -f "$0")")/minerva-posti.sh"
+REGISTRO="$STATO/demone.log"
+PIDFILE="$STATO/demone.pid"
+: > "$REGISTRO"
+
+# ── Un guardiano per sessione ─────────────────────────────────────────────
+#
+# `hyprctl reload` riesegue gli `exec-once`, e a chiamarlo è anche il plugin
+# delle barre quando si carica: senza questo controllo ogni caricamento
+# faceva nascere un secondo guardiano. Il demone in più muore da solo (la
+# porta è una sola) ma il guardiano resta: si fa da parte subito.
+if [ -f "$PIDFILE" ]; then
+    VECCHIO=$(cat "$PIDFILE" 2>/dev/null)
+    if [ -n "$VECCHIO" ] && kill -0 "$VECCHIO" 2>/dev/null \
+        && tr '\0' ' ' < "/proc/$VECCHIO/cmdline" 2>/dev/null | grep -q "minerva-demone"; then
+        echo "[MINERVA][DEMONE] C'è già un guardiano ($VECCHIO): questo esce." >> "$REGISTRO"
+        exit 0
+    fi
+fi
+echo $$ > "$PIDFILE"
+
+# Fuori da una sessione Wayland — le prove, un avvio a mano — non c'è nessun
+# compositore da guardare, e si tira dritto come prima.
+if COMPOSITORE=$(compositore_della_sessione); then
+    IO=$$
+    (
+        while kill -0 "$COMPOSITORE" 2>/dev/null; do sleep 5; done
+        kill -TERM "$IO" 2>/dev/null
+    ) &
+    sentinella=$!
+    echo "[MINERVA][DEMONE] Legato al compositore $COMPOSITORE: se la sessione" \
+         "finisce, finisce anche questo guardiano." >> "$REGISTRO"
+else
+    echo "[MINERVA][DEMONE] Nessun compositore di sessione da guardare" \
+         "(MINERVA_SESSIONE=${MINERVA_SESSIONE:-non impostata}): resto in piedi" \
+         "finché non mi si ferma." >> "$REGISTRO"
+fi
+
+while :; do
+    scegli_comando
+    if [ "$COMPILATO" = si ]; then
+        "$ESE" >> "$REGISTRO" 2>&1 &
+    else
+        dart run bin/minervad.dart >> "$REGISTRO" 2>&1 &
+    fi
+    figlio=$!
+    wait "$figlio"
+    esito=$?
+    figlio=""
+
+    adesso=$(date +%s)
+    if [ $((adesso - inizio)) -gt "$FINESTRA" ]; then
+        # Passato l'intervallo, si riparte a contare: un riavvio ogni tanto
+        # in una sessione lunga è un incidente, non un guasto.
+        tentativi=0
+        inizio=$adesso
+        pausa=1
+    fi
+
+    tentativi=$((tentativi + 1))
+    if [ "$tentativi" -ge "$MAX" ]; then
+        echo "[MINERVA][DEMONE] Morto $tentativi volte in meno di $FINESTRA s." | tee -a "$REGISTRO" >&2
+        echo "[MINERVA][DEMONE] Non riparte più: il guasto non è passeggero." | tee -a "$REGISTRO" >&2
+        exit 1
+    fi
+
+    echo "[MINERVA][DEMONE] Uscito con esito $esito. Riparte fra $pausa s." | tee -a "$REGISTRO" >&2
+    sleep "$pausa"
+    pausa=$((pausa * 2))
+done

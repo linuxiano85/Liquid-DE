@@ -1,0 +1,22 @@
+singleton Compositore   1.0 Compositore.qml
+Scorciatoia     1.0 Scorciatoia.qml
+singleton Ipc           1.0 Ipc.qml
+singleton Strings       1.0 Strings.qml
+singleton Overlays      1.0 Overlays.qml
+singleton SystemState   1.0 SystemState.qml
+singleton Notifications 1.0 Notifications.qml
+singleton Windows       1.0 Windows.qml
+singleton Apps          1.0 Apps.qml
+singleton Sounds        1.0 Sounds.qml
+singleton Wallpaper     1.0 Wallpaper.qml
+singleton Media         1.0 Media.qml
+Exec        1.0 Exec.qml
+WindowRules 1.0 WindowRules.qml
+singleton Meteo         1.0 Meteo.qml
+singleton Gioco         1.0 Gioco.qml
+singleton LuceNotturna  1.0 LuceNotturna.qml
+singleton Macchina      1.0 Macchina.qml
+TenutaPronta 1.0 TenutaPronta.qml
+AppPronte 1.0 AppPronte.qml
+singleton Vetro         1.0 Vetro.qml
+singleton Posizioni     1.0 Posizioni.qml

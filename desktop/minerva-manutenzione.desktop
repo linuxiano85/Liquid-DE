@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Manutenzione
+Name[en]=Maintenance
+GenericName=Spazio, pulizia e stato del computer
+GenericName[en]=Disk space, cleanup and system health
+Comment=Guarda cosa occupa posto, voce per voce, e cosa si può togliere
+Comment[en]=See what takes up room, item by item, and what can go
+Exec=minerva-manutenzione
+Icon=minerva-manutenzione
+StartupWMClass=minerva-manutenzione
+Terminal=false
+StartupNotify=false
+Categories=System;Utility;Filesystem;
+Keywords=pulizia;spazio;disco;cache;miniature;temporanei;cestino;lingue;pacchetti;orfani;manutenzione;clean;disk;space;cleanup;

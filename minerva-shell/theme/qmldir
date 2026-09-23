@@ -1,0 +1,5 @@
+singleton Colors     1.0 Colors.qml
+singleton Typography 1.0 Typography.qml
+singleton Effects    1.0 Effects.qml
+singleton Motion     1.0 Motion.qml
+LegaTema  1.0 LegaTema.qml

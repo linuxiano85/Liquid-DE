@@ -1,0 +1,59 @@
+#!/bin/sh
+# minerva-compila — Trasforma il demone in un programma vero.
+#
+# `dart run` non esegue: compila e poi esegue, ogni volta, portandosi dietro la
+# macchina virtuale con dentro il compilatore. Misurato il 30 luglio 2026, dal
+# lancio al momento in cui risponde sulla porta 11432:
+#
+#     dart run bin/minervad.dart      1317 ms      210 MB di memoria
+#     build/minervad                   261 ms       19 MB
+#
+# Va rilanciato dopo aver toccato un file .dart. Se ci si dimentica non succede
+# niente di male: il guardiano (`scripts/minerva-demone`) confronta le date e
+# torna da solo a `dart run`, dicendolo nel registro.
+
+SELF="$(readlink -f "$0")"
+ROOT="$(dirname "$(dirname "$SELF")")"
+
+cd "$ROOT/minervad" || exit 1
+mkdir -p build
+
+# ── Perché si compila di fianco e poi si sposta ────────────────────────────
+#
+# Scrivendo dritto su `build/minervad` mentre quel file È il demone acceso, il
+# sistema rifiuta: «Text file busy». Non è un caso di scuola — succede ogni
+# volta che si ricompila dentro la sessione, cioè sempre. E il modo in cui
+# fallisce è il peggiore: la compilazione si ferma, il file vecchio resta lì,
+# e il guardiano lo trova più vecchio dei sorgenti e riparte interpretato.
+# Tutto funziona, un po' più lento, e la correzione appena scritta non c'è.
+#
+# `mv` invece stacca il nome dal file vecchio senza toccarlo: il demone acceso
+# continua a girare sul suo, e il nome punta già a quello nuovo.
+printf '\033[36m·\033[0m Compilo il demone…\n'
+if dart compile exe bin/minervad.dart -o build/minervad.nuovo; then
+    mv -f build/minervad.nuovo build/minervad
+    printf '\033[32m✓\033[0m build/minervad pronto (%s)\n' \
+        "$(du -h build/minervad | cut -f1)"
+    printf '  Per usarlo adesso: scripts/minerva-reload.sh tutto\n'
+else
+    rm -f build/minervad.nuovo
+    printf '\033[31m✗\033[0m compilazione fallita: resta il demone interpretato\n'
+    exit 1
+fi
+
+# ── E il motore del Terminale ─────────────────────────────────────────────
+#
+# Uno per finestra, compilato come il demone e per la stessa ragione: da
+# sorgente `dart run` ci mette due secondi a partire, e un terminale che si
+# apre in due secondi non è un terminale. Se manca, `Sessione.qml` ripiega
+# sui sorgenti — lento ma vivo.
+printf '\033[36m·\033[0m Compilo il motore del Terminale…\n'
+if dart compile exe bin/terminale.dart -o build/minerva-terminale-motore.nuovo; then
+    mv -f build/minerva-terminale-motore.nuovo build/minerva-terminale-motore
+    printf '\033[32m✓\033[0m build/minerva-terminale-motore pronto (%s)\n' \
+        "$(du -h build/minerva-terminale-motore | cut -f1)"
+else
+    rm -f build/minerva-terminale-motore.nuovo
+    printf '\033[31m✗\033[0m il motore del Terminale non compila: si va da sorgente\n'
+    exit 1
+fi

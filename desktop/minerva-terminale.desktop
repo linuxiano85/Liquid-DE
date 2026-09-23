@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Terminale
+Name[en]=Terminal
+GenericName=Terminale
+GenericName[en]=Terminal emulator
+Comment=Il terminale di Minerva: una shell vera, con le schede
+Comment[en]=Minerva's terminal: a real shell, with tabs
+# `%u`: una cartella per aprire lì, oppure niente.
+Exec=minerva-terminale %u
+Icon=minerva-terminale
+StartupWMClass=minerva-terminale
+Terminal=false
+StartupNotify=false
+Categories=System;TerminalEmulator;Utility;
+Keywords=terminale;terminal;shell;comandi;console;

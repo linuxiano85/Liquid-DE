@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
+
+<!--
+  org.minerva.radice — La modalità amministratore del gestore file.
+
+  ── Cosa autorizza ──────────────────────────────────────────────────────
+
+  `scripts/minerva-radice`, che fa una cosa sola alla volta su un percorso:
+  elencare, leggere, scrivere, cancellare, rinominare, copiare, spostare,
+  cambiare i permessi. Non è una finestra che gira da root — è la singola
+  operazione che sale, e poi il processo muore. Il perché sta scritto per
+  esteso in cima a quel file.
+
+  ── `auth_admin_keep`, e perché non `auth_self` ─────────────────────────
+
+  `auth_self` chiede la password di CHI STA CHIEDENDO, e va benissimo per
+  cambiare la propria password: quello che si tocca è già tuo. Qui no. Qui si
+  toccano `/etc`, `/usr`, i file di tutti: serve la password di un
+  AMMINISTRATORE, che è quello che vuol dire `auth_admin`.
+
+  Il `_keep` ricorda l'autorizzazione per qualche minuto. Non è comodità
+  gratuita: in modalità amministratore si fanno più cose di fila — apri una
+  cartella, guardi, cancelli un file, ne rinomini un altro — e una finestra
+  della password a ogni gesto porta a due cose, tutte e due peggiori: si
+  smette di leggerla, oppure si spegne la modalità e si usa `sudo rm` alla
+  cieca in un terminale.
+
+  ── Il percorso è quello INSTALLATO ─────────────────────────────────────
+
+  `exec.path` deve combaciare carattere per carattere con quello che `pkexec`
+  esegue. Vale quindi solo per la copia in `/usr/local/bin`, che è di root e
+  non scrivibile da nessun altro — ed è tutto il punto: **root non deve
+  eseguire un file che l'utente può riscrivere.** Lanciando lo script dalla
+  cartella del progetto questa regola non si applica: `pkexec` ricade
+  sull'azione generica, che chiede comunque la password di amministratore ma
+  non ricorda niente.
+-->
+<policyconfig>
+
+  <vendor>Minerva</vendor>
+  <vendor_url>https://github.com/minerva-shell</vendor_url>
+
+  <action id="org.minerva.radice.gestione">
+    <description>Manage files as administrator</description>
+    <description xml:lang="it">Gestire i file come amministratore</description>
+    <message>Authentication is required to manage system files</message>
+    <message xml:lang="it">Per lavorare sui file di sistema serve la password di un amministratore</message>
+    <defaults>
+      <allow_any>auth_admin_keep</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/bin/minerva-radice</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+
+</policyconfig>

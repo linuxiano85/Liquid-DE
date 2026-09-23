@@ -1,0 +1,57 @@
+# zz-minerva.rules — priorità di scheduling per i processi di Minerva.
+#
+# Va in /etc/ananicy.d/. Serve solo dove gira ananicy-cpp (CachyOS lo installa
+# di serie, e lo tiene ACCESO): altrove il file non fa niente e non dà noia.
+#
+# ── Perché esiste ─────────────────────────────────────────────────────────
+#
+# ananicy-cpp riassegna la priorità dei processi in base a un elenco di regole
+# per nome. Nelle regole di serie:
+#
+#     plasmashell        nice  -6
+#     kwin_wayland       nice -12   (tipo LowLatency_RT)
+#     qs                 nice +10   (tipo Service)
+#     dart               nice  +9   (tipo Heavy_CPU, pensato per il compilatore)
+#
+# Cioè: la shell di KDE viene spinta avanti di sei posizioni, la nostra spinta
+# indietro di dieci, e il nostro demone trattato come una compilazione in
+# sottofondo. Sedici punti di scarto fra la shell di Plasma e la nostra, otto
+# fra i due compositori. Confrontare «Minerva contro KDE» su una macchina così
+# non confronta due shell: confronta due priorità.
+#
+# Misurato il 30 luglio 2026 su questa macchina: `qs` a nice 10 e ionice 6,
+# `dart:minervad.d` a nice 9 e ionice 7, Hyprland con la classe di I/O `idle`.
+#
+# Il numero giusto non è «il più basso possibile». Una shell che disegna la
+# barra e i pannelli deve rispondere al dito, non calcolare: -6 la mette dove
+# sta plasmashell, cioè davanti alle applicazioni e dietro al compositore.
+#
+# ── Perché al compositore diamo -12 e NON il tipo di kwin ─────────────────
+#
+# La prima versione dava a Hyprland `"type": "LowLatency_RT"`, che è quello
+# che le regole di serie danno a `kwin_wayland`. Provato: il compositore
+# finiva in SCHED_RR, cioè tempo reale. Il tipo dichiara solo `nice -12`, ma
+# ananicy-cpp per quel nome fa anche il cambio di politica.
+#
+# Un compositore in tempo reale che si impianta in un ciclo non lascia la
+# macchina all'utente: il kernel riserva ai processi normali il 5% del tempo
+# (`sched_rt_runtime_us` = 950000 su 1000000), che basta a non perdere i dati
+# e non basta a lavorare. Su una macchina di prova si accetta; su quella con
+# cui Giacomo lavora tutti i giorni no, e il guadagno rispetto a -12 senza
+# tempo reale è quello che si sente meno di tutti.
+#
+# Chi lo vuole comunque: sostituire la riga con
+#     { "name": "Hyprland", "type": "LowLatency_RT" }
+
+{ "name": "Hyprland",        "nice": -12, "ioclass": "best-effort", "ionice": 1 }
+{ "name": "qs",              "nice": -6, "ioclass": "best-effort", "ionice": 2 }
+# Il demone compilato si chiama `minervad` e basta. Il nome col prefisso è
+# quello che gli dà la macchina virtuale quando gira interpretato, durante lo
+# sviluppo: si dichiarano tutti e due, perché sono lo stesso programma.
+#
+# Attenzione: la regola di serie `{ "name": "dart", "type": "Heavy_CPU" }`
+# — pensata per il COMPILATORE — vince sul nome interpretato, e il demone
+# resta a nice +9. È una delle ragioni per compilarlo davvero.
+{ "name": "minervad",        "nice": -3, "ioclass": "best-effort", "ionice": 3 }
+{ "name": "dart:minervad",   "nice": -3, "ioclass": "best-effort", "ionice": 3 }
+{ "name": "dart:minervad.d", "nice": -3, "ioclass": "best-effort", "ionice": 3 }

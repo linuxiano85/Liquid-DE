@@ -1,0 +1,41 @@
+#!/bin/sh
+# minerva-settings — Avvia le Impostazioni di Minerva.
+#
+#     minerva-settings              apre dove si era rimasti
+#     minerva-settings audio        apre direttamente su una sezione
+#
+# Le Impostazioni sono un programma a sé: un processo `quickshell` che esegue
+# `minerva-shell/settings.qml`. Non sono più una finestra della shell — il
+# perché sta scritto in cima a quel file, e in due parole è che la finestra in
+# cui si toccano i valori non deve poter portarsi via la barra.
+#
+# La struttura è identica a `minerva-files`, che è il file da leggere per il
+# ragionamento per esteso su come si scopre dov'è installata Minerva.
+set -e
+
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+CONFIG="$ROOT/minerva-shell/settings.qml"
+
+if [ ! -f "$CONFIG" ]; then
+    echo "minerva-settings: non trovo $CONFIG" >&2
+    exit 1
+fi
+
+SECTION=${1:-}
+
+# Già aperte? Allora si porta la finestra dove serve invece di aprirne una
+# seconda. Due finestre di Impostazioni che regolano la stessa cosa sono il
+# modo più diretto per farsi sovrascrivere una scelta senza accorgersene.
+if qs ipc -p "$CONFIG" call settings ping >/dev/null 2>&1; then
+    exec qs ipc -p "$CONFIG" call settings open "$SECTION" >/dev/null
+fi
+
+MINERVA_SETTINGS_SECTION="$SECTION"
+export MINERVA_SETTINGS_SECTION
+# L'ambiente comune delle nostre app: disegnano col processore invece che
+# con la scheda video. Il perché, i numeri e cosa si perde stanno tutti
+# in `scripts/minerva-ambiente-app`.
+. "$ROOT/scripts/minerva-ambiente-app"
+
+exec qs -d -n -p "$CONFIG"

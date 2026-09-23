@@ -1,0 +1,61 @@
+#!/bin/sh
+# minerva-dentro-recupero — Un terminale, e nient'altro.
+#
+# ── Perché esiste ─────────────────────────────────────────────────────────
+#
+# Finché c'è stata la sessione Hyprland, la via di ritorno era quella: se la
+# scrivania non partiva si sceglieva l'altra voce al login e si riparava da
+# lì. Il 1 settembre 2026 Giacomo ha deciso il distacco totale, e con Hyprland
+# se ne va anche quella rete.
+#
+# **Non si toglie una rete senza metterne un'altra.** Questa è la nostra: il
+# compositore di Minerva con dentro un terminale a tutto schermo, e nessun
+# altro pezzo. Non ha bisogno del demone, non ha bisogno della shell, non ha
+# bisogno di niente che stiamo per togliere — quindi non può cadere per le
+# stesse ragioni per cui cadrebbe la sessione vera.
+#
+# ── Che cosa NON fa, di proposito ────────────────────────────────────────
+#
+# Niente demone, niente scrivania, niente servizi, niente autostart. Ogni
+# pezzo in più è un pezzo che può impedirti di arrivare al terminale, ed è
+# esattamente ciò da cui questa sessione deve proteggere.
+#
+# Il compositore però c'è per intero: hai le scorciatoie, le barre del titolo
+# e il blocco schermo. Con Super+C chiudi la finestra, e chiudendo l'ultima si
+# esce e si torna al login.
+set -u
+
+SELF="$(readlink -f "$0")"
+MINERVA_DIR="$(dirname "$(dirname "$SELF")")"
+export PATH="$MINERVA_DIR/scripts:$PATH"
+
+# ── Il terminale ─────────────────────────────────────────────────────────
+#
+# Si prova una lista invece di pretenderne uno: questa sessione serve proprio
+# quando qualcosa manca, e pretendere il terminale predefinito vorrebbe dire
+# una via di ritorno che si rompe per la stessa ragione per cui serve.
+#
+# La cartella di partenza è il progetto: chi arriva qui ci arriva per
+# ripararlo.
+cd "$MINERVA_DIR" 2>/dev/null || cd "$HOME" || :
+
+for T in alacritty foot kitty konsole xterm; do
+    if command -v "$T" >/dev/null 2>&1; then
+        echo "recupero: apro $T in $(pwd)"
+        exec "$T"
+    fi
+done
+
+# ── Nessun terminale: si dice, invece di lasciare uno schermo nero ───────
+#
+# Uno schermo nero manda a pensare che il compositore non sia partito, e a
+# cercare il guasto dalla parte sbagliata. Il compositore c'è: manca con cosa
+# parlargli.
+echo "RECUPERO: nessun terminale trovato (alacritty, foot, kitty, konsole, xterm)."
+echo "Installane uno da un'altra macchina o da una console:"
+echo "    sudo pacman -S alacritty"
+echo "Console testuale: Ctrl+Alt+Fn+F3 — su questa tastiera il Fn è obbligatorio."
+# Si resta accesi qualche secondo perché la riga si possa leggere nel
+# registro, poi si esce e si torna al login invece di piantarsi.
+sleep 5
+exit 1

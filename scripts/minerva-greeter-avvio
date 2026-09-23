@@ -1,0 +1,86 @@
+#!/bin/sh
+# minerva-greeter-avvio — Il comando che greetd lancia per la schermata di
+# accesso. Sempre questo, e sempre uguale.
+#
+# ── Perché un comando fisso ────────────────────────────────────────────────
+#
+# greetd legge la sua configurazione UNA volta, quando parte. Il 23 settembre
+# 2026 l'installazione ha spostato la schermata da Hyprland al nostro
+# compositore riscrivendo /etc/greetd/config.toml, e per tre accessi di fila
+# Giacomo ha continuato a vedere Hyprland — con il suo avviso rosso — perché
+# greetd era partito alle 19:22 e il file era delle 19:35. Il comando nuovo
+# sarebbe valso solo al riavvio del computer.
+#
+# Con un comando fisso la scelta si fa QUI, a ogni schermata: quello che
+# cambia sta in /etc/greetd/minerva-greeter.env, che si rilegge ogni volta.
+#
+# ── E una strada sempre aperta ─────────────────────────────────────────────
+#
+# Il nostro compositore sotto la schermata di accesso gira come utente
+# «greeter», sullo schermo vero. Se non parte (un driver, un permesso, un
+# difetto che solo il ferro fa vedere), greetd rilancerebbe questo comando
+# all'infinito e il computer resterebbe senza schermata di accesso. Quindi:
+# se il nostro compositore esce con un errore nei primi secondi, si scrive
+# perché nel registro e si passa a Hyprland, con «start-hyprland» — lanciato
+# nudo, Hyprland mette un avviso rosso davanti a chi entra.
+#
+# Uscita 0 vuol dire «si è entrati»: la schermata ha finito, greetd avvia la
+# sessione. È il nostro compositore a passare l'esito della schermata
+# (vedi «esito_figlio» in compositore/src/main.c).
+#
+# Lo installa minerva-greetd in /usr/local/lib/minerva, di proprietà di root.
+set -u
+
+# Sovrascrivibili solo per la prova (compositore/prova-greeter-avvio.py):
+# greetd lancia questo comando con un ambiente suo, pulito.
+LIB="${MINERVA_GREETER_LIB:-/usr/local/lib/minerva}"
+CONF="${MINERVA_GREETER_CONF:-/etc/greetd}"
+REGISTRI="${MINERVA_GREETER_REGISTRI:-/var/log/minerva-greeter}"
+REGISTRO="$REGISTRI/compositore.log"
+
+# I valori scelti all'installazione: LAYOUT, e FORZA_HYPRLAND=1 per chi ha
+# chiesto la schermata su Hyprland. Un file che manca vuol dire i predefiniti.
+LAYOUT=us
+FORZA_HYPRLAND=0
+[ -r "$CONF/minerva-greeter.env" ] && . "$CONF/minerva-greeter.env"
+
+scrivi() {
+    printf '[%s] minerva-greeter-avvio: %s\n' "$(date '+%F %T')" "$1" >> "$REGISTRO" 2>/dev/null
+}
+
+hyprland() {
+    # La prova non lancia un Hyprland vero: sostituisce la riserva.
+    if [ -n "${MINERVA_GREETER_PROVA_RISERVA:-}" ]; then
+        exec sh -c "$MINERVA_GREETER_PROVA_RISERVA"
+    fi
+    if command -v start-hyprland >/dev/null 2>&1; then
+        exec start-hyprland -- -c "$CONF/minerva-greeter.conf" >> "$REGISTRO" 2>&1
+    fi
+    exec Hyprland -c "$CONF/minerva-greeter.conf" >> "$REGISTRO" 2>&1
+}
+
+if [ "$FORZA_HYPRLAND" = 1 ] || [ ! -x "$LIB/minerva-wayland" ] \
+   || [ ! -x "$LIB/minerva-greeter-sessione" ]; then
+    scrivi "schermata su Hyprland (scelta, o il nostro compositore non è installato)"
+    hyprland
+fi
+
+INIZIO=$(date +%s)
+scrivi "schermata sul nostro compositore"
+MINERVA_ESCI_COL_FIGLIO=1 MINERVA_GREETER=1 XKB_DEFAULT_LAYOUT="$LAYOUT" \
+    "$LIB/minerva-wayland" "$LIB/minerva-greeter-sessione" >> "$REGISTRO" 2>&1
+ESITO=$?
+DURATA=$(( $(date +%s) - INIZIO ))
+
+[ "$ESITO" -eq 0 ] && exit 0
+
+# Caduto dopo un po': era partito, e la schermata si è vista. Si esce con
+# l'errore, greetd la rilancia, e si riprova il nostro.
+if [ "$DURATA" -ge 15 ]; then
+    scrivi "il nostro compositore è uscito con $ESITO dopo ${DURATA}s"
+    exit "$ESITO"
+fi
+
+# Caduto subito: non è partito. Hyprland, e il perché resta scritto.
+scrivi "il nostro compositore NON è partito (esito $ESITO in ${DURATA}s): ripiego su Hyprland"
+hyprland

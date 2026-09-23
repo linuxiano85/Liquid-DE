@@ -1,0 +1,29 @@
+#!/bin/sh
+# minerva-editor — Avvia l'editor di testi di Minerva.
+#
+# Se l'editor è già aperto gli si chiede una scheda in più; altrimenti si
+# avvia con il documento chiesto. Con `MINERVA_EDITOR_DORMIENTE=1` si
+# costruisce e basta, senza mostrarsi: è così che `core/AppPronte.qml` lo
+# tiene pronto all'accesso.
+set -e
+
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+
+CONFIG="$ROOT/minerva-shell/app.qml"
+QUALE=editor
+DORMIENTE=MINERVA_EDITOR_DORMIENTE
+
+# Il documento arriva come indirizzo (`file:///…`) quando è un altro
+# programma a chiamarci, o come percorso normale da un terminale.
+TARGET=${1:-}
+case "$TARGET" in
+    file://*)
+        TARGET=${TARGET#file://}
+        TARGET=$(printf '%b' "$(printf '%s' "$TARGET" | sed 's/%\(..\)/\\x\1/g')")
+        ;;
+esac
+
+# Da qui in poi non torna: apre, prepara o avvia l'ospite. Il perché di ognuna
+# delle tre strade sta scritto lì dentro, una volta per tutte e tre le app.
+. "$ROOT/scripts/minerva-ospite"

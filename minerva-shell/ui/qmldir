@@ -1,0 +1,18 @@
+module ui
+Membrane 1.0 Membrane.qml
+Icon        1.0 Icon.qml
+SpineButton 1.0 SpineButton.qml
+Slider      1.0 Slider.qml
+Scorrimento 1.0 Scorrimento.qml
+ToggleTile  1.0 ToggleTile.qml
+ToolTipHint 1.0 ToolTipHint.qml
+TitleBarContent 1.0 TitleBarContent.qml
+WindowTitleBar  1.0 WindowTitleBar.qml
+MediaCard   1.0 MediaCard.qml
+RigaScelta  1.0 RigaScelta.qml
+ApriCon     1.0 ApriCon.qml
+RitrattoTondo 1.0 RitrattoTondo.qml
+Scegli          1.0 Scegli.qml
+Condividi   1.0 Condividi.qml
+Campo       1.0 Campo.qml
+StatoSchermata 1.0 StatoSchermata.qml

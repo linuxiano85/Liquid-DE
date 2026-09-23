@@ -1,0 +1,145 @@
+#!/bin/sh
+# minerva-avvia-sessione — Avvia la sessione scelta, e lascia detto com'è andata.
+#
+#     minerva-avvia-sessione "<comando Exec del .desktop>"
+#
+# Lo lancia greetd, come utente che ha appena fatto l'accesso, subito dopo che
+# PAM ha detto di sì. Non lo si chiama a mano.
+#
+# ── Il difetto che chiude ──────────────────────────────────────────────────
+#
+# Giacomo, 23 agosto 2026: «kde appena clicco per entrare mi riporta al login
+# anche dopo molti tentativi consecutivi».
+#
+# Nel journal si vede esattamente questo (boot del 20 agosto, 17:26):
+#
+#     17:26:06  session opened for giacomo
+#     17:26:06  session closed for giacomo      ← meno di un secondo
+#     17:26:07  la schermata di accesso ritorna
+#     17:26:15  session opened … 17:26:16 closed
+#
+# Cioè: **la password era giusta**. PAM apre la sessione, il comando parte e
+# muore subito. E di quel perché non restava niente da nessuna parte — non un
+# registro, non un messaggio, non una riga nel journal. Da fuori è
+# indistinguibile da «password sbagliata», ed è il motivo per cui un difetto
+# del genere si trascina per giorni: non c'è niente da leggere, quindi si
+# tira a indovinare.
+#
+# Questo file esiste per una sola ragione: **che ci sia qualcosa da leggere.**
+#
+# ── Dove scrive, e perché lì ───────────────────────────────────────────────
+#
+# Nella casa di chi entra, che è l'unico posto in cui si può scrivere subito
+# dopo l'accesso e che sia suo. Non in `/var/log/minerva-greeter`: quella è
+# dell'utente `greeter`, e chi entra non ci può scrivere — e non gliela si
+# apre in scrittura, perché sarebbe un file di sistema scrivibile da chiunque
+# faccia l'accesso.
+#
+# Conseguenza da sapere: il registro si legge **da una sessione che funziona**.
+# Su questo computer ce n'è sempre una (Minerva), quindi va bene. Se un giorno
+# non ce ne fosse nessuna, si legge da una console testuale con Ctrl+Alt+F3.
+set -u
+
+# ── Perché "$*" e non "$1" ─────────────────────────────────────────────────
+#
+# Perché greetd NON esegue l'array `cmd` come una riga di comando, per quanto
+# la sua pagina di manuale dica «command line». Lo unisce con degli spazi e lo
+# appiccica in fondo a una riga di shell. Nel suo binario si legge, per esteso:
+#
+#     [ -f /etc/profile ] && . /etc/profile; \
+#     [ -f $HOME/.profile ] && . $HOME/.profile; exec
+#
+# La riga finisce lì, con «exec » e uno spazio: quello che segue è `cmd` unito,
+# e lo esegue `/bin/sh -c`. Cioè le virgolette non esistono, e ogni elemento
+# dell'array viene rispezzato sugli spazi.
+#
+# È esattamente il difetto di `wayland-session` che `minerva-session` racconta
+# nei propri commenti — `exec $@` senza virgolette — e ci è ricapitato dalla
+# parte opposta.
+#
+# Conseguenza pratica, ed è LA ragione per cui KDE non entrava: delle quattro
+# sessioni installate qui, Plasma è l'unica con due parole nella riga `Exec=`:
+#
+#     Exec=/usr/lib/plasma-dbus-run-session-if-needed /usr/bin/startplasma-wayland
+#
+# Arrivava spezzata in due argomenti. Con `$1` si eseguiva soltanto il primo —
+# `plasma-dbus-run-session-if-needed` senza il programma da avviare — che a sua
+# volta fa `exec dbus-run-session` senza argomenti, cioè apre una shell che
+# senza terminale esce subito. Uscita 0, zero secondi, nemmeno un messaggio:
+# lo schermo sfarfalla e sei di nuovo alla schermata di accesso.
+#
+# `"$*"` rimette insieme quello che greetd ha spezzato. E se un domani greetd
+# passasse davvero un `argv` intero, `"$*"` con un argomento solo è quell'unico
+# argomento: funziona in tutti e due i mondi.
+COMANDO="$*"
+if [ -z "$COMANDO" ]; then
+    echo "minerva-avvia-sessione: nessun comando" >&2
+    exit 2
+fi
+
+STATO="${XDG_STATE_HOME:-$HOME/.local/state}/minerva"
+mkdir -p "$STATO" 2>/dev/null || STATO=""
+
+if [ -n "$STATO" ]; then
+    REG="$STATO/sessione.log"
+    # Non cresce all'infinito: si tengono le ultime 400 righe. Un registro che
+    # riempie il disco è un difetto peggiore di quello che serviva a trovare.
+    if [ -f "$REG" ] && [ "$(wc -l < "$REG" 2>/dev/null || echo 0)" -gt 400 ]; then
+        tail -200 "$REG" > "$REG.tmp" 2>/dev/null && mv -f "$REG.tmp" "$REG"
+    fi
+    exec >> "$REG" 2>&1
+fi
+
+echo "════════════════════════════════════════════════════════════════"
+echo "$(date '+%Y-%m-%d %H:%M:%S')  avvio: $COMANDO"
+if [ "$#" -gt 1 ]; then
+    # Non è un guasto: è greetd che ha unito e rispezzato. Va scritto perché
+    # se un giorno una riga `Exec=` contenesse delle virgolette, quelle sono
+    # già andate perse prima di arrivare qui, e questa riga è l'unico posto in
+    # cui si potrà capirlo.
+    echo "  (greetd l'ha consegnata in $# pezzi, rimessi insieme)"
+fi
+echo "  scrivania: ${XDG_CURRENT_DESKTOP:-(non impostata)}"
+echo "  tipo:      ${XDG_SESSION_TYPE:-(non impostato)}"
+echo "  sessione:  ${XDG_SESSION_DESKTOP:-(non impostata)}"
+echo "────────────────────────────────────────────────────────────────"
+
+INIZIO=$(date +%s)
+
+# ── `sh -lc` e non `exec` ──────────────────────────────────────────────────
+#
+# Con `exec` questo processo sparirebbe e non ci sarebbe nessuno a scrivere
+# com'è finita — cioè si tornerebbe al difetto di partenza. Restare costa un
+# processo `sh` fermo per tutta la sessione: quaranta kilobyte.
+#
+# `-l` perché il comando arriva dalla riga `Exec=` di un file `.desktop`, che
+# per specifica è una riga di shell e non un elenco di argomenti: Plasma la
+# scrive con DUE parole (`plasma-dbus-run-session-if-needed startplasma-wayland`)
+# e senza una shell si cercherebbe un eseguibile con quel nome per intero.
+sh -lc "$COMANDO"
+USCITA=$?
+
+DURATA=$(( $(date +%s) - INIZIO ))
+
+echo "────────────────────────────────────────────────────────────────"
+echo "$(date '+%Y-%m-%d %H:%M:%S')  finita dopo ${DURATA}s, uscita $USCITA"
+
+# Una sessione che dura meno di cinque secondi non è «uscito dalla sessione»:
+# è «non è partita». Vale la pena dirlo con parole, perché chi legge questo
+# file lo apre proprio quando non capisce cosa sia successo.
+if [ "$DURATA" -lt 5 ]; then
+    echo
+    echo "  ⚠ NON È PARTITA."
+    echo
+    echo "    La password era giusta — PAM aveva già detto di sì. È il"
+    echo "    programma della sessione che è uscito subito, e il perché"
+    echo "    dovrebbe essere scritto qui sopra."
+    echo
+    echo "    Se qui sopra non c'è niente, il programma è morto senza dire"
+    echo "    niente: quasi sempre gli manca qualcosa nell'ambiente. Le"
+    echo "    quattro variabili che ogni scrivania si aspetta sono elencate"
+    echo "    in cima a questo blocco."
+fi
+echo
+
+exit $USCITA

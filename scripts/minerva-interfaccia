@@ -1,0 +1,243 @@
+#!/bin/sh
+# minerva-interfaccia — Tiene viva l'interfaccia di Minerva per tutta la
+# sessione. È il gemello di `minerva-demone`, per l'altra metà di Minerva.
+#
+# ── Perché esiste ──────────────────────────────────────────────────────────
+#
+# Il demone aveva un guardiano dal 29 luglio. L'interfaccia no: partiva con un
+# `exec-once` di Hyprland, una volta e basta.
+#
+# La differenza fra le due morti è che quella del demone si nasconde e quella
+# dell'interfaccia si vede — ed è molto peggio. Se `qs` muore spariscono in
+# un colpo la barra, la dock, il menu, le notifiche, le barre del titolo di
+# ogni finestra, e TUTTE le scorciatoie dichiarate `global, quickshell:*`,
+# che sono quasi tutte: Super+A, Super+Spazio, Super+E, Super+I, Super+D…
+# nessuna fa più niente, perché il programma che le riceveva non c'è più.
+#
+# Quello che resta è una scrivania nuda in cui l'unica cosa ancora apribile è
+# il terminale con Super+Invio, perché quella riga è `exec` e non `global`.
+# Chi non lo sa spegne il portatile dal tasto.
+#
+# ── Come si comporta ───────────────────────────────────────────────────────
+#
+# Le stesse tre regole del guardiano del demone, imparate lì e valide qui:
+#
+#   1. Riparte SEMPRE, comunque l'interfaccia sia uscita. Anche con esito 0:
+#      `qs` esce con garbo quando lo si chiude, quindi un'uscita pulita non
+#      vuol dire «me l'hanno chiesto».
+#   2. Le pause raddoppiano. Un'interfaccia che non riesce a partire e ci
+#      riprova sessanta volte al minuto mangia la batteria e riempie il
+#      registro; e con l'interfaccia si vedrebbe anche sfarfallare lo schermo.
+#   3. Dopo troppi tentativi ravvicinati ci si ferma. Un guasto vero — un
+#      errore di sintassi in un file QML, il demone irraggiungibile — non si
+#      risolve riprovando, e continuare all'infinito nasconde la causa.
+#
+# Con una cosa in più che il demone non ha: quando ci si arrende **si avvisa
+# a schermo**. Non con `notify-send`, che parla proprio col programma appena
+# morto: lo disegna il COMPOSITORE, che è l'unico canale a sopravvivere alla
+# morte dell'interfaccia.
+#
+# Fino al 1º settembre 2026 quel messaggio era `hyprctl notify`, ed era
+# l'ultima riga della sessione su wlroots che chiamava un programma di
+# Hyprland. Sotto il nostro compositore `hyprctl` non esiste: il messaggio non
+# lo dava nessuno, e restava uno schermo nero senza spiegazione — cioè proprio
+# nel caso per cui questo avviso era stato scritto.
+#
+# Adesso è un verbo nostro sul canale del compositore:
+#
+#     messaggio <millisecondi> <testo>
+#
+# e il ripiego su `hyprctl` resta solo per la sessione Hyprland, finché c'è.
+
+# ── Come si dice una cosa quando l'interfaccia non c'è ────────────────────
+#
+# Due strade, e si prova prima la nostra.
+#
+# `MINERVA_CANALE` lo mette il nostro compositore nell'ambiente dei programmi
+# che avvia: se c'è, c'è anche lui, e gli si scrive una riga sul socket. Non
+# serve nessun programma in più — `printf` in un socket Unix lo sa fare la
+# shell da sola con `/dev/tcp`? No, quello è TCP. Serve un tramite: si prova
+# `socat`, poi `nc -U`, poi Python, che su questa macchina c'è per forza
+# (l'installatore ne dipende).
+#
+# Se non c'è nessuno dei tre il messaggio non si dà: resta nel registro, che è
+# dove si guarda quando la scrivania non c'è.
+#
+# Un messaggio che non si riesce a dare non ferma niente: si va avanti in
+# silenzio, come faceva prima.
+dillo_a_schermo() {
+    _ms="$1"
+    _testo="$2"
+    if [ -n "${MINERVA_CANALE:-}" ] && [ -S "${MINERVA_CANALE:-}" ]; then
+        _riga="messaggio $_ms $_testo"
+        if command -v socat >/dev/null 2>&1; then
+            printf '%s\n' "$_riga" | socat - "UNIX-CONNECT:$MINERVA_CANALE" \
+                >/dev/null 2>&1 && return
+        fi
+        if command -v nc >/dev/null 2>&1; then
+            printf '%s\n' "$_riga" | nc -U -w 1 "$MINERVA_CANALE" \
+                >/dev/null 2>&1 && return
+        fi
+        if command -v python3 >/dev/null 2>&1; then
+            MINERVA_RIGA="$_riga" python3 -c '
+import os, socket, sys
+try:
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(2)
+    s.connect(os.environ["MINERVA_CANALE"])
+    s.sendall((os.environ["MINERVA_RIGA"] + "\n").encode())
+    s.close()
+except Exception:
+    sys.exit(1)
+' >/dev/null 2>&1 && return
+        fi
+    fi
+    # Qui c'era il ripiego su `hyprctl notify`, per la sessione Hyprland.
+    # Quella sessione non c'è più dal 2 settembre 2026, e con lei se n'è
+    # andata l'ultima riga di Minerva che chiamava un programma di Hyprland.
+    #
+    # Se nessuna delle tre strade qui sopra funziona il messaggio non si dà, e
+    # va bene: resta scritto nel registro, che è dove si guarda quando la
+    # scrivania non c'è. Meglio un avviso mancato che una dipendenza tenuta in
+    # vita per un caso che non capita più.
+}
+
+SELF="$(readlink -f "$0")"
+ROOT="$(dirname "$(dirname "$SELF")")"
+
+MAX=5
+FINESTRA=120
+
+tentativi=0
+inizio=$(date +%s)
+pausa=1
+
+# Di QUESTA sessione, non dell'utente. Con la cartella condivisa, la seconda
+# Minerva trovava il guardiano della prima, lo credeva suo e si faceva da
+# parte: sessione senza demone e senza shell, schermo nero. Vedi
+# `scripts/minerva-posti.sh`.
+. "$(dirname "$(readlink -f "$0")")/minerva-posti.sh"
+REGISTRO="$STATO/shell.log"
+: > "$REGISTRO"
+
+# Il proprio PID su file, perché `minerva-risveglia` deve poter trovare
+# QUESTO processo senza cercarlo per nome. Cercare per nome è come si
+# colpisce il processo sbagliato: `pgrep -f minerva-interfaccia` trova anche
+# sé stesso, e trova il `grep`.
+PIDFILE="$STATO/interfaccia.pid"
+
+# ── Un guardiano per sessione ─────────────────────────────────────────────
+#
+# `hyprctl reload` riesegue gli `exec-once`, e a chiamarlo è anche il plugin
+# delle barre quando si carica: senza questo controllo ogni caricamento
+# faceva nascere una SECONDA interfaccia — due shell, due barre, due dock,
+# e l'uscita del secondo `qs` che si mescola col registro del primo. Chi
+# arriva dopo e trova un guardiano vivo, vivo e davvero lui, si fa da parte.
+if [ -f "$PIDFILE" ]; then
+    VECCHIO=$(cat "$PIDFILE" 2>/dev/null)
+    if [ -n "$VECCHIO" ] && kill -0 "$VECCHIO" 2>/dev/null \
+        && tr '\0' ' ' < "/proc/$VECCHIO/cmdline" 2>/dev/null | grep -q "minerva-interfaccia"; then
+        echo "[MINERVA][SHELL] C'è già un guardiano ($VECCHIO): questo esce." >> "$REGISTRO"
+        exit 0
+    fi
+fi
+echo $$ > "$PIDFILE"
+
+figlio=""
+voluto=no
+
+# Fermando il guardiano si ferma anche l'interfaccia: si spegne il padre, non
+# il figlio. Senza, resterebbe una `qs` orfana che tiene il suo posto sui
+# livelli di Wayland, e la prossima disegnerebbe la barra due volte.
+fermati() {
+    [ -n "$figlio" ] && kill "$figlio" 2>/dev/null
+    rm -f "$PIDFILE"
+    exit 0
+}
+trap fermati TERM INT
+
+# SIGUSR1 = «riavviala, te lo sto chiedendo io». Arriva da
+# `minerva-risveglia`, cioè dal tasto Super+Ctrl+R. Un riavvio chiesto non
+# è un guasto e non deve consumare i cinque tentativi: chi prova un tema o
+# un pannello nuovo la riavvia dieci volte in due minuti, e al sesto giro si
+# ritroverebbe senza scrivania.
+riavvia() {
+    voluto=si
+    [ -n "$figlio" ] && kill "$figlio" 2>/dev/null
+}
+trap riavvia USR1
+
+# ── Come disegna la shell ──────────────────────────────────────────────────
+#
+# Col processore, come le sei app: il perché, i numeri e cosa si perde stanno
+# in `scripts/minerva-ambiente-app`. Qui il conto è questo — la shell nasce a
+# 202 MB di memoria privata, più del doppio di qualunque app, e non si spegne
+# mai; il motore grafico ne vale circa 38.
+#
+# Si può fare perché in tutta la shell non c'è un solo `layer.effect` né un
+# `QtQuick.Effects`: quelli stanno solo in `greeter/` e `blocco/`, che sono
+# altri due programmi e restano sulla scheda video.
+#
+# La via di fuga è una variabile NOSTRA e non `QT_QUICK_BACKEND` vuota: con
+# `${QT_QUICK_BACKEND:=software}` una variabile vuota conta come non
+# impostata, quindi «svuotarla» non riporterebbe la scheda video — riporterebbe
+# esattamente qui. Per una prova sulla scheda video:
+#
+#     MINERVA_SHELL_GPU=1 minerva-interfaccia
+#
+# e chi la vuole indietro per sempre toglie queste righe.
+if [ -z "${MINERVA_SHELL_GPU:-}" ]; then
+    QT_QUICK_BACKEND=software
+    export QT_QUICK_BACKEND
+fi
+
+echo "[MINERVA][SHELL] Guardiano avviato (pid $$)." >> "$REGISTRO"
+
+while :; do
+    qs -p "$ROOT/minerva-shell/shell.qml" >> "$REGISTRO" 2>&1 &
+    figlio=$!
+    wait "$figlio"
+    esito=$?
+    figlio=""
+
+    if [ "$voluto" = si ]; then
+        voluto=no
+        # Il registro si azzera a ogni riavvio CHIESTO, non a ogni morte.
+        #
+        # Serve a chi sviluppa, ed è costato mezz'ora il 10 agosto: si cambia
+        # un file, si riavvia, si va a leggere gli avvisi — e si legge quello
+        # di tre riavvii prima, che indica una riga in cui nel frattempo non
+        # c'è più niente di sbagliato. Si finisce a cercare un difetto che non
+        # esiste.
+        #
+        # I riavvii per GUASTO invece si accodano: lì la storia serve tutta.
+        : > "$REGISTRO"
+        echo "[MINERVA][SHELL] Riavvio chiesto. Riparte pulito." >> "$REGISTRO"
+        continue
+    fi
+
+    adesso=$(date +%s)
+    if [ $((adesso - inizio)) -gt "$FINESTRA" ]; then
+        tentativi=0
+        inizio=$adesso
+        pausa=1
+    fi
+
+    tentativi=$((tentativi + 1))
+    if [ "$tentativi" -ge "$MAX" ]; then
+        echo "[MINERVA][SHELL] Morta $tentativi volte in meno di $FINESTRA s." | tee -a "$REGISTRO" >&2
+        echo "[MINERVA][SHELL] Non riparte più: il guasto non è passeggero." | tee -a "$REGISTRO" >&2
+        # L'ultima cosa che si può ancora dire all'utente, e la si dice col
+        # compositore perché è l'unico rimasto in piedi. Trenta secondi: deve
+        # restare lì abbastanza da essere letta da chi torna al portatile.
+        dillo_a_schermo 30000 \
+            "Minerva: l'interfaccia non riparte. Super+Ctrl+R per riprovare, Super+Invio per un terminale." 
+        rm -f "$PIDFILE"
+        exit 1
+    fi
+
+    echo "[MINERVA][SHELL] Uscita con esito $esito. Riparte fra $pausa s." | tee -a "$REGISTRO" >&2
+    dillo_a_schermo 4000 "Minerva: interfaccia riavviata." 
+    sleep "$pausa"
+    pausa=$((pausa * 2))
+done

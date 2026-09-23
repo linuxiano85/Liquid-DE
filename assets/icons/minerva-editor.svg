@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Minerva Editor — un foglio con le righe di testo, piegato nell'angolo
+       come ogni documento. Il segno deve restare leggibile a quattordici
+       pixel, che è la dimensione a cui vive davvero. -->
+  <defs>
+    <linearGradient id="tinta" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+  <path d="M 12 6 L 32 6 L 40 14 L 40 42 L 12 42 Z" fill="none" stroke="url(#tinta)" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M 32 6 L 32 14 L 40 14" fill="none" stroke="url(#tinta)" stroke-width="2.4" stroke-linejoin="round"/>
+  <path d="M 17 22 L 33 22" stroke="#7CC4E8" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 17 28 L 33 28" stroke="#7CC4E8" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 17 34 L 27 34" stroke="#7CC4E8" stroke-width="2" stroke-linecap="round"/>
+</svg>

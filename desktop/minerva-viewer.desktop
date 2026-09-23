@@ -1,0 +1,24 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Anteprima
+Name[en]=Preview
+GenericName=Visualizzatore immagini
+GenericName[en]=Image viewer
+Comment=Guardare le immagini, e la cartella intorno
+Comment[en]=Look at images, and at the folder around them
+# %U e non %u: qui chiedere più file insieme ha senso — diventano l'album da
+# sfogliare, in una finestra sola. È il contrario del gestore file, dove venti
+# cartelle sarebbero venti schede che nessuno ha chiesto.
+Exec=minerva-viewer %U
+Icon=minerva-viewer
+StartupWMClass=minerva-viewer
+Terminal=false
+StartupNotify=false
+Categories=Graphics;Viewer;2DGraphics;RasterGraphics;
+# Senza questa riga Anteprima non compare nemmeno fra le scelte possibili per
+# aprire una fotografia, e in una sessione Minerva quel mestiere resta a
+# Gwenview. Sono i formati che Qt sa leggere da sé: si dichiara quello che si
+# sa fare, non quello che esiste.
+MimeType=image/png;image/jpeg;image/gif;image/bmp;image/webp;image/tiff;image/x-icon;image/svg+xml;image/x-portable-pixmap;image/x-xbitmap;
+Keywords=immagini;foto;fotografie;visualizzatore;anteprima;images;photos;viewer;preview;picture;

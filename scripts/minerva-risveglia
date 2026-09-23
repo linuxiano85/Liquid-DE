@@ -1,0 +1,53 @@
+#!/bin/sh
+# minerva-risveglia — Rimette in piedi l'interfaccia di Minerva quando è
+# sparita. È quello che sta dietro Super+Ctrl+R.
+#
+# ── Perché non è un semplice «rilancia qs» ─────────────────────────────────
+#
+# Perché ci sono due situazioni diverse e la scorciatoia è una sola.
+#
+#   · Il guardiano è vivo e l'interfaccia è morta o impallata.
+#     Rilanciare `qs` a mano qui è un errore: si finirebbe con due
+#     interfacce, due barre sovrapposte e due dock. Va invece CHIESTO al
+#     guardiano di riavviare la sua (SIGUSR1), che è l'unico che sa quale
+#     processo è il suo.
+#
+#   · Il guardiano stesso si è arreso dopo cinque morti ravvicinate.
+#     Qui non c'è nessuno a cui chiedere: si riparte da capo.
+#
+# Il PID del guardiano si legge da un file che scrive lui, e si CONTROLLA che
+# quel PID sia ancora davvero il guardiano prima di mandargli un segnale. Un
+# PID si riusa: dopo un riavvio del guardiano quel numero può appartenere a
+# un programma qualunque, e un SIGUSR1 a caso su un processo altrui è il modo
+# di romperlo. Si legge `/proc/<pid>/cmdline` e si guarda chi è.
+
+SELF="$(readlink -f "$0")"
+ROOT="$(dirname "$(dirname "$SELF")")"
+# La sessione è quella da cui si è chiamati: due Minerva accese hanno due
+# interfacce, e svegliare quella dell'altra non serve a nessuno.
+. "$(dirname "$(readlink -f "$0")")/minerva-posti.sh"
+PIDFILE="$STATO/interfaccia.pid"
+
+vivo_ed_e_lui() {
+    [ -f "$PIDFILE" ] || return 1
+    pid=$(cat "$PIDFILE" 2>/dev/null)
+    case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+    [ -r "/proc/$pid/cmdline" ] || return 1
+    # cmdline separa gli argomenti con byte zero: si traducono in a capo.
+    tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | grep -q 'minerva-interfaccia' || return 1
+    GUARDIANO=$pid
+    return 0
+}
+
+if vivo_ed_e_lui; then
+    kill -USR1 "$GUARDIANO" 2>/dev/null && \
+        hyprctl notify 1 2500 "rgb(f0407f)" "Minerva: interfaccia in riavvio…" >/dev/null 2>&1
+    exit 0
+fi
+
+# Nessun guardiano: si riparte da capo, staccati dal terminale o dalla
+# scorciatoia che ci ha lanciati, altrimenti muore insieme a chi lo ha
+# chiamato.
+hyprctl notify 1 2500 "rgb(f0407f)" "Minerva: riavvio dell'interfaccia da capo…" >/dev/null 2>&1
+setsid "$ROOT/scripts/minerva-interfaccia" >/dev/null 2>&1 &
+exit 0

@@ -1,0 +1,3 @@
+# Meson ci mette dentro tutto: oggetti, ninja, cache di configurazione. Si
+# rigenera con `./costruisci.sh` in due secondi.
+build/

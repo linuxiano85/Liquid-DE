@@ -1,0 +1,57 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  Cosa NON entra nella storia di Minerva
+#
+#  Regola: entra tutto ciò che è stato scritto da qualcuno, resta fuori
+#  tutto ciò che una macchina può rigenerare o che cambia da solo mentre
+#  la scrivania gira. Nel dubbio, entra: un file di troppo nella storia
+#  costa qualche kilobyte, un file di meno costa una serata.
+# ═══════════════════════════════════════════════════════════════════════
+
+# ── Roba compilata ─────────────────────────────────────────────────────
+minervad/build/
+minervad/.dart_tool/
+
+# ── Le preferenze non stanno qui, e non devono tornarci ────────────────
+#
+# Stavano in `config/settings.json` fino al trasloco in ~/.config/minerva,
+# e la copia vecchia è rimasta lì per mesi a fare da esca: la si apriva, la
+# si modificava, e non succedeva NIENTE, perché il demone legge l'altra.
+# Il 10 agosto le due dicevano cose diverse — titleHeight 38 di qua, 42 di
+# là — e mezz'ora se n'è andata a chiedersi perché il compositore ignorasse
+# quello che gli si scriveva.
+#
+# Le vecchie copie sono state cancellate il 17 agosto. Queste righe
+# esistono perché non ne ricompaiano di nuove.
+config/settings.json
+config/theme.json
+config/app_usage.json
+
+# ── Script di lavoro, usa e getta ──────────────────────────────────────
+#
+# Un file che si scrive per fare una prova, si lancia una volta e si butta.
+# Due di questi sono finiti in un commit il 24 agosto — creati, committati e
+# cancellati nello stesso minuto — e per toglierli è servito un commit a testa.
+# Il trattino basso iniziale li tiene fuori.
+minervad/bin/_*.dart
+
+# ── Copie di sicurezza fatte a mano ────────────────────────────────────
+*.bak
+*.orig
+*~
+
+# ── Roba che si rigenera da sola ───────────────────────────────────────
+#
+# `__pycache__` è nato con un programma in Python che non c'è più
+# (`.attic/2026-08-23-suoneria/`); `.cache/` la scrive clangd mentre si
+# lavora sul compositore. Nessuno dei due è stato scritto da qualcuno, ed è
+# la riga che decide chi entra nella storia e chi no.
+__pycache__/
+*.pyc
+.cache/
+
+# ── Sistema ────────────────────────────────────────────────────────────
+.DS_Store
+
+# ── Editor ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/

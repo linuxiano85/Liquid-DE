@@ -1,0 +1,307 @@
+#!/bin/sh
+# minerva-specchio — lo schermo, compresso in H.264, in una cartella di
+# segmenti HLS che un televisore può venirsi a prendere.
+#
+# ── Perché è uno script e non codice dentro il demone ─────────────────────
+#
+# Perché è una **conduttura**: `minerva-cattura` scrive frame grezzi,
+# `ffmpeg` li comprime, e in mezzo c'è una pipe. A 1920×1080 e 30 fps quella
+# pipe porta **249 MB al secondo**. Farla passare dentro il demone vorrebbe
+# dire che ogni byte dello schermo attraversa Dart trenta volte al secondo:
+# è il modo sicuro di trasformare «trasmetti lo schermo» in «il computer si
+# inchioda». Qui la pipe la fa il kernel, e il demone non la vede.
+#
+# La seconda ragione è che così si prova a mano, senza una TV accesa:
+#
+#   scripts/minerva-specchio avvia /tmp/prova
+#   ffplay /tmp/prova/schermo.m3u8
+#
+# ── Come si spegne, e perché c'è un `trap` ────────────────────────────────
+#
+# Il demone ferma la trasmissione uccidendo QUESTO script. Senza il `trap`,
+# `minerva-cattura` e `ffmpeg` resterebbero vivi: due processi orfani che
+# continuano a leggere lo schermo e a scrivere su disco, per sempre, e la
+# spia nel pannello direbbe «spento». È la stessa famiglia delle sessioni
+# annidate rimaste in piedi il 30 agosto — 174 MB che nessuno vedeva.
+#
+# ── Due forme, perché i televisori non sono d'accordo ────────────────────
+#
+#   avvia   scrive segmenti HLS in una cartella. È quello che vuole un
+#           Chromecast: il suo lettore riceve l'indirizzo di una LISTA e va a
+#           prendersi i pezzi. Costa qualche secondo di ritardo.
+#
+#   flusso  scrive un flusso MPEG-TS continuo sull'uscita standard. È quello
+#           che vuole un apparecchio DLNA — un Samsung non sa leggere una
+#           playlist `.m3u8`: si aspetta un indirizzo che, aperto, comincia a
+#           versare video. In cambio il ritardo è di uno o due secondi invece
+#           di tre, e **non tocca il disco**: i fotogrammi dello schermo non
+#           esistono da nessuna parte se non nel tubo.
+#
+# Uso:
+#   minerva-specchio avvia <cartella> [--schermo NOME] [--fps N]
+#                                     [--qualita N] [--cursore] [--muto]
+#   minerva-specchio flusso [--schermo NOME] [--fps N] [--qualita N]
+#                           [--senza-cursore] [--muto]      > flusso.ts
+#   minerva-specchio schermi
+set -eu
+
+CATTURA="${MINERVA_CATTURA:-minerva-cattura}"
+
+errore() { echo "minerva-specchio: $*" >&2; exit 1; }
+
+comando="${1:-}"
+[ -n "$comando" ] || errore "manca il comando (avvia | schermi)"
+shift || true
+
+if [ "$comando" = "schermi" ]; then
+    command -v "$CATTURA" >/dev/null 2>&1 || errore "manca minerva-cattura"
+    exec "$CATTURA" --schermi
+fi
+
+case "$comando" in
+    avvia|flusso) : ;;
+    *) errore "comando sconosciuto: $comando" ;;
+esac
+
+CARTELLA=""
+if [ "$comando" = "avvia" ]; then
+    CARTELLA="${1:-}"
+    [ -n "$CARTELLA" ] || errore "manca la cartella dove mettere i segmenti"
+    shift
+fi
+
+SCHERMO=""
+FPS=30
+QUALITA=6000000     # bit al secondo
+CURSORE="--cursore"
+SUONO=1
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --schermo) SCHERMO="${2:-}"; shift 2 ;;
+        --fps)     FPS="${2:-30}";   shift 2 ;;
+        --qualita) QUALITA="${2:-6000000}"; shift 2 ;;
+        --senza-cursore) CURSORE=""; shift ;;
+        --muto)    SUONO=0; shift ;;
+        *) errore "opzione sconosciuta: $1" ;;
+    esac
+done
+
+# ── La cartella: solo dentro la memoria volatile ─────────────────────────
+#
+# I segmenti sono **fotogrammi del tuo schermo**. Se finissero in una cartella
+# qualunque resterebbero lì dopo, e nessuno saprebbe che ci sono. In
+# `$XDG_RUNTIME_DIR` stanno in RAM, sono leggibili solo dall'utente (0700) e
+# spariscono da soli quando la sessione finisce.
+#
+# Rifiutare un percorso fuori di lì non è pignoleria: è l'unica riga che
+# impedisce a un errore di battitura di lasciare il tuo schermo su disco.
+RADICE="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [ "$comando" = "avvia" ]; then
+    case "$CARTELLA" in
+        "$RADICE"/*) : ;;
+        *) errore "la cartella dei segmenti deve stare dentro $RADICE (dato: $CARTELLA)" ;;
+    esac
+else
+    # In modo «flusso» non si scrive niente da nessuna parte: il tubo sta in
+    # RAM e muore col processo. Serve comunque una cartella per il tubo con
+    # un nome, e sta nella corsa come tutto il resto.
+    CARTELLA="$RADICE/minerva-specchio-tubo.$$"
+fi
+
+command -v "$CATTURA" >/dev/null 2>&1 || \
+    errore "manca minerva-cattura: compila il compositore con compositore/costruisci.sh"
+command -v ffmpeg >/dev/null 2>&1 || \
+    errore "manca ffmpeg, e senza non si può comprimere video in tempo reale"
+
+# ── La forma dello schermo, chiesta invece che indovinata ────────────────
+#
+# ffmpeg legge byte grezzi: non c'è niente dentro che dica quanto è larga
+# l'immagine. Una geometria sbagliata NON dà errore — dà un video storto a
+# diagonale, e si scopre guardando la TV. `--dimmi` la chiede al compositore
+# e non copia un solo pixel.
+TESTA="$("$CATTURA" ${SCHERMO:+--schermo "$SCHERMO"} --dimmi 2>/dev/null)" || \
+    errore "il compositore non risponde a wlr-screencopy"
+set -- $TESTA
+[ "${1:-}" = "MINERVA_CATTURA" ] || errore "risposta incomprensibile: $TESTA"
+LARG="$2"; ALT="$3"; FORMATO="$4"
+
+mkdir -p "$CARTELLA"
+chmod 700 "$CARTELLA"
+rm -f "$CARTELLA"/schermo*.ts "$CARTELLA"/schermo.m3u8
+
+# ── Il suono ─────────────────────────────────────────────────────────────
+#
+# «Trasmetti lo schermo» senza l'audio è mezzo lavoro. Si prende dal
+# *monitor* dell'uscita audio, cioè da quello che stai già sentendo. Se non
+# c'è — cuffie staccate, PipeWire che non risponde — si va avanti **muti**
+# invece di fallire: un video senza suono è una trasmissione riuscita a metà,
+# un errore è una trasmissione che non parte.
+INGRESSO_AUDIO=""
+USCITA_AUDIO="-an"
+if [ "$SUONO" = "1" ] && command -v pactl >/dev/null 2>&1; then
+    SINK="$(pactl get-default-sink 2>/dev/null || true)"
+    if [ -n "$SINK" ] && pactl list short sources 2>/dev/null | \
+            grep -q "^[0-9]*	$SINK.monitor	"; then
+        INGRESSO_AUDIO="-f pulse -thread_queue_size 1024 -i $SINK.monitor"
+        USCITA_AUDIO="-c:a aac -b:a 128k -ac 2"
+    fi
+fi
+
+# ── La compressione, sulla GPU se c'è ────────────────────────────────────
+#
+# `h264_vaapi` comprime dentro la scheda video: misurato il 3 settembre 2026
+# su questa Intel Iris Plus G1, tiene 1920×1080 a 30 fps in tempo reale
+# (speed 1.00x su 300 frame). Senza GPU si ripiega su libx264 `ultrafast`,
+# che sullo stesso schermo mangia mezzo processore — funziona, ma si sente.
+if [ -e /dev/dri/renderD128 ]; then
+    VIDEO="-vf format=nv12,hwupload -c:v h264_vaapi"
+    DISPOSITIVO="-init_hw_device vaapi=va:/dev/dri/renderD128 -filter_hw_device va"
+else
+    VIDEO="-c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p"
+    DISPOSITIVO=""
+fi
+
+# ── Il `trap`: nessun orfano, e nessun colpo di rimbalzo ─────────────────
+#
+# Il demone ferma la trasmissione uccidendo questo script. Senza `trap`,
+# `minerva-cattura` e `ffmpeg` resterebbero vivi: due orfani che continuano a
+# leggere lo schermo e a scrivere su disco per sempre, con la spia nel
+# pannello che dice «spento». È la famiglia delle sessioni annidate rimaste in
+# piedi il 30 agosto, 174 MB che nessuno vedeva.
+#
+# **`kill 0` sarebbe stato l'errore.** Manda il segnale a tutto il gruppo di
+# processi — e questo script non ha un gruppo suo: lo lancia il demone, e il
+# gruppo è quello del demone. Cioè `kill 0` avrebbe ucciso *il demone*, e con
+# lui la scrivania. Scritto qui perché è esattamente il tipo di riga che
+# sembra più pulita ed è catastrofica.
+#
+# Quindi: due pid, presi uno per uno. La pipe diventa un tubo con un nome,
+# che è l'unico modo in `sh` di avere il pid del PRIMO pezzo di una pipe.
+TUBO="$CARTELLA/tubo"
+rm -f "$TUBO"
+mkfifo -m 600 "$TUBO"
+
+PID_CATTURA=""
+PID_FFMPEG=""
+ripulisci() {
+    trap - TERM INT EXIT
+    [ -n "$PID_CATTURA" ] && kill "$PID_CATTURA" 2>/dev/null || true
+    [ -n "$PID_FFMPEG" ]  && kill "$PID_FFMPEG"  2>/dev/null || true
+    # ── E ASPETTARLI ────────────────────────────────────────────────────
+    #
+    # `kill` chiede, non impone: torna subito, e ffmpeg intanto sta ancora
+    # scrivendo l'ultimo segmento. Senza questa attesa la pulizia qui sotto
+    # cancella i file PRIMA che ffmpeg finisca di scriverli, e quello che
+    # scrive dopo resta lì per sempre. Trovato guardando, il 3 settembre
+    # 2026: dopo lo stop restavano `schermo7.ts` e la lista.
+    [ -n "$PID_FFMPEG" ]  && wait "$PID_FFMPEG"  2>/dev/null || true
+    [ -n "$PID_CATTURA" ] && wait "$PID_CATTURA" 2>/dev/null || true
+    rm -f "$TUBO"
+    # I segmenti sono fotogrammi del tuo schermo: non restano in giro dopo.
+    # In modo «flusso» non ce n'è nessuno da cancellare, e va bene così.
+    rm -f "$CARTELLA"/schermo*.ts "$CARTELLA"/schermo.m3u8 \
+          "$CARTELLA"/schermo*.ts.tmp
+    rmdir "$CARTELLA" 2>/dev/null || true
+}
+trap ripulisci TERM INT EXIT
+
+# ── Dove finisce il video ────────────────────────────────────────────────
+#
+# HLS scrive una lista e dei pezzi da un secondo; MPEG-TS versa e basta.
+# `-flush_packets 1` sul secondo non è un dettaglio: senza, ffmpeg accumula
+# qualche decina di kilobyte prima di scrivere, e su una trasmissione dal vivo
+# quell'attesa diventa ritardo che non si recupera più.
+if [ "$comando" = "flusso" ]; then
+    USCITA="-f mpegts -flush_packets 1 -muxdelay 0 -muxpreload 0 pipe:1"
+
+    # ── Tre cose che tolgono ritardo, e valgono SOLO dal vivo ────────────
+    #
+    # Misurate il 4 settembre 2026 su una trasmissione vera verso il
+    # televisore della cucina, dove Giacomo ha contato sette secondi di
+    # ritardo.
+    #
+    # `-use_wallclock_as_timestamps 1` su TUTTI E DUE gli ingressi. Senza,
+    # l'ingresso `rawvideo` non ha orari propri e ffmpeg gliene inventa uno:
+    # un contatore che avanza di 1/30 a fotogramma, qualunque sia l'ora vera
+    # in cui quel fotogramma è arrivato. Finché la conduttura sta al passo
+    # non si vede — misurato: 11,85 s di flusso in 12,2 s di orologio — ma
+    # basta saltare qualche fotogramma perché il tempo del flusso cominci a
+    # restare indietro da quello del mondo, e il ritardo cresca senza
+    # fermarsi mai. Con l'orologio vero un fotogramma saltato è un buco, non
+    # un rallentamento. E va su tutti e due gli ingressi o l'audio finisce su
+    # un altro orologio del video: provato, 13 ms di scarto contro i 42 di
+    # prima.
+    #
+    # `-fps_mode passthrough`: ffmpeg non aggiusta più la cadenza duplicando
+    # o buttando fotogrammi per farli tornare esattamente 30 al secondo. Con
+    # l'orologio vero quella correzione è il contrario di quello che serve.
+    OROLOGIO="-use_wallclock_as_timestamps 1"
+    PASSO="-fps_mode passthrough"
+
+    # ── Dire al televisore quanto poco gli serve tenere davanti ──────────
+    #
+    # Un flusso H.264 può portare dentro di sé la misura della scorta che il
+    # decodificatore deve avere prima di cominciare: si chiama HRD, e sta
+    # nella testata del video. Il nostro **non la portava**: verificato il 4
+    # settembre 2026 leggendo la testata di un flusso vero,
+    # `nal_hrd_parameters_present_flag = 0`.
+    #
+    # Un decodificatore che non trova quella misura non tira a indovinare al
+    # ribasso: fa la scelta prudente, e la scelta prudente è tenersi davanti
+    # dei secondi. È l'unica spiegazione rimasta in piedi dopo che le altre
+    # due sono cadute per misura: la coda di invio era nostra e l'abbiamo
+    # svuotata, e la scorta del televisore non è in byte — triplicare la
+    # banda non le ha tolto un secondo.
+    #
+    # `-rc_mode CBR` + `-maxrate` + `-bufsize` fanno scrivere quella misura, e
+    # gliela facciamo trovare piccola: un quarto di secondo di video. Nella
+    # testata ci finisce come `cpb_size`, ed è verificabile — dopo questa riga
+    # `nal_hrd_parameters_present_flag` vale 1.
+    SCORTA=$((QUALITA / 4))
+    case "$VIDEO" in
+        *h264_vaapi*) VIDEO="$VIDEO -rc_mode CBR" ;;
+    esac
+    # `-bf 0`: niente fotogrammi bidirezionali. Un B si comprime guardando
+    # anche l'immagine DOPO, quindi per ogni B c'è un'immagine che non si può
+    # mandare finché non è arrivata quella che viene dopo. È ritardo per
+    # definizione, e in cambio dà una compressione migliore che su una rete
+    # di casa non serve a nessuno.
+    BASSO_RITARDO="-bf 0 -flags low_delay -maxrate $QUALITA -bufsize $SCORTA"
+else
+    USCITA="-f hls -hls_time 1 -hls_list_size 4"
+    USCITA="$USCITA -hls_flags delete_segments+independent_segments+temp_file"
+    USCITA="$USCITA -hls_segment_type mpegts"
+    USCITA="$USCITA -hls_segment_filename $CARTELLA/schermo%d.ts"
+    USCITA="$USCITA -y $CARTELLA/schermo.m3u8"
+    # In HLS no: i segmenti vogliono una cadenza regolare, e quella strada
+    # oggi funziona. Non si tocca quello che non si sta misurando.
+    OROLOGIO=""
+    BASSO_RITARDO=""
+    PASSO=""
+fi
+
+# `-g $FPS`: una immagine intera al secondo. È quello che decide la lunghezza
+# minima di un segmento, e quindi il RITARDO: la TV non può cominciare a
+# guardare a metà di un segmento. Un secondo di GOP, segmenti da un secondo,
+# quattro segmenti in lista → circa tre secondi di ritardo. Allungarlo
+# risparmia banda e peggiora il ritardo; questa è la posizione scelta.
+# shellcheck disable=SC2086
+"$CATTURA" ${SCHERMO:+--schermo "$SCHERMO"} --fps "$FPS" $CURSORE \
+    > "$TUBO" 2>/dev/null &
+PID_CATTURA=$!
+
+# shellcheck disable=SC2086
+ffmpeg -hide_banner -loglevel error -nostdin \
+    $DISPOSITIVO \
+    $OROLOGIO \
+    -f rawvideo -pix_fmt "$FORMATO" -s "${LARG}x${ALT}" -r "$FPS" -i "$TUBO" \
+    $OROLOGIO $INGRESSO_AUDIO \
+    $VIDEO -b:v "$QUALITA" -g "$FPS" -keyint_min "$FPS" $BASSO_RITARDO \
+    $USCITA_AUDIO $PASSO \
+    $USCITA &
+PID_FFMPEG=$!
+
+# Si aspetta ffmpeg: è lui che decide quando è finita. Se muore la cattura,
+# ffmpeg vede il tubo chiudersi e finisce da sé.
+wait "$PID_FFMPEG"

@@ -1,0 +1,94 @@
+#!/bin/sh
+# minerva-ambiente-app — L'ambiente comune delle applicazioni di Minerva.
+#
+# Non si esegue: si include, con `. "$ROOT/scripts/minerva-ambiente-app"`,
+# subito prima di avviare una nostra app. Sta in un file solo perché una
+# variabile che decide come si disegna, copiata in sei script, prima o poi
+# diverge in uno e nessuno se ne accorge — l'app disegna diversamente dalle
+# altre e non c'è nessun errore da nessuna parte.
+#
+# ── Perché le nostre app disegnano SENZA scheda video ──────────────────────
+#
+# Giacomo, 18 agosto 2026: «non è possibile che il nostro file manager sia
+# 135 MB mentre dolphin 55 [...] il nostro codice è troppo pompato».
+#
+# L'osservazione è giusta, la causa no. Misurato quel giorno sulla macchina
+# vera, con la memoria PRIVATA (l'unica che non cambia a seconda di cos'altro
+# gira accanto):
+#
+#   · una finestra Quickshell VUOTA — che non disegna niente — costa 69 MB;
+#   · le 6200 righe del gestore file, sopra a quel pavimento, ne costano 35.
+#
+# Il nostro codice è la fetta più piccola. Metà di tutto è il pavimento di Qt
+# Quick, e dentro quel pavimento 26 MB sono Mesa e LLVM: il motore grafico.
+#
+# Dolphin, Kate e KCalc sono leggeri perché sono Qt WIDGETS, che disegna col
+# processore. L'unica app QML di KDE su questa macchina — plasma-systemmonitor
+# — pesa 142 MB e ci mette 1348 ms ad aprirsi: più della nostra Attività, che
+# ne pesa 125 e ci mette 418.
+#
+# `QT_QUICK_BACKEND=software` toglie il motore grafico e disegna col
+# processore, come fa Qt Widgets. Misurato, app per app:
+#
+#                  con GPU        senza
+#   finestra vuota  69 MB/130 ms  31 MB/ 70 ms
+#   Calcolatrice   101 MB/373 ms  67 MB/281 ms
+#   Attività       125 MB/418 ms  78 MB/302 ms
+#   Impostazioni   132 MB/494 ms  82 MB/443 ms
+#   Editor         119 MB/420 ms  85 MB/360 ms
+#   Gestore file   135 MB/717 ms  86 MB/613 ms
+#   Anteprima      147 MB/415 ms  92 MB/335 ms
+#
+# Meno memoria E avvio più rapido, senza toccare una riga di interfaccia.
+#
+# ── Quello che NON si perde ────────────────────────────────────────────────
+#
+# Il vetro. La sfocatura dietro alle nostre finestre la fa Hyprland, non noi:
+# a noi basta avere pixel trasparenti, e quelli ci sono anche col processore.
+# Verificato guardando: gestore file e Impostazioni aperti così sono identici,
+# vetro, angoli, icone, e zero avvisi nel registro.
+#
+# Lo scorrimento costa 0,09 s di processore per venti giri di rotellina.
+#
+# ── Quello che si perde davvero ────────────────────────────────────────────
+#
+# `layer.enabled` e `QtQuick.Effects` non funzionano: sono programmi per la
+# scheda video. E non danno errore — l'oggetto **sparisce**, in silenzio. È
+# successo al ritratto tondo nelle Impostazioni, ed è il motivo per cui esiste
+# `minerva-shell/ui/RitrattoTondo.qml`, che fa la stessa cosa con `Canvas`.
+#
+# Per questo la shell, il blocco schermo e la schermata di accesso NON
+# includono questo file: sono le cose più animate di Minerva, usano gli
+# effetti, e restano sulla scheda video.
+#
+# ── E il VIDEO, che è la perdita più grossa e la più nascosta ──────────────
+#
+# `VideoOutput` di Qt Multimedia col renderer software **non disegna niente**.
+# Non un errore, non un riquadro nero: l'audio parte, il tempo scorre, e
+# l'immagine semplicemente non c'è.
+#
+# Costo reale, scoperto il 4 settembre 2026: Minerva Media, che è un lettore
+# audio E video, mostrava di sé solo la metà musicale — con lo spettro
+# animato, la scaletta di mp3 e nessun fotogramma. Giacomo l'ha detto senza
+# sapere perché: «i file video li apre minerva media che è un lettore
+# musicale». Non lo sembrava: non poteva essere altro.
+#
+# Perciò un'app che deve mostrare video chiede la GPU, e la chiede prima di
+# includere questo file:
+#
+#     MINERVA_APP_GPU=1
+#     . "$ROOT/scripts/minerva-ambiente-app"
+#
+# Costa una quarantina di MB su quella finestra sola. È il prezzo giusto:
+# l'alternativa non è «un video un po' più pesante», è nessun video.
+#
+# ── Se una app dovesse peggiorare ──────────────────────────────────────────
+#
+# Si toglie la riga `.` che include questo file da quello script, e quella app
+# torna sulla GPU da sola, senza toccare le altre.
+if [ "${MINERVA_APP_GPU:-0}" = "1" ]; then
+    unset QT_QUICK_BACKEND
+else
+    QT_QUICK_BACKEND=software
+    export QT_QUICK_BACKEND
+fi

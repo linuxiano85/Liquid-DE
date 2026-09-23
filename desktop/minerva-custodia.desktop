@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Custodia
+Name[en]=Custody
+GenericName=Storia e sicurezza delle cartelle
+GenericName[en]=Folder history and safety
+Comment=Salva quello che fai, e torna indietro se si rompe
+Comment[en]=Save what you do, and go back if it breaks
+Exec=minerva-custodia
+Icon=minerva-custodia
+StartupWMClass=minerva-custodia
+Terminal=false
+StartupNotify=false
+Categories=Utility;Archiving;
+Keywords=backup;copia;salvataggio;storia;versioni;git;ripristino;punto di ritorno;restore;

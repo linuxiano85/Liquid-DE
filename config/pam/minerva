@@ -1,0 +1,96 @@
+# Minerva — blocco schermo.
+#
+# Lo installa `scripts/install-minerva.sh` in /etc/pam.d/minerva.
+# Lo usa `minerva-shell/blocco/Blocco.qml` attraverso `PamContext`.
+#
+# ── Solo righe «auth» (e una «account» per scaramanzia) ────────────────────
+#
+# Il `PamContext` di Quickshell chiama `pam_authenticate` e nient'altro:
+# verificato con `nm -D /usr/bin/quickshell`, che elenca pam_authenticate,
+# pam_end, pam_start_confdir e pam_strerror. Nessun `pam_acct_mgmt`.
+#
+# ── nodelay, su TUTTI E DUE i moduli ──────────────────────────────────────
+#
+# Va messo due volte, e la seconda è quella che conta. Misurato il 17 agosto
+# 2026 isolando il tempo fra `pam.start()` e la risposta — non il tempo del
+# processo, che l'avvio di Quickshell (~2,2 s) nasconde del tutto:
+#
+#     pam_permit, che riesce sempre              6 ms
+#     pam_unix  SENZA nodelay                 1993 ms
+#     pam_unix  CON   nodelay                   70 ms
+#     questo file, nodelay solo su pam_unix   1508 / 1924 / 2280 ms
+#     questo file, nodelay anche su faillock    56 /   73 /   69 ms
+#
+# La penultima riga è il punto. Con `nodelay` sul solo pam_unix il ritardo
+# restava, e sembrava non esserci nessun guadagno: la prima misura di quella
+# sera diceva 6 ms per faillock e faceva credere che fosse innocente. Era
+# sbagliata — misurava `pam_faillock preauth` seguito da `pam_permit`, cioè
+# un'autenticazione che RIESCE, e su un successo `authfail` non viene
+# eseguito. È `authfail` a chiamare `pam_fail_delay`, su ogni fallimento e
+# fin dal primo, contatore vuoto o pieno.
+#
+# Una prova che non riproduce il caso che ti interessa non dice «va bene»:
+# non dice niente, e lo dice in modo convincente.
+#
+# ── E il freno resta, tutto ───────────────────────────────────────────────
+#
+# Togliere il ritardo di PAM non lascia la porta aperta, perché il freno vero
+# non è mai stato quello:
+#
+#  · faillock CONTA ancora — verificato, i tentativi si registrano lo stesso —
+#    e chiude a 25. È il limite duro contro un automa.
+#  · La pausa fra un tentativo e l'altro la fa la schermata, in `Blocco.qml`:
+#
+#        pausa = min(8000, 500 * 2^(errori-1))    → 0,5s  1s  2s  4s  8s
+#
+#    Cresce, si vede (il campo si spegne), non chiude mai fuori nessuno, e
+#    ferma anche un automa: mentre scorre, il campo non accetta battute.
+#
+# Quello che si è tolto è solo l'attesa muta che pagava anche chi ha sbagliato
+# a digitare una volta sola. Password giusta al primo colpo: ~66 ms.
+#
+# ── NIENTE nullok, ed è la differenza con /etc/pam.d/system-auth ───────────
+#
+# Lì `nullok` va bene: serve ai primi avvii e agli account di servizio. Qui
+# no. `nullok` significa che un account senza password apre lo schermo
+# bloccato premendo Invio.
+#
+# ── faillock: soglie generose, scritte QUI ─────────────────────────────────
+#
+# Serve contro una minaccia che la pausa della schermata non copre da sola:
+# una chiavetta USB che si finge tastiera e prova password a raffica. Con
+# `deny=25` si ferma a venticinque. Con `nodelay` non rallenta più nessuno,
+# ma continua a contare: le due cose sono indipendenti, ed è stato provato.
+#
+# Le soglie NON stanno in /etc/security/faillock.conf perché quel file è
+# globale, e i suoi default (3 tentativi, 10 minuti) qui sono pericolosi:
+#
+#  1. Il contatore è per UTENTE e condiviso fra i servizi. Chi si autoesclude
+#     dal blocco schermo si autoesclude anche dalla console: si resta davanti
+#     a una macchina che rifiuta la password giusta.
+#
+#  2. `minerva-shell/prove-blocco.qml` manda a PAM una password inventata a
+#     ogni giro — è il modo giusto di provare la catena senza bloccare nulla,
+#     ma conta come tentativo fallito. Il 17 agosto 2026 due `scripts/prove.sh`
+#     di fila avevano portato il contatore a 2 su 3, e le misure di quella
+#     sera lo hanno superato per davvero: per qualche minuto questa macchina
+#     non si sarebbe sbloccata. Non è un'ipotesi.
+#
+# 25 tentativi e 2 minuti fermano il programma e non fermano la persona.
+#
+# Nota, per non credere che faillock faccia più di quel che fa: il file del
+# contatore (/var/run/faillock/<utente>) è dell'utente, e `faillock --reset`
+# funziona senza root. Non indebolisce il blocco — per eseguirlo serve una
+# shell, e sotto il blocco le scorciatoie del compositore non passano
+# (provato: Super+Return con tastiera preesistente non apre niente) — ma
+# significa che faillock ferma un automa, non chi ha già la sessione.
+
+auth      required                 pam_faillock.so  preauth  deny=25 unlock_time=120 nodelay
+auth      [success=1 default=bad]  pam_unix.so      try_first_pass nodelay
+auth      [default=die]            pam_faillock.so  authfail deny=25 unlock_time=120 nodelay
+auth      required                 pam_faillock.so  authsucc deny=25 unlock_time=120 nodelay
+
+# Inerte oggi (Quickshell non chiede `pam_acct_mgmt`) e costa zero. Se un
+# domani lo chiedesse, senza questa riga verrebbe rifiutata la password
+# GIUSTA, a schermo bloccato.
+account   required                 pam_unix.so

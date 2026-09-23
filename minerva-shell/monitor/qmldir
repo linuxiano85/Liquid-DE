@@ -1,0 +1,5 @@
+module monitor
+Monitor    1.0 Monitor.qml
+ProcessRow 1.0 ProcessRow.qml
+Sparkline  1.0 Sparkline.qml
+StatTile   1.0 StatTile.qml

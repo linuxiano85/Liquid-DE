@@ -1,0 +1,20 @@
+#!/bin/sh
+# minerva-custodia — Avvia la Custodia: la storia e la sicurezza delle cartelle.
+#
+# Se è già aperta la porta davanti invece di aprirne una seconda: due Custodie
+# aperte sullo stesso progetto si direbbero cose diverse, perché lo stato lo
+# rileggono ognuna per conto suo. Con `MINERVA_CUSTODIA_DORMIENTE=1` si
+# costruisce e basta, senza mostrarsi.
+set -e
+
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+
+CONFIG="$ROOT/minerva-shell/app.qml"
+QUALE=custodia
+DORMIENTE=MINERVA_CUSTODIA_DORMIENTE
+TARGET=""
+
+# Da qui in poi non torna: apre, prepara o avvia l'ospite. Il perché di ognuna
+# delle tre strade sta scritto lì dentro, una volta per tutte le app.
+. "$ROOT/scripts/minerva-ospite"

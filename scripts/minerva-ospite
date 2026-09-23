@@ -1,0 +1,83 @@
+# minerva-ospite — Come si chiede una finestra all'ospite delle quattro app.
+#
+# Non si esegue: si include (`. "$ROOT/scripts/minerva-ospite"`) dopo aver
+# impostato tre cose:
+#
+#     ROOT       la cartella di Minerva
+#     QUALE      calcolatrice | editor | attivita | anteprima
+#     DORMIENTE  il nome della variabile d'ambiente che dice «solo preparala»
+#     TARGET     l'argomento, se l'app ne prende uno (altrimenti vuoto)
+#
+# Da qui in poi non torna: o passa la richiesta all'ospite già acceso, o ne
+# avvia uno nuovo. In tutti e due i casi fa `exec`.
+#
+# ── Perché esiste ──────────────────────────────────────────────────────────
+#
+# Calcolatrice, Editor e Attività vivono nello stesso processo `app.qml` — il
+# pavimento di Qt costa 31 MB e si pagava quattro volte; le quattro app aperte
+# insieme stanno in 108 MB invece di 315. I tre script che le avviano facevano
+# quindi le stesse identiche otto righe, e sono state le otto righe in cui il
+# preload si è rotto in silenzio: aggiunta la parte «preparala senza mostrarla»
+# in uno solo, gli altri due avrebbero continuato a sbagliare.
+#
+# ── Aprire e preparare sono due cose diverse ───────────────────────────────
+#
+#   · APRIRE    la finestra si costruisce e si porta davanti. È quello che
+#               vuole chi ha appena fatto clic.
+#   · PREPARARE la finestra si costruisce e NON si mostra. È quello che vuole
+#               chi ha acceso «tienila pronta» nelle Impostazioni: la spesa si
+#               paga all'accesso, e la prima apertura costa 34 ms invece di 400.
+#
+# Il difetto che questo file chiude: `core/AppPronte.qml` lancia lo script con
+# `MINERVA_<APP>_DORMIENTE=1`, ma da quando le app vivono nell'ospite quella
+# variabile non la guardava più nessuno. Si finiva in `apri()`, che chiama
+# `risveglia()`, e chi aveva chiesto una app *pronta* se la vedeva spuntare in
+# faccia quattro secondi dopo l'accesso.
+
+if [ ! -f "$CONFIG" ]; then
+    echo "minerva: non trovo $CONFIG" >&2
+    exit 1
+fi
+
+# Vale «1» e non «non vuota»: una variabile lasciata a `0` o a `` deve poter
+# dire di no senza doverla togliere dall'ambiente.
+SOLO_PREPARA=no
+eval "VALORE=\${$DORMIENTE:-}"
+[ "$VALORE" = "1" ] && SOLO_PREPARA=si
+
+# ── Se l'ospite c'è già ────────────────────────────────────────────────────
+#
+# Gli si parla invece di avviarne un altro: un secondo processo pagherebbe di
+# nuovo tutto il pavimento, che è esattamente ciò che si sta evitando.
+if qs ipc -p "$CONFIG" call app ping >/dev/null 2>&1; then
+    if [ "$SOLO_PREPARA" = si ]; then
+        exec qs ipc -p "$CONFIG" call app prepara "$QUALE" >/dev/null
+    fi
+    exec qs ipc -p "$CONFIG" call app apri "$QUALE" "$TARGET" >/dev/null
+fi
+
+# ── Altrimenti nasce, e nasce già con la richiesta ─────────────────────────
+#
+# Un ospite senza nessuna finestra costruita non ha motivo di esistere ed esce
+# da solo, quindi la richiesta deve viaggiare con l'avvio e non dopo.
+#
+# Nell'ambiente e non sulla riga di comando: la riga di comando è di `qs`, non
+# nostra — `qs -p app.qml calcolatrice` proverebbe a leggerlo come un'opzione
+# sua. È la stessa ragione per cui il gestore file legge `MINERVA_FILES_PATH`.
+if [ "$SOLO_PREPARA" = si ]; then
+    MINERVA_APP_PREPARA="$QUALE"
+    export MINERVA_APP_PREPARA
+else
+    MINERVA_APP_APRI="$QUALE"
+    MINERVA_APP_ARG="$TARGET"
+    export MINERVA_APP_APRI MINERVA_APP_ARG
+fi
+
+# L'ambiente comune delle nostre app: disegnano col processore invece che con
+# la scheda video. Il perché, i numeri e cosa si perde stanno tutti in
+# `scripts/minerva-ambiente-app`.
+. "$ROOT/scripts/minerva-ambiente-app"
+
+# `-d` stacca dal terminale, `-n` impedisce a due lanci nello stesso istante
+# di aprire due ospiti gemelli.
+exec qs -d -n -p "$CONFIG"

@@ -1,0 +1,109 @@
+#!/bin/sh
+# minerva-autostart — Fa partire i programmi che l'utente ha messo all'avvio.
+#
+# Lo chiama `hyprland.conf` con un `exec-once`, una volta per sessione.
+#
+# ── Perché esiste ─────────────────────────────────────────────────────────
+#
+# Perché **Hyprland non legge `~/.config/autostart`**. Chi arriva da un altro
+# ambiente si porta dietro quella cartella e i suoi programmi smettono di
+# partire senza che niente lo dica; e chi ne vuole aggiungere uno oggi deve
+# modificare a mano la configurazione del compositore, per una cosa che col
+# compositore non c'entra.
+#
+# ── Perché SOLO la cartella dell'utente ───────────────────────────────────
+#
+# C'è anche `/etc/xdg/autostart`, che su questa macchina contiene diciannove
+# voci messe lì dai pacchetti di KDE: `baloo_file` che indicizza tutto il
+# disco, `plasmashell`, `powerdevil`. Oggi non partono — nessuno legge quella
+# cartella — e la sessione funziona benissimo.
+#
+# Farle partire tutte «perché così fa un desktop completo» vorrebbe dire che
+# il giorno in cui si aggiunge questa funzione compaiono dal nulla un
+# indicizzatore del disco e una seconda barra delle applicazioni. Una funzione
+# nuova non deve cambiare il comportamento di quello che c'era già.
+#
+# Restano elencate e spente nelle Impostazioni: chi ne vuole una se l'accende,
+# e accendendola se ne fa una copia qui dentro. Vedi `autostart_service.dart`,
+# dove sta la stessa decisione scritta per esteso.
+
+CARTELLA="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
+[ -d "$CARTELLA" ] || exit 0
+
+# I nostri nomi di ambiente, per `OnlyShowIn` e `NotShowIn`.
+#
+# Sono TRE perché tanti ne dichiara la sessione (vedi `DesktopNames` nelle voci
+# create da `install-minerva.sh`): `MinervaWayland` sul nostro compositore,
+# `Minerva` sempre, e `Hyprland` finché la sessione di recupero vecchia c'è.
+# Una voce scritta per uno qualunque dei tre vale.
+#
+# `minervawayland` mancava, ed era un difetto silenzioso di quelli che questo
+# progetto conosce bene: un programma dichiarato `OnlyShowIn=MinervaWayland;`
+# non sarebbe partito, e non l'avrebbe detto nessuno.
+NOSTRI="minervawayland minerva hyprland"
+
+# Legge un campo dalla sola sezione [Desktop Entry].
+#
+# Un `.desktop` può avere più sezioni — le «azioni» — e lì dentro `Exec` vuol
+# dire un'altra cosa. Chi cerca col solo `grep` fa partire l'azione invece del
+# programma.
+campo() {
+    awk -F= -v chiave="$2" '
+        /^\[/  { dentro = ($0 == "[Desktop Entry]"); next }
+        !dentro { next }
+        $1 == chiave { sub(/^[^=]*=/, ""); print; exit }
+    ' "$1"
+}
+
+# Vero se una delle parole di `$1` (separate da `;`) è fra i nostri ambienti.
+riguarda_noi() {
+    for voce in $(printf '%s' "$1" | tr ';' ' '); do
+        basso=$(printf '%s' "$voce" | tr 'A-Z' 'a-z')
+        for nostro in $NOSTRI; do
+            [ "$basso" = "$nostro" ] && return 0
+        done
+    done
+    return 1
+}
+
+for FILE in "$CARTELLA"/*.desktop; do
+    [ -r "$FILE" ] || continue
+
+    ESEGUI=$(campo "$FILE" Exec)
+    [ -n "$ESEGUI" ] || continue
+
+    NASCOSTA=$(campo "$FILE" Hidden | tr 'A-Z' 'a-z')
+    [ "$NASCOSTA" = "true" ] && continue
+
+    GNOMICA=$(campo "$FILE" X-GNOME-Autostart-enabled | tr 'A-Z' 'a-z')
+    [ "$GNOMICA" = "false" ] && continue
+
+    # `TryExec`: parti solo se quel programma c'è. È il campo che salva dalle
+    # voci rimaste dopo una disinstallazione — senza, si vede comparire un
+    # errore all'accesso per un programma di cui ci si era già dimenticati.
+    PROVA=$(campo "$FILE" TryExec)
+    if [ -n "$PROVA" ]; then
+        case "$PROVA" in
+            /*) [ -x "$PROVA" ] || continue ;;
+            *)  command -v "$PROVA" >/dev/null 2>&1 || continue ;;
+        esac
+    fi
+
+    SOLO=$(campo "$FILE" OnlyShowIn)
+    [ -n "$SOLO" ] && ! riguarda_noi "$SOLO" && continue
+
+    NON=$(campo "$FILE" NotShowIn)
+    [ -n "$NON" ] && riguarda_noi "$NON" && continue
+
+    # I segnaposto della specifica (`%u`, `%F`, `%i`…) valgono per un file da
+    # aprire, e all'avvio non c'è nessun file: lasciati lì finirebbero nella
+    # riga di comando come testo, e il programma se ne lamenterebbe.
+    ESEGUI=$(printf '%s' "$ESEGUI" | sed 's/%[uUfFdDnNickvm]//g')
+
+    # `sh -c` perché un `Exec` può contenere argomenti, virgolette e
+    # reindirizzamenti; `setsid` perché il programma deve sopravvivere a
+    # questo script, che finisce subito.
+    setsid sh -c "$ESEGUI" >/dev/null 2>&1 &
+done
+
+exit 0

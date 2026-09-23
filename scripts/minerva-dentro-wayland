@@ -1,0 +1,211 @@
+#!/bin/sh
+# minerva-dentro-wayland — Quello che Hyprland fa con gli `exec-once`.
+#
+# Lo lancia `minerva-wayland` come primo (e unico) programma, e da qui nascono
+# il demone, la scrivania e i servizi di contorno.
+#
+# ── Perché un file e non una riga ─────────────────────────────────────────
+#
+# Perché il nostro compositore avvia UN programma e basta (`argv[1]`), mentre
+# Hyprland ne avvia otto con altrettanti `exec-once`. Quella lista non si può
+# duplicare in una riga di comando, e soprattutto non si vuole duplicare
+# altrove: chi aggiunge un servizio in `config/hyprland.conf` deve trovare
+# qui accanto lo stesso elenco, o il giorno dello scambio scoprirà che manca
+# la metà delle cose e non saprà quale.
+#
+# **Se aggiungi un `exec-once` là, aggiungilo qui.** Non c'è una guardia che
+# lo controlli — sarebbe da scrivere, e per adesso è un promemoria.
+set -u
+
+MINERVA_DIR="${MINERVA_ROOT:?minerva-dentro-wayland: manca MINERVA_ROOT}"
+
+# ── PRIMA di ogni altra cosa: dire a D-Bus dove siamo ────────────────────
+#
+# I servizi che partono su richiesta — i portali, l'agente delle password, la
+# condivisione dello schermo — non ereditano l'ambiente da noi: li avvia
+# D-Bus, che senza questa riga non sa quale sia il display Wayland e li fa
+# partire ciechi. È la prima riga anche in `config/hyprland.conf`, e per la
+# stessa ragione.
+#
+# `HYPRLAND_INSTANCE_SIGNATURE` qui non c'è e non si nomina: al suo posto va
+# `MINERVA_CANALE`, che è come si trova il NOSTRO compositore.
+dbus-update-activation-environment --systemd \
+    WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE \
+    MINERVA_CANALE MINERVA_COMPOSITORE MINERVA_IPC_SOCKET \
+    XDG_DATA_DIRS XDG_DATA_HOME XDG_CONFIG_HOME \
+    >/dev/null 2>&1
+# Anche l'ambiente di questo processo deve averli: i figli (demone, shell)
+# li ereditano da qui, non solo da D-Bus.
+export MINERVA_CANALE MINERVA_COMPOSITORE 2>/dev/null || true
+
+# ── Quello che una PROVA non deve avviare ─────────────────────────────────
+#
+# `MINERVA_PROVA=1` è il contrassegno di una sessione di prova, ed è la stessa
+# riga con cui si decide chi si può chiudere senza rischiare la sessione vera.
+# Qui serve per una ragione più seria.
+#
+# `minerva-autostart` aprirebbe i programmi che l'utente ha chiesto all'avvio:
+# dentro una prova sono finestre che spuntano sulla scrivania di qualcun altro.
+#
+# ── E la sospensione? ────────────────────────────────────────────────────
+#
+# Non si decide più qui. Fino al 1º settembre 2026 questa guardia serviva
+# soprattutto a non avviare `hypridle`, che dopo tanti minuti arriva a
+# `systemctl suspend` — e una sessione di prova che sospende il computer non è
+# una prova andata male: è la macchina che sparisce sotto le mani di chi la sta
+# usando. Giacomo l'ha messo per iscritto: «altrimenti ti perdo».
+#
+# La regola non è cambiata, si è spostata dove sta la decisione: `onInattivo`
+# in `minerva-shell/shell.qml` legge `MINERVA_PROVA` e non sospende. È meglio
+# così — la guardia sta accanto alla riga che farebbe il danno, invece che in
+# uno script che avvia un programma che un giorno lo farà.
+#
+# Il resto parte lo stesso: il demone, la scrivania e gli appunti sono
+# esattamente ciò che una prova deve provare.
+DI_PROVA="${MINERVA_PROVA:-}"
+
+# ── L'inattività non ha più un programma ─────────────────────────────────
+#
+# Qui partiva `hypridle`. Dal 1º settembre 2026 il conto lo tiene il
+# compositore — `inattivita 300 600 1800` sul canale — e la politica sta in
+# `minerva-shell/shell.qml`, accanto a quella del coperchio del portatile.
+#
+# Il guadagno non è un processo in meno: è che le tre soglie del pannello
+# Energia avevano DUE sorgenti di verità, le impostazioni di Minerva e il file
+# di hypridle, e il pannello doveva tenerle d'accordo riscrivendo il secondo a
+# ogni pixel di cursore trascinato.
+#
+# La guardia `MINERVA_PROVA` non sparisce con lui: si è spostata dove sta la
+# decisione. Vedi `onInattivo` in `shell.qml` — dentro una prova non si
+# sospende, mai.
+
+# ── Chi apre la finestrella della password ───────────────────────────────
+#
+# Il nostro: `permessi/src/minerva-polkit.c`, con la finestra in
+# `minerva-shell/permessi.qml`. Fino al 1º settembre 2026 qui se ne provavano
+# sei in fila — hyprpolkitagent, KDE, GNOME, LXQt, MATE — e si teneva il primo
+# che c'era. Funzionava, e si vedeva: in mezzo alla scrivania di Minerva
+# compariva la finestra di un altro ambiente.
+#
+# ── E se il nostro non parte ─────────────────────────────────────────────
+#
+# Si ripiega, e non è una gentilezza: senza NESSUN agente, ogni richiesta di
+# permesso sparisce in silenzio — il programma che l'ha chiesta resta lì, senza
+# finestra e senza errore, e sembra bloccato. Meglio la finestra di qualcun
+# altro che nessuna finestra.
+#
+# Il ripiego si accorge del fallimento perché `minerva-polkit` esce subito
+# quando non riesce a registrarsi (per esempio: ce n'è già uno). Si aspetta un
+# istante e si guarda se è ancora vivo.
+#
+# ── E il suo registro NON è /dev/null ────────────────────────────────────
+#
+# Qui c'era `minerva-polkit >/dev/null 2>&1 &`. Il 3 settembre 2026 si è
+# scoperto che l'agente non partiva **da due giorni** nella sessione vera: era
+# compilato, installato e provato, ma stava in `~/.local/bin`, che non era nel
+# PATH della sessione. Per due giorni non c'è stata nessuna finestra della
+# password in tutta la scrivania — e questo blocco, che serve apposta ad
+# accorgersene, scriveva la sua diagnosi in `/dev/null`.
+#
+# Un ripiego che non lascia traccia non è un ripiego: è la stessa cosa del
+# guardiano del demone che diceva «uso dart run» sullo stderr di nessuno.
+# Quindi il registro esiste, e ci finisce sia quello che dice l'agente sia il
+# fatto che non l'abbiamo trovato.
+#
+# ── E non lo si cerca solo nel PATH ──────────────────────────────────────
+#
+# `command -v` fa una domanda a cui risponde il PATH, e il PATH è una cosa che
+# cambia da sotto senza dirlo — è esattamente così che questo agente è rimasto
+# spento per due giorni. Il compositore, dieci righe più in là in
+# `start-minerva-wayland.sh`, la stessa trappola non ce l'ha: prova prima il
+# percorso che conosce e solo dopo chiede al PATH. Qui si fa uguale.
+REGISTRO_PERMESSI="${XDG_RUNTIME_DIR:-/tmp}/minerva-permessi.log"
+AGENTE="${MINERVA_BIN:-$HOME/.local/bin}/minerva-polkit"
+[ -x "$AGENTE" ] || AGENTE="$(command -v minerva-polkit 2>/dev/null)"
+if [ -n "$AGENTE" ] && [ -x "$AGENTE" ]; then
+    "$AGENTE" >>"$REGISTRO_PERMESSI" 2>&1 &
+    POLKIT_PID=$!
+    sleep 0.5
+else
+    echo "$(date '+%F %T')  minerva-polkit non trovato" \
+        "(né in ${MINERVA_BIN:-$HOME/.local/bin} né nel PATH: $PATH)" \
+        >>"$REGISTRO_PERMESSI"
+fi
+if [ -z "${POLKIT_PID:-}" ] || ! kill -0 "$POLKIT_PID" 2>/dev/null; then
+    # ── Qui c'era il ripiego sugli agenti degli altri ────────────────────
+    #
+    # Se ne provavano sei in fila — hyprpolkitagent, KDE, GNOME, LXQt, MATE —
+    # perché senza NESSUN agente ogni richiesta di permesso sparisce in
+    # silenzio. Serviva quando il nostro non c'era.
+    #
+    # Adesso il nostro c'è, è provato (`permessi/prova-permessi.py`), e su una
+    # macchina senza Hyprland e senza KDE quella lista non trovava comunque
+    # niente. Restava a promettere una rete che non esiste, e una rete che non
+    # c'è è peggio di nessuna rete: si smette di guardare.
+    echo "minerva-dentro-wayland: minerva-polkit non è partito." >&2
+    echo "  Senza di lui NON c'è nessuna finestra della password: la modalità" >&2
+    echo "  amministratore non chiede niente e ogni pkexec resta appeso." >&2
+    echo "  Il perché sta in $REGISTRO_PERMESSI" >&2
+    echo "$(date '+%F %T')  minerva-polkit non è partito." >>"$REGISTRO_PERMESSI"
+fi
+
+# ── Il portachiavi, che nessuno avviava ───────────────────────────────────
+#
+# Giacomo, 8 settembre 2026, chiedendo di sincronizzare con GitHub dalla
+# Custodia: il gettone non si poteva nemmeno salvare. `secret-tool` rispondeva
+# «The name is not activatable», e sul bus non c'era nessuno che dichiarasse
+# `org.freedesktop.secrets`.
+#
+# La causa non è nostra ed è per questo che è durata: su Arch il servizio di
+# KDE si chiama `ksecretd` e il suo file D-Bus dichiara solo
+# `org.kde.secretservicecompat`. Il nome STANDARD — quello che cercano
+# `secret-tool`, la Custodia, gli account online — lo prende soltanto a
+# programma avviato. Sotto Plasma lo avvia Plasma; sotto Minerva non lo
+# avviava nessuno.
+#
+# Il costo di quel silenzio: la Custodia non poteva tenere un gettone di
+# GitHub, e gli account online non potevano ricordare una password. Nessuno
+# dei due lo diceva — è la «sincronizzazione sospesa» che Giacomo aveva già
+# incontrato ad agosto.
+#
+# Si prova prima se qualcuno c'è già: sotto una sessione mista, o se un domani
+# ne installiamo un altro, avviarne un secondo vorrebbe dire due portachiavi
+# che si contendono lo stesso nome.
+if ! busctl --user status org.freedesktop.secrets >/dev/null 2>&1; then
+    for PORTACHIAVI in ksecretd gnome-keyring-daemon; do
+        CHI="$(command -v "$PORTACHIAVI" 2>/dev/null)" || continue
+        [ -n "$CHI" ] || continue
+        case "$PORTACHIAVI" in
+            gnome-keyring-daemon) "$CHI" --start --components=secrets >/dev/null 2>&1 & ;;
+            *)                    "$CHI" >/dev/null 2>&1 & ;;
+        esac
+        break
+    done
+fi
+
+# La storia degli appunti.
+wl-paste --watch cliphist store >/dev/null 2>&1 &
+
+# ── Il demone e la scrivania, coi loro guardiani ─────────────────────────
+#
+# Non `minervad` e `qs` diretti: i due guardiani. Se il demone muore, ogni
+# finestra mostra i valori di fabbrica fingendo siano i tuoi; se muore la
+# shell, sparisce la scrivania. Tutti e due sono già successi.
+"$MINERVA_DIR/scripts/minerva-demone" >/dev/null 2>&1 &
+"$MINERVA_DIR/scripts/minerva-interfaccia" >/dev/null 2>&1 &
+
+# I programmi che l'utente ha chiesto all'avvio. Non in una prova: sarebbero
+# finestre che spuntano sulla scrivania di chi sta lavorando.
+if [ "$DI_PROVA" != "1" ]; then
+    "$MINERVA_DIR/scripts/minerva-autostart" >/dev/null 2>&1 &
+fi
+
+# Il gestore file tenuto pronto: 70 ms invece di 674 alla prima apertura.
+MINERVA_FILES_DORMIENTE=1 "$MINERVA_DIR/scripts/minerva-files" >/dev/null 2>&1 &
+
+# ── E poi si resta ────────────────────────────────────────────────────────
+#
+# Il compositore aspetta questo processo? No: lo avvia e se ne dimentica. Ma
+# uscire subito lascerebbe un processo zombie e nessun posto dove leggere che
+# cosa è partito. Si resta, e si muore col compositore.
+wait

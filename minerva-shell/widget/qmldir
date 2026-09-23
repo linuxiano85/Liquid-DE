@@ -1,0 +1,10 @@
+module widget
+WidgetLayer 1.0 WidgetLayer.qml
+Telaio      1.0 Telaio.qml
+Contenuto   1.0 Contenuto.qml
+Riassunto   1.0 Riassunto.qml
+Grafico     1.0 Grafico.qml
+Widgets     1.0 Widgets.qml
+Tabellone   1.0 Tabellone.qml
+Prestazioni 1.0 Prestazioni.qml
+Bluetooth   1.0 Bluetooth.qml

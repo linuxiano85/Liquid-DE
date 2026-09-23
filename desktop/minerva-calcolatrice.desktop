@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Calcolatrice
+Name[en]=Calculator
+GenericName=Calcolatrice
+GenericName[en]=Calculator
+Comment=Le quattro operazioni, le parentesi e il resto
+Comment[en]=The four operations, parentheses and the rest
+Exec=minerva-calcolatrice
+Icon=minerva-calcolatrice
+StartupWMClass=minerva-calcolatrice
+Terminal=false
+StartupNotify=false
+Categories=Utility;Calculator;
+Keywords=calcolatrice;calcolo;calculator;math;matematica;

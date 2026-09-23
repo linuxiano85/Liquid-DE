@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Media
+Name[en]=Media
+GenericName=Player audio e video
+GenericName[en]=Audio and video player
+Comment=Player audio e video, download, suonerie e PiP per Minerva Shell DE
+Comment[en]=Audio and video player, downloads, ringtones and PiP for Minerva Shell DE
+Exec=minerva-media %u
+Icon=minerva-media
+StartupWMClass=minerva-media
+Terminal=false
+StartupNotify=false
+Categories=AudioVideo;Audio;Video;AudioVideoEditing;Utility;
+MimeType=audio/mpeg;audio/x-wav;audio/wav;audio/mp4;audio/aac;audio/flac;audio/ogg;video/mp4;video/webm;video/x-matroska;video/quicktime;
+Keywords=audio;video;media;suoneria;ringtone;cutter;trim;youtube;download;pip;player;

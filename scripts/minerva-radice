@@ -1,0 +1,594 @@
+#!/bin/sh
+# minerva-radice — Le poche cose che il gestore file fa da amministratore.
+#
+#   minerva-radice elenca        <cartella>
+#   minerva-radice leggi         <file>
+#   minerva-radice scrivi        <file>          (il contenuto arriva da stdin)
+#   minerva-radice elimina       <percorso>
+#   minerva-radice crea-cartella <percorso>
+#   minerva-radice rinomina      <da> <a>
+#   minerva-radice copia         <da> <a>
+#   minerva-radice sposta        <da> <a>
+#   minerva-radice permessi      <ottale> <percorso>
+#
+# E le quattro della manutenzione, che tolgono roba di sistema:
+#
+#   minerva-radice pulisci-cache-pacchetti
+#   minerva-radice pulisci-lingue   <lingua> [<lingua>...]   (quelle da TENERE)
+#   minerva-radice pulisci-registro
+#   minerva-radice togli-orfani     <pacchetto> [<pacchetto>...]
+#
+# Lo lancia `pkexec`, cioè gira come root. Non si chiama a mano.
+#
+# ── Perché un aiutante, e non «apri la finestra come amministratore» ────────
+#
+# Giacomo, 23 agosto 2026: «nel file manager, se entro nelle cartelle di root,
+# non posso usare una modalità amministratore come fa Linux Mint».
+#
+# La strada breve sarebbe `pkexec minerva-files`: una riga, e funziona. È anche
+# la strada peggiore, per tre ragioni che si sommano.
+#
+#  1. Una interfaccia grafica che gira da root è enorme: Qt, QML, il tema, i
+#     font, i plugin di immagine. Ognuno di quei pezzi diventa codice
+#     privilegiato, e basta che UNO legga male un file per farlo da root.
+#  2. Il nostro QML sta in una cartella dell'utente ed è scrivibile
+#     dall'utente. Root eseguirebbe codice che chiunque giri come te può
+#     riscrivere — la stessa forma di guaio che il 23 agosto abbiamo tolto da
+#     `pkexec minerva-greetd` e, prima ancora, da `greeter.qml`.
+#  3. Una finestra da root resta aperta. Un aiutante fa una cosa e muore, e
+#     fra una cosa e l'altra non c'è niente di privilegiato in giro.
+#
+# Qui invece: la finestra resta tua, e solo la singola operazione sale. È lo
+# stesso schema del lavoratore `admin:` di KDE, ed è quello giusto.
+#
+# ── Cosa NON pretende di essere ────────────────────────────────────────────
+#
+# Non è una gabbia. Un aiutante che gira da root e cancella percorsi PUÒ, per
+# definizione, cancellare qualunque cosa: chi ha detto la password di
+# amministratore poteva già farlo con `rm`. Quello che questo file fa è più
+# modesto e più utile:
+#
+#  · **non aggiunge** modi di eseguire codice: nessun percorso finisce mai
+#    dentro una riga di shell, nessuna opzione arriva da fuori (`--` davanti a
+#    ogni percorso), e i sottocomandi sono un elenco chiuso;
+#  · **impedisce il disastro per sbaglio**: `/`, `/etc`, `/usr`, `/home` e
+#    compagnia non si cancellano da un gestore file. Non è sicurezza contro
+#    qualcuno, è sicurezza contro un doppio clic;
+#  · **lascia detto cosa ha fatto**, in `/var/log/minerva-radice.log`, con
+#    l'UID di chi ha chiesto. Un'operazione da root senza traccia è
+#    un'operazione che non si può ricostruire.
+set -eu
+
+REGISTRO=/var/log/minerva-radice.log
+
+muori() {
+    printf 'minerva-radice: %s\n' "$1" >&2
+    exit 1
+}
+
+# ── Solo da pkexec, e solo da root ─────────────────────────────────────────
+#
+# `PKEXEC_UID` esiste solo quando ci ha lanciato pkexec: senza, qualcuno lo sta
+# eseguendo per un'altra strada e non sappiamo per conto di chi.
+[ "$(id -u)" -eq 0 ] || muori "va eseguito con pkexec."
+[ -n "${PKEXEC_UID:-}" ] || muori "manca PKEXEC_UID: va lanciato da pkexec."
+
+AZIONE="${1:-}"
+[ -n "$AZIONE" ] || muori "nessuna azione."
+shift
+
+# ── Un percorso accettabile ────────────────────────────────────────────────
+#
+# Assoluto, perché la cartella di lavoro di un processo lanciato da pkexec non
+# è quella che credi. E mai cominciante per `-`, o finirebbe fra le opzioni di
+# `cp` invece che fra i suoi argomenti — che è il modo più vecchio di far fare
+# a un comando una cosa diversa da quella chiesta. (Il `--` davanti a ogni
+# percorso lo impedisce comunque: due controlli, perché qui sbagliare costa.)
+# Restituisce il percorso ripulito in `PULITO`, e muore se non va bene.
+# Le barre in fondo si tolgono: senza, «/etc/» non combacia con «/etc» nel
+# controllo qui sotto, e la protezione salta per un carattere.
+controlla_percorso() {
+    case "$1" in
+        "")   muori "percorso vuoto." ;;
+        -*)   muori "un percorso non può cominciare con un trattino." ;;
+        /*)   : ;;
+        *)    muori "il percorso dev'essere assoluto: «$1»." ;;
+    esac
+    PULITO="$1"
+    while : ; do
+        case "$PULITO" in
+            /) break ;;
+            */) PULITO="${PULITO%/}" ;;
+            *) break ;;
+        esac
+    done
+    # Niente `..`: il percorso arriva già risolto dal demone, e una risalita
+    # qui dentro vorrebbe dire che qualcuno sta cercando di far cadere il
+    # controllo di «intoccabile» passando per una strada più lunga.
+    case "$PULITO" in
+        */../*|*/..|../*|..) muori "un percorso non può contenere «..»." ;;
+    esac
+}
+
+# ── Quello che non si cancella da un gestore file ──────────────────────────
+#
+# Non protegge da un malintenzionato — chi ha la password di amministratore ha
+# già `rm`. Protegge da una selezione fatta male e da un doppio clic sul
+# pulsante sbagliato, che è l'incidente vero.
+intoccabile() {
+    case "$1" in
+        /|/bin|/boot|/dev|/etc|/home|/lib|/lib64|/opt|/proc|/root|/run|/sbin|/srv|/sys|/usr|/var)
+            return 0 ;;
+    esac
+    # E il secondo livello sotto /usr e /var: /usr/bin, /usr/lib, /var/lib.
+    # Più in profondità si può — /var/lib/qualcosa è roba di un programma, e
+    # toglierla è una manutenzione normale.
+    case "$1" in
+        /usr/*|/var/*)
+            RESTO="${1#/usr/}"
+            RESTO="${RESTO#/var/}"
+            case "$RESTO" in
+                */*) return 1 ;;
+                *)   return 0 ;;
+            esac ;;
+    esac
+    return 1
+}
+
+annota() {
+    # Il registro non deve poter far fallire l'operazione: se non si scrive,
+    # pazienza. Un aiutante che si rifiuta di lavorare perché non trova il
+    # proprio quaderno è un aiutante inutile.
+    {
+        printf '%s uid=%s %s\n' \
+            "$(date '+%Y-%m-%d %H:%M:%S')" "${PKEXEC_UID:-?}" "$1" \
+            >> "$REGISTRO"
+        chmod 600 "$REGISTRO"
+    } 2>/dev/null || true
+}
+
+# La porta su cui Minerva presta una fotografia a un televisore. Sta scritta
+# in tre posti — qui, in `servizio_effimero.dart` e nella pagina Impostazioni
+# — e non in uno solo perché questo file gira da root e non deve leggere
+# niente che l'utente possa riscrivere.
+PORTA_TRASMETTI=8010
+
+case "$AZIONE" in
+
+    # ── Il verbo che non fa niente, ed è il suo mestiere ─────────────────
+    #
+    # Serve a una cosa sola: far comparire la finestrella della password.
+    #
+    # Giacomo, 2 settembre 2026: «non chiede una password per entrare in
+    # modalità amministratore». Era vero, e la ragione è che accendere la
+    # modalità non chiamava nessuno: la password la chiedeva la PRIMA
+    # operazione. Chi accendeva la modalità restava convinto d'essere già
+    # amministratore, e lo scopriva dieci secondi dopo — o non lo scopriva
+    # affatto, perché il primo clic era proprio quello sbagliato.
+    #
+    # Non prende argomenti e non tocca il disco: quello che si sta chiedendo a
+    # polkit non è di fare qualcosa, è di dire CHI SEI. Il permesso ottenuto
+    # resta valido per qualche minuto (`auth_admin_keep`), quindi questa
+    # chiamata è anche quella che rende vere le operazioni che seguono senza
+    # ripetere la password — ed è il motivo per cui la modalità si spegne da
+    # sola dopo dieci minuti.
+    permesso)
+        # Niente output: chi guarda `/proc` non deve ricavarne nulla, e chi
+        # legge il codice non deve chiedersi cosa scrive.
+        exit 0
+        ;;
+
+    elenca)
+        controlla_percorso "${1:-}"; D="$PULITO"
+        [ -d "$D" ] || muori "«$D» non è una cartella."
+        # ── Le voci si separano con un byte zero, non con un a capo ───────
+        #
+        # Perché su Linux un nome di file PUÒ contenere un a capo. Con le
+        # righe, un file chiamato «nota\n-rw-r--r-- root» si spezzerebbe in due
+        # voci, e la seconda se la inventerebbe lui: cioè chi crea il file
+        # decide cosa vede chi guarda la cartella. Il byte zero è l'unico
+        # carattere che in un nome non ci può stare.
+        #
+        # Dentro la voce: tipo, dimensione, tempo, permessi, proprietario,
+        # gruppo, nome. Il nome per ultimo perché è l'unico che può contenere
+        # una tabulazione, e chi legge taglia sui primi sei campi.
+        find "$D" -mindepth 1 -maxdepth 1 \
+             -printf '%y\t%s\t%T@\t%m\t%u\t%g\t%f\0' 2>/dev/null || true
+        ;;
+
+    leggi)
+        controlla_percorso "${1:-}"; F="$PULITO"
+        [ -f "$F" ] || muori "«$F» non è un file."
+        # Un limite c'è, e serve: il contenuto passa dal demone alla finestra
+        # in un messaggio solo, e un file da un gigabyte non ci sta.
+        DIM=$(stat -c '%s' -- "$F" 2>/dev/null || echo 0)
+        [ "$DIM" -le 8388608 ] || muori "«$F» è troppo grande da aprire qui (${DIM} byte)."
+        annota "leggi $F"
+        cat -- "$F"
+        ;;
+
+    scrivi)
+        controlla_percorso "${1:-}"; F="$PULITO"
+        [ -e "$F" ] && [ ! -f "$F" ] && muori "«$F» non è un file normale."
+        D=$(dirname -- "$F")
+        [ -d "$D" ] || muori "la cartella «$D» non esiste."
+
+        # ── Si scrive accanto e poi si sposta ──────────────────────────────
+        #
+        # Scrivere direttamente dentro il file lo tronca subito: se qualcosa
+        # va storto a metà — il disco pieno, la corrente — resta un file di
+        # configurazione mezzo scritto, che è peggio di non averlo toccato.
+        # Con lo spostamento il cambio è atomico: o c'è il vecchio, o c'è il
+        # nuovo, mai una via di mezzo.
+        #
+        # E si conservano proprietario e permessi: un `/etc/…` che diventa di
+        # root:root a 644 quando era di root:shadow a 640 è un buco aperto
+        # salvando un file.
+        T=$(mktemp "$D/.minerva-radice.XXXXXX") || muori "non riesco a scrivere in «$D»."
+        if [ -f "$F" ]; then
+            chown --reference="$F" -- "$T" 2>/dev/null || true
+            chmod --reference="$F" -- "$T" 2>/dev/null || true
+        else
+            chmod 644 -- "$T"
+        fi
+        cat > "$T" || { rm -f -- "$T"; muori "scrittura interrotta."; }
+        mv -f -- "$T" "$F" || { rm -f -- "$T"; muori "non riesco a sostituire «$F»."; }
+        annota "scrivi $F"
+        printf 'fatto\n'
+        ;;
+
+    elimina)
+        controlla_percorso "${1:-}"; P="$PULITO"
+        [ -e "$P" ] || [ -L "$P" ] || muori "«$P» non c'è."
+        intoccabile "$P" && muori \
+            "«$P» fa parte del sistema e non si cancella da un gestore file."
+        annota "elimina $P"
+        rm -rf -- "$P" || muori "non sono riuscito a cancellare «$P»."
+        printf 'fatto\n'
+        ;;
+
+    crea-cartella)
+        controlla_percorso "${1:-}"; P="$PULITO"
+        [ -e "$P" ] && muori "«$P» esiste già."
+        annota "crea-cartella $P"
+        mkdir -p -- "$P" || muori "non sono riuscito a creare «$P»."
+        printf 'fatto\n'
+        ;;
+
+    rinomina|sposta)
+        controlla_percorso "${1:-}"; DA="$PULITO"
+        controlla_percorso "${2:-}"; A="$PULITO"
+        [ -e "$DA" ] || [ -L "$DA" ] || muori "«$DA» non c'è."
+        [ -e "$A" ] && muori "«$A» esiste già."
+        intoccabile "$DA" && muori \
+            "«$DA» fa parte del sistema e non si sposta da un gestore file."
+        annota "$AZIONE $DA → $A"
+        mv -n -- "$DA" "$A" || muori "non sono riuscito a spostare «$DA»."
+        printf 'fatto\n'
+        ;;
+
+    copia)
+        controlla_percorso "${1:-}"; DA="$PULITO"
+        controlla_percorso "${2:-}"; A="$PULITO"
+        [ -e "$DA" ] || muori "«$DA» non c'è."
+        [ -e "$A" ] && muori "«$A» esiste già."
+        annota "copia $DA → $A"
+        cp -a -- "$DA" "$A" || muori "non sono riuscito a copiare «$DA»."
+        printf 'fatto\n'
+        ;;
+
+    permessi)
+        M="${1:-}"; P="${2:-}"
+        case "$M" in
+            [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) : ;;
+            *) muori "«$M» non è un permesso ottale." ;;
+        esac
+        controlla_percorso "$P"; P="$PULITO"
+        [ -e "$P" ] || muori "«$P» non c'è."
+        annota "permessi $M $P"
+        chmod "$M" -- "$P" || muori "non sono riuscito a cambiare i permessi."
+        printf 'fatto\n'
+        ;;
+
+    # ── La porta per trasmettere a schermo ────────────────────────────────
+    #
+    # Un Chromecast non riceve la fotografia: se la va a PRENDERE. Quindi
+    # Minerva apre un servizio HTTP e gli dà un indirizzo — e con `ufw` acceso
+    # quel servizio è irraggiungibile. Il sintomo è cattivo: il televisore
+    # accetta il comando (`MEDIA_STATUS`), la schermata di Chromecast sparisce,
+    # e resta **schermo nero**. Il sì arriva subito, il no arriva dopo e in
+    # silenzio. Visto sulla TV di Giacomo il 30 agosto 2026.
+    #
+    # ── Perché questo verbo NON prende argomenti ──────────────────────────
+    #
+    # Perché un aiutante che gira da root e accetta «apri la porta N verso la
+    # rete M» è un aiutante che apre qualunque porta verso Internet, e la
+    # password di sudo l'ha già data l'utente una volta sola. Qui la porta è
+    # UNA, scritta qui dentro, e la rete si RICAVA — non si riceve: si guarda
+    # da quale scheda esce questo computer, e si permette solo quella
+    # sottorete privata.
+    #
+    # Il contrario — `apri-porta 22 0.0.0.0/0` — sarebbe la stessa riga con un
+    # buco dentro.
+    trasmetti-apri)
+        command -v ufw >/dev/null 2>&1 || muori "ufw non è installato."
+
+        # La sottorete di casa, ricavata dalla scheda che ha la via d'uscita.
+        RETE=$(ip -o -4 route get 1.1.1.1 2>/dev/null | awk "{for(i=1;i<=NF;i++) if(\$i==\"src\") print \$(i+1)}")
+        [ -n "$RETE" ] || muori "non capisco a quale rete sei attaccato."
+        case "$RETE" in
+            10.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*) : ;;
+            *) muori "«$RETE» non è una rete privata: non apro niente." ;;
+        esac
+        SOTTORETE="${RETE%.*}.0/24"
+
+        annota "trasmetti-apri $SOTTORETE porta $PORTA_TRASMETTI"
+        ufw allow from "$SOTTORETE" to any port "$PORTA_TRASMETTI" proto tcp \
+            comment "Minerva: trasmetti a schermo" >/dev/null \
+            || muori "ufw non ha accettato la regola."
+        printf 'fatto %s\n' "$SOTTORETE"
+        ;;
+
+    trasmetti-chiudi)
+        command -v ufw >/dev/null 2>&1 || muori "ufw non è installato."
+        annota "trasmetti-chiudi"
+        # Si tolgono TUTTE le regole nostre su quella porta, comunque siano
+        # state scritte: chi vuole chiudere deve poterlo fare senza dover
+        # indovinare la sottorete di quel giorno.
+        ufw status numbered 2>/dev/null \
+            | grep -n "Minerva: trasmetti a schermo" >/dev/null 2>&1 || {
+            printf 'niente da togliere\n'; exit 0; }
+        while ufw status numbered 2>/dev/null | grep -q "Minerva: trasmetti a schermo"; do
+            N=$(ufw status numbered 2>/dev/null \
+                | grep "Minerva: trasmetti a schermo" | head -1 \
+                | sed "s/^\\[ *\\([0-9]*\\)\\].*/\\1/")
+            [ -n "$N" ] || break
+            yes | ufw delete "$N" >/dev/null 2>&1 || break
+        done
+        printf 'fatto\n'
+        ;;
+
+    # ── Le quattro della manutenzione ─────────────────────────────────────
+    #
+    # Giacomo, 9 settembre 2026: «fai i tre verbi per la password». Sono
+    # quattro perché la finestra mostra quattro voci che stanno fuori dalla
+    # tua cartella, e mostrarne una che poi non si può togliere sarebbe una
+    # promessa non mantenuta.
+    #
+    # ── Perché QUATTRO verbi precisi e non un «pulisci <percorso>» ────────
+    #
+    # Perché un verbo generico sarebbe la stessa riga di codice con dentro un
+    # buco: chi ha la password potrebbe cancellare qualunque cosa passando dal
+    # nostro programma, e passandoci in un modo che il registro qui sotto
+    # farebbe sembrare normale. Ogni verbo sa fare una cosa sola e la
+    # ricontrolla da capo.
+
+    # Cache dei pacchetti: passa da `paccache`, che è scritto da chi fa
+    # pacman e sa cosa può togliere. NON un `rm` su una cartella di sistema.
+    #
+    # Si tengono le ULTIME DUE versioni di ogni pacchetto e non una sola:
+    # l'ultima è quella installata adesso, la penultima è quella a cui si
+    # torna quando un aggiornamento rompe qualcosa. Tenerne una sarebbe
+    # buttare via proprio la ragione per cui quella cartella esiste.
+    pulisci-cache-pacchetti)
+        command -v paccache >/dev/null 2>&1 \
+            || muori "paccache non c'è: si installa con «pacman -S pacman-contrib»."
+        CARTELLA=/var/cache/pacman/pkg
+        [ -d "$CARTELLA" ] || muori "«$CARTELLA» non c'è."
+        PRIMA=$(du -sb -- "$CARTELLA" 2>/dev/null | cut -f1)
+        annota "pulisci-cache-pacchetti (prima ${PRIMA:-?} byte)"
+        # Due giri, che sono due cose diverse: le versioni vecchie dei
+        # pacchetti che hai (tenendone due) e TUTTE quelle dei pacchetti che
+        # non hai piú — quelle sono spreco puro, resti di programmi
+        # disinstallati. Sono gli stessi due giri che l'inventario chiede a
+        # vuoto per dire quanto libererà: se qui se ne facesse uno solo, il
+        # numero promesso e quello ottenuto non tornerebbero.
+        paccache -r -k 2 >/dev/null 2>&1 \
+            || muori "paccache non ha finito il lavoro."
+        paccache -r -u -k 0 >/dev/null 2>&1 || true
+        DOPO=$(du -sb -- "$CARTELLA" 2>/dev/null | cut -f1)
+        annota "pulisci-cache-pacchetti (dopo ${DOPO:-?} byte)"
+        printf 'fatto %s %s\n' "${PRIMA:-0}" "${DOPO:-0}"
+        ;;
+
+    # Le lingue. È l'unico verbo che cambia un file di CONFIGURAZIONE, e per
+    # una ragione che vale tutto il resto: cancellarle e basta non funziona.
+    # Al primo aggiornamento pacman le rimette tutte, e la settimana dopo sei
+    # al punto di prima senza sapere perché. È la ragione per cui esiste
+    # `localepurge`, ed è la ragione per cui un programma che le cancella e
+    # basta MENTE a chi lo usa.
+    #
+    # Quindi due cose insieme: si scrive a pacman di non installarle più, e
+    # poi si tolgono quelle che ci sono. Farne una sola è mezzo lavoro.
+    #
+    # Gli argomenti sono le lingue da TENERE, e non quelle da togliere: se un
+    # domani l'elenco arrivasse vuoto o storto, il peggio che può succedere è
+    # che non si tolga niente. Al contrario, un elenco storto di cose da
+    # togliere è un disastro.
+    pulisci-lingue)
+        [ $# -ge 1 ] || muori "non mi hai detto quali lingue tenere."
+        RADICE=/usr/share/locale
+        [ -d "$RADICE" ] || muori "«$RADICE» non c'è."
+        CONF=/etc/pacman.conf
+        [ -f "$CONF" ] || muori "«$CONF» non c'è."
+
+        # Ogni lingua è un nome di cartella, non un percorso: niente barre,
+        # niente punti iniziali, niente trattini davanti.
+        TENERE=""
+        for L in "$@"; do
+            case "$L" in
+                ""|-*|*/*|.*|*'..'*)
+                    muori "«$L» non è un nome di lingua." ;;
+            esac
+            printf '%s' "$L" | grep -q '^[A-Za-z][A-Za-z0-9_@.-]*$' \
+                || muori "«$L» non è un nome di lingua."
+            TENERE="$TENERE $L"
+        done
+
+        # ── Due lingue non si tolgono MAI, comunque arrivi l'elenco ───────
+        #
+        # Giacomo, 9 settembre 2026: «facciamo in modo che lasci sempre
+        # l'inglese in qualsiasi caso [...] e lasci la lingua usata, come nel
+        # mio caso italiano».
+        #
+        # È una garanzia e sta QUI, dentro l'aiutante, e non solo nel demone
+        # che compone la richiesta: è l'ultimo posto che decide, ed è quello
+        # che ricontrolla sempre tutto da capo. Se un domani il demone
+        # sbagliasse il conto, o qualcun altro chiamasse questo verbo a mano,
+        # la garanzia varrebbe lo stesso.
+        #
+        #  · l'INGLESE, perché è la lingua in cui parla mezzo software del
+        #    mondo quando la tua non c'è — e senza, i programmi non tornano
+        #    in italiano: tornano in una lingua a caso o in nessuna;
+        #  · `C`, che non è una lingua ma il ripiego di chi non ne trova
+        #    nessuna;
+        #  · quella che il sistema USA davvero, letta da `/etc/locale.conf`.
+        #    Non si indovina e non si eredita dall'ambiente di chi chiama:
+        #    `pkexec` fa girare questo file con l'ambiente di root.
+        TENERE="$TENERE en C"
+        if [ -r /etc/locale.conf ]; then
+            SUA=$(sed -n 's/^LANG=\([A-Za-z][A-Za-z0-9]*\).*/\1/p' \
+                  /etc/locale.conf 2>/dev/null | head -1)
+            if [ -n "$SUA" ]; then TENERE="$TENERE $SUA"; fi
+        fi
+
+        # Senza doppioni, o la riga in pacman.conf ripete la stessa eccezione
+        # tre volte e diventa illeggibile proprio a chi la va a controllare.
+        UNAVOLTA=""
+        for L in $TENERE; do
+            GIA=no
+            for M in $UNAVOLTA; do
+                if [ "$L" = "$M" ]; then GIA=si; fi
+            done
+            if [ "$GIA" = no ]; then UNAVOLTA="$UNAVOLTA $L"; fi
+        done
+        TENERE="$UNAVOLTA"
+
+        # La riga per pacman. Il marcatore serve a ritrovarla per disfare:
+        # senza, chi vuole tornare indietro deve indovinare quale riga è
+        # nostra.
+        MARCA="# Minerva Manutenzione — lingue"
+        RIGA="NoExtract = usr/share/locale/*"
+        for L in $TENERE; do
+            RIGA="$RIGA !usr/share/locale/$L*"
+        done
+        # ── E il file che NON è una lingua ────────────────────────────────
+        #
+        # `usr/share/locale/*` prende anche `locale.alias`, che è di gettext e
+        # non è una traduzione: senza questa eccezione pacman smetterebbe di
+        # installarlo, e sparirebbe al primo aggiornamento del pacchetto che
+        # lo porta. Un effetto che nessuno collegherebbe mai a una pulizia
+        # delle lingue.
+        RIGA="$RIGA !usr/share/locale/locale.alias"
+
+        # Una copia del file PRIMA di toccarlo, una volta sola: la seconda
+        # volta sovrascriverebbe l'originale con quello già modificato, che è
+        # il modo classico di perdere il punto di ritorno.
+        [ -f "$CONF.minerva-prima" ] || cp -p -- "$CONF" "$CONF.minerva-prima"
+
+        # ── DENTRO `[options]`, e non in fondo al file ────────────────────
+        #
+        # La prima versione scriveva in coda, e in coda c'è l'ultima sezione
+        # dei repository — `[multilib]`. `NoExtract` lì dentro non vale
+        # niente: pacman lo dice, con un avviso che nessuno legge, e le
+        # lingue sarebbero tornate tutte al primo aggiornamento. Cioè l'esatto
+        # difetto che questo verbo esiste per non commettere.
+        #
+        # Visto sulla macchina di Giacomo il 9 settembre 2026, dopo la prima
+        # pulizia vera: «attenzione: /etc/pacman.conf, riga 145: la direttiva
+        # NoExtract presente nella sezione multilib non è stata riconosciuta».
+        #
+        # Si riscrive di fianco e si sposta: se manca la corrente a metà,
+        # `/etc/pacman.conf` è quello vecchio e intero, non mezzo.
+        NUOVO=$(mktemp /etc/pacman.conf.minerva.XXXXXX) || muori "non riesco a scrivere in /etc."
+        awk -v marca="$MARCA" -v riga="$RIGA" '
+            index($0, marca) == 1 { next }
+            /^NoExtract[ \t]*=[ \t]*usr\/share\/locale\// { next }
+            { print }
+            /^\[options\][ \t]*$/ && !messa {
+                print marca " (togli queste due righe per disfare)"
+                print riga
+                messa = 1
+            }
+        ' "$CONF" > "$NUOVO"
+        grep -q "^NoExtract = usr/share/locale/" "$NUOVO" \
+            || muori "non ho trovato la sezione [options] in «$CONF»: non tocco niente."
+        chmod 644 "$NUOVO"
+        mv -f -- "$NUOVO" "$CONF" || muori "non sono riuscito a scrivere «$CONF»."
+        annota "pulisci-lingue tengo:$TENERE"
+
+        PRIMA=$(du -sb -- "$RADICE" 2>/dev/null | cut -f1)
+        # Solo le CARTELLE dirette qui sotto: `locale.alias` è un file e
+        # serve, e più in profondità non si scende.
+        for D in "$RADICE"/*; do
+            [ -d "$D" ] || continue
+            NOME=$(basename -- "$D")
+            SALVA=no
+            for L in $TENERE; do
+                case "$NOME" in
+                    "$L"|"$L"_*|"$L"@*|"$L".*) SALVA=si ;;
+                esac
+            done
+            # «it» tiene «it», «it_IT», «it_IT@euro» e «it.UTF-8»: sono la
+            # stessa lingua scritta in quattro modi, e tenerne una sola
+            # vorrebbe dire che metà dei programmi torna in inglese.
+            [ "$SALVA" = no ] || continue
+            rm -rf -- "$D"
+        done
+        DOPO=$(du -sb -- "$RADICE" 2>/dev/null | cut -f1)
+        annota "pulisci-lingue (da ${PRIMA:-?} a ${DOPO:-?} byte)"
+        printf 'fatto %s %s\n' "${PRIMA:-0}" "${DOPO:-0}"
+        ;;
+
+    # Il registro di sistema. Non si cancella: si POTA, con lo strumento di
+    # systemd, che sa quali file sono ancora in uso. Se ne tengono cinquanta
+    # mega, che sono gli ultimi giorni — cioè quelli che servono quando
+    # qualcosa va storto adesso. Un registro azzerato del tutto è comodo il
+    # giorno dopo e inutile il giorno che serve.
+    pulisci-registro)
+        command -v journalctl >/dev/null 2>&1 || muori "journalctl non c'è."
+        CARTELLA=/var/log/journal
+        PRIMA=$(du -sb -- "$CARTELLA" 2>/dev/null | cut -f1)
+        annota "pulisci-registro (prima ${PRIMA:-?} byte)"
+        journalctl --vacuum-size=50M >/dev/null 2>&1 \
+            || muori "journalctl non ha potuto potare il registro."
+        DOPO=$(du -sb -- "$CARTELLA" 2>/dev/null | cut -f1)
+        annota "pulisci-registro (dopo ${DOPO:-?} byte)"
+        printf 'fatto %s %s\n' "${PRIMA:-0}" "${DOPO:-0}"
+        ;;
+
+    # I pacchetti rimasti soli. L'elenco arriva da fuori, e per questo non ci
+    # si fida: si richiede a pacman chi sono gli orfani ADESSO, e si toglie
+    # solo l'intersezione. Un elenco arrivato da fuori con dentro «linux» non
+    # deve poter disinstallare il kernel.
+    togli-orfani)
+        [ $# -ge 1 ] || muori "non mi hai detto quali pacchetti."
+        command -v pacman >/dev/null 2>&1 || muori "pacman non c'è."
+
+        ORFANI=$(pacman -Qtdq 2>/dev/null || true)
+        [ -n "$ORFANI" ] || { printf 'niente da togliere\n'; exit 0; }
+
+        DAVVERO=""
+        for P in "$@"; do
+            printf '%s' "$P" | grep -q '^[A-Za-z0-9][A-Za-z0-9@._+-]*$' \
+                || muori "«$P» non è un nome di pacchetto."
+            # `if` e non `[ ] && …`: sotto `set -e` una lista che finisce
+            # con un test falso può portarsi via la shell, ed è la trappola
+            # che questo file documenta più in alto.
+            for O in $ORFANI; do
+                if [ "$P" = "$O" ]; then DAVVERO="$DAVVERO $P"; fi
+            done
+        done
+        [ -n "$DAVVERO" ] || { printf 'niente da togliere\n'; exit 0; }
+
+        annota "togli-orfani$DAVVERO"
+        # shellcheck disable=SC2086
+        pacman -Rns --noconfirm -- $DAVVERO >/dev/null 2>&1 \
+            || muori "pacman non ha potuto togliere quei pacchetti."
+        printf 'fatto%s\n' "$DAVVERO"
+        ;;
+
+    *)
+        muori "azione «$AZIONE» sconosciuta."
+        ;;
+esac

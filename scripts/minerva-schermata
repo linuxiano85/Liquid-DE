@@ -1,0 +1,130 @@
+#!/bin/sh
+# ═══════════════════════════════════════════════════════════════════════════
+#  minerva-schermata — Cattura lo schermo, e la SALVA.
+#
+#      minerva-schermata               tutto lo schermo
+#      minerva-schermata area          una porzione scelta col mouse
+#      minerva-schermata finestra      solo la finestra attiva
+#      minerva-schermata schermo 5     fra cinque secondi
+#
+#  Il file finisce in ~/Immagini/Schermate (o dove dice XDG), e una copia va
+#  anche negli appunti.
+#
+#  Il ritardo serve a fotografare cose che spariscono quando si tocca la
+#  tastiera: un menu aperto, un suggerimento, una tendina. Con «area» si
+#  sceglie PRIMA la porzione e il ritardo scatta dopo — così si può inquadrare
+#  il punto e poi far comparire lì quello che si vuole mostrare.
+#
+#  Il salvataggio non è un extra. Prima c'era solo `grim - | wl-copy`: la
+#  schermata esisteva soltanto negli appunti, e bastava copiare qualunque
+#  altra cosa per perderla. Peggio: una schermata negli appunti non si può
+#  passare a nessuno che non sia un programma già aperto — non si allega, non
+#  si manda, non si mostra. Adesso c'è un file con un nome e un percorso, e
+#  gli appunti restano in più, non al posto di.
+# ═══════════════════════════════════════════════════════════════════════════
+set -u
+
+MODO="${1:-schermo}"
+RITARDO="${2:-0}"
+
+# Un ritardo che non è un numero è un errore di chi chiama, non una ragione
+# per non fare la schermata.
+case "$RITARDO" in
+    ''|*[!0-9]*) RITARDO=0 ;;
+esac
+
+# Dove salvare. Si rispetta la cartella «Immagini» dichiarata dal sistema
+# (user-dirs.dirs), che su un'installazione italiana è «Immagini» e su una
+# inglese «Pictures»: scriverne una a mano vorrebbe dire creare una seconda
+# cartella accanto a quella che l'utente già usa.
+IMMAGINI=""
+if [ -r "${XDG_CONFIG_HOME:-$HOME/.config}/user-dirs.dirs" ]; then
+    # shellcheck disable=SC1090
+    . "${XDG_CONFIG_HOME:-$HOME/.config}/user-dirs.dirs" 2>/dev/null
+    IMMAGINI="${XDG_PICTURES_DIR:-}"
+fi
+[ -n "$IMMAGINI" ] || IMMAGINI="$HOME/Immagini"
+[ -d "$IMMAGINI" ] || IMMAGINI="$HOME/Pictures"
+[ -d "$IMMAGINI" ] || IMMAGINI="$HOME"
+
+CARTELLA="$IMMAGINI/Schermate"
+mkdir -p "$CARTELLA" || exit 1
+
+NOME="$CARTELLA/Schermata $(date '+%Y-%m-%d alle %H.%M.%S').png"
+
+# ── L'avviso, e il file di cui parla ──────────────────────────────────────
+#
+# Il terzo argomento è il percorso del file: se c'è, l'avviso porta con sé un
+# suggerimento `x-minerva-file` e cliccandolo la schermata si apre col
+# programma predefinito.
+#
+# Giacomo, 2 settembre 2026: «se scatto uno screenshot e compare la notifica e
+# ci clicco devo poter vedere l'immagine con anteprima [...] e questo per tutte
+# le notifiche».
+#
+# Il protocollo delle notifiche non ha un campo «file», e i suggerimenti sono
+# il posto previsto per le cose che non ci sono. Il nome comincia per `x-`
+# perché è nostro; chi non lo conosce lo ignora, ed è quello che deve fare.
+#
+# Non si indovina il file dal TESTO del messaggio: un percorso dentro una frase
+# è una cosa che si somiglia, non una cosa che è. Vedi `fileDi()` in
+# `minerva-shell/core/Notifications.qml`.
+avvisa() {
+    command -v notify-send >/dev/null 2>&1 || return 0
+    if [ -n "${3:-}" ]; then
+        notify-send -a "Minerva" -h "string:x-minerva-file:$3" "$1" "$2"
+    else
+        notify-send -a "Minerva" "$1" "$2"
+    fi
+}
+
+aspetta() {
+    [ "$RITARDO" -gt 0 ] && sleep "$RITARDO"
+    return 0
+}
+
+case "$MODO" in
+    area)
+        # `slurp` restituisce vuoto se si preme Esc: è un annullamento, non un
+        # errore, e non deve lasciare un file vuoto né un avviso di guasto.
+        REGIONE=$(slurp 2>/dev/null) || exit 0
+        [ -n "$REGIONE" ] || exit 0
+        aspetta
+        grim -g "$REGIONE" "$NOME" || { avvisa "Schermata non riuscita" "grim ha fallito"; exit 1; }
+        ;;
+    finestra)
+        aspetta
+        # La geometria della finestra attiva la sa il compositore. Si legge in
+        # Python e non con `jq`: `jq` è un pacchetto in più da installare, e
+        # Python c'è già perché lo usano gli script di prova.
+        REGIONE=$(hyprctl activewindow -j 2>/dev/null | python3 -c '
+import json, sys
+try:
+    w = json.load(sys.stdin)
+    x, y = w["at"]
+    lw, lh = w["size"]
+    print(f"{x},{y} {lw}x{lh}")
+except Exception:
+    pass
+') || REGIONE=""
+        if [ -n "$REGIONE" ]; then
+            grim -g "$REGIONE" "$NOME" || { avvisa "Schermata non riuscita" "grim ha fallito"; exit 1; }
+        else
+            grim "$NOME" || { avvisa "Schermata non riuscita" "grim ha fallito"; exit 1; }
+        fi
+        ;;
+    *)
+        aspetta
+        grim "$NOME" || { avvisa "Schermata non riuscita" "grim ha fallito"; exit 1; }
+        ;;
+esac
+
+# Negli appunti si mette il CONTENUTO dell'immagine e non il percorso: è
+# quello che si aspetta chi preme Ctrl+V dentro un programma di disegno o una
+# chat. Il percorso resta nell'avviso, per chi invece deve allegare il file.
+if command -v wl-copy >/dev/null 2>&1; then
+    wl-copy --type image/png < "$NOME" 2>/dev/null
+fi
+
+avvisa "Schermata salvata" "$NOME" "$NOME"
+printf '%s\n' "$NOME"

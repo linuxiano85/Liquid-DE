@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Minerva Manutenzione — l'anello spezzato in famiglie: la stessa figura
+       che si vede aprendo il programma.
+
+       Non una scopa e non un secchio, che sono le icone di tutti i programmi
+       di pulizia: quelli promettono di CANCELLARE, e questo per prima cosa
+       misura. L'anello dice «di che cosa è fatto lo spazio», che è la
+       domanda a cui risponde davvero. -->
+  <defs>
+    <linearGradient id="tinta" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="luce" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".22"/>
+      <stop offset=".55" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="3" y="3" width="42" height="42" rx="12.5" fill="url(#tinta)"/>
+  <rect x="3" y="3" width="42" height="42" rx="12.5" fill="url(#luce)"/>
+  <!-- Le tre fette, di tre pesi diversi: un anello a fette uguali sarebbe un
+       cerchio tratteggiato, e non direbbe che le famiglie non pesano uguale. -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="butt">
+    <path d="M24 13 A11 11 0 0 1 29.5 33.53"/>
+    <path d="M28.12 34.2 A11 11 0 0 1 13.66 27.76" stroke-opacity=".72"/>
+    <path d="M13.24 26.29 A11 11 0 0 1 22.47 13.11" stroke-opacity=".45"/>
+  </g>
+</svg>

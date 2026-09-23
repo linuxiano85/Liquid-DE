@@ -1,0 +1,28 @@
+#!/bin/sh
+# minerva-session-recupero — Ponte senza spazi verso la sessione di recupero.
+#
+# Gemello di `minerva-session-wayland`, stessa ragione: certi gestori di
+# accesso finiscono con `exec $@` SENZA virgolette, e «…/Minerva Shell/…» si
+# spezza in due parole. Il percorso di QUESTO file non ha spazi.
+#
+# La sessione è **la stessa** — stesso compositore, stesso ambiente, stesso
+# registro — e cambia una cosa sola: che cosa parte dentro. Duplicare
+# `start-minerva-wayland.sh` vorrebbe dire due sessioni che divergono su cose
+# che non c'entrano col recupero, e allora non si saprebbe più quale
+# differenza conta.
+#
+# `@MINERVA_DIR@` è un segno che `install-minerva.sh` sostituisce.
+# ── E si esce chiudendo il terminale ──────────────────────────────────────
+#
+# `MINERVA_ESCI_COL_FIGLIO=1` dice al compositore di spegnersi quando il
+# programma che ha avviato finisce. Qui quel programma è il terminale: senza
+# questa riga, chiudendolo restava uno schermo nero — trovato dalla prova
+# annidata il 1º settembre 2026, ed è il modo peggiore in cui una via di fuga
+# può fallire.
+#
+# La sessione NORMALE non la mette, e non deve: là il figlio resta vivo per
+# tutta la sessione, e se un giorno finisse (i due guardiani che si arrendono
+# tutti e due) uscire porterebbe via anche le finestre di chi stava lavorando.
+MINERVA_ESCI_COL_FIGLIO=1 \
+MINERVA_DENTRO="@MINERVA_DIR@/scripts/minerva-dentro-recupero" \
+    exec "@MINERVA_DIR@/scripts/start-minerva-wayland.sh" "$@"

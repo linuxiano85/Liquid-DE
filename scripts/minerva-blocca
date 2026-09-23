@@ -1,0 +1,75 @@
+#!/bin/sh
+# minerva-blocca — Blocca lo schermo con la schermata di Minerva.
+#
+# Lo chiama il tasto Super+L, e la shell quando la macchina resta ferma —
+# `onInattivo` in `minerva-shell/shell.qml`, che ascolta il compositore.
+#
+# ── I due controlli prima di prendere lo schermo ───────────────────────────
+#
+# Un blocco schermo che non riesce a verificare la password non è un blocco:
+# è un computer perso, perché su Wayland il compositore tiene la superficie
+# davanti a tutto anche se il programma muore — `ext-session-lock` lo
+# garantisce apposta, o si sbloccherebbe uccidendo un processo.
+#
+# Quindi:
+#
+#  1. **Deve esistere un file PAM.** `/etc/pam.d/minerva`, e se non c'è si
+#     usa quello di hyprlock, che su Arch c'è sempre. Se non c'è nemmeno
+#     quello NON si blocca, e lo si dice: meglio uno schermo non bloccato di
+#     uno bloccato per sempre.
+#  2. **Uno solo alla volta.** `--no-duplicate` di quickshell: un secondo
+#     blocco sopra il primo raddoppierebbe le superfici e nessuna delle due
+#     saprebbe più chi sblocca.
+
+SELF="$(readlink -f "$0")"
+ROOT="$(dirname "$(dirname "$SELF")")"
+
+# Qual è il servizio PAM da usare. La scelta sta QUI e in nessun altro posto:
+# `prove-blocco.qml` la chiede con `--quale-pam` invece di ripeterla, perché
+# una prova che indovina da sé quale servizio useresti non prova niente — è
+# già successo, provava «hyprlock» mentre il blocco vero usava un altro file.
+quale_pam() {
+    if [ -n "${MINERVA_PAM:-}" ]; then
+        echo "$MINERVA_PAM"
+    elif [ -f /etc/pam.d/minerva ]; then
+        echo minerva
+    elif [ -f /etc/pam.d/hyprlock ]; then
+        # Il ripiego storico. `hyprlock` non è più fra i pacchetti di Minerva
+        # dal 2 settembre 2026, quindi su una macchina nuova questo file non
+        # c'è: la riga resta perché su una macchina vecchia può esserci ancora,
+        # e perché non costa niente. Se non c'è nessuno dei due NON si blocca,
+        # e lo si dice — è la scelta scritta qui sopra.
+        echo hyprlock
+    else
+        return 1
+    fi
+}
+
+if [ "${1:-}" = "--quale-pam" ]; then
+    quale_pam
+    exit $?
+fi
+
+if ! PAM="$(quale_pam)"; then
+    echo "[MINERVA][BLOCCO] Nessun file PAM utilizzabile: NON blocco." >&2
+    echo "[MINERVA][BLOCCO] Reinstalla con: scripts/install-minerva.sh" >&2
+    hyprctl notify 3 8000 "rgb(f0596b)" \
+        "Minerva non può bloccare: manca /etc/pam.d/minerva" >/dev/null 2>&1
+    exit 1
+fi
+
+if [ "$PAM" != minerva ]; then
+    echo "[MINERVA][BLOCCO] /etc/pam.d/minerva non c'è: uso «$PAM»." >&2
+fi
+export MINERVA_PAM="$PAM"
+
+# ── Con la scheda video, non col processore ─────────────────────────────────
+#
+# La shell gira col renderer software (vedi «Peso delle app») e lancia questo
+# script: la variabile arrivava fin qui, e col processore l'aurora (uno
+# shader) e il ritratto tondo (un MultiEffect) NON danno errore —
+# spariscono. La schermata di blocco era nera e senza ritratto, e nessuno lo
+# diceva. Visto in prova il 23 settembre 2026. Il blocco dura poco: la
+# memoria in più della scheda video qui non pesa.
+unset QT_QUICK_BACKEND
+exec qs -n -p "$ROOT/minerva-shell/blocco.qml"

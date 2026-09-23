@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Editor
+Name[it]=Editor
+GenericName=Editor di testi
+GenericName[en]=Text editor
+Comment=Scrivi e leggi documenti di testo
+Comment[en]=Write and read text documents
+# %u e non %U: si apre un documento alla volta.
+Exec=minerva-editor %u
+Icon=minerva-editor
+StartupWMClass=minerva-editor
+Terminal=false
+StartupNotify=false
+Categories=Utility;TextEditor;
+MimeType=text/plain;text/markdown;text/x-log;
+Keywords=editor;testo;text;scrittura;appunti;

@@ -1,0 +1,14 @@
+module settings
+SettingRow      1.0 SettingRow.qml
+ToggleSwitch    1.0 ToggleSwitch.qml
+ValueSlider     1.0 ValueSlider.qml
+ChoicePicker    1.0 ChoicePicker.qml
+ChangeGuard     1.0 ChangeGuard.qml
+SelettoreImmagine 1.0 SelettoreImmagine.qml
+SelettoreColore   1.0 SelettoreColore.qml
+SceltaPercorso    1.0 SceltaPercorso.qml
+MisuraPuntatore   1.0 MisuraPuntatore.qml
+RitaglioRitratto  1.0 RitaglioRitratto.qml
+WobblyControls  1.0 WobblyControls.qml
+System          1.0 System.qml
+Tendina         1.0 Tendina.qml

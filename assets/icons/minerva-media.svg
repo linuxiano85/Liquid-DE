@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Minerva Media — l'onda che diventa un triangolo di riproduzione.
+       Le altre icone di Minerva mettono dentro la scatola l'OGGETTO su cui si
+       lavora (il foglio, la stampa, i cursori). Qui l'oggetto è il suono, che
+       una forma non ce l'ha: si disegna quello che si vede davvero nella
+       finestra, cioè la zona d'onda, e ci si appoggia il triangolo che dice
+       «questo si ascolta».
+       Le barre sono cinque e non nove: a quattordici pixel — la misura a cui
+       questa icona vive (dock, «apri con», elenco dei file) — nove diventano
+       una macchia grigia. -->
+  <defs>
+    <linearGradient id="tinta" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="luce" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".22"/>
+      <stop offset=".55" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="3" y="3" width="42" height="42" rx="12.5" fill="url(#tinta)"/>
+  <rect x="3" y="3" width="42" height="42" rx="12.5" fill="url(#luce)"/>
+  <!-- L'onda: cinque barre, le esterne più basse, tutte con le punte tonde
+       come i tracciati di `ui/Icon.qml`. -->
+  <g fill="#FFFFFF" opacity=".55">
+    <rect x="10.5" y="20.5" width="3.2" height="7"  rx="1.6"/>
+    <rect x="16.2" y="16"   width="3.2" height="16" rx="1.6"/>
+    <rect x="21.9" y="12.5" width="3.2" height="23" rx="1.6"/>
+  </g>
+  <!-- Il triangolo, pieno e a punte tonde: è il segno che si riconosce per
+       primo, quindi sta sopra e non è trasparente. -->
+  <path d="M28.6 17.6a1.9 1.9 0 0 1 2.9-1.62l7.4 4.6a1.9 1.9 0 0 1 0 3.24l-7.4 4.6a1.9 1.9 0 0 1-2.9-1.62z"
+        fill="#FFFFFF"/>
+</svg>

@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Impostazioni
+Name[en]=Settings
+GenericName=Impostazioni di sistema
+GenericName[en]=System settings
+Comment=Schermo, audio, rete, energia e aspetto di Minerva
+Comment[en]=Display, audio, network, power and appearance
+Exec=minerva-settings
+Icon=minerva-settings
+StartupWMClass=minerva-settings
+Terminal=false
+StartupNotify=false
+Categories=Settings;System;DesktopSettings;
+Keywords=impostazioni;preferenze;settings;configura;sistema;

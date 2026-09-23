@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Minerva Anteprima — la stampa: sole e montagne dentro un fotogramma.
+       È il segno che si riconosce a quattordici pixel, che è la dimensione a
+       cui questa icona vive davvero (dock, elenco dei file, «apri con»). -->
+  <defs>
+    <linearGradient id="tinta" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="luce" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".22"/>
+      <stop offset=".55" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="stampa">
+      <rect x="10" y="12.5" width="28" height="23" rx="4.2"/>
+    </clipPath>
+  </defs>
+  <rect x="3" y="3" width="42" height="42" rx="12.5" fill="url(#tinta)"/>
+  <rect x="3" y="3" width="42" height="42" rx="12.5" fill="url(#luce)"/>
+  <g clip-path="url(#stampa)">
+    <rect x="10" y="12.5" width="28" height="23" fill="#FFFFFF" opacity=".3"/>
+    <circle cx="18" cy="20" r="3.1" fill="#FFFFFF"/>
+    <path d="M4 37l11-11.2 5.6 5.6 5.6-6.4L44 37z" fill="#FFFFFF"/>
+  </g>
+</svg>

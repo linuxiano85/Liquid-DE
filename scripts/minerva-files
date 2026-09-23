@@ -1,0 +1,68 @@
+#!/bin/sh
+# minerva-files — Avvia il gestore file di Minerva.
+#
+# Il gestore file è un programma a sé: un secondo processo `quickshell` che
+# esegue `minerva-shell/filemanager.qml`. Non è più una finestra della shell.
+# Il perché sta scritto in cima a quel file — in due parole: un errore nel
+# gestore file non deve poter spegnere la barra.
+#
+# Questo script fa tre cose, in ordine: trova dov'è installata Minerva; se il
+# gestore file è già aperto gli chiede una scheda in più; altrimenti lo avvia.
+set -e
+
+# ── 1. Dov'è Minerva ────────────────────────────────────────────────────────
+#
+# Non c'è nessun percorso scritto qui dentro. Questo script viene installato in
+# ~/.local/bin come COLLEGAMENTO al file vero dentro il progetto: seguendo il
+# collegamento si scopre la cartella di Minerva qualunque essa sia, e Minerva
+# si può spostare, rinominare o installare da un'altra parte senza toccare una
+# riga. È il secondo dei tre problemi strutturali del progetto, e questo ne è
+# un pezzo.
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+CONFIG="$ROOT/minerva-shell/filemanager.qml"
+
+if [ ! -f "$CONFIG" ]; then
+    echo "minerva-files: non trovo $CONFIG" >&2
+    exit 1
+fi
+
+# ── 2. La cartella da aprire ────────────────────────────────────────────────
+#
+# Arriva come indirizzo (`file:///home/…`) quando è un altro programma a
+# chiamarci, perché è così che il file `.desktop` dichiara di volerlo con `%u`;
+# arriva come percorso normale quando lo si scrive a mano in un terminale.
+# Vanno accettati tutti e due: chi digita `minerva-files ~/Immagini` ha ragione
+# tanto quanto la specifica.
+TARGET=${1:-}
+case "$TARGET" in
+    file://*)
+        TARGET=${TARGET#file://}
+        # Gli indirizzi codificano gli spazi e gli accenti in %XX.
+        TARGET=$(printf '%b' "$(printf '%s' "$TARGET" | sed 's/%\(..\)/\\x\1/g')")
+        ;;
+esac
+
+# ── 3. Aperto? Allora una scheda in più ─────────────────────────────────────
+#
+# `ping` risponde solo se c'è un gestore file vivo su QUESTA configurazione.
+# Chiedere a lui invece di avviarne un altro è tutta la differenza fra venti
+# schede in una finestra e venti finestre.
+if qs ipc -p "$CONFIG" call files ping >/dev/null 2>&1; then
+    exec qs ipc -p "$CONFIG" call files open "$TARGET" >/dev/null
+fi
+
+# ── 4. Altrimenti si parte ──────────────────────────────────────────────────
+#
+# `-d` stacca dal terminale: chi ci lancia da un file `.desktop` o da una shell
+# non deve restare appeso ad aspettare che la finestra si chiuda.
+# `-n` è la rete contro due lanci nello stesso istante: il secondo si accorge
+# del primo ed esce invece di aprire una finestra gemella.
+MINERVA_FILES_PATH="$TARGET"
+export MINERVA_FILES_PATH
+# L'ambiente comune delle nostre app: disegnano col processore invece che
+# con la scheda video. Il perché, i numeri e cosa si perde stanno tutti
+# in `scripts/minerva-ambiente-app`.
+. "$ROOT/scripts/minerva-ambiente-app"
+
+exec qs -d -n -p "$CONFIG"

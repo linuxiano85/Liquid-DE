@@ -1,0 +1,11 @@
+module viewer
+Viewer     1.0 Viewer.qml
+Stage      1.0 Stage.qml
+Griglia    1.0 Griglia.qml
+Filmstrip  1.0 Filmstrip.qml
+Strumento  1.0 Strumento.qml
+Chip       1.0 Chip.qml
+Freccia    1.0 Freccia.qml
+Galleria   1.0 Galleria.qml
+RigaGiorno 1.0 RigaGiorno.qml
+Miniatura  1.0 Miniatura.qml

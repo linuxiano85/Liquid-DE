@@ -1,0 +1,7 @@
+module custodia
+singleton Tempo      1.0 Tempo.qml
+Custodia             1.0 Custodia.qml
+DentroProgetto       1.0 DentroProgetto.qml
+Destinazioni         1.0 Destinazioni.qml
+RiquadroProgetto     1.0 RiquadroProgetto.qml
+RigaRitorno          1.0 RigaRitorno.qml

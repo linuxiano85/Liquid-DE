@@ -1,0 +1,1097 @@
+#!/bin/sh
+# minerva-greetd — Installa, prova e attiva la schermata di accesso di Minerva.
+#
+#   sudo minerva-greetd installa   copia i file e scrive la configurazione
+#   sudo minerva-greetd aspetto    solo le impostazioni e lo sfondo (svelto)
+#   sudo minerva-greetd configura  riscrive solo /etc/greetd (dopo un cambio)
+#   sudo minerva-greetd prova      la fa girare su una console libera
+#   sudo minerva-greetd attiva     la mette al posto di quella di adesso
+#   sudo minerva-greetd gestore U  accende il gestore di accessi «U»
+#   sudo minerva-greetd indietro   rimette il gestore di accessi precedente
+#
+# ── L'ordine è la sicurezza ────────────────────────────────────────────────
+#
+# `installa` e `configura` NON cambiano niente: scrivono dei file e basta, e
+# il gestore di accessi di adesso continua a fare il suo lavoro. `prova` fa
+# girare greetd su una console DIVERSA da quella in uso, così la sessione di
+# chi sta lavorando non viene toccata: si guarda con Ctrl+Alt+F<n> e si torna
+# indietro con Ctrl+Alt+F<console di prima>.
+#
+# Solo `attiva` cambia il modo in cui si entra in questo computer, ed è
+# l'unica azione che può chiudere fuori chi la lancia. Per questo:
+#
+#   - il gestore precedente NON viene disinstallato, solo disattivato;
+#   - il suo nome viene scritto in un file, così `indietro` sa cosa rimettere
+#     senza doverlo indovinare;
+#   - prima di procedere si controlla che esista una console testuale di
+#     riserva, che è l'unica via di ritorno se qualcosa va storto.
+#
+# ── Perché i file vanno copiati in /usr/local ─────────────────────────────
+#
+# Il greeter gira come utente `greeter`, che nella cartella personale di
+# nessuno può entrare: una cartella personale è `drwx------`.
+# Minerva gira in loco dalla cartella del progetto, e da lì il greeter non
+# leggerebbe un solo file. Quindi se ne copia una versione in un percorso di
+# sistema, leggibile da tutti.
+
+set -eu
+
+AZIONE="${1:-aiuto}"
+
+DEST=/usr/local/share/minerva
+STATO=/var/lib/minerva-greeter
+REGISTRI=/var/log/minerva-greeter
+CONF=/etc/greetd
+SEGNO=$CONF/gestore-precedente
+
+# La porta del canale fra demone e shell DENTRO il greeter.
+#
+# Diverso da quello della sessione perché i due Minerva possono essere accesi
+# insieme: durante una prova lo sono di sicuro, e al momento del cambio di
+# sessione si sfiorano comunque. Con un indirizzo solo il demone del greeter
+# non riesce ad ascoltare e la schermata di accesso si connette al demone
+# dell'utente già dentro — che non sa niente di greetd. Risultato: una
+# schermata che si vede benissimo e non fa entrare nessuno.
+#
+# Fino al 27 agosto 2026 qui c'era «PORTA_GREETER=11433». Adesso è un socket
+# Unix, e si scrive per esteso invece di lasciarlo dedurre dal nome della
+# sessione: l'utente «greeter» può avere XDG_RUNTIME_DIR impostato su una
+# cartella che non esiste e che non ha il diritto di creare — è successo il 10
+# agosto 2026, e allora il demone morì lasciando a schermo una schermata di
+# accesso intera con l'elenco utenti vuoto. «$STATO» invece è suo per
+# costruzione.
+#
+# Sotto i 100 caratteri, o «sun_path» lo taglia: vedi socketDa() nel demone.
+SOCKET_GREETER="$STATO/canale.sock"
+
+verde()  { printf '\033[32m✓\033[0m %s\n' "$1"; }
+grigio() { printf '\033[36m·\033[0m %s\n' "$1"; }
+rosso()  { printf '\033[31m✗\033[0m %s\n' "$1" >&2; }
+muori()  { rosso "$1"; exit 1; }
+
+[ "$(id -u)" -eq 0 ] || muori "Va eseguito come amministratore (sudo o pkexec)."
+
+# La cartella del progetto: questo script vive in scripts/, quindi sta due
+# livelli sopra. `readlink -f` perché può essere stato raggiunto da un
+# collegamento.
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+
+# ── Chi fa entrare adesso ──────────────────────────────────────────────────
+#
+# Si chiede a systemd invece di indovinare: `display-manager.service` è un
+# collegamento al gestore vero, qualunque sia.
+gestore_attuale() {
+    basename "$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null || true)" \
+        2>/dev/null || true
+}
+
+# ── C'è una via di ritorno? ────────────────────────────────────────────────
+#
+# Se la sessione grafica non parte, l'unico modo di rimettere le cose a posto
+# è una console testuale. Su systemd `autovt@` la fa comparire da sola sulle
+# console libere — ma se qualcuno ha messo `NAutoVTs=0` non compare niente, e
+# un accesso che non funziona diventa un computer che non si usa più.
+c_e_una_via_di_ritorno() {
+    N=$(sed -n 's/^NAutoVTs=\([0-9]*\).*/\1/p' /etc/systemd/logind.conf 2>/dev/null | tail -1)
+    [ -z "$N" ] && return 0          # non impostato = predefinito 6
+    [ "$N" -gt 0 ]
+}
+
+# ── Un nome di unità che si può passare a systemctl ────────────────────────
+#
+# Questo controllo è la metà che conta di «cambia gestore di accessi»: il nome
+# arriva da una finestra e finisce dentro un comando eseguito da root. Senza,
+# «cambia gestore di accessi» diventa «abilita qualunque servizio», e con un
+# po' di fantasia «esegui qualunque cosa».
+#
+# La stessa regola sta in `minervad/lib/services/gestori_accesso_service.dart`,
+# e c'è di proposito in tutti e due i posti: il demone filtra quello che mostra,
+# ma questo script si lancia anche a mano, e un controllo che vive solo
+# nell'interfaccia non è un controllo. Le prove del demone provano la regola;
+# quella qui sotto è la stessa scritta nella lingua di `case`.
+nome_unita_lecito() {
+    case "$1" in
+        ''|*/*|*..*) return 1 ;;
+        *.service)   : ;;
+        *)           return 1 ;;
+    esac
+    # Solo lettere, cifre, e i quattro segni che systemd ammette nei nomi.
+    case "$1" in
+        *[!A-Za-z0-9@._-]*) return 1 ;;
+    esac
+    [ "${#1}" -le 64 ]
+}
+
+# È DAVVERO un gestore di accessi?
+#
+# Non da un elenco di nomi scritto a mano, che invecchierebbe: dalla riga
+# `Alias=display-manager.service` dentro l'unità, che è quella con cui systemd
+# sa che quel servizio è il gestore di accessi. Chi ne installa uno che non
+# conosciamo funziona lo stesso; e nessun altro servizio si può accendere da
+# qui, che è il punto.
+e_un_gestore() {
+    for D in /etc/systemd/system /usr/lib/systemd/system /lib/systemd/system; do
+        [ -r "$D/$1" ] || continue
+        grep -q '^Alias=display-manager.service' "$D/$1" && return 0
+        return 1
+    done
+    return 1
+}
+
+# ── Copia dei file ─────────────────────────────────────────────────────────
+
+installa_file() {
+    grigio "Copio Minerva in $DEST"
+    mkdir -p "$DEST"
+
+    # Si copia l'albero del progetto, meno ciò che si rigenera. `--delete`
+    # perché una copia vecchia lasciata lì dentro verrebbe letta come se fosse
+    # buona: un file QML rimasto di due versioni fa non dà errore, disegna
+    # semplicemente qualcos'altro.
+    rsync -a --delete \
+          --exclude='.dart_tool' \
+          --exclude='build' \
+          "$ROOT/minerva-shell" "$ROOT/config" "$ROOT/assets" "$DEST/" \
+        2>/dev/null || {
+            # rsync può non esserci. `cp -a` fa la stessa cosa senza il
+            # `--delete`, quindi si svuota prima.
+            rm -rf "$DEST/minerva-shell" "$DEST/config" "$DEST/assets"
+            cp -a "$ROOT/minerva-shell" "$ROOT/config" "$ROOT/assets" "$DEST/"
+        }
+
+    # ── Leggibile da tutti, scrivibile solo da root ───────────────────────
+    #
+    # Qui c'era solo `chmod -R a+rX`, e il commento sopra diceva già la cosa
+    # giusta: «scrivibile da nessuno che non sia amministratore». Il comando
+    # però non la faceva. `rsync -a` e `cp -a` CONSERVANO il proprietario:
+    # copiando da una cartella di Giacomo, l'installazione restava
+    # `giacomo:giacomo` — e `a+rX` aggiunge permessi, non ne toglie.
+    #
+    # Il conto di quanto costava, e non è teorico: qui dentro c'è
+    # `greeter.qml`, cioè il programma che disegna la casella della password e
+    # che gira PRIMA che qualcuno abbia fatto l'accesso. Un processo qualunque
+    # in esecuzione come Giacomo — un'estensione del browser, un pacchetto
+    # npm, un gioco — poteva riscriverlo e farsi scrivere dentro le password
+    # di tutti quelli che entrano in questo computer. Non serviva essere
+    # amministratore: bastava essere lui.
+    #
+    # `chown` prima, `chmod` poi, e `go-w` esplicito perché un file arrivato
+    # con il bit di scrittura di gruppo se lo terrebbe.
+    chown -R root:root "$DEST"
+    chmod -R a+rX "$DEST"
+    chmod -R go-w "$DEST"
+
+    grigio "Copio il demone"
+    mkdir -p /usr/local/lib/minerva
+    if [ -x "$ROOT/minervad/build/minervad" ]; then
+        install -m755 "$ROOT/minervad/build/minervad" /usr/local/lib/minerva/minervad
+    else
+        muori "Manca $ROOT/minervad/build/minervad — lancia prima scripts/minerva-compila"
+    fi
+
+    # ── E chi avvia la sessione ───────────────────────────────────────────
+    #
+    # Non avvia niente di suo: esegue il comando della sessione scelta e
+    # lascia scritto nel registro dell'utente che cosa ha avviato, con quale
+    # ambiente e quanto è durata.
+    #
+    # Serve perché una sessione che muore in un secondo non lasciava NIENTE, e
+    # da fuori è indistinguibile da una password sbagliata: nel journal del 20
+    # agosto 2026 si legge «session opened for giacomo» e un secondo dopo
+    # «session closed», tre volte di fila. La password era giusta tutte e tre.
+    #
+    # Va installato come eseguibile e leggibile da tutti: lo esegue l'utente
+    # che sta entrando, non `greeter`.
+    install -m755 "$ROOT/scripts/minerva-avvia-sessione" \
+        /usr/local/lib/minerva/minerva-avvia-sessione
+
+    # ── Il comando fisso che greetd lancia ────────────────────────────────
+    #
+    # Sempre, anche senza il nostro compositore: è lui che sceglie a ogni
+    # schermata, e che ripiega su Hyprland se il nostro non parte. Vedi in
+    # cima a scripts/minerva-greeter-avvio.
+    install -m755 "$ROOT/scripts/minerva-greeter-avvio" \
+        /usr/local/lib/minerva/minerva-greeter-avvio
+
+    # ── E il NOSTRO compositore, per disegnarla ──────────────────────────
+    #
+    # Dal 23 settembre 2026 la schermata di accesso non gira più su Hyprland
+    # ma su minerva-wayland. Il binario della sessione sta in casa di chi
+    # l'ha compilato (~/.local/bin), dove l'utente «greeter» non entra: se ne
+    # mette una copia qui, di root, per la stessa ragione di tutto il resto
+    # di questa funzione. È statico — il fork di wlroots è dentro — quindi
+    # non si porta dietro librerie da installare a parte.
+    #
+    # Se non c'è (mai compilato), si resta su Hyprland: vedi
+    # `COMANDO_GREETER` in `scrivi_config`. Una schermata di accesso che non
+    # parte è il guasto peggiore che questo file possa fare.
+    COMPOSITORE="$ROOT/compositore/build-native/minerva-wayland"
+    if [ -x "$COMPOSITORE" ]; then
+        install -m755 "$COMPOSITORE" /usr/local/lib/minerva/minerva-wayland
+        install -m755 "$ROOT/scripts/minerva-greeter-sessione" \
+            /usr/local/lib/minerva/minerva-greeter-sessione
+    else
+        rm -f /usr/local/lib/minerva/minerva-wayland \
+              /usr/local/lib/minerva/minerva-greeter-sessione
+        grigio "compositore non compilato: la schermata resta su Hyprland"
+    fi
+
+    # ── E QUESTO STESSO FILE ──────────────────────────────────────────────
+    #
+    # Perché il pannello Accesso lo lancia con `pkexec`, cioè come root. Fino
+    # al 23 agosto 2026 lo lanciava **dalla cartella del progetto**: root
+    # eseguiva uno script che sta in casa di Giacomo ed è scrivibile da
+    # Giacomo. Non è di per sé una scalata di privilegi — la password di
+    # amministratore la chiede lo stesso — ma è la forma classica del guaio:
+    # qualunque processo che gira come lui (un pacchetto npm, un'estensione
+    # del browser, un gioco) può riscrivere quello script e aspettare che
+    # qualcuno prema il pulsante.
+    #
+    # Con una copia in `/usr/local/bin`, root esegue codice di root. È lo
+    # stesso ragionamento con cui `greeter.qml` è finito in `/usr/local/share`.
+    install -m755 "$ROOT/scripts/minerva-greetd" /usr/local/bin/minerva-greetd
+
+    # ── E adesso lo si DIMOSTRA ───────────────────────────────────────────
+    #
+    # Non «l'abbiamo impostato», ma «l'abbiamo verificato». È la stessa
+    # differenza che c'era prima fra il commento e il comando: se un domani
+    # qualcuno cambia il modo di copiare, questo controllo se ne accorge:
+    # il primo che scrive è il difetto stesso.
+    INTRUSI=$(find "$DEST" /usr/local/lib/minerva /usr/local/bin/minerva-greetd \
+                   \( ! -user root -o -perm -g+w -o -perm -o+w \) \
+                   -print 2>/dev/null | head -5)
+    if [ -n "$INTRUSI" ]; then
+        rosso "Dentro l'installazione c'è roba scrivibile da chi non è root:"
+        printf '%s\n' "$INTRUSI" | sed 's/^/    /' >&2
+        muori "La schermata di accesso gira prima che qualcuno entri: il suo codice non può essere riscrivibile da un utente."
+    fi
+
+    verde "file installati (root:root, non scrivibili da altri)"
+}
+
+# ── La cartella scrivibile del greeter ─────────────────────────────────────
+#
+# Il demone scrive le sue impostazioni. Sotto /etc non può (ed è giusto), e
+# nella casa di `greeter` non conviene: il pacchetto greetd la crea senza
+# garanzie su dove. Se ne fa una apposta.
+prepara_stato() {
+    getent passwd greeter >/dev/null 2>&1 || muori \
+        "L'utente «greeter» non esiste: installa prima il pacchetto greetd."
+    mkdir -p "$STATO" "$STATO/cache"
+    chown -R greeter:greeter "$STATO"
+    chmod 700 "$STATO"
+
+    # ── Dove finisce quello che la schermata dice ──────────────────────────
+    #
+    # Da nessuna parte, fino al 5 agosto 2026. L'`exec-once` di Hyprland
+    # eredita un'uscita che è `/dev/null`: il demone e la shell del greeter ci
+    # scrivevano dentro tutto, errori compresi. Quando la schermata non ha
+    # fatto entrare non c'era una riga da leggere da nessuna parte — e la causa
+    # (una porta occupata) era scritta proprio in quelle righe buttate via.
+    #
+    # È la stessa lezione già imparata per il demone della sessione, e qui vale
+    # doppio: una sessione che non parte la si guarda da dentro un'altra
+    # sessione, un ACCESSO che non funziona no.
+    #
+    # In /var/log e non in $STATO perché $STATO è 700 di `greeter`: il registro
+    # di un accesso andato storto deve poterlo leggere chi sta cercando di
+    # capire, senza diventare amministratore.
+    # ── I registri del greeter non sono di tutti ──────────────────────────
+    #
+    # Erano 755 con i file a 644: leggibili da chiunque abbia un account su
+    # questo computer. Dentro ci finiscono i tentativi di accesso falliti
+    # («pam_authenticate: AUTH_ERR»), l'elenco delle sessioni installate e
+    # tutto quello che Hyprland e Qt decidono di scrivere — che non lo
+    # decidiamo noi, ed è il motivo vero per chiuderli: non si può sapere in
+    # anticipo cosa ci finirà dentro dopo un aggiornamento.
+    #
+    # 0750 di `greeter`: li leggono `greeter` e root. Da una sessione normale
+    # ci vuole `sudo`, e va bene così — il registro che serve tutti i giorni
+    # (quello di com'è andata la sessione) sta in casa tua e resta leggibile.
+    mkdir -p "$REGISTRI"
+    chown greeter:greeter "$REGISTRI"
+    chmod 750 "$REGISTRI"
+    # E i file già scritti, che conservano i permessi vecchi.
+    find "$REGISTRI" -type f -exec chmod 640 {} + 2>/dev/null || true
+}
+
+# ── Il servizio PAM del greeter ────────────────────────────────────────────
+#
+# greetd apre la sessione del PROCESSO della schermata con il servizio
+# `greetd-greeter`, separato da `greetd` che verifica la password di chi entra.
+# Il pacchetto Arch installa solo il secondo: senza il primo, appena la console
+# diventa attiva il greeter muore prima ancora di lanciare Hyprland.
+prepara_pam() {
+    [ -r /etc/pam.d/greetd-greeter ] && return 0
+
+    cat > /etc/pam.d/greetd-greeter <<'FINE_PAM'
+#%PAM-1.0
+# Scritto da minerva-greetd: fa entrare il greeter, non gli utenti.
+auth       required     pam_env.so
+auth       required     pam_permit.so
+account    required     pam_permit.so
+password   required     pam_deny.so
+session    required     pam_unix.so
+session    optional     pam_systemd.so
+FINE_PAM
+    chmod 644 /etc/pam.d/greetd-greeter
+    verde "servizio PAM del greeter installato"
+}
+
+# ── Le impostazioni che il greeter deve vedere ─────────────────────────────
+#
+# Stanno nel demone dell'utente, in casa sua, dove il greeter non entra. Si
+# copiano SOLO le chiavi `greeter.*`: tutto il resto sono fatti di chi ha la
+# sessione, e un greeter non ha motivo di conoscerli.
+copia_impostazioni() {
+    CHI="${SUDO_USER:-${PKEXEC_UID:-}}"
+    [ -n "${PKEXEC_UID:-}" ] && CHI=$(getent passwd "$PKEXEC_UID" | cut -d: -f1)
+    [ -n "$CHI" ] || return 0
+
+    CASA=$(getent passwd "$CHI" | cut -d: -f6)
+    SORGENTE="$CASA/.config/minerva/settings.json"
+    [ -r "$SORGENTE" ] || { grigio "nessuna impostazione da copiare"; return 0; }
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        grigio "python3 assente: la schermata userà i valori di fabbrica"
+        return 0
+    fi
+
+    # Il filtro sta in un file temporaneo e non in un heredoc dentro un `||`:
+    # mescolare i due rende la riga illeggibile e, come si è visto, nemmeno
+    # valida per la shell.
+    ESTRATTORE=$(mktemp)
+    cat > "$ESTRATTORE" <<'FINE_PYTHON'
+import json, sys
+try:
+    dentro = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(1)
+# Oltre alla sezione sua, la schermata prende tre cose dalla sessione, e
+# solo quelle: il METEO (dove, e se è acceso — lo mostra sotto l'ora), la
+# TASTIERA e il TOUCHPAD (la disposizione dei tasti e il tocco che clicca:
+# senza, sotto il nostro compositore la password si scriverebbe su una
+# tastiera americana). Niente altro esce dalla casa di chi accede.
+def parte(sezione, chiavi):
+    d = dentro.get(sezione, {})
+    return {k: d[k] for k in chiavi if k in d}
+fuori = {
+    "greeter": dentro.get("greeter", {}),
+    "weather": parte("weather", ["enabled", "name", "lat", "lon"]),
+    "input": parte("input", ["layout", "naturalScroll", "tapToClick",
+                             "disableWhileTyping", "sensitivity",
+                             "repeatRate", "repeatDelay"]),
+}
+json.dump(fuori, open(sys.argv[2], "w"), indent=2, ensure_ascii=False)
+FINE_PYTHON
+
+    if python3 "$ESTRATTORE" "$SORGENTE" "$STATO/settings.json" 2>/dev/null; then
+        chown greeter:greeter "$STATO/settings.json" 2>/dev/null || true
+        verde "impostazioni della schermata copiate"
+        copia_sfondo
+    else
+        grigio "impostazioni illeggibili: userà i valori di fabbrica"
+    fi
+    rm -f "$ESTRATTORE"
+}
+
+# ── Lo sfondo non è un percorso: è un FILE da portarsi dietro ──────────────
+#
+# Giacomo, 6 settembre 2026: «il cambio sfondo della login non fa comparire lo
+# sfondo ma nero, però il resto funziona».
+#
+# Il resto funziona perché sono numeri e interruttori, e un numero si copia.
+# Lo sfondo invece è un percorso, e quel percorso porta dentro `/home/giacomo`,
+# che è `drwx------`: il greeter gira come utente «greeter» e in casa di
+# nessuno entra. L'immagine non si legge, e resta il nero.
+#
+# È lo stesso muro del ritratto utente — e lì la cosa funziona proprio perché
+# il ritratto viene COPIATO in una cartella di sistema. Qui si fa uguale: si
+# porta il file accanto alle impostazioni, e nelle impostazioni si scrive dove
+# è finito.
+#
+# Il nome è sempre lo stesso a meno dell'estensione, così una scelta nuova
+# sostituisce la vecchia invece di accumularsi: qui dentro finirebbero le
+# fotografie di tutti i cambi d'idea.
+copia_sfondo() {
+    SCELTO=$(python3 - "$STATO/settings.json" <<'FINE_PYTHON' 2>/dev/null || true
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+print(str(d.get("greeter", {}).get("wallpaper", "") or ""))
+FINE_PYTHON
+    )
+
+    # Le copie di prima se ne vanno comunque: se lo sfondo è stato tolto, o
+    # scambiato con l'aurora, non deve restare in giro l'immagine di ieri.
+    rm -f "$STATO"/sfondo.* 2>/dev/null || true
+
+    [ -n "$SCELTO" ] || return 0
+    SCELTO=${SCELTO#file://}
+    if [ ! -r "$SCELTO" ]; then
+        grigio "lo sfondo della schermata non si legge: $SCELTO"
+        return 0
+    fi
+
+    EST=${SCELTO##*.}
+    case "$EST" in
+        jpg|jpeg|png|webp|bmp|avif|jxl) : ;;
+        *) EST=img ;;
+    esac
+    DENTRO="$STATO/sfondo.$EST"
+
+    if cp -- "$SCELTO" "$DENTRO" 2>/dev/null; then
+        chown greeter:greeter "$DENTRO" 2>/dev/null || true
+        chmod 644 "$DENTRO" 2>/dev/null || true
+        python3 - "$STATO/settings.json" "$DENTRO" <<'FINE_PYTHON' 2>/dev/null || true
+import json, sys
+via = sys.argv[1]
+d = json.load(open(via))
+d.setdefault("greeter", {})["wallpaper"] = sys.argv[2]
+json.dump(d, open(via, "w"), indent=2, ensure_ascii=False)
+FINE_PYTHON
+        chown greeter:greeter "$STATO/settings.json" 2>/dev/null || true
+        verde "sfondo della schermata copiato ($(basename "$SCELTO"))"
+    else
+        grigio "lo sfondo non si è potuto copiare: la schermata resterà scura"
+    fi
+}
+
+# ── La configurazione ──────────────────────────────────────────────────────
+
+scrivi_config() {
+    mkdir -p "$CONF"
+
+    # ── La tastiera deve essere quella giusta ──────────────────────────────
+    #
+    # Senza `kb_layout` Hyprland usa l'inglese: il campo password risponde,
+    # ma i caratteri non sono quelli stampati sui tasti. Il 5 agosto 2026
+    # questa differenza ha contribuito a una schermata che «non prendeva la
+    # tastiera»: la prendeva, ma parlava un'altra lingua. Si copia il layout
+    # dalla configurazione della sessione, così alla schermata di accesso i
+    # tasti producono gli stessi caratteri che produrranno dopo.
+    #
+    # ── Da DOVE si copia, e il difetto che c'era ──────────────────────────
+    #
+    # Si leggeva «kb_layout» da «config/hyprland.conf». Quel file non esiste
+    # più dal distacco da Hyprland (2 settembre 2026), la riga tornava vuota
+    # e si ripiegava su «us»: la schermata di accesso ha avuto la tastiera
+    # AMERICANA per tre settimane. Le lettere coincidono, simboli e accenti
+    # no — una password con una «è» o una «@» si scriveva sbagliata, e
+    # l'errore sembrava una password sbagliata. Trovato il 23 settembre 2026.
+    #
+    # Adesso: la disposizione scelta nelle impostazioni (copiata poco sopra
+    # in «$STATO/settings.json»), poi quella del sistema, e «us» solo se
+    # nessuno dei due dice niente.
+    LAYOUT=""
+    if [ -r "$STATO/settings.json" ] && command -v python3 >/dev/null 2>&1; then
+        LAYOUT=$(python3 -c 'import json,sys
+try: print(json.load(open(sys.argv[1])).get("input", {}).get("layout", ""))
+except Exception: pass' "$STATO/settings.json" 2>/dev/null)
+    fi
+    if [ -z "$LAYOUT" ] && command -v localectl >/dev/null 2>&1; then
+        LAYOUT=$(localectl status 2>/dev/null | sed -n 's/^[[:space:]]*X11 Layout:[[:space:]]*\([^,[:space:]]*\).*/\1/p' | head -1)
+    fi
+    # Solo lettere minuscole: finisce dentro un file di configurazione e
+    # dentro una riga di comando, e una disposizione non ha altro.
+    LAYOUT=$(printf '%s' "$LAYOUT" | tr -cd 'a-z')
+    [ -n "$LAYOUT" ] || LAYOUT=us
+
+    # La sessione del greeter: un Hyprland minimo che avvia il demone e la
+    # schermata, e si chiude quando la schermata finisce.
+    #
+    # ── ATTENZIONE: qui dentro NON si scrivono backtick ────────────────────
+    #
+    # Il delimitatore è `EOF` senza virgolette, e deve restarlo: dentro ci sono
+    # `$DEST`, `$STATO`, `$LAYOUT`, `$SOCKET_GREETER` e `$REGISTRI`, che vanno
+    # sostituiti mentre si scrive il file.
+    #
+    # Ma «senza virgolette» vale anche per i BACKTICK, e un documento-qui non
+    # ha commenti: le righe che cominciano con `#` sono testo per il file che
+    # si sta scrivendo, non per la shell. Un backtick in una di quelle righe è
+    # una sostituzione di comando, **eseguita da root** durante l'installazione.
+    #
+    # Il 23 agosto 2026 è successo davvero: quattro nomi citati fra backtick in
+    # commenti miei — `XDG_SESSION_ID`, il nome di uno script, `greeter`,
+    # `//.cache` — sono stati eseguiti come comandi, e il loro posto nel file
+    # scritto è rimasto vuoto. Ha stampato quattro «comando non trovato» in
+    # mezzo a un'installazione riuscita.
+    #
+    # Nelle citazioni dentro il documento-qui si usano le virgolette basse.
+    # Una guardia in `scripts/prove.sh` lo controlla.
+    cat > "$CONF/minerva-greeter.conf" <<EOF
+# Scritto da minerva-greetd. Le modifiche a mano vengono sovrascritte.
+#
+# È un Hyprland ridotto all'osso: serve solo a dare una superficie su cui
+# disegnare alla schermata di accesso. Niente scorciatoie, niente regole,
+# niente animazioni — è aperto per pochi secondi.
+
+monitor = , preferred, auto, 1
+
+env = MINERVA_ROOT,$DEST
+env = MINERVA_CONFIG_DIR,$STATO
+# Il nome di questa «sessione». Il greeter non è una sessione di logind come le
+# altre — «XDG_SESSION_ID» lì può non esserci — e senza un nome ricadrebbe su
+# «unica», cioè sullo stesso posto in cui scrive la sessione dell'utente. Con
+# un nome suo, demone e schermata del greeter si trovano fra loro e nessun
+# altro. Vedi «scripts/minerva-posti.sh».
+env = MINERVA_SESSIONE,greeter
+env = MINERVA_IPC_SOCKET,$SOCKET_GREETER
+env = XDG_CURRENT_DESKTOP,Minerva:Hyprland
+# ── Dove Qt tiene gli shader già compilati ─────────────────────────────────
+#
+# L'utente «greeter» non ha una casa, quindi Qt provava a scrivere in «//.cache»
+# e si arrendeva: «Failed to create //.cache for shader cache (Permesso negato)
+# ---disabling». Senza quella cache lo shader dell'aurora si ricompila a OGNI
+# accesso, e la schermata resta scura qualche decimo di secondo in più proprio
+# nell'istante in cui la si guarda per la prima volta.
+env = XDG_CACHE_HOME,$STATO/cache
+# Qui più che altrove: un riquadro «Quickshell: Config reloaded» sulla
+# schermata di accesso è il nome di un'altra cosa davanti a chi entra, e non
+# si può nemmeno chiudere senza un mouse che ancora non serve a niente.
+env = QS_NO_RELOAD_POPUP,1
+
+# ── I cartelli di Hyprland non stanno su una schermata di accesso ──────────
+#
+# Hyprland mostra dei riquadri d'avviso sopra ogni cosa: le novità della
+# versione, l'invito a donare, il controllo sulle variabili XDG. Nella sessione
+# li avevamo già spenti; qui no, e comparivano sulla PRIMA cosa che si vede di
+# questo computer — sopra un campo password, in inglese, senza modo di
+# chiuderli perché il mouse ancora non serve a niente.
+ecosystem {
+    no_update_news = true
+    no_donation_nag = true
+}
+
+misc {
+    disable_hyprland_logo = true
+    disable_splash_rendering = true
+    force_default_wallpaper = 0
+
+    # «XDG_CURRENT_DESKTOP sembra gestito esternamente»: lo impostiamo noi,
+    # qui sotto, ed è giusto. Hyprland non sa distinguere «scritto da chi sa
+    # cosa fa» da «avanzo di un'altra sessione».
+    disable_xdg_env_checks = true
+
+    # «Hyprland is being launched without start-hyprland»: una riga ROSSA in
+    # cima alla schermata di accesso. Lanciato da greetd col comando di una
+    # volta non passa da start-hyprland, e questo file si rilegge a ogni
+    # schermata — a differenza del comando, che greetd legge solo all'avvio
+    # del computer. Visto da Giacomo il 23 settembre 2026.
+    disable_watchdog_warning = true
+}
+
+animations { enabled = false }
+decoration { blur { enabled = false } }
+
+# Il touchpad deve rispondere anche al tocco: su molti portatili la pressione
+# fisica del tasto è dura, e una schermata che sembra ignorare il dito sembra
+# rotta anche quando non lo è.
+input {
+    follow_mouse = 1
+    kb_layout = $LAYOUT
+    touchpad {
+        natural_scroll = true
+        tap-to-click = true
+    }
+}
+
+# Il demone per primo: la schermata gli chiede chi può entrare e in cosa.
+# L'uscita finisce in un file: vedi $REGISTRI. Senza, un accesso che non
+# funziona non lascia una riga da leggere da nessuna parte.
+exec-once = sh -c '/usr/local/lib/minerva/minervad >> $REGISTRI/demone.log 2>&1'
+
+# E poi la schermata. Quando finisce — cioè quando greetd ha detto di sì —
+# si chiude anche il compositore: la sessione vera parte SOLO dopo che tutto
+# il greeter è terminato.
+exec-once = sh -c 'qs -p $DEST/minerva-shell/greeter.qml >> $REGISTRI/schermata.log 2>&1; hyprctl dispatch exit'
+EOF
+
+    # La configurazione di greetd. `vt` si passa da fuori perché `prova` usa
+    # una console diversa da quella vera.
+    VT="${1:-2}"
+
+    # ── E se la console la si cambia da soli ───────────────────────────────
+    #
+    # `switch` è vero per definizione in greetd, e vuol dire: appena parto,
+    # porto lo schermo sulla MIA console. Per l'accesso vero è giusto — è tutto
+    # quello che c'è. Per una prova no: la prova ha promesso di non toccare la
+    # sessione di chi sta lavorando, e invece se la prende. È successo il 5
+    # agosto 2026: la schermata di prova è comparsa da sola sopra il lavoro di
+    # Giacomo, e se fosse rimasta bloccata l'unica via d'uscita sarebbe stata
+    # una console che lui aveva già detto di non riuscire a cambiare.
+    #
+    # Quindi: la prova resta dov'è e si va a guardarla; l'accesso vero si
+    # prende lo schermo, perché è il suo mestiere.
+    CAMBIA="${2:-true}"
+
+    AUTOLOGIN=""
+    if [ -r "$STATO/settings.json" ] && command -v python3 >/dev/null 2>&1; then
+        LETTORE=$(mktemp)
+        cat > "$LETTORE" <<'FINE_PYTHON'
+import json, sys
+try:
+    g = json.load(open(sys.argv[1])).get("greeter", {})
+except Exception:
+    sys.exit(0)
+if g.get("autologin") is True and g.get("user"):
+    print("%s\t%s" % (g["user"], g.get("session", "minerva")))
+FINE_PYTHON
+        AUTOLOGIN=$(python3 "$LETTORE" "$STATO/settings.json" 2>/dev/null || true)
+        rm -f "$LETTORE"
+    fi
+
+    # ── Il comando dell'accesso automatico ─────────────────────────────────
+    #
+    # Si risolve QUI, mentre si scrive il file, e non a colpi di `$(...)`
+    # dentro la riga del TOML. La versione precedente scriveva:
+    #
+    #     command = "sh -lc "$(grep -m1 '^Exec=' …)""
+    #
+    # cioè virgolette dentro virgolette: **non è TOML valido**. greetd
+    # rifiuta il file intero e non parte — e siccome l'accesso automatico si
+    # accende da una casella nelle Impostazioni, il difetto sarebbe comparso
+    # al riavvio successivo, con la schermata di accesso che non esiste più e
+    # nessuno a spiegare perché.
+    #
+    # Si guarda in tutte e due le cartelle delle sessioni: chi sceglie
+    # l'accesso automatico su una sessione X11 ha lo stesso diritto di chi lo
+    # sceglie su Wayland.
+    # ── L'ambiente vale anche per l'accesso automatico ─────────────────────
+    #
+    # `[initial_session]` di greetd non ha un campo `env`: la schermata di
+    # accesso può passare le variabili, questa strada no. Quindi fino al 23
+    # agosto 2026 chi accendeva l'accesso automatico su Plasma entrava in una
+    # sessione che non sapeva di essere KDE — lo stesso difetto che sulla
+    # strada interattiva avevamo chiuso il 17, e che qui era rimasto intero.
+    #
+    # Si scrivono davanti al comando con `env`, che è l'unico posto rimasto.
+    # E si passa dall'avviatore, così anche questa strada lascia scritto com'è
+    # andata: una sessione che muore in un secondo con l'accesso automatico
+    # acceso è ANCORA più difficile da capire, perché non c'è nemmeno una
+    # password da sospettare.
+    COMANDO_AUTO=""
+    if [ -n "$AUTOLOGIN" ]; then
+        SESSIONE=$(printf '%s' "$AUTOLOGIN" | cut -f2)
+        for D in /usr/share/wayland-sessions /usr/share/xsessions; do
+            [ -r "$D/$SESSIONE.desktop" ] || continue
+            COMANDO_AUTO=$(sed -n 's/^Exec=//p' "$D/$SESSIONE.desktop" | head -1)
+            NOMI=$(sed -n 's/^DesktopNames=//p' "$D/$SESSIONE.desktop" | head -1)
+            case "$D" in
+                *xsessions) TIPO_AUTO=x11 ;;
+                *)          TIPO_AUTO=wayland ;;
+            esac
+            break
+        done
+        if [ -z "$COMANDO_AUTO" ]; then
+            rosso "sessione «$SESSIONE» non trovata: accesso automatico ignorato"
+            AUTOLOGIN=""
+        else
+            # Da `DesktopNames` a `XDG_CURRENT_DESKTOP`: punto e virgola nel
+            # file, DUE PUNTI nella variabile. Passandolo com'è scritto,
+            # «Minerva;Hyprland;» sarebbe un nome solo, che non esiste.
+            [ -n "$NOMI" ] || NOMI="$SESSIONE"
+            NOMI=$(printf '%s' "$NOMI" | tr ';' ':' | sed 's/:*$//')
+
+            AMBIENTE="env XDG_SESSION_DESKTOP=$SESSIONE XDG_SESSION_CLASS=user"
+            AMBIENTE="$AMBIENTE XDG_SESSION_TYPE=$TIPO_AUTO"
+            AMBIENTE="$AMBIENTE XDG_CURRENT_DESKTOP=$NOMI"
+
+            if [ -x /usr/local/lib/minerva/minerva-avvia-sessione ]; then
+                COMANDO_AUTO="/usr/local/lib/minerva/minerva-avvia-sessione $AMBIENTE $COMANDO_AUTO"
+            else
+                COMANDO_AUTO="$AMBIENTE $COMANDO_AUTO"
+            fi
+
+            # Le virgolette dentro il comando romperebbero comunque il TOML.
+            # Si scappano invece di sperare che non ce ne siano.
+            COMANDO_AUTO=$(printf '%s' "$COMANDO_AUTO" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        fi
+    fi
+
+    {
+        printf '# Scritto da minerva-greetd. Le modifiche a mano vengono sovrascritte.\n\n'
+        printf '[terminal]\nvt = %s\nswitch = %s\n\n' "$VT" "$CAMBIA"
+        printf '[default_session]\n'
+        # Anche il compositore ha il suo registro. Il 5 agosto 2026 Hyprland
+        # del greeter non lasciò una riga da nessuna parte: se non trovava i
+        # device di input, se la configurazione non gli piaceva, lo sapeva solo
+        # lui. Le virgolette singole dentro la stringa TOML sono lecite.
+        #
+        # ── Un comando FISSO, e la scelta fatta a ogni schermata ───────────
+        #
+        # greetd legge questo file solo quando parte: un comando che cambia
+        # qui dentro vale dal riavvio successivo del computer, non dal
+        # prossimo accesso. Il 23 settembre 2026 la schermata è rimasta su
+        # Hyprland per tre accessi dopo l'installazione che la spostava.
+        # Adesso il comando è sempre lo stesso, e quello che cambia sta in
+        # minerva-greeter.env, che il lanciatore rilegge ogni volta. Il
+        # lanciatore prova il nostro compositore e, se non parte, ripiega su
+        # Hyprland scrivendo perché (scripts/minerva-greeter-avvio).
+        {
+            printf '# Scritto da minerva-greetd. Lo rilegge minerva-greeter-avvio a ogni schermata.\n'
+            printf 'LAYOUT=%s\n' "$LAYOUT"
+            if [ "${MINERVA_GREETER_HYPRLAND:-0}" = 1 ]; then
+                printf 'FORZA_HYPRLAND=1\n'
+            else
+                printf 'FORZA_HYPRLAND=0\n'
+            fi
+        } > "$CONF/minerva-greeter.env"
+        chmod 644 "$CONF/minerva-greeter.env"
+        COMANDO_GREETER="/usr/local/lib/minerva/minerva-greeter-avvio"
+        printf 'command = "%s"\n' "$COMANDO_GREETER"
+        printf 'user = "greeter"\n'
+
+        if [ -n "$AUTOLOGIN" ] && [ -n "$COMANDO_AUTO" ]; then
+            UTENTE=$(printf '%s' "$AUTOLOGIN" | cut -f1)
+            printf '\n# Accesso automatico: chi accende il computer entra, chiunque sia.\n'
+            printf '[initial_session]\n'
+            printf 'command = "%s"\n' "$COMANDO_AUTO"
+            printf 'user = "%s"\n' "$UTENTE"
+        fi
+    } > "$CONF/config.toml"
+
+    chmod 644 "$CONF/config.toml" "$CONF/minerva-greeter.conf"
+    verde "configurazione scritta in $CONF (console $VT)"
+    [ -n "$AUTOLOGIN" ] && grigio "accesso automatico ACCESO per $(printf '%s' "$AUTOLOGIN" | cut -f1)"
+    return 0
+}
+
+# ── Le azioni ──────────────────────────────────────────────────────────────
+
+case "$AZIONE" in
+    installa)
+        command -v greetd >/dev/null 2>&1 || muori \
+            "greetd non è installato. Prima: pacman -S greetd"
+        prepara_stato
+        prepara_pam
+        installa_file
+        copia_impostazioni
+        scrivi_config 2
+        printf '\n'
+        grigio "Non è cambiato niente nel modo in cui entri."
+        grigio "Per guardarla senza rischi:  minerva-greetd prova"
+        ;;
+
+    configura)
+        prepara_stato
+        prepara_pam
+        copia_impostazioni
+        scrivi_config 2
+        systemctl is-active greetd >/dev/null 2>&1 && \
+            grigio "greetd è attivo: la nuova configurazione vale dal prossimo accesso"
+        ;;
+
+    prova)
+        command -v greetd >/dev/null 2>&1 || muori "greetd non è installato."
+        [ -r "$CONF/minerva-greeter.conf" ] || muori \
+            "Non ancora installata. Prima: minerva-greetd installa"
+        prepara_pam
+
+        # ── «Per guardarla senza rischi» era falso ────────────────────────
+        #
+        # 27 agosto 2026, mattina. Giacomo lancia questa prova dalla sua
+        # scrivania. Lo schermo diventa nero e resta nero: entra da tty2 e
+        # trova greetd fermo, la sessione morta, e nel giornale un `Stopped`
+        # senza nessun `Started` dopo.
+        #
+        # La riga colpevole è venti righe più in giù: `systemctl stop greetd`.
+        # Se sei entrato DALLA schermata di accesso, la tua sessione è quella
+        # che greetd ha avviato — fermarlo la spegne. E spegnendola spegne
+        # anche il terminale in cui gira questo script, che quindi non arriva
+        # mai al `systemctl start greetd` che avrebbe rimesso tutto a posto.
+        # Non un difetto della schermata: la prova che si suicida a metà e
+        # lascia il computer senza modo di entrare.
+        #
+        # Si riconosce da `Service=greetd`: è il nome del servizio PAM con cui
+        # greetd apre la sessione, e nessun altro lo usa.
+        VITTIME=""
+        for S in $(loginctl list-sessions --no-legend 2>/dev/null | awk '{print $1}'); do
+            [ "$(loginctl show-session "$S" -p Service --value 2>/dev/null)" = greetd ] \
+                || continue
+            [ "$(loginctl show-session "$S" -p State --value 2>/dev/null)" = closing ] \
+                && continue
+            CHI=$(loginctl show-session "$S" -p Name --value 2>/dev/null)
+            [ "$CHI" = greeter ] && continue
+            VITTIME="$VITTIME $CHI(sessione $S)"
+        done
+
+        if [ -n "$VITTIME" ] && [ "${2:-}" != "--anche-se-spegne-la-scrivania" ]; then
+            rosso "Questa prova ferma greetd, e greetd tiene in piedi:$VITTIME"
+            grigio "Spegnerlo chiude quella scrivania — e se stai leggendo"
+            grigio "questo DA lì, chiude anche il terminale in cui gira la"
+            grigio "prova: resterebbe greetd fermo e nessun modo di entrare."
+            grigio ""
+            grigio "Tre strade, in ordine di quanto costano:"
+            grigio "  · la catena intera senza toccare la sessione:"
+            grigio "        python3 scripts/prova-accesso.py"
+            grigio "  · la schermata da sola, in una finestra:"
+            grigio "        qs -p minerva-shell/prove-greeter.qml"
+            grigio "  · quella vera: salva il lavoro e riavvia."
+            grigio ""
+            grigio "Se la scrivania puoi perderla e NON stai lanciando questa"
+            grigio "prova da dentro di lei (per esempio sei su una console con"
+            grigio "Ctrl+Alt+Fn+F3), ripeti con:"
+            grigio "        minerva-greetd prova --anche-se-spegne-la-scrivania"
+            exit 1
+        fi
+
+        # Una console che non è quella in uso.
+        #
+        # NON `fgconsole`: quel comando vuole una console vera sotto di sé e
+        # fallisce quando lo si lancia da un terminale grafico — cioè sempre,
+        # in questa situazione. Cadeva sul ripiego «2», che qui è giusto per
+        # caso: se qualcuno lanciasse la prova da una sessione sulla tty3, la
+        # prova gli partirebbe SOTTO I PIEDI, sulla console che sta usando.
+        #
+        # `/sys/class/tty/tty0/active` è il nome della console in primo piano
+        # e lo legge chiunque, senza tty e senza permessi.
+        ORA=$(sed 's/^tty//' /sys/class/tty/tty0/active 2>/dev/null)
+        case "$ORA" in
+            ''|*[!0-9]*) ORA=2 ;;
+        esac
+
+        # ── E NON una console su cui systemd tiene un «login:» ─────────────
+        #
+        # Qui c'era `PROVA = 3`, ed è costato una prova che sembrava fallita e
+        # non lo era. Il 16 agosto 2026 Giacomo ha scritto la password giusta e
+        # si è ritrovato «una schermata nera di login da terminale». Nel
+        # giornale di sistema, allo stesso secondo in cui greetd apriva la
+        # sessione:
+        #
+        #     greetd: pam_unix(greetd:session): session opened for user giacomo
+        #     systemd: Started Getty on tty3.
+        #
+        # systemd tiene un `getty` pronto su ogni console da 1 a `NAutoVTs`
+        # (sei, di serie): appena il greeter libera la sua, il getty la
+        # riprende — e la sessione appena autorizzata trova la console già di
+        # qualcun altro. Non parte, non scrive niente da nessuna parte, e a
+        # schermo resta il «login:» del getty.
+        #
+        # Non è un difetto della schermata di accesso: è la prova che stava
+        # correndo in casa d'altri. Si va quindi OLTRE `NAutoVTs`, dove
+        # systemd non mette niente. (Con `attiva` il problema non esiste: lì
+        # greetd possiede la console dall'avvio e non la lascia mai libera.)
+        AUTOVT=$(sed -n 's/^[[:space:]]*NAutoVTs[[:space:]]*=[[:space:]]*\([0-9]*\).*/\1/p' \
+                 /etc/systemd/logind.conf /etc/systemd/logind.conf.d/*.conf \
+                 2>/dev/null | tail -1)
+        case "$AUTOVT" in
+            ''|*[!0-9]*) AUTOVT=6 ;;
+        esac
+        PROVA=$(( AUTOVT + 1 ))
+        [ "$PROVA" = "$ORA" ] && PROVA=$(( PROVA + 1 ))
+
+        # E se per qualche ragione lì ci fosse comunque un getty, si sale
+        # ancora: meglio una console strana che una prova che mente.
+        while systemctl is-active "getty@tty$PROVA.service" >/dev/null 2>&1; do
+            PROVA=$(( PROVA + 1 ))
+            [ "$PROVA" -gt 12 ] && muori \
+                "Non trovo una console libera da getty fra la 7 e la 12."
+        done
+        grigio "console di prova: $PROVA (fuori dalle $AUTOVT che systemd sorveglia)"
+
+        # Una prova precedente può essere rimasta attiva e ferma: `start` su un
+        # servizio già in piedi è un no-op, e la nuova configurazione resterebbe
+        # solo su disco. Si riparte puliti.
+        systemctl stop greetd >/dev/null 2>&1 || true
+
+        scrivi_config "$PROVA" false
+        grigio "Avvio greetd sulla console $PROVA (tu sei sulla $ORA)"
+        INIZIO=$(date '+%Y-%m-%d %H:%M:%S')
+        systemctl start greetd || muori "greetd non è partito: journalctl -u greetd"
+
+        # ── Si è davvero accesa? ───────────────────────────────────────────
+        #
+        # Con `switch = false` greetd NON fa partire niente finché la sua
+        # console non diventa attiva: è scritto nella pagina di manuale, e il
+        # comportamento osservato l'8 agosto 2026 lo conferma. La prova deve
+        # quindi aspettare che chi guarda passi alla console di prova, invece di
+        # scambiare quell'attesa per una schermata rotta.
+        ATTESA=10
+        if [ "$ORA" != "$PROVA" ]; then
+            ATTESA=120
+            printf '\n'
+            grigio "greetd aspetta che la console $PROVA diventi attiva."
+            grigio "Passa ora con Ctrl+Alt+F$PROVA, poi torna qui con Ctrl+Alt+F$ORA."
+            # Su parecchi portatili — questo compreso — la riga dei tasti F
+            # manda le funzioni speciali e non F1..F12: lì la combinazione va
+            # premuta CON Fn, altrimenti non succede niente e sembra che il
+            # cambio console non funzioni. Misurato il 10 agosto 2026: senza
+            # Fn, Ctrl+Alt+F3 su questa tastiera è Ctrl+Alt+«luminosità giù».
+            grigio "Se non cambia nulla, tieni premuto anche Fn: Fn+Ctrl+Alt+F$PROVA."
+            grigio "Attendo al massimo $ATTESA secondi."
+        fi
+
+        ACCESA=""
+        VISTA=""
+        N=0
+        while [ "$N" -lt "$ATTESA" ]; do
+            if [ "$(cat /sys/class/tty/tty0/active 2>/dev/null)" = "tty$PROVA" ]; then
+                VISTA=si
+            fi
+            if journalctl -u greetd --since "$INIZIO" --no-pager 2>/dev/null \
+                    | grep -q "session opened for user greeter"; then
+                ACCESA=si
+                break
+            fi
+            N=$((N + 1))
+            sleep 1
+        done
+
+        if [ -n "$ACCESA" ]; then
+            verde "la sessione del greeter è partita"
+        else
+            if [ -z "$VISTA" ]; then
+                rosso "la console $PROVA non è mai diventata attiva: greetd è fermo per switch=false."
+                grigio "Non è un errore della schermata: è il modo in cui la prova evita di prendersi lo schermo."
+                muori "Prova non eseguita: passa a Ctrl+Alt+F$PROVA, oppure cambia console con chvt."
+            fi
+
+            rosso "greetd è attivo ma la schermata NON è partita entro $ATTESA secondi."
+            grigio "Ultimi messaggi di greetd:"
+            journalctl -u greetd --since "2 min ago" --no-pager 2>&1 | tail -15 \
+                | sed 's/^/    /'
+            grigio "Se Hyprland è partito ma senza input, le ragioni sono in:"
+            grigio "  $REGISTRI/compositore.log"
+            muori "Prova NON riuscita: indaga prima di guardare la console $PROVA."
+        fi
+
+        printf '\n'
+        verde "Guardala con  Ctrl+Alt+F$PROVA   (o Fn+Ctrl+Alt+F$PROVA)"
+        grigio "Torna qui con Ctrl+Alt+F$ORA   (o Fn+Ctrl+Alt+F$ORA)"
+        grigio "Se non entra, leggi:  $REGISTRI/schermata.log, demone.log e compositore.log"
+        grigio "Quando hai finito:  sudo systemctl stop greetd"
+        grigio "NON è ancora il tuo gestore di accessi: al riavvio entri come sempre."
+        ;;
+
+    attiva)
+        command -v greetd >/dev/null 2>&1 || muori "greetd non è installato."
+        [ -r "$CONF/minerva-greeter.conf" ] || muori \
+            "Non ancora installata. Prima: minerva-greetd installa"
+
+        c_e_una_via_di_ritorno || muori \
+"NAutoVTs è a 0 in /etc/systemd/logind.conf: non esiste nessuna console
+   testuale di riserva. Se l'accesso non funzionasse non ci sarebbe modo di
+   rimettere le cose a posto. Rimettilo a 6 prima di procedere."
+
+        PRIMA=$(gestore_attuale)
+        if [ -n "$PRIMA" ] && [ "$PRIMA" != "greetd.service" ]; then
+            printf '%s\n' "$PRIMA" > "$SEGNO"
+            grigio "gestore precedente: $PRIMA (segnato, non disinstallato)"
+            systemctl disable "$PRIMA" >/dev/null 2>&1 || true
+        fi
+
+        scrivi_config 2
+        systemctl enable greetd >/dev/null 2>&1
+        verde "greetd sarà il gestore di accessi dal prossimo riavvio"
+        printf '\n'
+        grigio "Se qualcosa non va: Ctrl+Alt+F3, accedi, e poi"
+        grigio "  sudo minerva-greetd indietro"
+        ;;
+
+    gestore)
+        # ── Scegliere chi ti apre la porta ─────────────────────────────────
+        #
+        # Giacomo, 23 agosto 2026: «voglio un'impostazione per impostare il
+        # login manager predefinito, nel caso in cui io voglia quello di kde o
+        # cosmic o gnome o altri».
+        #
+        # Vale anche come via di ritorno: finora, se la nostra schermata non
+        # entrava, l'unico modo di tornare indietro era ricordarsi
+        # «minerva-greetd indietro» da una console testuale.
+        VOLUTO="${2:-}"
+        [ -n "$VOLUTO" ] || muori "Uso: minerva-greetd gestore <unità.service>"
+        nome_unita_lecito "$VOLUTO" || muori \
+            "«$VOLUTO» non è un nome di unità systemd accettabile."
+        e_un_gestore "$VOLUTO" || muori \
+"«$VOLUTO» non è un gestore di accessi: la sua unità non dichiara
+   Alias=display-manager.service. Da qui si accendono solo quelli, apposta."
+
+        c_e_una_via_di_ritorno || muori \
+"NAutoVTs è a 0 in /etc/systemd/logind.conf: non esiste nessuna console
+   testuale di riserva. Se l'accesso non funzionasse non ci sarebbe modo di
+   rimettere le cose a posto. Rimettilo a 6 prima di procedere."
+
+        PRIMA=$(gestore_attuale)
+        if [ "$PRIMA" = "$VOLUTO" ]; then
+            verde "«$VOLUTO» è già il gestore di accessi"
+            exit 0
+        fi
+
+        # Il nostro ha bisogno di una configurazione che gli altri non hanno.
+        # Accenderlo senza sarebbe una schermata che non parte, cioè
+        # esattamente il guaio da cui questa azione dovrebbe salvare.
+        if [ "$VOLUTO" = "greetd.service" ]; then
+            [ -r "$CONF/minerva-greeter.conf" ] || muori \
+                "Minerva non è ancora installata. Prima: minerva-greetd installa"
+            scrivi_config 2
+        fi
+
+        if [ -n "$PRIMA" ]; then
+            printf '%s\n' "$PRIMA" > "$SEGNO"
+            systemctl disable "$PRIMA" >/dev/null 2>&1 || true
+            grigio "spento $PRIMA (segnato, non disinstallato)"
+        fi
+
+        if systemctl enable "$VOLUTO" >/dev/null 2>&1; then
+            verde "«$VOLUTO» sarà il gestore di accessi dal prossimo riavvio"
+        else
+            # Non si lascia il computer senza nessuno che apra la porta: si
+            # rimette quello di prima e si dice cosa è successo.
+            [ -n "$PRIMA" ] && systemctl enable "$PRIMA" >/dev/null 2>&1
+            muori "non sono riuscito ad accendere «$VOLUTO». Ho rimesso $PRIMA."
+        fi
+        printf '\n'
+        grigio "Se qualcosa non va: Ctrl+Alt+F3 (o Fn+Ctrl+Alt+F3), accedi, e poi"
+        grigio "  sudo minerva-greetd indietro"
+        ;;
+
+    indietro)
+        systemctl disable greetd >/dev/null 2>&1 || true
+        systemctl stop greetd >/dev/null 2>&1 || true
+
+        if [ -r "$SEGNO" ]; then
+            PRIMA=$(cat "$SEGNO")
+            systemctl enable "$PRIMA" >/dev/null 2>&1 && \
+                verde "rimesso $PRIMA" || \
+                rosso "non sono riuscito a riattivare $PRIMA — fallo a mano"
+        else
+            rosso "non so quale fosse il gestore precedente."
+            grigio "Riattivalo a mano, per esempio: systemctl enable plasmalogin"
+        fi
+        ;;
+
+    # ── Solo l'aspetto, e in un secondo ──────────────────────────────────
+    #
+    # La schermata di accesso tiene una copia SUA delle impostazioni, perché
+    # quando è a video la cartella personale di chi entra è ancora chiusa a
+    # chiave. Il prezzo è che ogni ritocco — lo sfondo, la sfocatura, il velo —
+    # arriva lì solo quando qualcuno gliela riporta.
+    #
+    # Finora l'unico modo era `installa`, che rifà tutto: la copia della shell,
+    # il demone, la configurazione di greetd, PAM. Per spostare una sfocatura
+    # di dieci pixel è sproporzionato, e sproporzionato vuol dire che uno smette
+    # di ritoccarla.
+    #
+    # Giacomo, 6 settembre 2026, dopo aver rifatto l'accesso: «lo sfondo c'è ma
+    # ha un effetto blur pesante e quindi si distingue poco». Per provare un
+    # altro valore gli sarebbe toccato reinstallare tutto un'altra volta.
+    #
+    # Questa azione copia le impostazioni e lo sfondo, e basta. Non tocca
+    # niente di ciò che decide COME si entra: se sbaglia, si sbaglia un colore.
+    aspetto)
+        [ -d "$STATO" ] || muori \
+            "la schermata di accesso non è ancora installata: prima «installa»"
+        copia_impostazioni
+        printf '\n'
+        grigio "Si vede al prossimo accesso. Per guardarla adesso:"
+        grigio "    minerva-greetd prova"
+        ;;
+
+    *)
+        sed -n '2,10p' "$SELF" | sed 's/^# \{0,1\}//'
+        ;;
+esac

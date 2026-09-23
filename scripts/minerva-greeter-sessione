@@ -1,0 +1,61 @@
+#!/bin/sh
+# minerva-greeter-sessione — Quello che gira DENTRO il compositore della
+# schermata di accesso: il demone, e la schermata.
+#
+# ── Perché esiste ──────────────────────────────────────────────────────────
+#
+# Fino al 23 settembre 2026 la schermata di accesso era l'ultimo posto in cui
+# girava Hyprland: un Hyprland ridotto all'osso, con due righe `exec-once`
+# (il demone, la schermata) scritte in un file di configurazione suo. Adesso
+# la disegna il nostro compositore, che non legge file di configurazione: si
+# lancia con UN programma da avviare, e con `MINERVA_ESCI_COL_FIGLIO=1` si
+# chiude quando quel programma finisce. Questo è quel programma.
+#
+# L'ordine conta, ed è quello di prima: il demone per primo (la schermata gli
+# chiede chi può entrare e in cosa), poi la schermata. Quando la schermata
+# esce — cioè quando greetd ha detto di sì — si ferma il demone e si esce: la
+# sessione vera parte SOLO dopo che tutto il greeter è terminato.
+#
+# Lo installa `minerva-greetd` in /usr/local/lib/minerva, di proprietà di
+# root: è codice che gira prima di qualunque accesso, e nessun utente deve
+# poterlo riscrivere (vedi il blocco «Leggibile da tutti, scrivibile solo da
+# root» in `minerva-greetd`).
+set -u
+
+DEST="${MINERVA_ROOT:-/usr/local/share/minerva}"
+STATO="${MINERVA_CONFIG_DIR:-/var/lib/minerva-greeter}"
+REGISTRI="${MINERVA_REGISTRI:-/var/log/minerva-greeter}"
+DEMONE="${MINERVA_DEMONE:-/usr/local/lib/minerva/minervad}"
+
+export MINERVA_ROOT="$DEST"
+export MINERVA_CONFIG_DIR="$STATO"
+# Un nome suo: il greeter non è una sessione di logind come le altre, e
+# senza un nome ricadrebbe su «unica», cioè sullo stesso posto in cui scrive
+# la sessione dell'utente. Vedi scripts/minerva-posti.sh.
+export MINERVA_SESSIONE=greeter
+export MINERVA_IPC_SOCKET="$STATO/canale.sock"
+export XDG_CURRENT_DESKTOP=MinervaWayland:Minerva
+# L'utente «greeter» non ha una casa: senza, Qt prova a scrivere la cache
+# degli shader in «//.cache», si arrende, e l'aurora si ricompila a ogni
+# accesso — la schermata resta scura qualche decimo di secondo in più proprio
+# quando la si guarda per la prima volta.
+export XDG_CACHE_HOME="$STATO/cache"
+export QS_NO_RELOAD_POPUP=1
+export QT_QPA_PLATFORM=wayland
+# La schermata disegna con la scheda video: l'aurora è uno shader e la foto
+# sfocata un MultiEffect, e col renderer del processore tutti e due NON danno
+# errore — spariscono, e resta il nero. La scrivania usa il renderer software
+# apposta (vedi «Peso delle app»), e se quella scelta arrivasse fin qui per
+# una variabile ereditata, la schermata di accesso sarebbe nera. Visto in
+# prova il 23 settembre 2026.
+unset QT_QUICK_BACKEND
+
+"$DEMONE" >> "$REGISTRI/demone.log" 2>&1 &
+DEMONE_PID=$!
+
+qs -p "$DEST/minerva-shell/greeter.qml" >> "$REGISTRI/schermata.log" 2>&1
+ESITO=$?
+
+kill "$DEMONE_PID" 2>/dev/null
+wait "$DEMONE_PID" 2>/dev/null
+exit "$ESITO"

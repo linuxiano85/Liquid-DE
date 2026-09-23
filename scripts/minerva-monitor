@@ -1,0 +1,20 @@
+#!/bin/sh
+# minerva-monitor — Avvia Minerva Attività, il gestore attività.
+#
+# Se è già aperto lo porta davanti invece di aprirne un secondo: due monitor di
+# sistema aperti insieme non servono a niente e misurano l'uno il consumo
+# dell'altro. Con `MINERVA_ATTIVITA_DORMIENTE=1` si costruisce e basta, senza
+# mostrarsi: è così che `core/AppPronte.qml` lo tiene pronto all'accesso.
+set -e
+
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+
+CONFIG="$ROOT/minerva-shell/app.qml"
+QUALE=attivita
+DORMIENTE=MINERVA_ATTIVITA_DORMIENTE
+TARGET=""
+
+# Da qui in poi non torna: apre, prepara o avvia l'ospite. Il perché di ognuna
+# delle tre strade sta scritto lì dentro, una volta per tutte e tre le app.
+. "$ROOT/scripts/minerva-ospite"

@@ -1,0 +1,19 @@
+#!/bin/sh
+# minerva-calcolatrice — Avvia la calcolatrice di Minerva.
+#
+# Se è già aperta la si porta davanti, altrimenti si avvia. Con
+# `MINERVA_CALCOLATRICE_DORMIENTE=1` si costruisce e basta, senza mostrarsi:
+# è così che `core/AppPronte.qml` la tiene pronta all'accesso.
+set -e
+
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+
+CONFIG="$ROOT/minerva-shell/app.qml"
+QUALE=calcolatrice
+DORMIENTE=MINERVA_CALCOLATRICE_DORMIENTE
+TARGET=""
+
+# Da qui in poi non torna: apre, prepara o avvia l'ospite. Il perché di ognuna
+# delle tre strade sta scritto lì dentro, una volta per tutte e tre le app.
+. "$ROOT/scripts/minerva-ospite"

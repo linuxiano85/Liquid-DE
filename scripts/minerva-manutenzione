@@ -1,0 +1,21 @@
+#!/bin/sh
+# minerva-manutenzione — Cosa occupa posto su questo computer.
+#
+# Se è già aperta la porta davanti invece di aprirne una seconda: la scansione
+# dura qualche secondo e legge decine di migliaia di file, e farla due volte
+# insieme vorrebbe dire due finestre che dicono numeri diversi mentre si
+# guardano. Con `MINERVA_MANUTENZIONE_DORMIENTE=1` si costruisce e basta,
+# senza mostrarsi.
+set -e
+
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+
+CONFIG="$ROOT/minerva-shell/app.qml"
+QUALE=manutenzione
+DORMIENTE=MINERVA_MANUTENZIONE_DORMIENTE
+TARGET=""
+
+# Da qui in poi non torna: apre, prepara o avvia l'ospite. Il perché di ognuna
+# delle tre strade sta scritto lì dentro, una volta per tutte le app.
+. "$ROOT/scripts/minerva-ospite"

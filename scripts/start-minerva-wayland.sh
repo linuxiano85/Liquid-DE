@@ -1,0 +1,258 @@
+#!/bin/bash
+# start-minerva-wayland.sh — La sessione Minerva sul NOSTRO compositore.
+#
+# È il gemello di `start-minerva.sh`, e la differenza è una riga sola in
+# fondo: là si esegue Hyprland, qui `minerva-wayland`. Tutto quello che sta in
+# mezzo — l'identità della sessione, il registro, i percorsi — è identico
+# apposta: due sessioni che si comportano diversamente su cose che non
+# c'entrano col compositore renderebbero impossibile capire quale delle due
+# differenze conta.
+#
+# ── Come si torna indietro ────────────────────────────────────────────────
+#
+# **La sessione «Minerva» resta dov'era.** Questa si aggiunge accanto, non al
+# suo posto: se qui dentro qualcosa non va, si esce (Super+M, o si spegne il
+# computer col pulsante) e alla schermata di accesso si sceglie di nuovo
+# «Minerva». Niente di quello che c'è qui può impedire di rientrare nell'altra.
+#
+# E se non si arrivasse nemmeno alla schermata di accesso: **Ctrl+Alt+Fn+F3**
+# apre una console testuale. Su questa tastiera il tasto Fn è obbligatorio —
+# vedi la memoria `minerva-console-fn`.
+#
+# ── Che cosa NON c'è ancora, e va saputo prima di entrare ─────────────────
+#
+#  · le animazioni: le finestre compaiono e spariscono di scatto;
+#  · lo sfondo sfocato dietro i pannelli, che è di Hyprland;
+#  · venti delle novantacinque scorciatoie (i gruppi, la scrivania speciale,
+#    i gesti col mouse): sono di Hyprland e non si mandano apposta;
+#  · la luce notturna è cablata ma **non l'ha mai vista funzionare nessuno**:
+#    è la prima cosa da guardare.
+#
+# Tutto il resto — finestre, barre del titolo, scrivanie, dock, blocco
+# schermo, Steam e i giochi, schermi, tastiera e touchpad — è provato.
+
+SELF="$(readlink -f "$0")"
+MINERVA_DIR="$(dirname "$(dirname "$SELF")")"
+
+export MINERVA_ROOT="$MINERVA_DIR"
+
+# ── E `~/.local/bin`, che non c'era ──────────────────────────────────────
+#
+# greetd non fa passare una shell di login: il PATH che arriva qui è quello
+# scarno di systemd — `/usr/local/bin:/usr/bin` e poco altro. `~/.local/bin`,
+# dove i programmi si installano quando non si è root, **non c'è**.
+#
+# Il costo, trovato il 3 settembre 2026 guardando la sessione vera di Giacomo:
+# `minerva-polkit` era compilato e installato (`permessi/costruisci.sh` lo mette
+# proprio lì), l'installatore diceva verde, e il compositore non lo trovava.
+# Risultato: nessun agente dei permessi per due giorni, cioè **nessuna finestra
+# della password** in tutta la scrivania — la modalità amministratore del
+# gestore file che non chiede niente, e ogni `pkexec` che resta appeso.
+#
+# Il difetto non stava nell'agente, che era sano, e nemmeno
+# nell'installatore, che aveva fatto il suo. Stava nel fatto che
+# `command -v minerva-polkit` fa una domanda a cui il PATH risponde per lui, e
+# il PATH era la cosa che nessuno aveva guardato.
+CASA_BIN="${XDG_BIN_HOME:-$HOME/.local/bin}"
+export PATH="$MINERVA_DIR/scripts:$CASA_BIN:$PATH"
+
+# ── L'identità della sessione ─────────────────────────────────────────────
+#
+# `Minerva:Hyprland` anche qui, e **non è una svista**. Non descrive quale
+# compositore gira: sceglie quale file di portali si legge
+# (`minerva-portals.conf`, che è nostro) e quale backend risponde alle
+# finestre «Apri file». Cambiandolo in `Minerva:wlroots` quel file non
+# verrebbe più trovato, e insieme a lui se ne andrebbe la risposta ai segreti
+# — cioè le password di Chrome, che questa storia l'ha già pagata una volta.
+# ── E perché adesso davanti c'è un terzo nome ────────────────────────────
+#
+# `MinervaWayland` sta PRIMA, e gli altri due restano dietro. Il motivo è un
+# difetto che si rompe in silenzio, misurato il 30 agosto 2026:
+# `minerva-portals.conf` dice `default=hyprland;gtk`, e
+# `xdg-desktop-portal-hyprland` per lavorare cerca `HYPRLAND_INSTANCE_SIGNATURE`
+# (verificato: la stringa sta dentro il suo binario). Qui dentro quella
+# variabile non esiste — quindi condivisione dello schermo e finestre «apri
+# file» dei programmi cadrebbero **senza un errore**, esattamente come cadde il
+# portachiavi di Chrome l'11 agosto.
+#
+# `xdg-desktop-portal` cerca un file per OGNI nome della lista, in ordine:
+# `minervawayland-portals.conf` (nostro, dice `wlr`) vince, e se un giorno non
+# ci fosse si ricade su quello di prima. E `Minerva` e `Hyprland` restano nella
+# lista perché chiunque altro guardi questa variabile continua a riconoscerci —
+# compreso chi risponde ai segreti.
+export XDG_CURRENT_DESKTOP=MinervaWayland:Minerva:Hyprland
+export XDG_SESSION_DESKTOP=Minerva
+export XDG_SESSION_TYPE=wayland
+export QS_NO_RELOAD_POPUP=1
+
+# ── L'ambiente dei programmi ──────────────────────────────────────────────
+#
+# Sotto Hyprland queste righe stanno in `config/hyprland.conf` come `env =`, e
+# **valgono solo dentro Hyprland**: qui non le metteva nessuno. Ce n'è una che
+# si vede a occhio nudo — `QT_WAYLAND_DISABLE_WINDOWDECORATION`: senza, ogni
+# programma Qt disegna la propria barra del titolo **sopra la nostra**, e ti
+# ritrovi due barre sulla stessa finestra.
+#
+# `minervad/test/ambiente_sessione_test.dart` verifica che questo elenco e
+# quello di `hyprland.conf` restino la stessa cosa: due sessioni che danno
+# ambienti diversi renderebbero impossibile capire quale differenza conta.
+export QT_QPA_PLATFORM="wayland;xcb"
+export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
+export QT_AUTO_SCREEN_SCALE_FACTOR=1
+export GDK_BACKEND=wayland,x11
+export MOZ_ENABLE_WAYLAND=1
+# `HYPRCURSOR_SIZE` no: è il formato di cursori di Hyprland, e qui dentro non
+# lo legge nessuno. Metterla sarebbe copiare invece di capire.
+
+# ── Il puntatore per CHI SE LO DISEGNA DA SÉ ─────────────────────────────
+#
+# Il compositore il puntatore lo disegna lui, e sulle finestre di Minerva si
+# vede sempre. Ma sopra una PAGINA WEB non è così: Firefox e Chrome se lo
+# disegnano da soli, e il tema se lo vanno a prendere da `XCURSOR_THEME` —
+# oppure, se quella manca, dal nome scritto nelle impostazioni di GTK.
+#
+# Giacomo, 5 settembre 2026: «sono su google e nella lista dei risultati il
+# mouse non compare sulla pagina web, probabilmente ci sarà lo stesso errore
+# in molte altre app o pagine».
+#
+# Aveva ragione, ed era una cosa sola: in `~/.config/gtk-3.0/settings.ini`
+# c'era scritto `breeze_cursors`, e quel tema **non è installato**. I browser
+# lo cercavano, non lo trovavano, e sulla pagina non disegnavano niente. Sulle
+# nostre finestre invece il puntatore c'era, perché lì lo disegna il
+# compositore con un tema suo: è per questo che sembrava un difetto dei
+# browser.
+#
+# Quindi il nome si dice noi, e si dice **dopo aver guardato se esiste**. È lo
+# stesso controllo che `settings/MisuraPuntatore.qml` fa già prima di
+# applicare un tema — un tema che non c'è fa sparire il puntatore, e sparito
+# quello non lo si rimette col mouse.
+#
+# La MISURA viene dalle impostazioni: era scritta 24 a mano, e chi sceglieva
+# «Grande» in Impostazioni vedeva crescere il puntatore solo sopra Minerva.
+# Il nome CHIESTO si tiene da parte e non si tocca: la prima versione lo
+# azzerava al primo posto in cui non lo trovava, e i due posti dopo cercavano
+# una cartella senza nome. Trovato provandolo: `breeze_cursors` era installato
+# e la sessione rispondeva «ripiego».
+_chiesto_cursore=$(sed -n 's/^gtk-cursor-theme-name=//p' \
+    "$HOME/.config/gtk-3.0/settings.ini" 2>/dev/null | tr -d '"' | head -1)
+_tema_cursore=""
+for _c in "$HOME/.local/share/icons" "$HOME/.icons" /usr/share/icons; do
+    if [ -n "$_chiesto_cursore" ] && [ -d "$_c/$_chiesto_cursore/cursors" ]; then
+        _tema_cursore=$_chiesto_cursore
+        break
+    fi
+done
+if [ -z "$_tema_cursore" ]; then
+    # Il primo che esiste davvero. «default» è quello che c'è quasi sempre,
+    # Adwaita quello che c'è su ogni installazione con GTK.
+    for _t in default Adwaita capitaine-cursors Pop; do
+        if [ -d "/usr/share/icons/$_t/cursors" ]; then
+            _tema_cursore=$_t
+            break
+        fi
+    done
+fi
+_misura_cursore=$(sed -n 's/.*"cursorSize"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p' \
+    "$HOME/.config/minerva/settings.json" 2>/dev/null | head -1)
+case "$_misura_cursore" in
+    ''|*[!0-9]*) _misura_cursore=24 ;;
+esac
+[ -n "$_tema_cursore" ] && export XCURSOR_THEME="$_tema_cursore"
+export XCURSOR_SIZE="$_misura_cursore"
+unset _tema_cursore _chiesto_cursore _misura_cursore _c _t
+
+# Chi ci ospita, detto invece che lasciato indovinare. Lo leggono gli script
+# e le prove; la shell invece si regola su `MINERVA_CANALE`, che lo scrive il
+# compositore stesso quando apre il canale.
+export MINERVA_COMPOSITORE=minerva-wayland
+
+# ── XDG_DATA_DIRS per la sessione wayland ────────────────────────────────
+#
+# Sotto Hyprland questa variabile la porta systemd --user; sotto il nostro
+# compositore il figlio (minerva-dentro-wayland) non la esportava a D-Bus e
+# AppScanner finiva a 71 app invece di 89. Se non è già impostata, la si
+# recupera una volta sola.
+if [ -z "${XDG_DATA_DIRS:-}" ]; then
+    if command -v systemctl >/dev/null 2>&1; then
+        _XDD=$(systemctl --user show-environment 2>/dev/null | sed -n 's/^XDG_DATA_DIRS=//p')
+        [ -n "$_XDD" ] && export XDG_DATA_DIRS="$_XDD"
+        unset _XDD
+    fi
+    [ -z "${XDG_DATA_DIRS:-}" ] && export XDG_DATA_DIRS="$HOME/.local/share/flatpak/exports/share:/var/lib/flatpak/exports/share:/usr/local/share:/usr/share"
+fi
+[ -z "${XDG_DATA_HOME:-}" ] && export XDG_DATA_HOME="$HOME/.local/share"
+# Garantisce che la shell trovi il portale corretto anche in wlroots
+[ -z "${XDG_DATA_DIRS:-}" ] || export XDG_DATA_DIRS
+
+# ── Un registro da leggere quando qualcosa non parte ──────────────────────
+#
+# Stesso posto della sessione Hyprland, e per la stessa ragione: se la
+# sessione muore all'avvio, il gestore di accesso ributta al login senza dire
+# niente. Con questo file si può almeno sapere perché.
+. "$MINERVA_DIR/scripts/minerva-posti.sh"
+LOG="$STATO/session.log"
+
+# ── Una PROVA non azzera il registro della sessione vera ─────────────────
+#
+# `: > "$LOG"` è giusto per una sessione che comincia: il registro deve
+# parlare di questo avvio e non di quello di ieri. Ma lanciando questo script
+# a mano per provare qualcosa — cosa che si fa, ed è come è nata la sessione
+# di recupero — quella riga cancellava il registro della sessione **in corso**:
+# il racconto di come Giacomo è entrato stamattina, sparito per una prova.
+#
+# È la stessa famiglia dei difetti raccolti in `minerva-trappole-prove`: una
+# prova che tocca la sessione viva. `MINERVA_PROVA` è il contrassegno che le
+# distingue, ed è già quello che protegge i processi dal `kill`.
+if [ -n "${MINERVA_PROVA:-}" ]; then
+    LOG="$STATO/session-prova.log"
+fi
+: > "$LOG"
+exec >>"$LOG" 2>&1
+
+echo "── Minerva (wlroots) $(date '+%F %T') ──────────────────"
+
+BIN="${MINERVA_BIN:-$HOME/.local/bin}/minerva-wayland"
+if [ ! -x "$BIN" ]; then
+    BIN="$(command -v minerva-wayland 2>/dev/null)"
+fi
+if [ -z "$BIN" ] || [ ! -x "$BIN" ]; then
+    echo "ERRORE: minerva-wayland non trovato."
+    echo "Costruiscilo con:  compositore/costruisci.sh"
+    exit 1
+fi
+echo "compositore: $BIN"
+
+# ── Gli schermi ───────────────────────────────────────────────────────────
+#
+# `~/.config/minerva/schermi.conf` lo scrive il pannello Schermi e lo legge il
+# compositore all'avvio. Se non c'è, ogni schermo prende il modo che preferisce
+# a scala 1 — che è la cosa giusta su un computer che non ha ancora scelto, ma
+# su questo portatile vuol dire tutto piccolo di un quarto.
+if [ ! -f "$HOME/.config/minerva/schermi.conf" ]; then
+    echo "nota: nessun schermi.conf — scala 1 e modo preferito."
+fi
+
+# ── E si parte ────────────────────────────────────────────────────────────
+#
+# L'argomento è il programma da avviare dentro, ed è il nostro equivalente
+# degli `exec-once` di Hyprland: da lì nascono il demone, la scrivania e i
+# servizi di contorno.
+#
+# ── E si può chiedere di avviarne un ALTRO ───────────────────────────────
+#
+# `MINERVA_DENTRO` è la sola differenza fra la sessione vera e quella di
+# recupero (`minerva-dentro-recupero`: un terminale e nient'altro). Tutto il
+# resto di questo file — identità, ambiente, registro, schermi — resta lo
+# stesso apposta, perché è la stessa sessione: duplicare lo script vorrebbe
+# dire due vie che divergono su cose che col recupero non c'entrano, e allora
+# non si saprebbe più quale differenza conta.
+#
+# Serve da quando Hyprland se n'è andato: era lui la via di ritorno, e una
+# rete non si toglie senza metterne un'altra.
+DENTRO="${MINERVA_DENTRO:-$MINERVA_DIR/scripts/minerva-dentro-wayland}"
+if [ ! -x "$DENTRO" ]; then
+    echo "ERRORE: «$DENTRO» non è eseguibile."
+    exit 1
+fi
+echo "avvio: $BIN + $(basename "$DENTRO")"
+exec "$BIN" "$DENTRO"

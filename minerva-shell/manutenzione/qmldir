@@ -1,0 +1,10 @@
+module manutenzione
+singleton Misure    1.0 Misure.qml
+Manutenzione        1.0 Manutenzione.qml
+Anello              1.0 Anello.qml
+Spunta              1.0 Spunta.qml
+RigaVoce            1.0 RigaVoce.qml
+Freccia             1.0 Freccia.qml
+Registro            1.0 Registro.qml
+Ordine              1.0 Ordine.qml
+RigaCopia           1.0 RigaCopia.qml

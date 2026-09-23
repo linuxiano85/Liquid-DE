@@ -1,0 +1,15 @@
+module spine
+Spine         1.0 Spine.qml
+BarContent    1.0 BarContent.qml
+MinervaMark   1.0 MinervaMark.qml
+Workspaces    1.0 Workspaces.qml
+ClockCluster  1.0 ClockCluster.qml
+StatusCluster 1.0 StatusCluster.qml
+Vassoio       1.0 Vassoio.qml
+Toasts        1.0 Toasts.qml
+WindowChip    1.0 WindowChip.qml
+ListaFinestre 1.0 ListaFinestre.qml
+Osd           1.0 Osd.qml
+TitleBars     1.0 TitleBars.qml
+FullscreenBar 1.0 FullscreenBar.qml
+WidgetBarra   1.0 WidgetBarra.qml

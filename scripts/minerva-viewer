@@ -1,0 +1,88 @@
+#!/bin/sh
+# minerva-viewer — Avvia Minerva Anteprima, il visualizzatore di immagini.
+#
+# Stessa forma di `minerva-files` e `minerva-monitor`: se è già aperto NON ne
+# apre un secondo, gli passa l'immagine e lo porta davanti. È la differenza
+# fra sfogliare una cartella di fotografie e ritrovarsi trenta finestre.
+set -e
+
+# ── 1. Dov'è Minerva ────────────────────────────────────────────────────────
+#
+# Nessun percorso scritto qui dentro: questo script è installato in
+# ~/.local/bin come COLLEGAMENTO al file vero, e seguendo il collegamento si
+# trova la cartella del progetto ovunque sia.
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+CONFIG="$ROOT/minerva-shell/viewer.qml"
+
+if [ ! -f "$CONFIG" ]; then
+    echo "minerva-viewer: non trovo $CONFIG" >&2
+    exit 1
+fi
+
+# ── 2. I file da guardare ───────────────────────────────────────────────────
+#
+# Arrivano come indirizzi (`file:///home/…`) quando è un altro programma a
+# chiamarci — il `.desktop` li chiede con `%U` — e come percorsi normali
+# quando si scrive `minerva-viewer foto.png` in un terminale. Vanno accettati
+# tutti e due.
+#
+# Sono PIÙ D'UNO di proposito: chi seleziona sei fotografie e preme Invio ha
+# chiesto di guardare quelle sei, non la cartella che le contiene. Se ne arriva
+# una sola, l'album lo costruisce la finestra dalla cartella intorno.
+PATHS=""
+for ARG in "$@"; do
+    case "$ARG" in
+        file://*)
+            ARG=${ARG#file://}
+            # Gli indirizzi codificano spazi e accenti in %XX.
+            ARG=$(printf '%b' "$(printf '%s' "$ARG" | sed 's/%\(..\)/\\x\1/g')")
+            ;;
+    esac
+    [ -n "$ARG" ] || continue
+    if [ -z "$PATHS" ]; then
+        PATHS="$ARG"
+    else
+        PATHS="$PATHS
+$ARG"
+    fi
+done
+
+# ── 3. Una cartella? ────────────────────────────────────────────────────────
+#
+# `minerva-viewer ~/Immagini` vuol dire «sfogliami questa cartella». Chi
+# distingue una cartella da un file è la shell, che ha `-d`: in QML non c'è
+# modo di saperlo senza chiederlo al demone, e chiederglielo per una cosa che
+# qui si sa già sarebbe un giro d'aria.
+FIRST=$(printf '%s' "$PATHS" | head -n 1)
+CARTELLA=""
+if [ -d "$FIRST" ]; then
+    CARTELLA="$FIRST"
+fi
+
+# ── 4. Aperto? Allora è lui che la mostra ───────────────────────────────────
+#
+# `ping` risponde solo se c'è un'Anteprima viva su QUESTA configurazione.
+if qs ipc -p "$CONFIG" call viewer ping >/dev/null 2>&1; then
+    if [ -n "$CARTELLA" ]; then
+        exec qs ipc -p "$CONFIG" call viewer openDir "$CARTELLA" >/dev/null
+    fi
+    # Una alla volta: `qs ipc` passa argomenti singoli, e le altre le ritrova
+    # comunque da sé guardando la cartella.
+    exec qs ipc -p "$CONFIG" call viewer open "$FIRST" >/dev/null
+fi
+
+# ── 5. Altrimenti si parte ──────────────────────────────────────────────────
+#
+# Nell'ambiente e non sulla riga di comando: la riga di comando è di `qs`, non
+# nostra. `-d` stacca dal terminale, `-n` impedisce a due lanci nello stesso
+# istante di aprire due finestre gemelle.
+MINERVA_VIEWER_PATHS="$PATHS"
+MINERVA_VIEWER_DIR="$CARTELLA"
+export MINERVA_VIEWER_PATHS MINERVA_VIEWER_DIR
+# L'ambiente comune delle nostre app: disegnano col processore invece che
+# con la scheda video. Il perché, i numeri e cosa si perde stanno tutti
+# in `scripts/minerva-ambiente-app`.
+. "$ROOT/scripts/minerva-ambiente-app"
+
+exec qs -d -n -p "$CONFIG"

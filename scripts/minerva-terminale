@@ -1,0 +1,54 @@
+#!/bin/sh
+# minerva-terminale — Avvia il Terminale di Minerva.
+#
+#     minerva-terminale                  una shell, a casa (o una scheda in più)
+#     minerva-terminale /una/cartella    una scheda lì
+#     minerva-terminale -e COMANDO…      esegue il comando in una scheda
+#     minerva-terminale --esegui "cmd"   lo stesso, con la riga intera
+#
+# `-e` è la convenzione di ogni terminale (xterm, alacritty, foot): serve a
+# chi lancia «apri nel terminale» o un programma con `Terminal=true`, ed è
+# quello che `dentroUnTerminale` nel demone si aspetta di poter usare.
+#
+# Se il Terminale è già aperto gli si chiede una scheda in più; altrimenti si
+# avvia. Con `MINERVA_TERMINALE_DORMIENTE=1` si costruisce e basta, senza
+# mostrarsi: è così che `core/AppPronte.qml` lo tiene pronto all'accesso.
+set -e
+
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+
+CONFIG="$ROOT/minerva-shell/app.qml"
+QUALE=terminale
+DORMIENTE=MINERVA_TERMINALE_DORMIENTE
+
+TARGET=""
+case "${1:-}" in
+    -e|--esegui)
+        shift
+        # Tutto il resto è il comando, parola per parola, protetto: ogni
+        # argomento diventa `'…'` con gli apostrofi interni raddoppiati nel
+        # modo di POSIX (`'\''`), così `-e vim "un file.txt"` apre quel file.
+        RIGA=""
+        for parola in "$@"; do
+            protetta=$(printf '%s' "$parola" | sed "s/'/'\\\\''/g")
+            RIGA="$RIGA '$protetta'"
+        done
+        # Il comando viaggia come `esegui://…`, uno schema come `file://`:
+        # `qs ipc call` (CLI11) rifiuta qualunque argomento che cominci con
+        # un trattino e non ha un `--` che lo protegga — `--esegui …` non
+        # arrivava mai all'app (visto il 15 settembre 2026).
+        TARGET="esegui://${RIGA# }"
+        ;;
+    file://*)
+        TARGET=${1#file://}
+        TARGET=$(printf '%b' "$(printf '%s' "$TARGET" | sed 's/%\(..\)/\\x\1/g')")
+        ;;
+    *)
+        TARGET=${1:-}
+        ;;
+esac
+
+# Da qui in poi non torna: apre, prepara o avvia l'ospite. Il perché di ognuna
+# delle tre strade sta scritto lì dentro, una volta per tutte le app.
+. "$ROOT/scripts/minerva-ospite"
