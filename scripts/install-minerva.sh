@@ -26,7 +26,9 @@ PKGS=(
     base-devel meson ninja pkgconf
     wayland wayland-protocols libdrm libinput libxkbcommon pixman
     mesa libglvnd seatd libdisplay-info libliftoff hwdata
-    vulkan-headers vulkan-icd-loader glslang
+    # vulkan-headers e glslang servivano solo al renderer Vulkan, che non si
+    # compila più di serie (vedi compositore/costruisci.sh).
+    vulkan-icd-loader
     libxcb xcb-util-wm xcb-util-errors xcb-util-renderutil xorg-xwayland
     cairo pango systemd glib2
     desktop-file-utils libpulse qt6-5compat
@@ -96,12 +98,26 @@ if ! command -v ksecretd >/dev/null 2>&1 &&
     PKGS+=(gnome-keyring)
 fi
 
-c_head "Aggiornamento e installazione delle dipendenze"
-# Aggiornamento completo: evitare database nuovi con librerie di sistema vecchie.
-sudo pacman -Syu --needed --noconfirm "${PKGS[@]}" || {
-    c_err "Dipendenze non installate: installazione interrotta."
+c_head "Dipendenze"
+# Si installa solo quello che MANCA, e senza aggiornare il sistema.
+#
+# Prima qui c'era `pacman -Syu`: installare una scrivania aggiornava tutto
+# CachyOS, cosa che nessuno aveva chiesto e che, andando storta, trascinava
+# con sé anche l'altra scrivania. Il timore che giustificava l'aggiornamento
+# completo — un database appena scaricato con librerie vecchie — qui non
+# c'è: `pacman -T` guarda cosa manca col database che c'è già, e se manca
+# qualcosa lo si installa senza scaricarne uno nuovo (`-S`, non `-Sy`).
+MANCANTI=$(pacman -T "${PKGS[@]}" 2>/dev/null || true)
+if [ -z "$MANCANTI" ]; then
+    c_ok "c'è già tutto: niente da installare"
+elif sudo pacman -S --needed --noconfirm $MANCANTI; then
+    c_ok "installati: $(printf '%s ' $MANCANTI)"
+else
+    c_err "Non riesco a installare: $(printf '%s ' $MANCANTI)"
+    c_info "Probabilmente il database dei pacchetti è vecchio. Aggiorna il sistema"
+    c_info "quando vuoi tu (sudo pacman -Syu) e rilancia questo installatore."
     exit 1
-}
+fi
 
 # Compilare prima di configurare la sessione: gli errori devono essere visibili.
 c_head "Compositore Minerva e prove automatiche"
@@ -140,7 +156,7 @@ for f in "Adwaita Sans" "Noto Sans Mono"; do
 done
 
 # ── 3. Sessione Wayland registrata in SDDM/GDM ────────────────────────────
-c_head "Registrazione sessione «Minerva» nel display manager"
+c_head "Registrazione della sessione «Liquid DE» nel display manager"
 # Il gestore di accessi non riesce a eseguire uno script il cui
 # percorso contiene uno spazio. `/usr/share/plasmalogin/scripts/wayland-session`
 # finisce con `exec $@` senza virgolette: la shell spezza il percorso sugli

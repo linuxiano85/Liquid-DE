@@ -5,7 +5,10 @@ QUI="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 BUILD="${MINERVA_BUILD_DIR:-$QUI/build-native}"
 . "$QUI/../scripts/minerva-cartelle.sh"
 DOVE="$CARTELLA_BIN"
-RENDERERS="${MINERVA_RENDERERS:-gles2,vulkan}"
+# Solo gles2 di serie: gli effetti (blur, angoli, anello) esistono solo lì,
+# e aggiungere vulkan vuol dire ricompilare wlroots per un renderer che li
+# perde in silenzio. Chi vuole provarlo lo chiede: MINERVA_RENDERERS=gles2,vulkan.
+RENDERERS="${MINERVA_RENDERERS:-gles2}"
 INSTALLA=1
 case "${1:-}" in
     --build-only) INSTALLA=0 ;;
