@@ -105,6 +105,20 @@ PanelWindow {
         onTriggered: { stanze.sbirciata = false; if (!stanze.aperto) spegni.restart(); }
     }
 
+    // Le molle solo dopo il primo fotogramma vero (`Ui.Pronto`), e la
+    // colonna entra solo DOPO che le molle ci sono: prima la finestra misura
+    // zero, e una posizione calcolata dalla sua misura volava attraverso lo
+    // schermo (il menù «a metà fuori schermo» della prima apertura).
+    Ui.Pronto { id: pronto }
+    property bool _entra: false
+    Connections {
+        target: pronto
+        function onVistoChanged() {
+            if (pronto.visto) Qt.callLater(function() { stanze._entra = true; });
+            else stanze._entra = false;
+        }
+    }
+
     visible: stanze.mostrato
     anchors { top: true; bottom: true; left: true; right: true }
     exclusiveZone: -1
@@ -155,10 +169,10 @@ PanelWindow {
         x: {
             var dentro = stanze.aDestra ? stanze.width - margine - width : margine;
             var fuori = stanze.aDestra ? stanze.width + 30 : -width - 30;
-            return (stanze.aperto || stanze.sbirciata ? dentro : fuori) + presaStanze.scarto;
+            return ((stanze.aperto || stanze.sbirciata) && stanze._entra ? dentro : fuori) + presaStanze.scarto;
         }
         Behavior on x {
-            enabled: Theme.Motion.liquido
+            enabled: Theme.Motion.liquido && pronto.visto
             SpringAnimation { spring: Theme.Motion.molla * 0.6; damping: 0.42 }
         }
         radius: Theme.Effects.radiusLG

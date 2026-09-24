@@ -652,7 +652,38 @@ ShellRoot {
 
     /// Super tenuto premuto: i tasti sulla scrivania di ogni schermo.
     property bool tastiAperti: false
-    function mostraTasti(si) { root.tastiAperti = si; }
+
+    // ── La riva riservata ────────────────────────────────────────────────
+    //
+    // Giacomo, 25 settembre 2026: «se ho una app a schermo intero compaiono
+    // le isole passandoci sopra [...] per abilitarli magari possiamo usare
+    // un tasto per dargli il consenso a comparire tenendo premuto». Con una
+    // finestra che riempie lo schermo (ingrandita o a schermo intero, nella
+    // stanza che si guarda) la riva non esce da sola: il compositore tace
+    // angoli e bordi se Super non è giù, e la dock non esce sfiorandola.
+    // Tenendo Super, invece dei tasti sulla scrivania sale la riva — l'Isola
+    // e la dock, sopra a tutto — ed è il «consenso».
+    readonly property bool rivaRiservata: {
+        var tutte = Core.Windows.all || [];
+        var qui = Core.Compositore.scrivaniaAttiva;
+        for (var i = 0; i < tutte.length; i++) {
+            var w = tutte[i];
+            if (!w.minimized && w.workspace === qui && w.modoSchermo > 0)
+                return true;
+        }
+        return false;
+    }
+    property bool consenso: false
+
+    function mostraTasti(si) {
+        if (si && root.rivaRiservata) {
+            root.consenso = true;
+            return;
+        }
+        if (!si)
+            root.consenso = false;
+        root.tastiAperti = si;
+    }
 
     /// Il Cassetto degli appunti dello schermo attivo; senza, il pannello di
     /// prima.
@@ -765,6 +796,8 @@ ShellRoot {
                 id: dock
                 screen: scrivania.modelData
                 inAlto: root.dockInAlto
+                riservata: root.rivaRiservata
+                consenso: root.consenso
 
                 enabled:              Core.Ipc.get("dock.enabled", true)
                 iconSize:             Core.Ipc.get("dock.iconSize", 48)
@@ -912,6 +945,10 @@ ShellRoot {
                 screen: scrivania.modelData
                 visible: root.barraIsola
                 inBasso: root.barraInBasso
+                aScomparsa: Core.Ipc.get("bar.aScomparsa", true) === true
+                riservata: root.rivaRiservata
+                consenso: root.consenso
+                tenuta: isolaGiorno.aperto
                 onGiornataChiesta: function(dove) {
                     if (isolaGiorno.aperto) isolaGiorno.chiudi(); else isolaGiorno.apriDa(dove);
                 }
@@ -1017,6 +1054,13 @@ ShellRoot {
                 function onBordo(quale, schermo) {
                     if (!scrivania.modelData || schermo !== scrivania.modelData.name)
                         return;
+                    // Il bordo alto (o basso, con la barra in basso): torna
+                    // l'Isola a scomparsa.
+                    if (quale === "alto" || quale === "basso") {
+                        if ((quale === "basso") === root.barraInBasso)
+                            isolaBarra.svela();
+                        return;
+                    }
                     // Chi esce da quale bordo lo decide `riva.cassetto`.
                     var cassettoQui = (quale === "sinistra") === root.cassettoASinistra;
                     if (quale !== "destra" && quale !== "sinistra")
@@ -1029,10 +1073,11 @@ ShellRoot {
                 function onAngolo(quale, schermo) {
                     if (!scrivania.modelData || schermo !== scrivania.modelData.name)
                         return;
-                    // Il menù da tutti e due gli angoli di sinistra: in basso,
-                    // dove emerge il periscopio (è la Riva studiata), e in
-                    // alto, dove la mano ci arriva di slancio.
-                    if (quale === "alto-sx" || quale === "basso-sx")
+                    // Il menù dall'angolo in basso a sinistra, dove emerge il
+                    // periscopio (la Riva studiata). Da tutti e due gli angoli
+                    // di sinistra era «una cosa strana» (Giacomo, 25/09): uno
+                    // solo, e quello in alto resta libero per la panoramica.
+                    if (quale === "basso-sx")
                         sottomarino.apri("");
                     else if (quale === "alto-dx")
                         centroControllo.apri();

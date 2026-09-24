@@ -190,6 +190,20 @@ PanelWindow {
     Process { id: rimetti }
     Process { id: via }
 
+    // Le molle solo dopo il primo fotogramma vero (`Ui.Pronto`), e la
+    // carta entra solo DOPO che le molle ci sono: prima la finestra misura
+    // zero, e una posizione calcolata dalla sua misura volava attraverso lo
+    // schermo (il menù «a metà fuori schermo» della prima apertura).
+    Ui.Pronto { id: pronto }
+    property bool _entra: false
+    Connections {
+        target: pronto
+        function onVistoChanged() {
+            if (pronto.visto) Qt.callLater(function() { cassetto._entra = true; });
+            else cassetto._entra = false;
+        }
+    }
+
     visible: cassetto.mostrato
     anchors { top: true; bottom: true; left: true; right: true }
     exclusiveZone: -1
@@ -220,10 +234,10 @@ PanelWindow {
         x: {
             var dentro = cassetto.aSinistra ? margine : cassetto.width - margine - width;
             var fuori = cassetto.aSinistra ? -width - 30 : cassetto.width + 30;
-            return (cassetto.aperto ? dentro : fuori) + presa.scarto;
+            return (cassetto.aperto && cassetto._entra ? dentro : fuori) + presa.scarto;
         }
         Behavior on x {
-            enabled: Theme.Motion.liquido
+            enabled: Theme.Motion.liquido && pronto.visto
             SpringAnimation { spring: Theme.Motion.molla * 0.6; damping: 0.42 }
         }
         radius: Theme.Effects.radiusLG

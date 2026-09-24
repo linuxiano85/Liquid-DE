@@ -138,7 +138,7 @@ PanelWindow {
     readonly property bool it: Core.Strings.lang === "it"
 
     WlrLayershell.namespace: "quickshell"
-    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.layer: dock.consenso ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
     /// Il menu di un'icona deve crescere verso il basso: lo legge chi lo apre,
@@ -487,6 +487,21 @@ PanelWindow {
     /// di Hyprland citato lì.
     property bool forceReveal: false
 
+    /// La riva riservata (una finestra riempie lo schermo): sfiorarla non la
+    /// fa uscire. Giacomo, 25 settembre 2026: «se ho una app a schermo
+    /// intero compaiono le isole passandoci sopra».
+    property bool riservata: false
+    /// Super tenuto con la riva riservata: esce, sopra a tutto.
+    property bool consenso: false
+    onConsensoChanged: {
+        if (dock.consenso) {
+            dock.revealed = true;
+            hideSoon.stop();
+        } else if (dock.autoHide && !dockArea.containsMouse) {
+            hideSoon.restart();
+        }
+    }
+
     property bool revealed: !dock.autoHide
 
     onForceRevealChanged: {
@@ -502,7 +517,7 @@ PanelWindow {
         id: hideSoon
         interval: 450
         onTriggered: {
-            if (!dock.autoHide || dockArea.containsMouse)
+            if (!dock.autoHide || dockArea.containsMouse || dock.consenso)
                 return;
             // In «elude» ci si ritira solo se una finestra la copre davvero:
             // a scrivania libera la dock resta dov'è.
@@ -620,6 +635,9 @@ PanelWindow {
         cursorShape: Qt.PointingHandCursor
         onContainsMouseChanged: {
             if (containsMouse) {
+                // Riservata e nascosta: il passaggio non basta, serve Super.
+                if (dock.riservata && !dock.consenso && !dock.revealed)
+                    return;
                 dock.revealed = true;
                 hideSoon.stop();
             } else if (dock.siNasconde) {

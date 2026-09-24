@@ -68,7 +68,10 @@ PanelWindow {
         sub.aperto = true;
         sub.mostrato = true;
         sub.emerso = false;
-        emergi.restart();
+        // Lo scafo emerge 170 ms dopo il PRIMO FOTOGRAMMA, non dopo il
+        // comando: se la finestra c'è già (riaperto prima di sparire) subito.
+        if (pronto.visto)
+            emergi.restart();
         spegni.stop();
     }
     function chiudi() {
@@ -79,6 +82,16 @@ PanelWindow {
         spegni.restart();
     }
     function commuta() { sub.aperto ? sub.chiudi() : sub.apri(""); }
+
+    // Le molle solo dopo il primo fotogramma vero (`Ui.Pronto`), e lo
+    // scafo emerge solo DOPO che le molle ci sono: prima la finestra misura
+    // zero, e una posizione calcolata dalla sua misura volava attraverso lo
+    // schermo (il menù «a metà fuori schermo» della prima apertura).
+    Ui.Pronto { id: pronto }
+    Connections {
+        target: pronto
+        function onVistoChanged() { if (pronto.visto && sub.aperto && !sub.emerso) emergi.restart(); }
+    }
 
     visible: sub.mostrato
     anchors { top: true; bottom: true; left: true; right: true }
@@ -466,15 +479,15 @@ PanelWindow {
         y: sub.emerso ? (sub.verticale ? margine + sub.margineAlto : sub.height - margine - sub.margineBasso - height)
                       : sub.height + 30
         Behavior on y {
-            enabled: Theme.Motion.liquido && !sub.ridimensionando
+            enabled: Theme.Motion.liquido && !sub.ridimensionando && pronto.visto
             SpringAnimation { spring: Theme.Motion.molla * 0.55; damping: 0.42 }
         }
         Behavior on width {
-            enabled: Theme.Motion.liquido && !sub.ridimensionando
+            enabled: Theme.Motion.liquido && !sub.ridimensionando && pronto.visto && sub.emerso
             SpringAnimation { spring: Theme.Motion.molla; damping: Theme.Motion.smorzamento }
         }
         Behavior on height {
-            enabled: Theme.Motion.liquido && !sub.ridimensionando
+            enabled: Theme.Motion.liquido && !sub.ridimensionando && pronto.visto && sub.emerso
             SpringAnimation { spring: Theme.Motion.molla; damping: Theme.Motion.smorzamento }
         }
         // Anche la y: in orizzontale lo scafo è appoggiato in basso, e

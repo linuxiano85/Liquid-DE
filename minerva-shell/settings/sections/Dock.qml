@@ -213,6 +213,25 @@ Page {
                 }
             }
         }
+
+        // L'Isola a scomparsa: vale solo con l'Isola (stile Liquid).
+        S.SettingRow {
+            width: parent.width
+            visible: Core.Ipc.get("bar.stile", "isola") !== "classica"
+            label: page.it ? "Isola a scomparsa" : "Auto-hide Island"
+            description: page.it
+                ? "Nascosta oltre il bordo, torna fermando il puntatore lassù: "
+                  + "le finestre usano tutto lo schermo."
+                : "Hidden past the edge, it comes back when the pointer rests "
+                  + "up there: windows use the whole screen."
+            controlWidth: 60
+            control: S.ToggleSwitch {
+                checked: Core.Ipc.get("bar.aScomparsa", true) === true
+                onToggled: function(v) {
+                    Core.Ipc.setSetting("bar.aScomparsa", v);
+                }
+            }
+        }
     }
 
     Card {

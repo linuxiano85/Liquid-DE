@@ -616,6 +616,10 @@ class SettingsApi {
           // classica è la barra di Minerva, a tutta larghezza, che resta
           // come scelta.
           'stile': 'isola',
+          // L'Isola a scomparsa: nascosta oltre il bordo, ricompare con una
+          // sosta del puntatore lassù. Giacomo, 25 settembre 2026: «così
+          // recuperiamo spazio».
+          'aScomparsa': true,
           // Qui c'era `'opacity': 0.10`. Tolta il 5 settembre 2026: non la
           // leggeva NESSUNO — zero occorrenze in tutto il progetto — e la
           // trasparenza della barra ce l'ha già `shell.membraneOpacity`, che

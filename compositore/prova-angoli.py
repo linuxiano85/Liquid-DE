@@ -16,7 +16,10 @@ aprire: è NON aprire per sbaglio. Questa prova guarda che:
      prende la barra di scorrimento): una spinta piccola non annuncia
      niente, una vera annuncia `bordo` una volta sola, due spinte piccole
      separate da una pausa non si sommano, e negli angoli non c'è bordo;
-  6. lo stesso per il bordo sinistro, da cui escono le Stanze.
+  6. lo stesso per il bordo sinistro, da cui escono le Stanze;
+  7. una sosta sul bordo alto (o basso) fuori dagli angoli annuncia il bordo:
+     da lì ricompare l'Isola a scomparsa;
+  8. con una finestra ingrandita non risponde niente, se non con Super giù.
 
 Il puntatore lo muove `dito`, che esiste solo in prova. Si spinge oltre il
 bordo (`dito -10 99999`) e il compositore lo ferma sull'angolo vero, quale che
@@ -208,6 +211,53 @@ def main():
                 dito(-500, 5)
                 visti = bordi(annunci.righe(0.4))
                 verifica("nell'angolo in alto a sinistra non c'è bordo", visti == [], visti)
+
+                # 7. I bordi alto e basso (l'Isola a scomparsa): una sosta
+                # fuori dagli angoli si annuncia come bordo.
+                dito(400, 300)
+                annunci.righe(0.3)
+                dito(640, -20)
+                visti = bordi(annunci.righe(0.5))
+                verifica("una sosta sul bordo alto annuncia «alto»",
+                         len(visti) == 1 and '"quale":"alto"' in visti[0], visti)
+                dito(400, 300)
+                annunci.righe(0.3)
+                dito(640, 99999)
+                visti = bordi(annunci.righe(0.5))
+                verifica("e sul bordo basso «basso»",
+                         len(visti) == 1 and '"quale":"basso"' in visti[0], visti)
+
+                # 8. La riva riservata: con una finestra ingrandita angoli e
+                # bordi rispondono solo con Super giù.
+                display = re.search(r"^minerva-wayland: in ascolto su (\S+)",
+                                    registro.read_text(errors="replace"), re.M)[1]
+                figli.append(subprocess.Popen(["alacritty"], env=dict(amb, WAYLAND_DISPLAY=display),
+                                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                aspetta(lambda: '"classe":"Alacritty"' in chiedi(canale, "finestre"), 20)
+                time.sleep(0.5)
+                r = chiedi(canale, "ingrandisci attiva si")
+                assert r.startswith("ok"), r
+                time.sleep(0.3)
+                dito(400, 300)
+                annunci.righe(0.3)
+                for x, y in ((-10, 99999), (640, -20), (99999, -10), (destra + 500, 300)):
+                    dito(x, y)
+                    time.sleep(0.35)
+                    dito(400, 300)
+                visti = annunci.righe(0.6)
+                verifica("con una finestra ingrandita: né angoli, né bordi, né spinte",
+                         visti == [], visti)
+                chiedi(canale, "tasto Super_L premi")
+                dito(-10, 99999)
+                visti = [v for v in annunci.righe(0.5) if v.startswith("evento angolo ")]
+                verifica("ma con Super giù l'angolo risponde",
+                         len(visti) == 1 and '"quale":"basso-sx"' in visti[0], visti)
+                dito(400, 300)
+                annunci.righe(0.3)
+                dito(640, -20)
+                visti = bordi(annunci.righe(0.5))
+                verifica("e anche il bordo alto", len(visti) == 1 and '"quale":"alto"' in visti[0], visti)
+                chiedi(canale, "tasto Super_L lascia")
             finally:
                 for f in figli:
                     f.terminate()

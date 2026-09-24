@@ -293,11 +293,54 @@ PanelWindow {
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.Effects.space1
 
+            // ── «Esci dallo schermo intero», scritto per esteso ──────────
+            //
+            // Era un'icona fra tre, senza nome: Giacomo, 25 settembre 2026,
+            // «vedo scritto qualcosa che spiega come portarlo allo stato
+            // normale ma non capisco come». La cosa che si cerca quassù è
+            // proprio questa, e si scrive con le parole.
+            Rectangle {
+                id: esci
+                anchors.verticalCenter: parent.verticalCenter
+                height: fs.barHeight - 8
+                width: esciRiga.implicitWidth + 2 * Theme.Effects.space3
+                radius: height / 2
+                color: esciMouse.containsMouse ? Qt.alpha(Theme.Colors.accent, 0.30)
+                                               : Qt.alpha(Theme.Colors.accent, 0.16)
+                border.width: 1
+                border.color: Qt.alpha(Theme.Colors.accent, 0.45)
+                Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
+                Row {
+                    id: esciRiga
+                    anchors.centerIn: parent
+                    spacing: Theme.Effects.space2
+                    Ui.Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 14; height: 14
+                        name: "restore"
+                        color: Theme.Colors.text
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: fs.it ? "Esci dallo schermo intero" : "Leave fullscreen"
+                        color: Theme.Colors.text
+                        font.family: Theme.Typography.fontDisplay
+                        font.pixelSize: Theme.Typography.sizeSM
+                        font.weight: Theme.Typography.weightMedium
+                    }
+                }
+                MouseArea {
+                    id: esciMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    preventStealing: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: fs.run("restore")
+                }
+            }
+
             Repeater {
                 model: [
-                    { "id": "restore",  "icon": "restore",
-                      "it": "Esci da schermo intero", "en": "Leave fullscreen",
-                      "danger": false },
                     { "id": "minimize", "icon": "minimize",
                       "it": "Riduci a icona", "en": "Minimise", "danger": false },
                     { "id": "close",    "icon": "close",
@@ -345,8 +388,12 @@ PanelWindow {
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.top: parent.bottom
             anchors.topMargin: 4
-            text: fs.it ? "Torna indietro portando il puntatore quassù"
-                        : "Bring the pointer up here to come back"
+            // Prima diceva «Torna indietro portando il puntatore quassù»: voleva
+            // dire «questa barra ricompare quassù», e si leggeva come il modo di
+            // uscire dallo schermo intero — che invece non era scritto da
+            // nessuna parte.
+            text: fs.it ? "Per uscire: il pulsante qui sopra, oppure Super+↓  ·  Questa barra torna tenendo Super e portando il puntatore in cima"
+                        : "To leave: the button above, or Super+↓  ·  This bar comes back holding Super with the pointer at the top"
             color: Theme.Colors.textFaint
             font.family: Theme.Typography.fontDisplay
             font.weight: Theme.Typography.weightRegular

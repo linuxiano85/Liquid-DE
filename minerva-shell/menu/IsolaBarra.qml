@@ -37,15 +37,64 @@ PanelWindow {
     /// Trascinata dall'altra parte dello schermo.
     signal spostaChiesto(bool inBasso)
 
+    // ── A scomparsa ──────────────────────────────────────────────────────
+    //
+    // Giacomo, 25 settembre 2026: «l'isola alta centrale la vorrei a
+    // scomparsa, e passando sulla parte alta deve ricomparire, così
+    // recuperiamo spazio». Di serie sta nascosta oltre il bordo e non
+    // riserva la fascia: le finestre arrivano fino in cima. Scende con una
+    // sosta del puntatore sul bordo (l'evento `bordo` «alto» del
+    // compositore, `svela()`), resta finché il puntatore ci sta sopra, e
+    // risale un attimo dopo che se n'è andato.
+    //
+    // ── La riva riservata ────────────────────────────────────────────────
+    //
+    // Con una finestra che riempie lo schermo il compositore non annuncia il
+    // bordo se non con Super giù; e tenendo Super (`consenso`) l'Isola sale
+    // anche sopra lo schermo intero — per questo, finché dura, sta sul piano
+    // più alto.
+    /// `bar.aScomparsa`: nascosta finché non la si chiama.
+    property bool aScomparsa: true
+    /// Una finestra ingrandita o a schermo intero: niente la fa comparire da
+    /// sola (le notifiche comprese).
+    property bool riservata: false
+    /// Super tenuto con la riva riservata: sale, sopra a tutto.
+    property bool consenso: false
+    /// Qualcosa la tiene su: la sua carta aperta, per esempio.
+    property bool tenuta: false
+
+    property bool svelata: false
+    readonly property bool su: !isolaBarra.aScomparsa || isolaBarra.svelata
+                               || isolaBarra.consenso || isolaBarra.tenuta
+                               || (isolaBarra.arrivata !== null && !isolaBarra.riservata)
+    function svela() {
+        isolaBarra.svelata = true;
+        cala.restart();
+    }
+    Timer {
+        id: cala
+        interval: 1400
+        onTriggered: {
+            if (sopra.hovered || trascina.pressed)
+                cala.restart();
+            else
+                isolaBarra.svelata = false;
+        }
+    }
+    // Finito il consenso (Super lasciato) resta su finché ci si sta sopra.
+    onConsensoChanged: if (!isolaBarra.consenso) isolaBarra.svela()
+    onTenutaChanged: if (!isolaBarra.tenuta) isolaBarra.svela()
+
     anchors { top: !isolaBarra.inBasso; bottom: isolaBarra.inBasso; left: true; right: true }
     implicitHeight: Theme.Effects.barHeight
-    exclusiveZone: Theme.Effects.barHeight
+    exclusiveZone: isolaBarra.aScomparsa ? 0 : Theme.Effects.barHeight
     color: "transparent"
     WlrLayershell.namespace: "liquid-isola-barra"
-    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.layer: isolaBarra.consenso ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-    // Solo la capsula prende il puntatore: ai lati c'è la scrivania.
-    mask: Region { item: capsula }
+    // Solo la capsula prende il puntatore, e solo quando c'è: nascosta, il
+    // bordo è delle finestre.
+    mask: Region { item: isolaBarra.su ? capsula : null }
 
     // ── La notifica che arriva ───────────────────────────────────────────
     property var arrivata: null
@@ -83,6 +132,7 @@ PanelWindow {
     function riassunto() {
         var r = [];
         r.push("isola " + (isolaBarra.inBasso ? "in basso" : "in alto")
+               + " · " + (isolaBarra.su ? "su" : "nascosta")
                + " · larga " + Math.round(capsula.width));
         if (isolaBarra.arrivata)
             r.push("notifica: " + isolaBarra.arrivata.appName + " — " + isolaBarra.arrivata.summary);
@@ -96,7 +146,20 @@ PanelWindow {
         id: capsula
         readonly property real alta: Theme.Effects.barHeight - 8
         height: capsula.alta
-        anchors.verticalCenter: parent.verticalCenter
+        // Su: in mezzo alla fascia. Nascosta: oltre il bordo, con la molla.
+        y: {
+            var dentro = (isolaBarra.height - capsula.alta) / 2;
+            var fuori = isolaBarra.inBasso ? isolaBarra.height + 10 : -capsula.alta - 10;
+            return isolaBarra.su ? dentro : fuori;
+        }
+        Behavior on y {
+            enabled: Theme.Motion.liquido
+            SpringAnimation { spring: Theme.Motion.molla * 0.8; damping: 0.4 }
+        }
+        HoverHandler {
+            id: sopra
+            onHoveredChanged: if (!hovered) cala.restart()
+        }
         x: (isolaBarra.width - width) / 2
         width: riga.implicitWidth + 2 * Theme.Effects.space2
         radius: height / 2

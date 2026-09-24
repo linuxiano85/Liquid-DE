@@ -19,6 +19,7 @@ li deve separare senza sbagliare mai:
 I tasti li preme `tasto`, che esiste solo in prova: una tastiera finta DENTRO
 il compositore, che passa dagli stessi gestori di quella vera.
 """
+import json
 import os
 import re
 import socket
@@ -166,6 +167,36 @@ def main():
                 time.sleep(0.6); tasto("Super_L", "lascia")
                 visti = ascolto.azioni(0.6)
                 verifica("Super + clic: niente menù e niente tasti al rilascio", visti == [], visti)
+
+                # 7. Super+↓ su una finestra a schermo intero: ne esce e torna
+                # com'era, senza ridurla (la riduceva restando a schermo
+                # intero: tornava senza barra del titolo).
+                for riga in ("scorciatoia SUPER f - schermo-intero:0",
+                             "scorciatoia SUPER down - sposta-finestra:d"):
+                    assert chiedi(canale, riga).startswith("ok")
+                display = re.search(r"^minerva-wayland: in ascolto su (\S+)",
+                                    registro.read_text(errors="replace"), re.M)[1]
+                figli.append(subprocess.Popen(["alacritty"], env=dict(amb, WAYLAND_DISPLAY=display),
+                                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+
+                def alacritty():
+                    for w in json.loads(chiedi(canale, "finestre")[3:]):
+                        if w.get("classe") == "Alacritty":
+                            return w
+                prima = aspetta(alacritty, 20)
+                time.sleep(0.5)
+                tasto("Super_L", "premi"); tasto("f", "premi"); tasto("f", "lascia"); tasto("Super_L", "lascia")
+                time.sleep(0.5)
+                verifica("Super+F la mette a schermo intero", alacritty()["schermoIntero"] is True, alacritty())
+                tasto("Super_L", "premi"); tasto("Down", "premi"); tasto("Down", "lascia"); tasto("Super_L", "lascia")
+                time.sleep(0.5)
+                dopo = alacritty()
+                verifica("Super+↓ esce dallo schermo intero, senza ridurla",
+                         dopo["schermoIntero"] is False and dopo["ridotta"] is False, dopo)
+                verifica("e torna alla misura di prima",
+                         (dopo["x"], dopo["y"], dopo["larghezza"], dopo["altezza"])
+                         == (prima["x"], prima["y"], prima["larghezza"], prima["altezza"]),
+                         (prima, dopo))
 
                 # 6. Fuori prova il verbo non c'è: lo dice il codice, qui si
                 # guarda che almeno risponda in prova e rifiuti l'assurdo.

@@ -4529,6 +4529,21 @@ static void aggancia_attiva(struct minerva *m, const char *dove) {
 	if (f == NULL)
 		return;
 
+	// ── Dallo schermo intero, prima si esce ──────────────────────────────
+	//
+	// Giacomo, 25 settembre 2026: «quando passo una finestra a schermo
+	// intero e premo poi Super+freccia giù la finestra perde la barra del
+	// titolo». Super+↓ la RIDUCEVA restando a schermo intero: tornava senza
+	// barra e senza un modo evidente di uscirne. Adesso Super+↓ esce dallo
+	// schermo intero e basta — «torna com'era» — e le altre frecce prima ne
+	// escono e poi fanno la loro.
+	if (f->schermo_intero) {
+		finestra_schermo_intero(f, false);
+		annuncia(m, "stato", f);
+		if (dove[0] == 'd')
+			return;
+	}
+
 	if (dove[0] == 'u') {
 		finestra_ingrandisci(f, true);
 		return;
@@ -5947,6 +5962,41 @@ static bool presa_avanti(struct minerva *m) {
 	return true;
 }
 
+// ── La riva riservata ────────────────────────────────────────────────────
+//
+// Giacomo, 25 settembre 2026: «se ho una app a schermo intero compaiono le
+// isole passandoci sopra». Con una finestra che riempie lo schermo —
+// ingrandita o a schermo intero — la riva non si muove da sola: angoli,
+// bordi e spinte rispondono solo mentre Super è tenuto giù. È la prima
+// regola dei tasti («Super da solo è la porta») applicata al puntatore.
+// Senza finestre che riempiono lo schermo tutto resta com'era.
+static bool riva_riservata(struct minerva *m, struct wlr_output *out) {
+	if (out == NULL)
+		return false;
+	struct wlr_box box;
+	wlr_output_layout_get_box(m->schermi, out, &box);
+	struct finestra *f;
+	wl_list_for_each(f, &m->finestre_elenco, link) {
+		if (!finestra_visibile(f) || (!f->ingrandita && !f->schermo_intero))
+			continue;
+		struct wlr_box fb;
+		finestra_box(f, &fb);
+		if (wlr_box_contains_point(&box, fb.x + fb.width / 2.0, fb.y + fb.height / 2.0))
+			return true;
+	}
+	return false;
+}
+
+static bool super_giu(struct minerva *m) {
+	struct wlr_keyboard *kb = wlr_seat_get_keyboard(m->seat);
+	return kb != NULL && (wlr_keyboard_get_modifiers(kb) & WLR_MODIFIER_LOGO);
+}
+
+/// La riva di questo schermo si può muovere adesso?
+static bool riva_libera(struct minerva *m, struct wlr_output *out) {
+	return !riva_riservata(m, out) || super_giu(m);
+}
+
 // ── Il bordo alto sopra lo schermo intero ────────────────────────────────
 //
 // A schermo intero l'unica via d'uscita visibile è la barra che scende
@@ -5978,6 +6028,9 @@ static void bordo_alto_guarda(struct minerva *m) {
 		return;
 	}
 	if (dentro > 2 || m->bordo_alto_detto)
+		return;
+	// Sopra lo schermo intero la barra scende solo con Super giù.
+	if (!super_giu(m))
 		return;
 	bool intero = false;
 	struct finestra *f;
@@ -6013,9 +6066,14 @@ static void bordo_alto_guarda(struct minerva *m) {
 //    manda più movimenti;
 //  · solo gli angoli VERI: fra due schermi affiancati l'angolo interno non
 //    è un angolo, il puntatore ci passa per andare di là;
-//  · niente mentre si trascina una finestra, a schermo bloccato, o sopra una
-//    finestra a schermo intero (un gioco non deve aprire il menù perché il
-//    mouse è finito in un angolo).
+//  · niente mentre si trascina una finestra o a schermo bloccato; e con una
+//    finestra che riempie lo schermo (ingrandita o a schermo intero) solo
+//    con Super giù (`riva_libera`): un gioco non deve aprire il menù perché
+//    il mouse è finito in un angolo.
+//
+// Anche i bordi alto e basso, fuori dagli angoli, con la stessa sosta: si
+// annunciano come `evento bordo {"quale":"alto"}` e servono all'Isola a
+// scomparsa.
 //
 // Si annuncia `evento angolo {"quale":"basso-sx","schermo":"eDP-1"}` dopo la
 // sosta, e `evento angolo {"quale":"via"}` quando il puntatore se ne va da un
@@ -6042,10 +6100,13 @@ static int angolo_scade(void *dati) {
 	if (m->angolo_ora == NULL || m->angolo_detto || m->canale == NULL)
 		return 0;
 	m->angolo_detto = true;
+	// Il bordo alto e quello basso (l'Isola a scomparsa) si annunciano come
+	// bordi, gli angoli come angoli: sono due ascolti diversi nella shell.
+	const bool bordo = strcmp(m->angolo_ora, "alto") == 0 || strcmp(m->angolo_ora, "basso") == 0;
 	char riga[160];
-	snprintf(riga, sizeof(riga), "evento angolo {\"quale\":\"%s\",\"schermo\":\"%s\"}",
-		m->angolo_ora, m->angolo_schermo);
-	canale_annuncia(m->canale, "angolo", riga);
+	snprintf(riga, sizeof(riga), "evento %s {\"quale\":\"%s\",\"schermo\":\"%s\"}",
+		bordo ? "bordo" : "angolo", m->angolo_ora, m->angolo_schermo);
+	canale_annuncia(m->canale, bordo ? "bordo" : "angolo", riga);
 	return 0;
 }
 
@@ -6070,21 +6131,16 @@ static void angolo_guarda(struct minerva *m) {
 			const bool vero =
 				wlr_output_layout_output_at(m->schermi, fuori_x, cy) == NULL &&
 				wlr_output_layout_output_at(m->schermi, cx, fuori_y) == NULL;
-			bool intero = false;
-			struct finestra *f;
-			wl_list_for_each(f, &m->finestre_elenco, link) {
-				if (!f->schermo_intero || !finestra_visibile(f))
-					continue;
-				struct wlr_box fb;
-				finestra_box(f, &fb);
-				if (wlr_box_contains_point(&fb, cx, cy)) {
-					intero = true;
-					break;
-				}
-			}
-			if (vero && !intero)
+			if (vero && riva_libera(m, out))
 				quale = alto ? (sx ? "alto-sx" : "alto-dx")
 				             : (sx ? "basso-sx" : "basso-dx");
+		} else if (alto || basso) {
+			// Il bordo alto o basso, fuori dagli angoli: da lì ricompare
+			// l'Isola a scomparsa. Vero se oltre non c'è un altro schermo.
+			const double fuori_y = alto ? box.y - 4 : box.y + box.height + 4;
+			if (wlr_output_layout_output_at(m->schermi, cx, fuori_y) == NULL
+			    && riva_libera(m, out))
+				quale = alto ? "alto" : "basso";
 		}
 	}
 
@@ -6094,8 +6150,11 @@ static void angolo_guarda(struct minerva *m) {
 	    || (quale != NULL && m->angolo_ora != NULL && strcmp(quale, m->angolo_ora) == 0))
 		return;
 
-	// Cambiato angolo, o uscito: quello di prima si chiude.
-	if (m->angolo_detto && m->canale != NULL)
+	// Cambiato angolo, o uscito: quello di prima si chiude. I bordi alto e
+	// basso non hanno un «via»: l'Isola se ne va da sola quando il puntatore
+	// la lascia.
+	if (m->angolo_detto && m->canale != NULL && m->angolo_ora != NULL
+	    && strcmp(m->angolo_ora, "alto") != 0 && strcmp(m->angolo_ora, "basso") != 0)
 		canale_annuncia(m->canale, "angolo", "evento angolo {\"quale\":\"via\"}");
 	m->angolo_detto = false;
 	m->angolo_ora = quale;
@@ -6150,19 +6209,8 @@ static void bordo_spinto(struct minerva *m, double oltre, uint32_t tempo) {
 		else if (mezzo && cx <= box.x + 1
 		    && wlr_output_layout_output_at(m->schermi, box.x - 4, cy) == NULL)
 			lato = -1;
-		if (lato != 0) {
-			struct finestra *f;
-			wl_list_for_each(f, &m->finestre_elenco, link) {
-				if (!f->schermo_intero || !finestra_visibile(f))
-					continue;
-				struct wlr_box fb;
-				finestra_box(f, &fb);
-				if (wlr_box_contains_point(&fb, cx, cy)) {
-					lato = 0;
-					break;
-				}
-			}
-		}
+		if (lato != 0 && !riva_libera(m, out))
+			lato = 0;
 	}
 	if (lato != m->spinta_lato) {
 		m->spinta = 0;
