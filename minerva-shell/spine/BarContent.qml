@@ -387,7 +387,7 @@ Item {
             id: statusCluster
             anchors.verticalCenter: parent.verticalCenter
             active: bar.spine.activePanel === "control"
-            onClicked: bar.spine.toggle("control")
+            onClicked: bar.spine.centroChiesto()
         }
 
         Ui.SpineButton {

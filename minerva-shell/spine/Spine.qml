@@ -83,6 +83,8 @@ PanelWindow {
     /// Il pulsante del menù delle app: il menù è il Sottomarino, che non
     /// vive nella barra (`menu/Sottomarino.qml`).
     signal menuAppChiesto()
+    /// I segni di stato: aprono il Centro di controllo (`menu/Centro.qml`).
+    signal centroChiesto()
     signal monitorRequested()
     /// Tasto destro sul nome della finestra attiva, in coordinate globali.
     signal windowMenuRequested(point where)

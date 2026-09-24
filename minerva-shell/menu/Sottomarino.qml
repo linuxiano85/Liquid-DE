@@ -441,7 +441,10 @@ PanelWindow {
         // Anche la y: in orizzontale lo scafo è appoggiato in basso, e
         // allungandolo verso l'alto la sua cima deve seguire il dito.
         radius: Theme.Effects.radiusLG
-        color: Theme.Colors.panel
+        // Quasi pieno: col vetro trasparente di serie i riquadri della
+        // scrivania dietro si leggevano ATTRAVERSO le levette e le app.
+        color: Qt.rgba(Theme.Colors.panel.r, Theme.Colors.panel.g, Theme.Colors.panel.b,
+                       Math.max(Theme.Colors.panel.a, 0.98))
         border.width: Theme.Effects.hairline
         border.color: Theme.Colors.edge
 

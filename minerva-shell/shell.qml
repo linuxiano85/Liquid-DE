@@ -491,11 +491,12 @@ ShellRoot {
 
     property var scrivanie: ({})
 
-    function iscriviScrivania(nome, barra, dock, sottomarino) {
+    function iscriviScrivania(nome, barra, dock, sottomarino, centro) {
         if (!nome)
             return;
         var m = root.scrivanie;
-        m[nome] = { "barra": barra, "dock": dock, "sottomarino": sottomarino };
+        m[nome] = { "barra": barra, "dock": dock, "sottomarino": sottomarino,
+                    "centro": centro };
         root.scrivanie = m;
         root.scrivanieCambiate();
     }
@@ -557,7 +558,34 @@ ShellRoot {
         case "sospendi":
         case "riavvia":
         case "spegni":
-        case "esci":         root.apriPannello("power"); break;
+        case "esci":         root.apriCentro(); break;
+        }
+    }
+
+    /// Il Centro di controllo dello schermo attivo; senza, il pannello di prima.
+    function apriCentro() {
+        var s = root.scrivaniaAttiva();
+        if (s && s.centro)
+            s.centro.commuta();
+        else
+            root.pannello("control");
+    }
+
+    /// I pulsanti dell'energia del Centro. Esci, Riavvia e Spegni arrivano
+    /// qui solo dopo essere stati tenuti premuti fino in fondo.
+    function azioneDalCentro(id) {
+        // In prova non si spegne, non si sospende e non si esce davvero: la
+        // macchina è quella vera, e con lei il collegamento di chi ci lavora.
+        if (Quickshell.env("MINERVA_PROVA")) {
+            console.log("[LIQUID][CENTRO] in prova, non eseguo: " + id);
+            return;
+        }
+        switch (id) {
+        case "blocca":   root.run(["minerva-blocca"]); break;
+        case "sospendi": root.run(["systemctl", "suspend"]); break;
+        case "esci":     Core.Compositore.esciDallaSessione(); break;
+        case "riavvia":  root.run(["systemctl", "reboot"]); break;
+        case "spegni":   root.run(["systemctl", "poweroff"]); break;
         }
     }
 
@@ -700,6 +728,7 @@ ShellRoot {
                 onCheatsheetRequested: root.toggleCheatsheet()
                 onSettingsRequested: root.openSettings()
                 onMenuAppChiesto: sottomarino.commuta()
+                onCentroChiesto: centroControllo.commuta()
                 onMonitorRequested: root.openMonitor()
                 onScreenshotRequested: function(modo, ritardo) {
                     root.scattaSchermata(modo, ritardo);
@@ -729,17 +758,29 @@ ShellRoot {
                 margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
                 onAzione: function(id) { root.azioneDalMenu(id); }
             }
+            // ── Il Centro di controllo: scende dall'angolo in alto a destra ─
+            Centro {
+                id: centroControllo
+                screen: scrivania.modelData
+                margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
+                onAzione: function(id) { root.azioneDalCentro(id); }
+            }
+
             Connections {
                 target: Core.Compositore
                 function onAngolo(quale, schermo) {
-                    if (quale === "basso-sx" && scrivania.modelData
-                        && schermo === scrivania.modelData.name)
+                    if (!scrivania.modelData || schermo !== scrivania.modelData.name)
+                        return;
+                    if (quale === "basso-sx")
                         sottomarino.apri("");
+                    else if (quale === "alto-dx")
+                        centroControllo.apri();
                 }
             }
 
             Component.onCompleted: root.iscriviScrivania(
-                scrivania.modelData ? scrivania.modelData.name : "", spine, dock, sottomarino)
+                scrivania.modelData ? scrivania.modelData.name : "", spine, dock, sottomarino,
+                centroControllo)
             Component.onDestruction: root.cancellaScrivania(
                 scrivania.modelData ? scrivania.modelData.name : "")
         }
@@ -2061,7 +2102,7 @@ ShellRoot {
 
     Core.Scorciatoia {
         name: "control"
-        onPressed: root.pannello("control")
+        onPressed: root.apriCentro()
     }
 
     // Stamp non scatta: CHIEDE. Prima faceva una cosa sola e la faceva subito
