@@ -37,8 +37,10 @@ esac
 # (user-dirs.dirs), che su un'installazione italiana è «Immagini» e su una
 # inglese «Pictures»: scriverne una a mano vorrebbe dire creare una seconda
 # cartella accanto a quella che l'utente già usa.
-IMMAGINI=""
-if [ -r "${XDG_CONFIG_HOME:-$HOME/.config}/user-dirs.dirs" ]; then
+# Chi ha già detto dove (una prova, per esempio: vedi
+# `compositore/prova-annidata.sh`) vince sul file di user-dirs.
+IMMAGINI="${XDG_PICTURES_DIR:-}"
+if [ -z "$IMMAGINI" ] && [ -r "${XDG_CONFIG_HOME:-$HOME/.config}/user-dirs.dirs" ]; then
     # shellcheck disable=SC1090
     . "${XDG_CONFIG_HOME:-$HOME/.config}/user-dirs.dirs" 2>/dev/null
     IMMAGINI="${XDG_PICTURES_DIR:-}"
@@ -71,6 +73,12 @@ NOME="$CARTELLA/Schermata $(date '+%Y-%m-%d alle %H.%M.%S').png"
 # `minerva-shell/core/Notifications.qml`.
 avvisa() {
     command -v notify-send >/dev/null 2>&1 || return 0
+    # In prova le notifiche andrebbero al server della sessione VERA (il bus
+    # è lo stesso): si scrive nel registro e basta.
+    if [ -n "${MINERVA_PROVA:-}" ]; then
+        echo "minerva-schermata: $1 — $2" >&2
+        return 0
+    fi
     if [ -n "${3:-}" ]; then
         notify-send -a "Minerva" -h "string:x-minerva-file:$3" "$1" "$2"
     else

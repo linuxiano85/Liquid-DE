@@ -288,9 +288,31 @@ ShellRoot {
                 s.isola.chiudi();
             else if (testo === "mese" || testo === "giorno")
                 s.isola.giraSu(testo);
+            else if (testo === "notifiche")
+                s.isola.apriNotifiche(null);
+            else if (testo === "schermata")
+                s.isola.apriSchermata(null);
             else if (testo === "avanti" || testo === "indietro")
                 s.isola.sfoglia(testo === "avanti" ? 1 : -1);
             return s.isola.riassunto();
+        }
+
+        /// Solo in prova: fa arrivare una notifica di Minerva, per vedere come
+        /// la racconta l'Isola. Fuori prova non fa niente — `notify-send`
+        /// andrebbe al server delle notifiche della sessione vera.
+        function notifica(testo: string): string {
+            if (!Quickshell.env("MINERVA_PROVA"))
+                return "no: solo in prova";
+            Core.Notifications.daMinerva(testo, "Una notifica di prova");
+            return "ok";
+        }
+
+        /// L'Isola al posto della barra: che cosa mostra.
+        function barra(): string {
+            var s = root.scrivaniaAttiva();
+            if (!root.barraIsola)
+                return "barra classica";
+            return s && s.isolaBarra ? s.isolaBarra.riassunto() : "nessuna isola";
         }
 
         /// I tasti sulla scrivania: «apri» o «chiudi», come Super tenuto e
@@ -429,6 +451,9 @@ ShellRoot {
     // sé, così una prova può metterle dove vuole senza toccare il file della
     // sessione vera.
     readonly property bool barraInBasso: Core.Posizioni.barraInBasso
+    /// La barra della Riva: l'Isola che galleggia in mezzo
+    /// (`menu/IsolaBarra.qml`). Con «classica» torna la barra di Minerva.
+    readonly property bool barraIsola: Core.Ipc.get("bar.stile", "isola") !== "classica"
     readonly property bool dockInAlto: Core.Posizioni.dockInAlto
 
     readonly property bool titleBarsOn: Core.Ipc.get("windows.titleBars", true)
@@ -531,12 +556,13 @@ ShellRoot {
 
     property var scrivanie: ({})
 
-    function iscriviScrivania(nome, barra, dock, sottomarino, centro, cassetto, isola) {
+    function iscriviScrivania(nome, barra, dock, sottomarino, centro, cassetto, isola, isolaBarra) {
         if (!nome)
             return;
         var m = root.scrivanie;
         m[nome] = { "barra": barra, "dock": dock, "sottomarino": sottomarino,
-                    "centro": centro, "cassetto": cassetto, "isola": isola };
+                    "centro": centro, "cassetto": cassetto, "isola": isola,
+                    "isolaBarra": isolaBarra };
         root.scrivanie = m;
         root.scrivanieCambiate();
     }
@@ -582,6 +608,30 @@ ShellRoot {
             s.sottomarino.commuta();
         else
             root.pannello("apps");
+    }
+
+    /// Stamp: con l'Isola la scelta della schermata è una faccia della sua
+    /// carta; con la barra classica il pannello di prima.
+    function apriSchermata() {
+        var s = root.scrivaniaAttiva();
+        if (root.barraIsola && s && s.isola) {
+            if (s.isola.aperto && s.isola.faccia === "schermata") s.isola.chiudi();
+            else s.isola.apriSchermata(s.isolaBarra ? s.isolaBarra.rettangoloCapsula() : null);
+        } else {
+            root.pannello("schermata");
+        }
+    }
+
+    /// Le notifiche: con l'Isola sono una faccia della sua carta, con la
+    /// barra classica il pannello di prima.
+    function apriNotifiche() {
+        var s = root.scrivaniaAttiva();
+        if (root.barraIsola && s && s.isola) {
+            if (s.isola.aperto && s.isola.faccia === "notifiche") s.isola.chiudi();
+            else s.isola.apriNotifiche(s.isolaBarra ? s.isolaBarra.rettangoloCapsula() : null);
+        } else {
+            root.pannello("notifications");
+        }
     }
 
     /// Super tenuto premuto: i tasti sulla scrivania di ogni schermo.
@@ -769,6 +819,10 @@ ShellRoot {
                 id: spine
                 screen: scrivania.modelData
                 inBasso: root.barraInBasso
+                // Con l'Isola la barra di Minerva non c'è. Torna solo se si
+                // apre uno dei pannelli che vivono ancora dentro di lei (la
+                // schermata di Stamp, per esempio), e se ne va con lui.
+                visible: !root.barraIsola || spine.activePanel !== ""
 
                 // Il raccoglitore di clic della Spine sta sopra tutto: gli si
                 // dice dove NON stendersi, altrimenti con un pannello aperto
@@ -835,6 +889,29 @@ ShellRoot {
                               : (root.barraInBasso ? Theme.Effects.barHeight : 0)
             }
 
+            // ── L'Isola al posto della barra ──────────────────────────────
+            IsolaBarra {
+                id: isolaBarra
+                screen: scrivania.modelData
+                visible: root.barraIsola
+                inBasso: root.barraInBasso
+                onGiornataChiesta: function(dove) {
+                    if (isolaGiorno.aperto) isolaGiorno.chiudi(); else isolaGiorno.apriDa(dove);
+                }
+                onNotificheChieste: function(dove) {
+                    if (isolaGiorno.aperto && isolaGiorno.faccia === "notifiche") isolaGiorno.chiudi();
+                    else isolaGiorno.apriNotifiche(dove);
+                }
+                onCentroChiesto: centroControllo.commuta()
+                // Trascinata dall'altra parte: la barra va di là, e la dock —
+                // che non può stare dallo stesso bordo — passa dall'altra.
+                onSpostaChiesto: function(inBasso) {
+                    Core.Ipc.setSetting("bar.position", inBasso ? "basso" : "alto");
+                    if (Core.Ipc.get("dock.enabled", true) === true)
+                        Core.Ipc.setSetting("dock.position", inBasso ? "alto" : "basso");
+                }
+            }
+
             // ── L'Isola: la capsula in mezzo alla barra che cresce ────────
             Isola {
                 id: isolaGiorno
@@ -843,6 +920,7 @@ ShellRoot {
                 margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
                 margineBasso: root.barraInBasso ? Theme.Effects.barHeight : 0
                 onImpostazioniChieste: root.openSettings("dataora")
+                onSchermataChiesta: function(modo, ritardo) { root.scattaSchermata(modo, ritardo); }
             }
 
             // ── Il Cassetto degli appunti: esce dal bordo destro ──────────
@@ -925,7 +1003,7 @@ ShellRoot {
 
             Component.onCompleted: root.iscriviScrivania(
                 scrivania.modelData ? scrivania.modelData.name : "", spine, dock, sottomarino,
-                centroControllo, cassettoAppunti, isolaGiorno)
+                centroControllo, cassettoAppunti, isolaGiorno, isolaBarra)
             Component.onDestruction: root.cancellaScrivania(
                 scrivania.modelData ? scrivania.modelData.name : "")
         }
@@ -1151,7 +1229,9 @@ ShellRoot {
 
     // ── Avvisi delle notifiche ───────────────────────────────────────────
 
-    Toasts { inBasso: root.barraInBasso }
+    // Con l'Isola gli avvisi li racconta lei, allargandosi: due avvisi per la
+    // stessa notifica sarebbero la stessa cosa detta due volte.
+    Toasts { inBasso: root.barraInBasso; spenti: root.barraIsola }
 
     // Avviso a schermo di volume e luminosità: senza, premere i tasti
     // funzione non produce nessun segno e non si sa se hanno funzionato.
@@ -2237,7 +2317,7 @@ ShellRoot {
 
     Core.Scorciatoia {
         name: "notifications"
-        onPressed: root.pannello("notifications")
+        onPressed: root.apriNotifiche()
     }
 
     Core.Scorciatoia {
@@ -2251,7 +2331,7 @@ ShellRoot {
     // sa già cosa vuole (Maiusc+Stamp una porzione, Super+Stamp la finestra).
     Core.Scorciatoia {
         name: "schermata"
-        onPressed: root.pannello("schermata")
+        onPressed: root.apriSchermata()
     }
 
     // I tasti della luminosità passano di qui invece di chiamare

@@ -359,6 +359,12 @@ struct minerva {
 	// tocco non scatta, che è precisamente quello che si vuole.
 	uint32_t ultimo_premuto;
 
+	/// La superficie su cui si è premuto un pulsante, e dove comincia in
+	/// coordinate dello schermo (vedi «la presa implicita» in
+	/// `cursore_aggiorna`).
+	struct wlr_surface *tenuta;
+	double tenuta_x, tenuta_y;
+
 	/// Il «tieni» in corso (vedi `tenuto` in `struct scorciatoia`): quale
 	/// tasto, quale scorciatoia, se è già scattato, e il timer dei 400 ms.
 	uint32_t tieni_tasto;
@@ -6192,6 +6198,29 @@ static void cursore_aggiorna(struct minerva *m, uint32_t tempo) {
 	if (presa_avanti(m))
 		return;
 
+	// ── La presa implicita ───────────────────────────────────────────────
+	//
+	// Wayland la dà per scontata: finché un pulsante è giù, il puntatore
+	// resta alla superficie su cui è stato premuto, anche se esce dai suoi
+	// bordi. Qui non c'era — il fuoco seguiva la superficie sotto il
+	// puntatore anche col pulsante giù — e ogni trascinamento che usciva
+	// dalla superficie si fermava a metà: la barra di scorrimento tirata
+	// fuori dalla finestra, il testo selezionato oltre il bordo, le maniglie
+	// del menù, l'Isola trascinata in basso. Visto il 24 settembre 2026
+	// provando l'Isola: la capsula restava «premuta» e non si spostava.
+	//
+	// Non vale mentre si trascina un file (lì il bersaglio DEVE cambiare) né
+	// mentre il compositore sposta una finestra (`presa_avanti`, sopra).
+	if (m->tenuta != NULL) {
+		if (m->seat->pointer_state.focused_surface == m->tenuta
+		    && m->seat->drag == NULL) {
+			wlr_seat_pointer_notify_motion(m->seat, tempo,
+				m->cursore->x - m->tenuta_x, m->cursore->y - m->tenuta_y);
+			return;
+		}
+		m->tenuta = NULL;
+	}
+
 	struct sotto s;
 	cosa_c_e_sotto(m, &s);
 
@@ -6472,6 +6501,11 @@ static void cursore_premuto(struct wl_listener *l, void *dati) {
 
 	if (e->state == WL_POINTER_BUTTON_STATE_RELEASED) {
 		cursore_rilasciato(m, e);
+		// Finita la presa implicita, il puntatore torna a chi gli sta sotto.
+		if (m->tenuta != NULL && m->seat->pointer_state.button_count == 0) {
+			m->tenuta = NULL;
+			cursore_aggiorna(m, e->time_msec);
+		}
 		return;
 	}
 
@@ -6584,6 +6618,13 @@ static void cursore_premuto(struct wl_listener *l, void *dati) {
 		fprintf(stderr, "minerva-wayland: pulsante CONSEGNATO %s (0x%x)\n",
 			nome_pulsante(e->button), e->button);
 	wlr_seat_pointer_notify_button(m->seat, e->time_msec, e->button, e->state);
+	// La presa implicita comincia qui: vedi `cursore_aggiorna`.
+	if (s.superficie != NULL
+	    && m->seat->pointer_state.focused_surface == s.superficie) {
+		m->tenuta = s.superficie;
+		m->tenuta_x = m->cursore->x - s.sx;
+		m->tenuta_y = m->cursore->y - s.sy;
+	}
 
 	if (s.finestra != NULL)
 		return;

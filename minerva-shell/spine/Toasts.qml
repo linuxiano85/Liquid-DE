@@ -61,7 +61,9 @@ PanelWindow {
 
     implicitWidth: 380
     implicitHeight: Math.max(1, column.implicitHeight)
-    visible: toastModel.count > 0
+    /// Spenti dove qualcun altro racconta le notifiche (l'Isola).
+    property bool spenti: false
+    visible: !spenti && toastModel.count > 0
     color: "transparent"
 
     // Solo i toast visibili; la cronologia completa vive nel singleton.

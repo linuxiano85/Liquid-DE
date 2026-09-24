@@ -40,6 +40,30 @@ PanelWindow {
         var d = new Date(isola.mese.getFullYear(), isola.mese.getMonth() + quanti, 1);
         isola.mese = d;
     }
+    /// Via subito, senza animazione: prima di una schermata.
+    function sparisci() {
+        isola.aperto = false;
+        isola.mostrato = false;
+        spegni.stop();
+    }
+
+    /// La carta sulla schermata: la apre il tasto Stamp.
+    property int ritardoSchermata: 0
+    function apriSchermata(dove) {
+        if (dove !== undefined && dove !== null && dove.width > 0)
+            isola.origine = dove;
+        isola.apri();
+        isola.faccia = "schermata";
+    }
+
+    /// La carta sulle notifiche: la apre la campanella dell'Isola.
+    function apriNotifiche(dove) {
+        if (dove !== undefined && dove !== null && dove.width > 0)
+            isola.origine = dove;
+        isola.apri();
+        isola.faccia = "notifiche";
+        Core.Notifications.markAllRead();
+    }
     function giraSu(faccia) {
         isola.faccia = faccia;
         if (faccia === "mese")
@@ -47,6 +71,9 @@ PanelWindow {
     }
     /// Scegliere una località: lo fanno le Impostazioni.
     signal impostazioniChieste()
+    /// Scattare una schermata: la scatta la shell, dopo che l'Isola se n'è
+    /// andata (`sparisci`), o finirebbe dentro la fotografia.
+    signal schermataChiesta(string modo, int ritardo)
 
     function apriDa(dove) {
         if (dove !== undefined && dove !== null && dove.width > 0)
@@ -192,6 +219,10 @@ PanelWindow {
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
                     text: {
+                        if (isola.faccia === "notifiche")
+                            return "Notifiche";
+                        if (isola.faccia === "schermata")
+                            return "Schermata";
                         var s = isola.oggi.toLocaleDateString(isola._locale, "dddd d MMMM");
                         return s.charAt(0).toUpperCase() + s.slice(1);
                     }
@@ -205,6 +236,15 @@ PanelWindow {
                     anchors.verticalCenter: parent.verticalCenter
                     testo: isola.faccia === "giorno" ? "Calendario" : "Giornata"
                     onScelta: isola.giraSu(isola.faccia === "giorno" ? "mese" : "giorno")
+                }
+                Capsula {
+                    id: svuotaNotifiche
+                    visible: isola.faccia === "notifiche" && Core.Notifications.items.length > 0
+                    anchors.right: parent.right
+                    anchors.rightMargin: 96
+                    anchors.verticalCenter: parent.verticalCenter
+                    testo: "Svuota"
+                    onScelta: Core.Notifications.clear()
                 }
             }
 
@@ -428,6 +468,233 @@ PanelWindow {
                             }
                         }
                     }
+                }
+            }
+
+            // ── La schermata ──
+            //
+            // Stamp non scatta: CHIEDE. Tutto lo schermo, una porzione, una
+            // finestra; e fra quanto. Le stesse scelte del pannello di prima
+            // (`spine/panels/ScreenshotPanel.qml`), dentro l'Isola.
+            Column {
+                id: schermata
+                visible: isola.faccia === "schermata"
+                width: parent.width
+                spacing: Theme.Effects.space2
+
+                Repeater {
+                    model: [
+                        { "id": "schermo",  "icona": "screen", "it": "Tutto lo schermo",  "nota": "Così com'è adesso" },
+                        { "id": "area",     "icona": "crop",   "it": "Una porzione",      "nota": "La scegli trascinando col mouse" },
+                        { "id": "finestra", "icona": "window", "it": "Solo una finestra", "nota": "Quella attiva, senza il resto della scrivania" }
+                    ]
+                    delegate: Rectangle {
+                        id: scelta
+                        required property var modelData
+                        width: schermata.width
+                        height: 52
+                        radius: Theme.Effects.radiusMD
+                        color: sceltaMouse.containsMouse ? Theme.Colors.hover : Theme.Colors.raised
+                        Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
+                        Ui.Icon {
+                            id: sceltaIcona
+                            x: Theme.Effects.space3
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 20; height: 20
+                            name: scelta.modelData.icona
+                            color: Theme.Colors.text
+                        }
+                        Column {
+                            anchors.left: sceltaIcona.right
+                            anchors.leftMargin: Theme.Effects.space3
+                            anchors.verticalCenter: parent.verticalCenter
+                            Text {
+                                text: scelta.modelData.it
+                                color: Theme.Colors.text
+                                font.family: Theme.Typography.fontDisplay
+                                font.pixelSize: Theme.Typography.sizeSM
+                                font.weight: Theme.Typography.weightMedium
+                            }
+                            Text {
+                                text: scelta.modelData.nota
+                                color: Theme.Colors.textMuted
+                                font.family: Theme.Typography.fontDisplay
+                                font.pixelSize: Theme.Typography.sizeXS
+                            }
+                        }
+                        MouseArea {
+                            id: sceltaMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            preventStealing: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                var ritardo = isola.ritardoSchermata;
+                                isola.sparisci();
+                                isola.schermataChiesta(scelta.modelData.id, ritardo);
+                            }
+                        }
+                    }
+                }
+
+                Row {
+                    spacing: Theme.Effects.space2
+                    topPadding: Theme.Effects.space1
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "Fra quanto"
+                        color: Theme.Colors.textMuted
+                        font.family: Theme.Typography.fontDisplay
+                        font.pixelSize: Theme.Typography.sizeSM
+                        rightPadding: Theme.Effects.space2
+                    }
+                    Repeater {
+                        model: [ { "v": 0, "it": "Subito" }, { "v": 3, "it": "3 s" }, { "v": 10, "it": "10 s" } ]
+                        delegate: Capsula {
+                            required property var modelData
+                            testo: modelData.it
+                            color: isola.ritardoSchermata === modelData.v ? Qt.alpha(Theme.Colors.accent, 0.28)
+                                                                          : Theme.Colors.raised
+                            onScelta: isola.ritardoSchermata = modelData.v
+                        }
+                    }
+                }
+                Text {
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    text: "Si salva in Immagini › Schermate, e una copia va anche negli appunti."
+                    color: Theme.Colors.textFaint
+                    font.family: Theme.Typography.fontDisplay
+                    font.pixelSize: Theme.Typography.sizeXS
+                }
+            }
+
+            // ── Le notifiche ──
+            //
+            // Dalla più recente. Un tocco apre quello di cui parla (l'azione
+            // del programma, o il file); la crocetta la toglie.
+            Column {
+                id: notifiche
+                visible: isola.faccia === "notifiche"
+                width: parent.width
+                spacing: Theme.Effects.space2
+                readonly property var elenco: Core.Notifications.items.slice().reverse().slice(0, 8)
+
+                Text {
+                    visible: notifiche.elenco.length === 0
+                    width: parent.width
+                    topPadding: Theme.Effects.space3
+                    bottomPadding: Theme.Effects.space3
+                    horizontalAlignment: Text.AlignHCenter
+                    text: Core.Notifications.doNotDisturb
+                          ? "Niente notifiche. «Non disturbare» è acceso: arrivano senza farsi vedere."
+                          : "Niente notifiche."
+                    wrapMode: Text.WordWrap
+                    color: Theme.Colors.textFaint
+                    font.family: Theme.Typography.fontDisplay
+                    font.pixelSize: Theme.Typography.sizeSM
+                }
+
+                Repeater {
+                    model: notifiche.elenco
+                    delegate: Rectangle {
+                        id: nota
+                        required property var modelData
+                        width: notifiche.width
+                        height: testoNota.implicitHeight + 2 * Theme.Effects.space3
+                        radius: Theme.Effects.radiusMD
+                        color: notaMouse.containsMouse ? Theme.Colors.hover : Theme.Colors.raised
+                        Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
+
+                        Column {
+                            id: testoNota
+                            x: Theme.Effects.space3
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - 2 * Theme.Effects.space3 - 28
+                            spacing: 2
+                            Text {
+                                width: parent.width
+                                elide: Text.ElideRight
+                                text: nota.modelData.appName + " · " + new Date(nota.modelData.time).toLocaleTimeString(isola._locale, "HH:mm")
+                                color: nota.modelData.urgency === 2 ? Theme.Colors.danger : Theme.Colors.textMuted
+                                font.family: Theme.Typography.fontDisplay
+                                font.pixelSize: Theme.Typography.sizeXS
+                            }
+                            Text {
+                                width: parent.width
+                                visible: text !== ""
+                                elide: Text.ElideRight
+                                text: nota.modelData.summary || ""
+                                color: Theme.Colors.text
+                                font.family: Theme.Typography.fontDisplay
+                                font.pixelSize: Theme.Typography.sizeSM
+                                font.weight: Theme.Typography.weightMedium
+                            }
+                            Text {
+                                width: parent.width
+                                visible: text !== ""
+                                text: nota.modelData.body || ""
+                                textFormat: Text.PlainText
+                                wrapMode: Text.WordWrap
+                                maximumLineCount: 2
+                                elide: Text.ElideRight
+                                color: Theme.Colors.textMuted
+                                font.family: Theme.Typography.fontDisplay
+                                font.pixelSize: Theme.Typography.sizeXS
+                            }
+                        }
+                        MouseArea {
+                            id: notaMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            preventStealing: true
+                            cursorShape: Core.Notifications.siPuoAprire(nota.modelData) ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: {
+                                if (!Core.Notifications.siPuoAprire(nota.modelData))
+                                    return;
+                                isola.chiudi();
+                                Core.Notifications.apri(nota.modelData);
+                            }
+                        }
+                        Rectangle {
+                            anchors.right: parent.right
+                            anchors.rightMargin: Theme.Effects.space2
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 24; height: 24; radius: 12
+                            color: viaMouse.containsMouse ? Qt.alpha(Theme.Colors.danger, 0.8) : "transparent"
+                            opacity: notaMouse.containsMouse || viaMouse.containsMouse ? 1 : 0
+                            Ui.Icon {
+                                anchors.centerIn: parent
+                                width: 11; height: 11
+                                name: "close"
+                                color: viaMouse.containsMouse ? Theme.Colors.textOnAccent : Theme.Colors.textMuted
+                            }
+                            MouseArea {
+                                id: viaMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                preventStealing: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    var tutte = Core.Notifications.items;
+                                    for (var i = 0; i < tutte.length; i++)
+                                        if (tutte[i].id === nota.modelData.id && tutte[i].time === nota.modelData.time) {
+                                            Core.Notifications.remove(i);
+                                            break;
+                                        }
+                                }
+                            }
+                        }
+                    }
+                }
+                Text {
+                    visible: Core.Notifications.items.length > notifiche.elenco.length
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    text: "e altre " + (Core.Notifications.items.length - notifiche.elenco.length)
+                    color: Theme.Colors.textFaint
+                    font.family: Theme.Typography.fontDisplay
+                    font.pixelSize: Theme.Typography.sizeXS
                 }
             }
 

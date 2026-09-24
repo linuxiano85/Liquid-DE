@@ -43,15 +43,29 @@ Page {
     /// ricorda: l'elenco è uno solo apposta, o le due cose divergono e
     /// tornando a «Libero» si riprende metà scrivania.
     readonly property var _chiavi: [
-        "bar.position", "bar.listaFinestre",
+        "bar.position", "bar.listaFinestre", "bar.stile",
         "dock.enabled", "dock.position", "dock.modo",
         "dock.iconSize", "dock.magnification",
         "windows.buttonsSide"
     ]
 
     readonly property var _stili: ({
+        // La Riva: al posto della barra l'Isola, una capsula che galleggia in
+        // mezzo con l'ora, il tempo, i segni di stato e le notifiche.
+        "liquid": {
+            "bar.position": "alto",
+            "bar.stile": "isola",
+            "bar.listaFinestre": false,
+            "dock.enabled": true,
+            "dock.position": "basso",
+            "dock.modo": "sempre",
+            "dock.iconSize": 48,
+            "dock.magnification": 1.5,
+            "windows.buttonsSide": "destra"
+        },
         "minerva": {
             "bar.position": "alto",
+            "bar.stile": "classica",
             "bar.listaFinestre": false,
             "dock.enabled": true,
             "dock.position": "basso",
@@ -62,6 +76,7 @@ Page {
         },
         "mac": {
             "bar.position": "alto",
+            "bar.stile": "classica",
             "bar.listaFinestre": false,
             "dock.enabled": true,
             "dock.position": "basso",
@@ -78,6 +93,7 @@ Page {
             // Una barra sola, in basso, con dentro le finestre aperte. La
             // dock non c'è: sarebbe la stessa cosa detta due volte.
             "bar.position": "basso",
+            "bar.stile": "classica",
             "bar.listaFinestre": true,
             "dock.enabled": false,
             "dock.position": "alto",
@@ -165,10 +181,11 @@ Page {
             description: page.it
                 ? "Cambia dove stanno barra, dock e comandi delle finestre"
                 : "Changes where the bar, dock and window controls sit"
-            controlWidth: 380
+            controlWidth: 460
             control: S.ChoicePicker {
                 value: page.attuale
                 options: [
+                    { "value": "liquid",  "label": "Liquid" },
                     { "value": "minerva", "label": "Minerva" },
                     { "value": "mac",     "label": "Mac" },
                     { "value": "windows", "label": "Windows" },
@@ -188,6 +205,10 @@ Page {
 
             Repeater {
                 model: [
+                    { "n": "Liquid",
+                      "d": page.it
+                           ? "Al posto della barra l'Isola: una capsula che galleggia in mezzo con l'ora, il tempo, i segni di stato e le notifiche. Si trascina in alto o in basso."
+                           : "Instead of the bar, the Island: a capsule floating in the middle with the time, the weather, the status and the notifications. Drag it up or down." },
                     { "n": "Minerva",
                       "d": page.it
                            ? "Barra in alto, dock in fondo sempre visibile, comandi delle finestre a destra."

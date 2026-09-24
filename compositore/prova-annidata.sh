@@ -189,6 +189,10 @@ mkdir -p "$XDG_CONFIG_HOME"
 # ~/.cache/cliphist/db, e il Cassetto sa cancellarli: una prova che svuota
 # il Cassetto non deve svuotare la storia di chi sta lavorando.
 export CLIPHIST_DB_PATH="$CONF_PROVA/appunti.db"
+# E le schermate di prova in una cartella loro: Stamp in prova non deve
+# riempire ~/Immagini/Schermate di chi lavora.
+export XDG_PICTURES_DIR="$CONF_PROVA/immagini"
+mkdir -p "$XDG_PICTURES_DIR"
 # Isolamento socket Unix: senza, il demone di prova usa lo stesso
 # /run/user/1000/minerva/canale-<sess>.sock del demone della sessione vera
 # (stesso XDG_SESSION_ID) e fallisce con "già in ascolto".
