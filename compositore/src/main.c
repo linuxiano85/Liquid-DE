@@ -499,6 +499,11 @@ struct minerva {
 	char angolo_schermo[64];
 	bool angolo_detto;
 	struct wl_event_source *angolo_timer;
+	/// La spinta contro il bordo destro (vedi `bordo_spinto`): quanti pixel
+	/// il puntatore ha provato ad andare oltre, e quando l'ultima volta.
+	double spinta;
+	uint32_t spinta_quando;
+	bool spinta_detta;
 	/// Se il «locked» è già partito. wlroots lo consente **una volta sola**
 	/// per serratura, e chiamarlo due volte non è un errore da gestire: è un
 	/// assert che porta giù il compositore, cioè tutto lo schermo. Preso
@@ -5952,6 +5957,73 @@ static void angolo_guarda(struct minerva *m) {
 	wl_event_source_timer_update(m->angolo_timer, ANGOLO_SOSTA_MS);
 }
 
+// ── La spinta sul bordo destro ───────────────────────────────────────────
+//
+// Dal bordo destro esce il Cassetto (gli appunti). Il bordo destro però è
+// anche dove si va a prendere la barra di scorrimento di una finestra
+// ingrandita: fermarcisi è una cosa che si fa di continuo, e una SOSTA come
+// quella degli angoli aprirebbe il Cassetto ogni volta che si scorre una
+// pagina. Qui serve un gesto che nessuno fa per caso: SPINGERE oltre il
+// bordo. Il puntatore è fermo contro lo schermo e la mano continua ad andare
+// a destra — ogni pixel che il compositore non ha potuto dare al puntatore
+// si somma; 90 pixel di spinta aprono. La spinta si svuota se ci si ferma
+// più di 400 ms, e si ri-arma solo lasciando il bordo.
+//
+// Solo nel tratto di mezzo (gli angoli sono degli angoli), solo su un bordo
+// VERO (oltre non c'è un altro schermo), e non sopra lo schermo intero, a
+// schermo bloccato o mentre si trascina una finestra: le stesse regole degli
+// angoli.
+//
+// Si annuncia `evento bordo {"quale":"destra","schermo":"eDP-1"}`.
+#define SPINTA_SOGLIA 90.0
+#define SPINTA_PAUSA_MS 400
+
+static void bordo_spinto(struct minerva *m, double oltre, uint32_t tempo) {
+	struct wlr_output *out = wlr_output_layout_output_at(m->schermi,
+		m->cursore->x, m->cursore->y);
+	bool sul_bordo = false;
+	if (out != NULL && !m->bloccato && m->presa == PRESA_NIENTE) {
+		struct wlr_box box;
+		wlr_output_layout_get_box(m->schermi, out, &box);
+		const double cx = m->cursore->x, cy = m->cursore->y;
+		const double margine = box.height * 0.15;
+		sul_bordo = cx >= box.x + box.width - 2
+			&& cy > box.y + margine && cy < box.y + box.height - margine
+			&& wlr_output_layout_output_at(m->schermi, box.x + box.width + 4, cy) == NULL;
+		if (sul_bordo) {
+			struct finestra *f;
+			wl_list_for_each(f, &m->finestre_elenco, link) {
+				if (!f->schermo_intero || !finestra_visibile(f))
+					continue;
+				struct wlr_box fb;
+				finestra_box(f, &fb);
+				if (wlr_box_contains_point(&fb, cx, cy)) {
+					sul_bordo = false;
+					break;
+				}
+			}
+		}
+	}
+	if (!sul_bordo) {
+		m->spinta = 0;
+		m->spinta_detta = false;
+		return;
+	}
+	if (oltre <= 0 || m->spinta_detta)
+		return;
+	if (tempo - m->spinta_quando > SPINTA_PAUSA_MS)
+		m->spinta = 0;
+	m->spinta_quando = tempo;
+	m->spinta += oltre;
+	if (m->spinta < SPINTA_SOGLIA || m->canale == NULL)
+		return;
+	m->spinta_detta = true;
+	char riga[160];
+	snprintf(riga, sizeof(riga), "evento bordo {\"quale\":\"destra\",\"schermo\":\"%s\"}",
+		out->name);
+	canale_annuncia(m->canale, "bordo", riga);
+}
+
 static void cursore_aggiorna(struct minerva *m, uint32_t tempo) {
 	bordo_alto_guarda(m);
 	angolo_guarda(m);
@@ -6043,7 +6115,9 @@ static void cursore_mosso(struct wl_listener *l, void *dati) {
 	puntatore_consenti(m->puntatore, !m->bloccato && m->presa == PRESA_NIENTE);
 	puntatore_movimento(m->puntatore, (uint64_t)e->time_msec * 1000,
 		&dx, &dy, e->unaccel_dx, e->unaccel_dy, true);
+	const double voluta = m->cursore->x + dx;
 	wlr_cursor_move(m->cursore, &e->pointer->base, dx, dy);
+	bordo_spinto(m, voluta - m->cursore->x, e->time_msec);
 	cursore_aggiorna(m, e->time_msec);
 }
 
@@ -9338,6 +9412,8 @@ void minerva_comando(struct minerva *m, const char *riga,
 			return;
 		}
 		wlr_cursor_warp_closest(m->cursore, NULL, x, y);
+		// Oltre il bordo destro è una spinta: quanto oltre, tanto spinge.
+		bordo_spinto(m, x - m->cursore->x, tempo);
 		cursore_aggiorna(m, tempo);
 		wlr_seat_pointer_notify_frame(m->seat);
 		snprintf(risposta, n, "ok %d, %d",

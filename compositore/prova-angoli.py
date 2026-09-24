@@ -11,7 +11,11 @@ aprire: è NON aprire per sbaglio. Questa prova guarda che:
   1. una sosta in un angolo si annuncia UNA volta, col nome dell'angolo;
   2. andandosene si annuncia «via»;
   3. passarci attraverso più svelti della sosta non annuncia niente;
-  4. i quattro angoli hanno i loro quattro nomi.
+  4. i quattro angoli hanno i loro quattro nomi;
+  5. il bordo destro NON si apre con una sosta ma con una SPINTA (è dove si
+     prende la barra di scorrimento): una spinta piccola non annuncia
+     niente, una vera annuncia `bordo` una volta sola, due spinte piccole
+     separate da una pausa non si sommano, e negli angoli non c'è bordo.
 
 Il puntatore lo muove `dito`, che esiste solo in prova. Si spinge oltre il
 bordo (`dito -10 99999`) e il compositore lo ferma sull'angolo vero, quale che
@@ -108,7 +112,7 @@ def main():
                     return c[1] if c else None
 
                 canale = aspetta(capi)
-                annunci = Ascolto(canale, "angolo")
+                annunci = Ascolto(canale, "angolo bordo")
                 annunci.righe(0.3)
 
                 def dito(x, y):
@@ -147,6 +151,47 @@ def main():
                     visti = annunci.righe(0.5)
                     verifica(f"l'angolo {nome} si chiama «{nome}»",
                              len(visti) == 1 and f'"quale":"{nome}"' in visti[0], visti)
+
+                # 5. La spinta sul bordo destro. `dito` oltre il bordo spinge
+                # di quanto va oltre.
+                dito(400, 300)
+                annunci.righe(0.3)
+                destra = int(chiedi(canale, "dito 99999 300").split()[1].rstrip(","))
+                annunci.righe(0.3)
+                dito(400, 300)
+                annunci.righe(0.3)
+
+                def bordi(righe):
+                    return [r for r in righe if r.startswith("evento bordo ")]
+
+                dito(destra + 30, 300)
+                visti = bordi(annunci.righe(0.3))
+                verifica("una spinta piccola sul bordo destro non annuncia niente", visti == [], visti)
+                dito(destra + 80, 300)
+                visti = bordi(annunci.righe(0.3))
+                verifica("una spinta vera annuncia il bordo destro",
+                         len(visti) == 1 and '"quale":"destra"' in visti[0]
+                         and '"schermo":"' in visti[0], visti)
+                dito(destra + 200, 300)
+                visti = bordi(annunci.righe(0.3))
+                verifica("e continuare a spingere non lo ripete", visti == [], visti)
+
+                dito(400, 300)
+                dito(destra + 50, 300)
+                time.sleep(0.6)
+                dito(destra + 50, 300)
+                visti = bordi(annunci.righe(0.3))
+                verifica("due spinte separate da una pausa non si sommano", visti == [], visti)
+
+                dito(400, 300)
+                dito(destra + 500, 300)
+                visti = bordi(annunci.righe(0.3))
+                verifica("lasciato il bordo, si ri-arma", len(visti) == 1, visti)
+
+                dito(400, 300)
+                dito(destra + 500, 5)
+                visti = bordi(annunci.righe(0.4))
+                verifica("nell'angolo non c'è bordo", visti == [], visti)
             finally:
                 for f in figli:
                     f.terminate()

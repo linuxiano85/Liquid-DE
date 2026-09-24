@@ -189,6 +189,7 @@ PanelWindow {
         { "id": "notte",        "it": "Luce notturna",       "p": "luce notturna notte occhi sera" },
         { "id": "dnd",          "it": "Non disturbare",      "p": "non disturbare silenzio notifiche" },
         { "id": "impostazioni", "it": "Impostazioni",        "p": "impostazioni settings preferenze" },
+        { "id": "appunti",      "it": "Appunti",             "p": "appunti clipboard copiato copia incolla" },
         { "id": "sospendi",     "it": "Sospendi",            "p": "sospendi dormire sleep" },
         { "id": "riavvia",      "it": "Riavvia",             "p": "riavvia riavviare reboot" },
         { "id": "spegni",       "it": "Spegni",              "p": "spegni spegnere arresta shutdown" },

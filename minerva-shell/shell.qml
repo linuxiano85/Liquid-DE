@@ -261,6 +261,21 @@ ShellRoot {
             return s.sottomarino.riassunto();
         }
 
+        /// Il Cassetto degli appunti: «apri», «chiudi», o un testo da
+        /// cercare. Risponde con quello che mostra.
+        function appunti(testo: string): string {
+            var s = root.scrivaniaAttiva();
+            if (!s || !s.cassetto)
+                return "nessun cassetto";
+            if (testo === "chiudi")
+                s.cassetto.chiudi();
+            else if (testo === "apri")
+                s.cassetto.apri();
+            else
+                s.cassetto.cerca = testo;
+            return s.cassetto.riassunto();
+        }
+
         function dock(): string {
             // Il terzo pezzo dice PERCHÉ, e serve: «la dock non si nasconde»
             // ha due cause che da fuori si vedono identiche — il modo
@@ -491,12 +506,12 @@ ShellRoot {
 
     property var scrivanie: ({})
 
-    function iscriviScrivania(nome, barra, dock, sottomarino, centro) {
+    function iscriviScrivania(nome, barra, dock, sottomarino, centro, cassetto) {
         if (!nome)
             return;
         var m = root.scrivanie;
         m[nome] = { "barra": barra, "dock": dock, "sottomarino": sottomarino,
-                    "centro": centro };
+                    "centro": centro, "cassetto": cassetto };
         root.scrivanie = m;
         root.scrivanieCambiate();
     }
@@ -544,6 +559,16 @@ ShellRoot {
             root.pannello("apps");
     }
 
+    /// Il Cassetto degli appunti dello schermo attivo; senza, il pannello di
+    /// prima.
+    function apriCassetto() {
+        var s = root.scrivaniaAttiva();
+        if (s && s.cassetto)
+            s.cassetto.commuta();
+        else
+            root.pannello("clipboard");
+    }
+
     /// Le azioni che il Sottomarino trova con la ricerca. Quelle che
     /// chiudono la sessione passano dal pannello dell'energia, che chiede
     /// conferma: la ricerca non deve poter spegnere il computer con un Invio.
@@ -555,6 +580,7 @@ ShellRoot {
         case "dnd":          Core.Ipc.setSetting("notifications.doNotDisturb",
                                                  !Core.Notifications.doNotDisturb); break;
         case "impostazioni": root.openSettings(); break;
+        case "appunti":      root.apriCassetto(); break;
         case "sospendi":
         case "riavvia":
         case "spegni":
@@ -767,8 +793,24 @@ ShellRoot {
                 onAzione: function(id) { root.azioneDalCentro(id); }
             }
 
+            // ── Il Cassetto degli appunti: esce dal bordo destro ──────────
+            Cassetto {
+                id: cassettoAppunti
+                screen: scrivania.modelData
+                margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
+                margineBasso: dock.screenRect.height > 0 && !root.dockInAlto && scrivania.modelData
+                              ? Math.max(0, scrivania.modelData.height - dock.screenRect.y)
+                              : 0
+            }
+
             Connections {
                 target: Core.Compositore
+                function onBordo(quale, schermo) {
+                    if (!scrivania.modelData || schermo !== scrivania.modelData.name)
+                        return;
+                    if (quale === "destra")
+                        cassettoAppunti.apri();
+                }
                 function onAngolo(quale, schermo) {
                     if (!scrivania.modelData || schermo !== scrivania.modelData.name)
                         return;
@@ -783,7 +825,7 @@ ShellRoot {
 
             Component.onCompleted: root.iscriviScrivania(
                 scrivania.modelData ? scrivania.modelData.name : "", spine, dock, sottomarino,
-                centroControllo)
+                centroControllo, cassettoAppunti)
             Component.onDestruction: root.cancellaScrivania(
                 scrivania.modelData ? scrivania.modelData.name : "")
         }
@@ -1680,7 +1722,7 @@ ShellRoot {
         case "bluetooth":  root.openSettings("bluetooth"); break;
         case "defaults":   root.openSettings("defaults"); break;
         case "cheatsheet": root.toggleCheatsheet(); break;
-        case "clipboard":  root.apriPannello("clipboard"); break;
+        case "clipboard":  root.apriCassetto(); break;
         case "files":      root.openFiles(); break;
         case "lock":       root.run(["minerva-blocca"]); break;
         case "suspend":    if (!Quickshell.env("MINERVA_PROVA")) Core.Compositore._nostro("sospendi", []); break;
@@ -2095,7 +2137,7 @@ ShellRoot {
 
     Core.Scorciatoia {
         name: "clipboard"
-        onPressed: root.pannello("clipboard")
+        onPressed: root.apriCassetto()
     }
 
     Core.Scorciatoia {
