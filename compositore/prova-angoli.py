@@ -15,7 +15,8 @@ aprire: è NON aprire per sbaglio. Questa prova guarda che:
   5. il bordo destro NON si apre con una sosta ma con una SPINTA (è dove si
      prende la barra di scorrimento): una spinta piccola non annuncia
      niente, una vera annuncia `bordo` una volta sola, due spinte piccole
-     separate da una pausa non si sommano, e negli angoli non c'è bordo.
+     separate da una pausa non si sommano, e negli angoli non c'è bordo;
+  6. lo stesso per il bordo sinistro, da cui escono le Stanze.
 
 Il puntatore lo muove `dito`, che esiste solo in prova. Si spinge oltre il
 bordo (`dito -10 99999`) e il compositore lo ferma sull'angolo vero, quale che
@@ -192,6 +193,21 @@ def main():
                 dito(destra + 500, 5)
                 visti = bordi(annunci.righe(0.4))
                 verifica("nell'angolo non c'è bordo", visti == [], visti)
+
+                # 6. Il bordo sinistro: le Stanze.
+                dito(400, 300)
+                annunci.righe(0.3)
+                dito(-30, 300)
+                visti = bordi(annunci.righe(0.3))
+                verifica("una spinta piccola a sinistra non annuncia niente", visti == [], visti)
+                dito(-80, 300)
+                visti = bordi(annunci.righe(0.3))
+                verifica("una spinta vera annuncia il bordo sinistro",
+                         len(visti) == 1 and '"quale":"sinistra"' in visti[0], visti)
+                dito(400, 300)
+                dito(-500, 5)
+                visti = bordi(annunci.righe(0.4))
+                verifica("nell'angolo in alto a sinistra non c'è bordo", visti == [], visti)
             finally:
                 for f in figli:
                     f.terminate()

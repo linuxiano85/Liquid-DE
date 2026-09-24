@@ -43,7 +43,7 @@ void main() {
       // capite tutte. Il numero si aggiorna a mano quando cambia: il 24
       // settembre 2026 le 97 di Minerva sono diventate queste, con le cinque
       // regole della Riva (i tasti multimediali contano uno per uno).
-      expect(sorgente.tutte.length, 76);
+      expect(sorgente.tutte.length, 77);
     });
 
     test('tutte hanno un tasto', () {

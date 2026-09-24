@@ -137,6 +137,9 @@ Alt_L [al-rilascio] -> minerva: switchercommit
 @ Muoversi | Annulla il passaggio fra finestre
 ALT Escape -> minerva: switchercancel
 
+@ Muoversi | Le stanze e le finestre che ci stanno (o spingi sul bordo sinistro)
+$mod Tab -> minerva: stanze
+
 @ Muoversi | Scrivania libera, e ritorno
 $mod D -> minerva: showdesktop
 

@@ -88,7 +88,7 @@ PanelWindow {
             y: fondo.height / 2 - height / 2
             nome: "Stanza 1, 2, 3…"
             chiavi: ["Super", "1 2 3"]
-            detto: "con Maiusc porti la finestra"
+            detto: "tutte: Super Tab, o spingi sul bordo"
         }
 
         // ── La finestra, in mezzo ──

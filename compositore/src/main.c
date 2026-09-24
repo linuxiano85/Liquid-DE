@@ -526,6 +526,8 @@ struct minerva {
 	double spinta;
 	uint32_t spinta_quando;
 	bool spinta_detta;
+	/// Da che parte si spinge: -1 a sinistra, +1 a destra, 0 nessuna.
+	int spinta_lato;
 	/// Se il «locked» è già partito. wlroots lo consente **una volta sola**
 	/// per serratura, e chiamarlo due volte non è un errore da gestire: è un
 	/// assert che porta giù il compositore, cioè tutto lo schermo. Preso
@@ -6109,9 +6111,9 @@ static void angolo_guarda(struct minerva *m) {
 	wl_event_source_timer_update(m->angolo_timer, ANGOLO_SOSTA_MS);
 }
 
-// ── La spinta sul bordo destro ───────────────────────────────────────────
+// ── La spinta sui bordi di lato ──────────────────────────────────────────
 //
-// Dal bordo destro esce il Cassetto (gli appunti). Il bordo destro però è
+// Dal bordo destro esce il Cassetto (gli appunti), dal sinistro le Stanze. Il bordo destro però è
 // anche dove si va a prendere la barra di scorrimento di una finestra
 // ingrandita: fermarcisi è una cosa che si fa di continuo, e una SOSTA come
 // quella degli angoli aprirebbe il Cassetto ogni volta che si scorre una
@@ -6126,23 +6128,29 @@ static void angolo_guarda(struct minerva *m) {
 // schermo bloccato o mentre si trascina una finestra: le stesse regole degli
 // angoli.
 //
-// Si annuncia `evento bordo {"quale":"destra","schermo":"eDP-1"}`.
+// Si annuncia `evento bordo {"quale":"destra","schermo":"eDP-1"}` (o
+// «sinistra»). `oltre` è quanto il puntatore ha provato ad andare oltre: in
+// pixel, positivo verso destra.
 #define SPINTA_SOGLIA 90.0
 #define SPINTA_PAUSA_MS 400
 
 static void bordo_spinto(struct minerva *m, double oltre, uint32_t tempo) {
 	struct wlr_output *out = wlr_output_layout_output_at(m->schermi,
 		m->cursore->x, m->cursore->y);
-	bool sul_bordo = false;
+	int lato = 0;
 	if (out != NULL && !m->bloccato && m->presa == PRESA_NIENTE) {
 		struct wlr_box box;
 		wlr_output_layout_get_box(m->schermi, out, &box);
 		const double cx = m->cursore->x, cy = m->cursore->y;
 		const double margine = box.height * 0.15;
-		sul_bordo = cx >= box.x + box.width - 2
-			&& cy > box.y + margine && cy < box.y + box.height - margine
-			&& wlr_output_layout_output_at(m->schermi, box.x + box.width + 4, cy) == NULL;
-		if (sul_bordo) {
+		const bool mezzo = cy > box.y + margine && cy < box.y + box.height - margine;
+		if (mezzo && cx >= box.x + box.width - 2
+		    && wlr_output_layout_output_at(m->schermi, box.x + box.width + 4, cy) == NULL)
+			lato = 1;
+		else if (mezzo && cx <= box.x + 1
+		    && wlr_output_layout_output_at(m->schermi, box.x - 4, cy) == NULL)
+			lato = -1;
+		if (lato != 0) {
 			struct finestra *f;
 			wl_list_for_each(f, &m->finestre_elenco, link) {
 				if (!f->schermo_intero || !finestra_visibile(f))
@@ -6150,29 +6158,33 @@ static void bordo_spinto(struct minerva *m, double oltre, uint32_t tempo) {
 				struct wlr_box fb;
 				finestra_box(f, &fb);
 				if (wlr_box_contains_point(&fb, cx, cy)) {
-					sul_bordo = false;
+					lato = 0;
 					break;
 				}
 			}
 		}
 	}
-	if (!sul_bordo) {
+	if (lato != m->spinta_lato) {
 		m->spinta = 0;
 		m->spinta_detta = false;
-		return;
+		m->spinta_lato = lato;
 	}
-	if (oltre <= 0 || m->spinta_detta)
+	if (lato == 0)
+		return;
+	// Conta solo la spinta verso il bordo su cui si sta.
+	const double verso = oltre * lato;
+	if (verso <= 0 || m->spinta_detta)
 		return;
 	if (tempo - m->spinta_quando > SPINTA_PAUSA_MS)
 		m->spinta = 0;
 	m->spinta_quando = tempo;
-	m->spinta += oltre;
+	m->spinta += verso;
 	if (m->spinta < SPINTA_SOGLIA || m->canale == NULL)
 		return;
 	m->spinta_detta = true;
 	char riga[160];
-	snprintf(riga, sizeof(riga), "evento bordo {\"quale\":\"destra\",\"schermo\":\"%s\"}",
-		out->name);
+	snprintf(riga, sizeof(riga), "evento bordo {\"quale\":\"%s\",\"schermo\":\"%s\"}",
+		lato > 0 ? "destra" : "sinistra", out->name);
 	canale_annuncia(m->canale, "bordo", riga);
 }
 
@@ -9677,7 +9689,7 @@ void minerva_comando(struct minerva *m, const char *riga,
 			return;
 		}
 		wlr_cursor_warp_closest(m->cursore, NULL, x, y);
-		// Oltre il bordo destro è una spinta: quanto oltre, tanto spinge.
+		// Oltre un bordo di lato è una spinta: quanto oltre, tanto spinge.
 		bordo_spinto(m, x - m->cursore->x, tempo);
 		cursore_aggiorna(m, tempo);
 		wlr_seat_pointer_notify_frame(m->seat);

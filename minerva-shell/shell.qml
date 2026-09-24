@@ -307,6 +307,16 @@ ShellRoot {
             return "ok";
         }
 
+        /// Le Stanze: «apri», «chiudi», o niente. Risponde con quello che mostrano.
+        function stanze(testo: string): string {
+            var s = root.scrivaniaAttiva();
+            if (!s || !s.stanze)
+                return "nessuna stanza";
+            if (testo === "apri") s.stanze.apri();
+            else if (testo === "chiudi") s.stanze.chiudi();
+            return s.stanze.riassunto();
+        }
+
         /// L'Isola al posto della barra: che cosa mostra.
         function barra(): string {
             var s = root.scrivaniaAttiva();
@@ -556,13 +566,13 @@ ShellRoot {
 
     property var scrivanie: ({})
 
-    function iscriviScrivania(nome, barra, dock, sottomarino, centro, cassetto, isola, isolaBarra) {
+    function iscriviScrivania(nome, barra, dock, sottomarino, centro, cassetto, isola, isolaBarra, stanze) {
         if (!nome)
             return;
         var m = root.scrivanie;
         m[nome] = { "barra": barra, "dock": dock, "sottomarino": sottomarino,
                     "centro": centro, "cassetto": cassetto, "isola": isola,
-                    "isolaBarra": isolaBarra };
+                    "isolaBarra": isolaBarra, "stanze": stanze };
         root.scrivanie = m;
         root.scrivanieCambiate();
     }
@@ -923,6 +933,16 @@ ShellRoot {
                 onSchermataChiesta: function(modo, ritardo) { root.scattaSchermata(modo, ritardo); }
             }
 
+            // ── Le Stanze: escono dal bordo sinistro ──────────────────────
+            Stanze {
+                id: stanzeLato
+                screen: scrivania.modelData
+                margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
+                margineBasso: dock.screenRect.height > 0 && !root.dockInAlto && scrivania.modelData
+                              ? Math.max(0, scrivania.modelData.height - dock.screenRect.y)
+                              : (root.barraInBasso ? Theme.Effects.barHeight : 0)
+            }
+
             // ── Il Cassetto degli appunti: esce dal bordo destro ──────────
             Cassetto {
                 id: cassettoAppunti
@@ -940,7 +960,7 @@ ShellRoot {
             // impilavano — Isola, Centro e Cassetto aperti insieme, uno sopra
             // l'altro, visto il 24 settembre 2026 provando i tasti.
             function soloLui(chi) {
-                var tutti = [sottomarino, centroControllo, cassettoAppunti, isolaGiorno];
+                var tutti = [sottomarino, centroControllo, cassettoAppunti, isolaGiorno, stanzeLato];
                 for (var i = 0; i < tutti.length; i++)
                     if (tutti[i] !== chi && tutti[i].aperto)
                         tutti[i].chiudi();
@@ -963,6 +983,10 @@ ShellRoot {
                 target: isolaGiorno
                 function onApertoChanged() { if (isolaGiorno.aperto) scrivania.soloLui(isolaGiorno); }
             }
+            Connections {
+                target: stanzeLato
+                function onApertoChanged() { if (stanzeLato.aperto) scrivania.soloLui(stanzeLato); }
+            }
             // E al contrario: un pannello della barra (le notifiche, Super+N)
             // chiude quelli della riva.
             Connections {
@@ -970,7 +994,7 @@ ShellRoot {
                 function onActivePanelChanged() {
                     if (spine.activePanel === "")
                         return;
-                    var tutti = [sottomarino, centroControllo, cassettoAppunti, isolaGiorno];
+                    var tutti = [sottomarino, centroControllo, cassettoAppunti, isolaGiorno, stanzeLato];
                     for (var i = 0; i < tutti.length; i++)
                         if (tutti[i].aperto)
                             tutti[i].chiudi();
@@ -984,6 +1008,8 @@ ShellRoot {
                         return;
                     if (quale === "destra")
                         cassettoAppunti.apri();
+                    else if (quale === "sinistra")
+                        stanzeLato.apri();
                 }
                 function onAngolo(quale, schermo) {
                     if (!scrivania.modelData || schermo !== scrivania.modelData.name)
@@ -1003,7 +1029,7 @@ ShellRoot {
 
             Component.onCompleted: root.iscriviScrivania(
                 scrivania.modelData ? scrivania.modelData.name : "", spine, dock, sottomarino,
-                centroControllo, cassettoAppunti, isolaGiorno, isolaBarra)
+                centroControllo, cassettoAppunti, isolaGiorno, isolaBarra, stanzeLato)
             Component.onDestruction: root.cancellaScrivania(
                 scrivania.modelData ? scrivania.modelData.name : "")
         }
@@ -2304,6 +2330,15 @@ ShellRoot {
     Core.Scorciatoia {
         name: "clipboard"
         onPressed: root.apriCassetto()
+    }
+
+    Core.Scorciatoia {
+        name: "stanze"
+        onPressed: {
+            var s = root.scrivaniaAttiva();
+            if (s && s.stanze)
+                s.stanze.commuta();
+        }
     }
 
     Core.Scorciatoia {

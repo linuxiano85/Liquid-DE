@@ -1,0 +1,264 @@
+import QtQuick
+import Quickshell
+import Quickshell.Wayland
+import "../theme" as Theme
+import "../core" as Core
+import "../ui" as Ui
+
+// ── Le Stanze, dal bordo sinistro ────────────────────────────────────────
+//
+// La Riva: «i bordi vivi: banchina in basso, stanze a sinistra, Cassetto a
+// destra». Con l'Isola al posto della barra i pallini delle scrivanie non
+// ci sono più: le stanze stanno qui, sul bordo sinistro, e si vedono in due
+// modi.
+//
+//  · APERTE: spingendo il puntatore contro il bordo sinistro (lo stesso
+//    gesto del Cassetto a destra) o con Super+Tab. Ogni stanza con le icone
+//    delle sue finestre; un tocco ci porta.
+//  · DI SBIECO: quando si cambia stanza da tastiera (Super+1…9, Super+Ctrl+
+//    frecce) o con la rotellina, sbuca per un attimo la colonna delle stanze
+//    con quella nuova accesa, e torna dentro. Senza, cambiare stanza sarebbe
+//    un salto al buio: niente dice dove si è arrivati.
+PanelWindow {
+    id: stanze
+
+    property bool aperto: false
+    property bool mostrato: false
+    /// La colonna che sbuca un attimo quando si cambia stanza.
+    property bool sbirciata: false
+    property real margineAlto: 0
+    property real margineBasso: 0
+
+    readonly property int attiva: Core.Compositore.scrivaniaAttiva
+
+    /// Le stanze da mostrare: almeno quattro, fino all'ultima occupata o
+    /// attiva, più una vuota in fondo (per andarci si tocca quella).
+    readonly property var elenco: {
+        Core.Compositore.scrivanie;
+        var tutte = Core.Windows.all || [];
+        var massima = Math.max(3, stanze.attiva);
+        for (var i = 0; i < tutte.length; i++)
+            if (tutte[i].workspace > massima && tutte[i].workspace <= 10)
+                massima = tutte[i].workspace;
+        var fuori = [];
+        for (var n = 1; n <= Math.min(10, massima + 1); n++) {
+            var dentro = [];
+            for (var j = 0; j < tutte.length; j++) {
+                var w = tutte[j];
+                if (w.workspace === n && !w.own)
+                    dentro.push(w);
+            }
+            fuori.push({ "numero": n, "finestre": dentro });
+        }
+        return fuori;
+    }
+
+    function apri() {
+        if (stanze.aperto) return;
+        stanze.sbirciata = false;
+        stanze.aperto = true;
+        stanze.mostrato = true;
+        spegni.stop();
+    }
+    property real _chiuseAlle: 0
+    function chiudi() {
+        if (!stanze.aperto) return;
+        stanze._chiuseAlle = Date.now();
+        stanze.aperto = false;
+        spegni.restart();
+    }
+    function commuta() { stanze.aperto ? stanze.chiudi() : stanze.apri(); }
+    function vai(numero) {
+        Core.Compositore.vaiAScrivania(numero);
+        stanze.chiudi();
+    }
+
+    /// Per le prove: che cosa si vede.
+    function riassunto() {
+        var r = ["stanze: " + (stanze.aperto ? "aperte" : stanze.sbirciata ? "di sbieco" : "chiuse")
+                 + " · attiva " + stanze.attiva];
+        for (var i = 0; i < stanze.elenco.length; i++) {
+            var s = stanze.elenco[i];
+            r.push(s.numero + ": " + s.finestre.map(function(w) { return w.appClass; }).join(", "));
+        }
+        return r.join("\n");
+    }
+
+    // Cambiata la stanza, e non da qui: la colonna sbuca un attimo.
+    onAttivaChanged: {
+        // Aperte, o appena chiuse toccando una stanza: la si è appena vista,
+        // sbucare di nuovo sarebbe dirlo due volte.
+        if (stanze.aperto || Date.now() - stanze._chiuseAlle < 800)
+            return;
+        stanze.sbirciata = true;
+        stanze.mostrato = true;
+        spegni.stop();
+        rientra.restart();
+    }
+    Timer {
+        id: rientra
+        interval: 1100
+        onTriggered: { stanze.sbirciata = false; if (!stanze.aperto) spegni.restart(); }
+    }
+
+    visible: stanze.mostrato
+    anchors { top: true; bottom: true; left: true; right: true }
+    exclusiveZone: -1
+    color: "transparent"
+    WlrLayershell.namespace: "liquid-stanze"
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: stanze.aperto ? WlrKeyboardFocus.Exclusive
+                                               : WlrKeyboardFocus.None
+    // Di sbieco non prende niente: è un cartello, sotto si lavora.
+    mask: Region { item: stanze.aperto ? fondo : null }
+
+    Timer { id: spegni; interval: Theme.Motion.liquido ? 650 : 0; onTriggered: if (!stanze.aperto && !stanze.sbirciata) stanze.mostrato = false }
+
+    Item {
+        id: fondo
+        anchors.fill: parent
+        MouseArea {
+            anchors.fill: parent
+            enabled: stanze.aperto
+            onPressed: stanze.chiudi()
+        }
+        Item {
+            anchors.fill: parent
+            focus: stanze.aperto
+            Keys.onEscapePressed: stanze.chiudi()
+            Keys.onPressed: function(e) {
+                if (e.key >= Qt.Key_1 && e.key <= Qt.Key_9) {
+                    stanze.vai(e.key - Qt.Key_0);
+                    e.accepted = true;
+                }
+            }
+        }
+    }
+
+    // ── La colonna ──────────────────────────────────────────────────────
+    Rectangle {
+        id: colonna
+        readonly property int margine: Theme.Effects.space4
+        readonly property real larga: stanze.aperto ? 260 : 64
+        width: larga
+        Behavior on width {
+            enabled: Theme.Motion.liquido
+            SpringAnimation { spring: Theme.Motion.molla * 0.7; damping: 0.4 }
+        }
+        height: Math.min(pila.implicitHeight + 2 * Theme.Effects.space3,
+                         stanze.height - stanze.margineAlto - stanze.margineBasso - 2 * margine)
+        y: stanze.margineAlto + (stanze.height - stanze.margineAlto - stanze.margineBasso - height) / 2
+        x: stanze.aperto || stanze.sbirciata ? margine : -width - 30
+        Behavior on x {
+            enabled: Theme.Motion.liquido
+            SpringAnimation { spring: Theme.Motion.molla * 0.6; damping: 0.42 }
+        }
+        radius: Theme.Effects.radiusLG
+        color: Qt.rgba(Theme.Colors.panel.r, Theme.Colors.panel.g, Theme.Colors.panel.b,
+                       Math.max(Theme.Colors.panel.a, 0.98))
+        border.width: Theme.Effects.hairline
+        border.color: Theme.Colors.edge
+        clip: true
+
+        MouseArea { anchors.fill: parent; enabled: stanze.aperto; onClicked: {} }
+
+        Ui.Goccia {
+            id: goccia
+            radius: Theme.Effects.radiusMD
+            color: Qt.alpha(Theme.Colors.accent, 0.22)
+            attiva: stanze.attiva >= 1 && stanze.attiva <= ripetitore.count
+                    ? ripetitore.itemAt(stanze.attiva - 1) : null
+        }
+
+        Column {
+            id: pila
+            x: Theme.Effects.space2
+            y: Theme.Effects.space3
+            width: colonna.width - 2 * Theme.Effects.space2
+            spacing: Theme.Effects.space1
+
+            Repeater {
+                id: ripetitore
+                model: stanze.elenco
+                delegate: Item {
+                    id: stanza
+                    required property var modelData
+                    width: pila.width
+                    height: 48
+                    readonly property bool vuota: stanza.modelData.finestre.length === 0
+
+                    MouseArea {
+                        id: stanzaMouse
+                        anchors.fill: parent
+                        enabled: stanze.aperto
+                        hoverEnabled: true
+                        preventStealing: true
+                        cursorShape: Qt.PointingHandCursor
+                        onContainsMouseChanged: goccia.punta(stanza, containsMouse)
+                        onClicked: stanze.vai(stanza.modelData.numero)
+                    }
+
+                    // Il numero, sempre.
+                    Rectangle {
+                        id: numero
+                        x: (48 - width) / 2
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 30; height: 30; radius: 15
+                        color: stanza.modelData.numero === stanze.attiva ? Theme.Colors.accent
+                             : stanza.vuota ? "transparent" : Theme.Colors.raised
+                        border.width: stanza.vuota && stanza.modelData.numero !== stanze.attiva ? 1 : 0
+                        border.color: Theme.Colors.edge
+                        Text {
+                            anchors.centerIn: parent
+                            text: stanza.modelData.numero
+                            color: stanza.modelData.numero === stanze.attiva ? Theme.Colors.textOnAccent
+                                 : stanza.vuota ? Theme.Colors.textFaint : Theme.Colors.text
+                            font.family: Theme.Typography.fontMono
+                            font.pixelSize: Theme.Typography.sizeSM
+                            font.weight: Theme.Typography.weightMedium
+                        }
+                    }
+
+                    // Aperte, le icone delle finestre che ci stanno.
+                    Row {
+                        anchors.left: numero.right
+                        anchors.leftMargin: Theme.Effects.space3
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 4
+                        opacity: stanze.aperto ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: Theme.Motion.quick } }
+                        Repeater {
+                            model: stanza.modelData.finestre.slice(0, 5)
+                            delegate: Image {
+                                required property var modelData
+                                width: 26; height: 26
+                                sourceSize.width: 52; sourceSize.height: 52
+                                asynchronous: true
+                                source: {
+                                    var i = Core.Apps.iconForClass(modelData.appClass);
+                                    return i ? "file://" + i : "";
+                                }
+                            }
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: stanza.modelData.finestre.length > 5
+                            text: "+" + (stanza.modelData.finestre.length - 5)
+                            color: Theme.Colors.textMuted
+                            font.family: Theme.Typography.fontDisplay
+                            font.pixelSize: Theme.Typography.sizeXS
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: stanza.vuota
+                            text: "vuota"
+                            color: Theme.Colors.textFaint
+                            font.family: Theme.Typography.fontDisplay
+                            font.pixelSize: Theme.Typography.sizeXS
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
