@@ -261,6 +261,8 @@ FloatingWindow {
           "cerca": "scrivania widget desktop processore memoria gpu temperatura rete orologio blocca personalizza pulita" },
         { "id": "stile",      "icon": "image",     "it": "Stile",         "en": "Style",
           "cerca": "preset mac windows minerva libero layout disposizione" },
+        { "id": "riva",       "icon": "sliders",   "it": "La Riva",       "en": "The Shore",
+          "cerca": "riva angoli bordi isola scomparsa molla liquida calma viva consenso super appunti stanze cassetto personalizza" },
         { "id": "dock",       "icon": "apps",      "it": "Dock e barra",  "en": "Dock & bar",
           "cerca": "dock barra posizione alto basso nascondi elude ingrandimento icone etichette taskbar" },
         { "id": "animazioni", "icon": "shuffle",   "it": "Effetti e animazioni", "en": "Effects and animations",
@@ -313,7 +315,7 @@ FloatingWindow {
         // Sei gruppi, come COSMIC, dal 20 settembre 2026: prima c'erano
         // sette voci dirette in mezzo e la pagina Energia stava da sola.
         { "id": "g-scrivania", "icon": "image", "it": "Personalizzazione", "en": "Personalization",
-          "voci": ["appearance", "scrivania", "stile", "dock", "animazioni"] },
+          "voci": ["appearance", "scrivania", "stile", "riva", "dock", "animazioni"] },
         { "id": "g-dispositivi", "icon": "screen", "it": "Dispositivi", "en": "Devices",
           "voci": ["display", "audio", "input", "bluetooth"] },
         { "id": "g-connessioni", "icon": "wifi", "it": "Connessioni", "en": "Connections",
@@ -739,6 +741,7 @@ FloatingWindow {
         source: {
             switch (settings.section) {
             case "stile":    return "sections/Stile.qml";
+            case "riva":     return "sections/Riva.qml";
             case "dock":     return "sections/Dock.qml";
             case "animazioni": return "sections/Animazioni.qml";
             case "display":  return "sections/Display.qml";

@@ -78,10 +78,17 @@ QtObject {
     /// Falso con le animazioni spente: chi usa la molla la mette su
     /// `enabled`, e il valore arriva a destinazione nello stesso fotogramma.
     readonly property bool liquido: motion.scala > 0
+    /// Il carattere della molla, scelto in Impostazioni › La Riva:
+    /// «calma» (più lenta, si posa senza rimbalzo), «liquida» (quella di
+    /// serie: supera di un soffio e torna), «viva» (svelta, e ondeggia).
+    property string carattere: "liquida"
+    readonly property real _forza: motion.carattere === "calma" ? 0.62
+                                 : motion.carattere === "viva" ? 1.5 : 1.0
     /// Rigidità: più alta, più svelta.
-    readonly property real molla: 4.2 / Math.max(0.25, motion.scala)
+    readonly property real molla: 4.2 * motion._forza / Math.max(0.25, motion.scala)
     /// Smorzamento: sotto 1 supera il bersaglio e torna. 0.34 è un soffio.
-    readonly property real smorzamento: 0.34
+    readonly property real smorzamento: motion.carattere === "calma" ? 0.55
+                                      : motion.carattere === "viva" ? 0.22 : 0.34
 
     // ── Curve ────────────────────────────────────────────────────────────
     // Le curve stanno come quaterne di controllo di una Bézier cubica, così

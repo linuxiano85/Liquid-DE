@@ -245,10 +245,12 @@ PanelWindow {
                     Spine.ClockCluster {
                         anchors.verticalCenter: parent.verticalCenter
                         dimmed: false
+                        // Senza la data, se la si è tolta (Impostazioni › La Riva).
+                        compatto: !Core.Riva.isolaData
                     }
                     Row {
                         anchors.verticalCenter: parent.verticalCenter
-                        visible: Core.Meteo.attivo && Core.Meteo.pronto
+                        visible: Core.Riva.isolaMeteo && Core.Meteo.attivo && Core.Meteo.pronto
                         spacing: Theme.Effects.space1
                         Ui.Icon {
                             anchors.verticalCenter: parent.verticalCenter
@@ -273,7 +275,8 @@ PanelWindow {
             Voce {
                 id: musica
                 onTrascinata: function(dy) { isolaBarra.trascinata(dy); }
-                visible: !avviso.visible && Core.Media.cQualcosa && Core.Media.inRiproduzione
+                visible: !avviso.visible && Core.Riva.isolaMusica
+                         && Core.Media.cQualcosa && Core.Media.inRiproduzione
                 onScelta: isolaBarra.centroChiesto()
                 Row {
                     spacing: Theme.Effects.space2
@@ -316,13 +319,13 @@ PanelWindow {
             // ── I programmi del vassoio ──
             Spine.Vassoio {
                 anchors.verticalCenter: parent.verticalCenter
-                visible: !avviso.visible
+                visible: !avviso.visible && Core.Riva.isolaVassoio
             }
 
             // ── I segni di stato: il Centro ──
             Spine.StatusCluster {
                 anchors.verticalCenter: parent.verticalCenter
-                visible: !avviso.visible
+                visible: !avviso.visible && Core.Riva.isolaStato
                 onClicked: isolaBarra.centroChiesto()
             }
 

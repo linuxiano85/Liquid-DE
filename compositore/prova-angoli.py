@@ -258,6 +258,18 @@ def main():
                 visti = bordi(annunci.righe(0.5))
                 verifica("e anche il bordo alto", len(visti) == 1 and '"quale":"alto"' in visti[0], visti)
                 chiedi(canale, "tasto Super_L lascia")
+
+                # 9. «riva sempre» (Impostazioni › La Riva): niente consenso,
+                # angoli e bordi rispondono anche sopra la finestra ingrandita.
+                verifica("«riva sempre» si accetta", chiedi(canale, "riva sempre").startswith("ok"))
+                dito(400, 300)
+                annunci.righe(0.3)
+                dito(-10, 99999)
+                visti = [v for v in annunci.righe(0.5) if v.startswith("evento angolo ")]
+                verifica("e senza Super l'angolo risponde",
+                         len(visti) == 1 and '"quale":"basso-sx"' in visti[0], visti)
+                verifica("«riva super» rimette il consenso", chiedi(canale, "riva super").startswith("ok"))
+                verifica("e una parola sbagliata si rifiuta", chiedi(canale, "riva forse").startswith("no"))
             finally:
                 for f in figli:
                     f.terminate()

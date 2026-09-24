@@ -528,6 +528,10 @@ struct minerva {
 	bool spinta_detta;
 	/// Da che parte si spinge: -1 a sinistra, +1 a destra, 0 nessuna.
 	int spinta_lato;
+	/// La riva riservata chiede Super (vero di serie). Il verbo `riva
+	/// sempre` lo spegne: angoli e bordi rispondono anche sopra una finestra
+	/// che riempie lo schermo. Lo sceglie Impostazioni › La Riva.
+	bool riva_col_consenso;
 	/// Se il «locked» è già partito. wlroots lo consente **una volta sola**
 	/// per serratura, e chiamarlo due volte non è un errore da gestire: è un
 	/// assert che porta giù il compositore, cioè tutto lo schermo. Preso
@@ -5994,7 +5998,7 @@ static bool super_giu(struct minerva *m) {
 
 /// La riva di questo schermo si può muovere adesso?
 static bool riva_libera(struct minerva *m, struct wlr_output *out) {
-	return !riva_riservata(m, out) || super_giu(m);
+	return !m->riva_col_consenso || !riva_riservata(m, out) || super_giu(m);
 }
 
 // ── Il bordo alto sopra lo schermo intero ────────────────────────────────
@@ -6030,7 +6034,7 @@ static void bordo_alto_guarda(struct minerva *m) {
 	if (dentro > 2 || m->bordo_alto_detto)
 		return;
 	// Sopra lo schermo intero la barra scende solo con Super giù.
-	if (!super_giu(m))
+	if (m->riva_col_consenso && !super_giu(m))
 		return;
 	bool intero = false;
 	struct finestra *f;
@@ -9631,6 +9635,23 @@ void minerva_comando(struct minerva *m, const char *riga,
 	//
 	// E fuori da una prova NON esiste: un canale che muove il mouse di chi
 	// sta lavorando è una cosa che nessuno ha chiesto.
+	// `riva super|sempre`: con una finestra che riempie lo schermo, la riva
+	// (angoli, bordi, spinte, la barra dello schermo intero) risponde solo
+	// con Super giù, oppure sempre. Vedi `riva_libera`.
+	if (strcmp(verbo, "riva") == 0) {
+		char *come = parola(&resto);
+		if (come != NULL && strcmp(come, "super") == 0)
+			m->riva_col_consenso = true;
+		else if (come != NULL && strcmp(come, "sempre") == 0)
+			m->riva_col_consenso = false;
+		else {
+			snprintf(risposta, n, "no riva vuole «super» o «sempre»");
+			return;
+		}
+		snprintf(risposta, n, "ok");
+		return;
+	}
+
 	// ── La tastiera finta, solo in prova ─────────────────────────────────
 	//
 	// `tasto <nome> premi|lascia`: come `dito` per il puntatore. Crea una
@@ -10387,6 +10408,7 @@ int main(int argc, char *argv[]) {
 	m.ingresso.scorrimento_naturale = -1;
 	m.ingresso.tocco_e_clic = -1;
 	m.tieni_quale = -1;
+	m.riva_col_consenso = true;
 	m.ingresso.spento_mentre_scrivi = -1;
 
 	// ── La lista di riserva di chi si disegna la barra da sé ─────────────

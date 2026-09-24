@@ -466,7 +466,7 @@ ShellRoot {
     readonly property bool barraIsola: Core.Ipc.get("bar.stile", "isola") !== "classica"
     /// Da che parte esce il Cassetto; le Stanze dall'altra. Si scambiano
     /// trascinandone uno verso l'altro bordo (`riva.cassetto`).
-    readonly property bool cassettoASinistra: Core.Ipc.get("riva.cassetto", "destra") === "sinistra"
+    readonly property bool cassettoASinistra: Core.Riva.cassettoASinistra
     function scambiaBordi() {
         Core.Ipc.setSetting("riva.cassetto", root.cassettoASinistra ? "destra" : "sinistra");
     }
@@ -664,6 +664,10 @@ ShellRoot {
     // Tenendo Super, invece dei tasti sulla scrivania sale la riva — l'Isola
     // e la dock, sopra a tutto — ed è il «consenso».
     readonly property bool rivaRiservata: {
+        // Il consenso si può spegnere (Impostazioni › La Riva): allora la
+        // riva si comporta sempre come sulla scrivania vuota.
+        if (!Core.Riva.conConsenso)
+            return false;
         var tutte = Core.Windows.all || [];
         var qui = Core.Compositore.scrivaniaAttiva;
         for (var i = 0; i < tutte.length; i++) {
@@ -674,6 +678,16 @@ ShellRoot {
         return false;
     }
     property bool consenso: false
+
+    // Il compositore deve sapere se chiedere Super: lo si dice all'avvio e a
+    // ogni cambio. Un attimo di ritardo all'avvio perché il canale ci sia.
+    readonly property bool _rivaConConsenso: Core.Riva.conConsenso
+    on_RivaConConsensoChanged: Core.Compositore.riva(root._rivaConConsenso)
+    property Timer _rivaAllAvvio: Timer {
+        running: true
+        interval: 1500
+        onTriggered: Core.Compositore.riva(root._rivaConConsenso)
+    }
 
     function mostraTasti(si) {
         if (si && root.rivaRiservata) {
@@ -1007,6 +1021,18 @@ ShellRoot {
             // uno chiude gli altri e il pannello della barra. Prima si
             // impilavano — Isola, Centro e Cassetto aperti insieme, uno sopra
             // l'altro, visto il 24 settembre 2026 provando i tasti.
+            /// Un'azione della riva (un angolo), su questo schermo.
+            function fai(azione) {
+                switch (azione) {
+                case "menu":      sottomarino.apri(""); break;
+                case "centro":    centroControllo.apri(); break;
+                case "scrivania": Core.Windows.mostraScrivania(); break;
+                case "stanze":    stanzeLato.apri(); break;
+                case "isola":     isolaGiorno.apriDa(isolaBarra.rettangoloCapsula()); break;
+                case "appunti":   cassettoAppunti.apri(); break;
+                }
+            }
+
             function soloLui(chi) {
                 var tutti = [sottomarino, centroControllo, cassettoAppunti, isolaGiorno, stanzeLato];
                 for (var i = 0; i < tutti.length; i++)
@@ -1073,18 +1099,14 @@ ShellRoot {
                 function onAngolo(quale, schermo) {
                     if (!scrivania.modelData || schermo !== scrivania.modelData.name)
                         return;
-                    // Il menù dall'angolo in basso a sinistra, dove emerge il
-                    // periscopio (la Riva studiata). Da tutti e due gli angoli
-                    // di sinistra era «una cosa strana» (Giacomo, 25/09): uno
-                    // solo, e quello in alto resta libero per la panoramica.
-                    if (quale === "basso-sx")
-                        sottomarino.apri("");
-                    else if (quale === "alto-dx")
-                        centroControllo.apri();
-                    // In basso a destra la scrivania si libera, e ci si torna
-                    // rientrando nell'angolo: lo stesso di Super+D.
-                    else if (quale === "basso-dx")
-                        Core.Windows.mostraScrivania();
+                    // Che cosa fa ogni angolo lo decide Impostazioni › La Riva
+                    // (`Core.Riva`). Di serie come nella Riva studiata: il
+                    // menù in basso a sinistra, dove emerge il periscopio; il
+                    // Centro in alto a destra; la scrivania libera in basso a
+                    // destra; e l'angolo in alto a sinistra libero.
+                    var chiave = Core.Riva.chiaveDi(quale);
+                    if (chiave !== "")
+                        scrivania.fai(Core.Riva.angolo(chiave));
                 }
             }
 

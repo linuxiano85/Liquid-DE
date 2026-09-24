@@ -70,6 +70,12 @@ QtObject {
     }
 
     // ── Il tema ──────────────────────────────────────────────────────────
+    property Binding _carattere: Binding {
+        target: Theme.Motion
+        property: "carattere"
+        value: Core.Ipc.get("riva.molla", "liquida")
+    }
+
     property Binding _scheme: Binding {
         target: Theme.Colors
         property: "scheme"

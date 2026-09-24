@@ -1422,6 +1422,13 @@ Singleton {
             comp._nostro("molla", [Number(rigidita).toFixed(2), Number(smorzamento).toFixed(2)]);
     }
 
+    /// Con una finestra che riempie lo schermo la riva chiede Super (`true`)
+    /// o risponde sempre (`false`). Vedi `riva_libera` nel compositore.
+    function riva(conConsenso) {
+        if (!comp.nostro) return;
+        comp._nostro("riva", [conConsenso ? "super" : "sempre"]);
+    }
+
     function elastico(forza) {
         var f = Number(forza);
         if (!isFinite(f) || f < 0)

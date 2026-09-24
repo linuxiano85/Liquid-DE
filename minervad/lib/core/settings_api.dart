@@ -537,6 +537,30 @@ class SettingsApi {
         // Lo cambia il trascinamento di uno dei due verso l'altro bordo.
         'riva': {
           'cassetto': 'destra',
+          // Il carattere della molla di tutta la riva: 'calma', 'liquida',
+          // 'viva' (vedi `minerva-shell/theme/Motion.qml`).
+          'molla': 'liquida',
+          // Con una finestra che riempie lo schermo, angoli e bordi solo con
+          // Super giù (e Super tenuto fa salire la riva). Falso: sempre.
+          'consenso': true,
+          // Che cosa fa ogni angolo: 'menu', 'centro', 'scrivania',
+          // 'stanze', 'isola', 'appunti', 'niente' (`core/Riva.qml`).
+          'angoli': {
+            'altoSx': 'niente',
+            'altoDx': 'centro',
+            'bassoSx': 'menu',
+            'bassoDx': 'scrivania',
+          },
+        },
+        // Che cosa mostra l'Isola, pezzo per pezzo.
+        'isola': {
+          'mostra': {
+            'data': true,
+            'meteo': true,
+            'musica': true,
+            'vassoio': true,
+            'stato': true,
+          },
         },
         'launcher': {
           // Qui c'era `'maxShown': 7` — quante voci mostrare nel menu — e

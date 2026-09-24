@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import "../theme" as Theme
+import "../core" as Core
 import "../ui" as Ui
 
 // ── I tasti sulla scrivania ──────────────────────────────────────────────
@@ -52,26 +53,29 @@ PanelWindow {
 
         readonly property real m: Theme.Effects.space4
 
-        // ── Gli angoli e i bordi ──
-        Cartello {
-            // In basso a sinistra, dove emerge il periscopio del menù.
-            x: fondo.m
-            y: fondo.height - tasti.margineBasso - fondo.m - height
-            nome: "Menù"
-            chiavi: ["Super"]
-            detto: "tocca e scrivi"
-        }
-        Cartello {
-            x: fondo.width - fondo.m - width
-            y: tasti.margineAlto + fondo.m
-            nome: "Centro di controllo"
-            chiavi: ["Super", "A"]
-        }
-        Cartello {
-            x: fondo.width - fondo.m - width
-            y: fondo.height - tasti.margineBasso - fondo.m - height
-            nome: "Scrivania libera"
-            chiavi: ["Super", "D"]
+        // ── Gli angoli: quello che ci hai messo tu (Impostazioni › La Riva) ──
+        Repeater {
+            model: [
+                { "chiave": "altoSx",  "sx": true,  "alto": true },
+                { "chiave": "altoDx",  "sx": false, "alto": true },
+                { "chiave": "bassoSx", "sx": true,  "alto": false },
+                { "chiave": "bassoDx", "sx": false, "alto": false }
+            ]
+            delegate: Cartello {
+                id: angolo
+                required property var modelData
+                readonly property var azione: {
+                    Core.Riva.altoSx; Core.Riva.altoDx; Core.Riva.bassoSx; Core.Riva.bassoDx;
+                    return Core.Riva.azione(Core.Riva.angolo(angolo.modelData.chiave));
+                }
+                visible: angolo.azione.id !== "niente"
+                x: angolo.modelData.sx ? fondo.m : fondo.width - fondo.m - width
+                y: angolo.modelData.alto ? tasti.margineAlto + fondo.m
+                                         : fondo.height - tasti.margineBasso - fondo.m - height
+                nome: angolo.azione.it
+                chiavi: angolo.azione.tasto.split(" ")
+                detto: angolo.azione.id === "menu" ? "tocca e scrivi" : "o sosta nell'angolo"
+            }
         }
         Cartello {
             x: tasti.cassettoASinistra ? fondo.m : fondo.width - fondo.m - width
