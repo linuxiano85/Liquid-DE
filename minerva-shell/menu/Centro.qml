@@ -61,11 +61,13 @@ PanelWindow {
 
     Timer { id: spegni; interval: Theme.Motion.liquido ? 650 : 0; onTriggered: if (!centro.aperto) centro.mostrato = false }
 
-    // Il fondo: un clic fuori chiude.
+    // Il fondo: premere fuori chiude, già alla pressione. Al rilascio non
+    // bastava: col touchpad un tocco che si sposta di un soffio fra pressione
+    // e rilascio non è un clic, e il Centro restava aperto.
     MouseArea {
         anchors.fill: parent
         enabled: centro.aperto
-        onClicked: centro.chiudi()
+        onPressed: centro.chiudi()
     }
 
     Item {
@@ -272,7 +274,7 @@ PanelWindow {
             Text {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
-                text: "Esci, Riavvia e Spegni: tieni premuto finché non si riempie."
+                text: "Esci, Riavvia e Spegni: tieni premuto finché non si riempie, o tocca due volte."
                 color: Theme.Colors.textFaint
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeXS
@@ -399,6 +401,10 @@ PanelWindow {
         signal fatto(string id)
         /// Da 0 a 1 mentre lo si tiene premuto; a 1 parte.
         property real pieno: 0
+        /// Armato da un primo tocco: il secondo, entro tre secondi, conferma.
+        /// È la via del touchpad, dove tenere il dito appoggiato non tiene
+        /// premuto niente.
+        property bool armato: false
         height: 44
         radius: Theme.Effects.radiusMD
         clip: true
@@ -415,9 +421,16 @@ PanelWindow {
             radius: Math.min(en.radius, height / 2)
             color: Qt.alpha(Theme.Colors.danger, 0.55)
         }
+        Rectangle {
+            anchors.fill: parent
+            radius: parent.radius
+            visible: en.armato
+            color: Qt.alpha(Theme.Colors.danger, 0.35)
+        }
+        Timer { id: disarma; interval: 3000; onTriggered: en.armato = false }
         Text {
             anchors.centerIn: parent
-            text: en.modelData.it
+            text: en.armato ? "Ancora" : en.modelData.it
             color: Theme.Colors.text
             font.family: Theme.Typography.fontDisplay
             font.pixelSize: Theme.Typography.sizeXS
@@ -441,7 +454,19 @@ PanelWindow {
                     en.fatto(en.modelData.id);
                     return;
                 }
-                if (riempi.running) { riempi.stop(); en.pieno = 0; }
+                if (!riempi.running)
+                    return;             // era pieno: è già partito
+                riempi.stop();
+                en.pieno = 0;
+                // Un tocco breve: il primo arma, il secondo conferma.
+                if (en.armato) {
+                    en.armato = false;
+                    disarma.stop();
+                    en.fatto(en.modelData.id);
+                } else {
+                    en.armato = true;
+                    disarma.restart();
+                }
             }
             onCanceled: { riempi.stop(); en.pieno = 0; }
         }

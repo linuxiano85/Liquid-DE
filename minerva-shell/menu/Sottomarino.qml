@@ -390,7 +390,8 @@ PanelWindow {
     MouseArea {
         anchors.fill: parent
         enabled: sub.aperto
-        onClicked: sub.chiudi()
+        // Alla pressione e non al rilascio: vedi `menu/Centro.qml`.
+        onPressed: sub.chiudi()
     }
 
     // ── Il periscopio ───────────────────────────────────────────────────

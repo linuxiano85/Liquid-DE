@@ -574,6 +574,7 @@ ShellRoot {
     /// I pulsanti dell'energia del Centro. Esci, Riavvia e Spegni arrivano
     /// qui solo dopo essere stati tenuti premuti fino in fondo.
     function azioneDalCentro(id) {
+        console.log("[LIQUID][CENTRO] azione: " + id);
         // In prova non si spegne, non si sospende e non si esce davvero: la
         // macchina è quella vera, e con lei il collegamento di chi ci lavora.
         if (Quickshell.env("MINERVA_PROVA")) {
