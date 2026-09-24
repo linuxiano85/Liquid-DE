@@ -1029,9 +1029,10 @@ ShellRoot {
                 function onAngolo(quale, schermo) {
                     if (!scrivania.modelData || schermo !== scrivania.modelData.name)
                         return;
-                    // Il menù dall'angolo in alto a sinistra: la mano ci arriva
-                    // di slancio, e l'esagono della barra sta già lì.
-                    if (quale === "alto-sx")
+                    // Il menù da tutti e due gli angoli di sinistra: in basso,
+                    // dove emerge il periscopio (è la Riva studiata), e in
+                    // alto, dove la mano ci arriva di slancio.
+                    if (quale === "alto-sx" || quale === "basso-sx")
                         sottomarino.apri("");
                     else if (quale === "alto-dx")
                         centroControllo.apri();

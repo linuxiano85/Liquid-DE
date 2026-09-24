@@ -84,7 +84,21 @@ tolgono i rami Hyprland dalla shell, dal demone e dagli script; resta una sola
 strada, la nostra. La sessione di recupero si rifà sul compositore nostro in
 modalità minima, così la rete di sicurezza non sparisce.
 
-## Tappa 1 — La Riva: la scrivania nuova
+## Tappa 1 — La Riva: la scrivania nuova ✔ (24 settembre)
+
+Fatta e provata nella sessione annidata, fotografia per fotografia:
+l'Isola al posto della barra (con la giornata, il calendario, le notifiche e
+la schermata come facce della sua carta, e che si trascina in basso), le
+Stanze dal bordo sinistro e il Cassetto dal destro (si aprono con una
+SPINTA, non una sosta, e si scambiano posto trascinandoli), il Sottomarino
+da tutti e due gli angoli di sinistra, il Centro in alto a destra, la
+scrivania libera in basso a destra, il blocco a marea, i tasti a cinque
+regole con Super tenuto che li disegna sulla scrivania, e «Adesso, di
+solito» dall'ora dei lanci. Due scarti dalla simulazione, scritti qui
+perché siano decisioni e non dimenticanze: Super+Tab apre le Stanze finché
+non c'è la panoramica (Tappa 4), e il menù si apre anche dall'angolo in
+alto a sinistra, oltre che da quello in basso.
+
 
 Quello che la simulazione mostra, fatto davvero. Tutto nella shell, tranne
 due cose che solo il compositore può sapere.

@@ -54,8 +54,9 @@ PanelWindow {
 
         // ── Gli angoli e i bordi ──
         Cartello {
+            // In basso a sinistra, dove emerge il periscopio del menù.
             x: fondo.m
-            y: tasti.margineAlto + fondo.m
+            y: fondo.height - tasti.margineBasso - fondo.m - height
             nome: "Menù"
             chiavi: ["Super"]
             detto: "tocca e scrivi"
