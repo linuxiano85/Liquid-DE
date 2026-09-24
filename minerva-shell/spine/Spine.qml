@@ -85,6 +85,9 @@ PanelWindow {
     signal menuAppChiesto()
     /// I segni di stato: aprono il Centro di controllo (`menu/Centro.qml`).
     signal centroChiesto()
+    /// La capsula in mezzo: apre l'Isola (`menu/Isola.qml`), che nasce dal
+    /// rettangolo della capsula, in coordinate dello schermo.
+    signal isolaChiesta(rect dove)
     signal monitorRequested()
     /// Tasto destro sul nome della finestra attiva, in coordinate globali.
     signal windowMenuRequested(point where)

@@ -276,6 +276,18 @@ ShellRoot {
             return s.cassetto.riassunto();
         }
 
+        /// L'Isola: «apri», «chiudi», o niente. Risponde con quello che mostra.
+        function isola(testo: string): string {
+            var s = root.scrivaniaAttiva();
+            if (!s || !s.isola)
+                return "nessuna isola";
+            if (testo === "apri")
+                s.isola.apri();
+            else if (testo === "chiudi")
+                s.isola.chiudi();
+            return s.isola.riassunto();
+        }
+
         function dock(): string {
             // Il terzo pezzo dice PERCHÉ, e serve: «la dock non si nasconde»
             // ha due cause che da fuori si vedono identiche — il modo
@@ -506,12 +518,12 @@ ShellRoot {
 
     property var scrivanie: ({})
 
-    function iscriviScrivania(nome, barra, dock, sottomarino, centro, cassetto) {
+    function iscriviScrivania(nome, barra, dock, sottomarino, centro, cassetto, isola) {
         if (!nome)
             return;
         var m = root.scrivanie;
         m[nome] = { "barra": barra, "dock": dock, "sottomarino": sottomarino,
-                    "centro": centro, "cassetto": cassetto };
+                    "centro": centro, "cassetto": cassetto, "isola": isola };
         root.scrivanie = m;
         root.scrivanieCambiate();
     }
@@ -756,6 +768,9 @@ ShellRoot {
                 onSettingsRequested: root.openSettings()
                 onMenuAppChiesto: sottomarino.commuta()
                 onCentroChiesto: centroControllo.commuta()
+                onIsolaChiesta: function(dove) {
+                    if (isolaGiorno.aperto) isolaGiorno.chiudi(); else isolaGiorno.apriDa(dove);
+                }
                 onMonitorRequested: root.openMonitor()
                 onScreenshotRequested: function(modo, ritardo) {
                     root.scattaSchermata(modo, ritardo);
@@ -793,6 +808,17 @@ ShellRoot {
                 onAzione: function(id) { root.azioneDalCentro(id); }
             }
 
+            // ── L'Isola: la capsula in mezzo alla barra che cresce ────────
+            Isola {
+                id: isolaGiorno
+                screen: scrivania.modelData
+                dalBasso: root.barraInBasso
+                margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
+                margineBasso: root.barraInBasso ? Theme.Effects.barHeight : 0
+                onCalendarioChiesto: spine.toggle("calendar")
+                onImpostazioniChieste: root.openSettings("dataora")
+            }
+
             // ── Il Cassetto degli appunti: esce dal bordo destro ──────────
             Cassetto {
                 id: cassettoAppunti
@@ -825,7 +851,7 @@ ShellRoot {
 
             Component.onCompleted: root.iscriviScrivania(
                 scrivania.modelData ? scrivania.modelData.name : "", spine, dock, sottomarino,
-                centroControllo, cassettoAppunti)
+                centroControllo, cassettoAppunti, isolaGiorno)
             Component.onDestruction: root.cancellaScrivania(
                 scrivania.modelData ? scrivania.modelData.name : "")
         }
@@ -2138,6 +2164,15 @@ ShellRoot {
     Core.Scorciatoia {
         name: "clipboard"
         onPressed: root.apriCassetto()
+    }
+
+    Core.Scorciatoia {
+        name: "isola"
+        onPressed: {
+            var s = root.scrivaniaAttiva();
+            if (s && s.isola)
+                s.isola.commuta();
+        }
     }
 
     Core.Scorciatoia {

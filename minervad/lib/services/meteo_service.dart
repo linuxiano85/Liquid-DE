@@ -66,8 +66,12 @@ class MeteoService {
         '&longitude=${lon.toStringAsFixed(2)}'
         '&current=temperature_2m,relative_humidity_2m,apparent_temperature,'
         'precipitation,weather_code,wind_speed_10m,is_day'
+        // Le prossime dodici ore (più quella in corso) per l'Isola, che
+        // racconta la giornata e non la settimana.
+        '&hourly=temperature_2m,weather_code,precipitation_probability,is_day'
+        '&forecast_hours=13'
         '&daily=weather_code,temperature_2m_max,temperature_2m_min,'
-        'precipitation_probability_max'
+        'precipitation_probability_max,sunrise,sunset'
         '&forecast_days=7&timezone=auto');
     try {
       final dati = meteoDaJson(await _prendi(u));
@@ -147,12 +151,33 @@ Map<String, dynamic> meteoDaJson(String testo) {
     };
   }
 
+  final ore = d['hourly'];
+  if (ore is Map && ore['time'] is List) {
+    final t = ore['time'] as List;
+    final temp = (ore['temperature_2m'] as List?) ?? const [];
+    final cod = (ore['weather_code'] as List?) ?? const [];
+    final pio = (ore['precipitation_probability'] as List?) ?? const [];
+    final luce = (ore['is_day'] as List?) ?? const [];
+    fuori['ore'] = [
+      for (var i = 0; i < t.length; i++)
+        {
+          'ora': _soloOra('${t[i]}'),
+          'temperatura': i < temp.length ? (temp[i] as num?)?.toDouble() : null,
+          'codice': i < cod.length ? (cod[i] as num?)?.toInt() ?? -1 : -1,
+          'pioggia': i < pio.length ? (pio[i] as num?)?.toDouble() : null,
+          'giorno': i < luce.length ? (luce[i] as num?)?.toInt() != 0 : true,
+        }
+    ];
+  }
+
   if (giorni is Map && giorni['time'] is List) {
     final t = giorni['time'] as List;
     final cod = (giorni['weather_code'] as List?) ?? const [];
     final max = (giorni['temperature_2m_max'] as List?) ?? const [];
     final min = (giorni['temperature_2m_min'] as List?) ?? const [];
     final pio = (giorni['precipitation_probability_max'] as List?) ?? const [];
+    final alba = (giorni['sunrise'] as List?) ?? const [];
+    final tramonto = (giorni['sunset'] as List?) ?? const [];
     final elenco = <Map<String, dynamic>>[];
     for (var i = 0; i < t.length; i++) {
       elenco.add({
@@ -161,12 +186,21 @@ Map<String, dynamic> meteoDaJson(String testo) {
         'max': i < max.length ? (max[i] as num?)?.toDouble() : null,
         'min': i < min.length ? (min[i] as num?)?.toDouble() : null,
         'pioggia': i < pio.length ? (pio[i] as num?)?.toDouble() : null,
+        'alba': i < alba.length ? _soloOra('${alba[i]}') : null,
+        'tramonto': i < tramonto.length ? _soloOra('${tramonto[i]}') : null,
       });
     }
     fuori['giorni'] = elenco;
   }
 
   return fuori;
+}
+
+/// «2026-09-24T18:00» → «18:00». Con `timezone=auto` open-meteo dà già
+/// l'ora del posto, senza fuso: basta il pezzo dopo la T.
+String? _soloOra(String iso) {
+  final t = iso.indexOf('T');
+  return t < 0 || iso.length < t + 6 ? null : iso.substring(t + 1, t + 6);
 }
 
 /// Che cosa vuol dire un codice WMO, e con che icona si disegna.

@@ -20,6 +20,22 @@ const _vereMeteo = '''
 "temperature_2m_max":[33.1,29.4],"temperature_2m_min":[20.2,19.8],
 "precipitation_probability_max":[0,65]}}''';
 
+/// Con le ore e l'alba, copiata il 24 settembre 2026 (Roma, come sopra).
+const _vereOre = '''
+{"latitude":41.875,"longitude":12.5,"timezone":"Europe/Rome",
+"current":{"time":"2026-09-24T17:45","temperature_2m":24.7,
+"relative_humidity_2m":60,"apparent_temperature":25.4,"precipitation":0.0,
+"weather_code":3,"wind_speed_10m":10.2,"is_day":1},
+"hourly":{"time":["2026-09-24T17:00","2026-09-24T18:00","2026-09-24T19:00",
+"2026-09-24T20:00"],"temperature_2m":[25.2,24.5,23.8,23.0],
+"weather_code":[3,3,3,3],"precipitation_probability":[0,0,0,0],
+"is_day":[1,1,1,0]},
+"daily":{"time":["2026-09-24","2026-09-25"],"weather_code":[3,3],
+"temperature_2m_max":[26.4,28.4],"temperature_2m_min":[13.8,19.1],
+"precipitation_probability_max":[0,28],
+"sunrise":["2026-09-24T06:59","2026-09-25T07:00"],
+"sunset":["2026-09-24T19:04","2026-09-25T19:02"]}}''';
+
 void main() {
   group('meteo — leggere le risposte vere', () {
     test('una località si riduce a nome, dove, e due coordinate', () {
@@ -54,11 +70,29 @@ void main() {
       expect(g[1]['pioggia'], 65);
     });
 
+    test('le ore della giornata, con l\'ora del posto e la notte', () {
+      final o = meteoDaJson(_vereOre)['ore'] as List;
+      expect(o, hasLength(4));
+      expect(o.first['ora'], '17:00');
+      expect(o.first['temperatura'], 25.2);
+      expect(o.first['codice'], 3);
+      expect(o.first['pioggia'], 0);
+      // Alle venti è già buio: la luna, non il sole.
+      expect(o.last['giorno'], isFalse);
+    });
+
+    test('l\'alba e il tramonto, come ore', () {
+      final g = meteoDaJson(_vereOre)['giorni'] as List;
+      expect(g.first['alba'], '06:59');
+      expect(g.first['tramonto'], '19:04');
+    });
+
     test('una risposta monca non fa cadere niente', () {
       // Capita: open-meteo risponde 200 con i soli campi che ha.
       final m = meteoDaJson('{"latitude":41.9}');
       expect(m['adesso'], isNull);
       expect(m['giorni'], isNull);
+      expect(m['ore'], isNull);
     });
 
     test('una risposta che non è JSON si lamenta invece di mentire', () {

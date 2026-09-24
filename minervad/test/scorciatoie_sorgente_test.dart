@@ -38,10 +38,11 @@ void main() {
   });
 
   group('la sorgente si legge tutta', () {
-    test('novantacinque scorciatoie, nessuna riga incomprensibile', () {
+    test('tutte le scorciatoie, nessuna riga incomprensibile', () {
       // `leggi` lancia su una riga che non capisce: se siamo qui, le ha
-      // capite tutte.
-      expect(sorgente.tutte.length, 96);
+      // capite tutte. Il numero si aggiorna a mano quando se ne aggiunge
+      // una: l'ultima è Super+O, l'Isola (24 settembre 2026).
+      expect(sorgente.tutte.length, 97);
     });
 
     test('tutte hanno un tasto', () {

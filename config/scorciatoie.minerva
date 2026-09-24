@@ -119,6 +119,9 @@ $mod B -> avvia: $browser
 @ Applicazioni | Mostra la cronologia degli appunti
 $mod V -> minerva: clipboard
 
+@ Applicazioni | Apre l'Isola: la giornata, col tempo che fa ora per ora
+$mod O -> minerva: isola
+
 
 # ───────────────────────────────────────────────────────────────────────────
 #  FINESTRE

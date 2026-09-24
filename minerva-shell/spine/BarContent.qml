@@ -47,7 +47,7 @@ Item {
         put("apps",          launcherButton);
         put("minimized",     minimizedButton);
         put("calendar",      clockButton);
-        put("meteo",         meteoBottone);
+        put("meteo",         clockButton);
         put("control",       statusCluster);
         put("clipboard",     clipButton);
         put("notifications", bellButton);
@@ -191,22 +191,73 @@ Item {
         onWidthChanged: bar.syncAnchors()
         onXChanged: bar.syncAnchors()
 
+        // ── L'Isola ──────────────────────────────────────────────────
+        //
+        // L'ora, la data e il tempo che fa, in una capsula sola: toccata,
+        // cresce nella giornata intera (`menu/Isola.qml`). Il calendario è
+        // lì dentro, a un tocco. Il meteo non c'è finché non si sceglie una
+        // località: chi non lo vuole non vede nemmeno il posto dove starebbe.
         Ui.SpineButton {
             id: clockButton
             anchors.centerIn: parent
             active: bar.spine.activePanel === "calendar"
-            tooltip: Core.Strings.lang === "it" ? "Calendario" : "Calendar"
+            tooltip: Core.Meteo.pronto
+                     ? Core.Meteo.descrizione(Core.Meteo.adesso.codice) + " · " + Core.Meteo.luogo
+                     : (Core.Strings.lang === "it" ? "Oggi" : "Today")
             horizontalPadding: Theme.Effects.space3
-            onClicked: bar.spine.toggle("calendar")
+            onClicked: {
+                var w = clockButton.Window.window;
+                var p = clockButton.mapToItem(null, 0, 0);
+                // Coordinate della finestra della barra → dello schermo: la
+                // barra in basso ha la finestra in fondo allo schermo.
+                var sotto = w ? clockButton.Screen.height - w.height : 0;
+                bar.spine.isolaChiesta(Qt.rect(p.x, p.y + (bar.spine.inBasso ? sotto : 0),
+                                               clockButton.width, clockButton.height));
+            }
 
-            content: ClockCluster {
-                id: clockCluster
-                dimmed: clockButton.active || clockButton.hovered
-                // Senza spazio per tutto, resta l'ora e se ne va la data.
-                // Il perché per esteso sta in `ClockCluster.qml`.
-                compatto: centreZone.disponibile
-                          < clockCluster.larghezzaPiena
-                            + clockButton.horizontalPadding * 2
+            content: Row {
+                spacing: Theme.Effects.space2
+
+                ClockCluster {
+                    id: clockCluster
+                    anchors.verticalCenter: parent.verticalCenter
+                    dimmed: clockButton.active || clockButton.hovered
+                    // Senza spazio per tutto, resta l'ora e se ne va la data.
+                    // Il perché per esteso sta in `ClockCluster.qml`.
+                    compatto: centreZone.disponibile
+                              < clockCluster.larghezzaPiena + tempo.width + Theme.Effects.space2
+                                + clockButton.horizontalPadding * 2
+                }
+
+                Row {
+                    id: tempo
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: Core.Meteo.attivo && Core.Meteo.pronto
+                    width: visible ? implicitWidth : 0
+                    spacing: Theme.Effects.space1
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 1; height: 14
+                        color: Theme.Colors.edge
+                    }
+                    Item { width: Theme.Effects.space1; height: 1 }
+                    Ui.Icon {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 18; height: 18
+                        name: Core.Meteo.pronto
+                              ? Core.Meteo.icona(Core.Meteo.adesso.codice, Core.Meteo.adesso.giorno)
+                              : "nuvole"
+                        color: Theme.Colors.textMuted
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: Core.Meteo.pronto ? Core.Meteo.gradi(Core.Meteo.adesso.temperatura) : ""
+                        color: Theme.Colors.text
+                        font.family: Theme.Typography.fontMono
+                        font.pixelSize: Theme.Typography.sizeSM
+                    }
+                }
             }
         }
     }
@@ -287,53 +338,6 @@ Item {
                 running: !Core.Ipc.connected
                 onTriggered: attesa.scaduta = true
                 onRunningChanged: if (!running) attesa.scaduta = false
-            }
-        }
-
-        // ── Il tempo che fa ──────────────────────────────────────────
-        //
-        // Simbolo e temperatura, e basta: è l'informazione che si guarda di
-        // sfuggita uscendo di casa. Tutto il resto — umidità, vento, i sette
-        // giorni — sta dietro il clic, perché nessuna di quelle cose si
-        // guarda passando.
-        //
-        // Non c'è finché non si sceglie una località: un riquadro vuoto in
-        // mezzo alla barra sarebbe una domanda senza risposta, e chi il meteo
-        // non lo vuole non deve nemmeno vedere il buco dove starebbe.
-        Ui.SpineButton {
-            id: meteoBottone
-            anchors.verticalCenter: parent.verticalCenter
-            visible: Core.Meteo.attivo && Core.Meteo.pronto
-            active: bar.spine.activePanel === "meteo"
-            tooltip: Core.Meteo.pronto
-                     ? Core.Meteo.descrizione(Core.Meteo.adesso.codice)
-                       + " · " + Core.Meteo.luogo
-                     : ""
-            onClicked: bar.spine.toggle("meteo")
-
-            content: Row {
-                spacing: Theme.Effects.space1
-
-                Ui.Icon {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 18; height: 18
-                    name: Core.Meteo.pronto
-                          ? Core.Meteo.icona(Core.Meteo.adesso.codice,
-                                             Core.Meteo.adesso.giorno)
-                          : "nuvole"
-                    color: meteoBottone.active ? Theme.Colors.accent
-                                               : Theme.Colors.textMuted
-                }
-
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: Core.Meteo.pronto
-                          ? Core.Meteo.gradi(Core.Meteo.adesso.temperatura) : ""
-                    color: meteoBottone.active ? Theme.Colors.accent
-                                               : Theme.Colors.text
-                    font.family: Theme.Typography.fontMono
-                    font.pixelSize: Theme.Typography.sizeSM
-                }
             }
         }
 

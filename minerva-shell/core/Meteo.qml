@@ -30,6 +30,9 @@ QtObject {
     property var adesso: null
     /// I prossimi sette giorni.
     property var giorni: []
+    /// Le prossime dodici ore, da quella in corso: `{ ora: "18:00",
+    /// temperatura, codice, pioggia, giorno }`.
+    property var ore: []
     /// Vero quando quello che si mostra è l'ultima copia buona e non è fresca.
     property bool vecchio: false
 
@@ -88,10 +91,12 @@ QtObject {
             if (m.spento === true) {
                 meteo.adesso = null;
                 meteo.giorni = [];
+                meteo.ore = [];
                 return;
             }
             if (m.adesso !== undefined) meteo.adesso = m.adesso;
             if (m.giorni !== undefined) meteo.giorni = m.giorni;
+            if (m.ore !== undefined) meteo.ore = m.ore;
             meteo.vecchio = m.vecchio === true;
         }
         function onConnectedChanged() { if (Core.Ipc.connected) meteo.aggiorna(); }
