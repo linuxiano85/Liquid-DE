@@ -19,8 +19,8 @@ import QtQuick
 // e non una riscrittura:
 //
 //     Core.Scorciatoia {
-//         name: "launcher"
-//         onPressed: root.openPalette()
+//         name: "appmenu"
+//         onPressed: root.apriSottomarino()
 //     }
 //
 // Il nome NON è la combinazione di tasti: è un'etichetta. Quali tasti la

@@ -1600,16 +1600,16 @@ done
 #     verbo `messaggio`);
 #   · la voce di sessione e la configurazione di Hyprland.
 #
-# Resta UNA riga in tutta la catena, e non è una dipendenza: il NOME
-# «hyprland» nell'elenco degli ambienti di `minerva-autostart`, che serve a
-# far partire i programmi il cui `.desktop` dice `OnlyShowIn=Hyprland`. È una
-# stringa da confrontare, non un programma da eseguire, e toglierla vorrebbe
-# dire che quei programmi smettono di partire senza dirlo.
+# Restava UNA riga in tutta la catena: il NOME «hyprland» nell'elenco degli
+# ambienti di `minerva-autostart`. In Liquid DE se n'è andata con la
+# convivenza (48bdc84, 24 settembre 2026): l'ambiente è `LiquidDE:Minerva`, e
+# la riga l'ha tolta chi ha fatto la Tappa 0. Da allora il conto è zero
+# ovunque — ed è la direzione della Tappa 0b.
 #
 # Il conto è per file: se cresce, qualcuno ne ha aggiunta una.
 CATENA_ATTESA="scripts/minerva-dentro-wayland=0
 scripts/minerva-interfaccia=0
-scripts/minerva-autostart=1
+scripts/minerva-autostart=0
 scripts/start-minerva-wayland.sh=0
 scripts/minerva-demone=0
 scripts/minerva-posti.sh=0"
