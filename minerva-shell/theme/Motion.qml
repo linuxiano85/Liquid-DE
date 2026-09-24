@@ -63,6 +63,26 @@ QtObject {
     /// Uscita: sempre più corta dell'entrata corrispondente.
     readonly property int exit: Math.round(160 * motion.scala)
 
+    // ── La molla liquida ─────────────────────────────────────────────────
+    //
+    // Per quello che SCIVOLA da un posto all'altro — la goccia sotto la voce
+    // scelta, sotto il puntatore, sotto la vista attiva: non ci arriva con
+    // una curva di durata fissa ma con una molla, supera di un soffio e si
+    // posa. È il movimento di Liquid DE («fluidità, desktop elastico, quasi
+    // liquidità»), ed è una `SpringAnimation`, che col renderer software
+    // costa quanto un'animazione di colore.
+    //
+    // La molla non ha una durata da moltiplicare: `scala` la rende più lenta
+    // allentandola, e a zero la spegne del tutto (`liquido`).
+
+    /// Falso con le animazioni spente: chi usa la molla la mette su
+    /// `enabled`, e il valore arriva a destinazione nello stesso fotogramma.
+    readonly property bool liquido: motion.scala > 0
+    /// Rigidità: più alta, più svelta.
+    readonly property real molla: 4.2 / Math.max(0.25, motion.scala)
+    /// Smorzamento: sotto 1 supera il bersaglio e torna. 0.34 è un soffio.
+    readonly property real smorzamento: 0.34
+
     // ── Curve ────────────────────────────────────────────────────────────
     // Le curve stanno come quaterne di controllo di una Bézier cubica, così
     // possono essere assegnate a `easing.bezierCurve`.

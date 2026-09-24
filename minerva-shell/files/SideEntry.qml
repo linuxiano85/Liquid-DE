@@ -27,6 +27,14 @@ Rectangle {
     /// Si può espellere (disco montato e staccabile).
     property bool ejectable: false
 
+    /// La voce della cartella che si sta guardando.
+    property bool attiva: false
+    /// La goccia della colonna (`ui/Goccia.qml`): è lei a colorare la voce
+    /// sotto il puntatore e quella attiva, scivolando dall'una all'altra.
+    property Item goccia: null
+    onAttivaChanged: if (entry.attiva && entry.goccia) entry.goccia.attiva = entry
+    Component.onCompleted: if (entry.attiva && entry.goccia) entry.goccia.attiva = entry
+
     /// Ci hanno lasciato sopra dei file. Il percorso lo sa già chi ascolta:
     /// è `entry.path`.
     signal rilasciato(var sorgenti)
@@ -63,10 +71,11 @@ Rectangle {
 
     readonly property bool hasAction: entry.removable || entry.ejectable
 
-    height: entry.detail !== "" ? 38 : 30
-    radius: Theme.Effects.radiusXS
-    color: entry.bersaglio ? Qt.alpha(Theme.Colors.accent, 0.34)
-         : mouse.containsMouse ? Theme.Colors.hover : "transparent"
+    height: entry.detail !== "" ? 40 : 32
+    radius: Theme.Effects.radiusSM
+    // Il passaggio del mouse e la voce attiva li disegna la goccia; qui resta
+    // solo il bersaglio di un trascinamento, che è un'altra cosa.
+    color: entry.bersaglio ? Qt.alpha(Theme.Colors.accent, 0.34) : "transparent"
     Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
     opacity: entry.dimmed ? 0.6 : 1
 
@@ -77,7 +86,9 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         width: 15; height: 15
         name: entry.icon
-        color: mouse.containsMouse ? Theme.Colors.accent : Theme.Colors.textFaint
+        color: mouse.containsMouse || entry.attiva ? Theme.Colors.accent
+                                                   : Theme.Colors.textFaint
+        Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
     }
 
     Text {
@@ -98,7 +109,7 @@ Rectangle {
         anchors.verticalCenterOffset: entry.detail !== "" ? -9 : 0
         elide: Text.ElideMiddle
         text: entry.label
-        color: Theme.Colors.textMuted
+        color: entry.attiva ? Theme.Colors.text : Theme.Colors.textMuted
         font.family: Theme.Typography.fontDisplay
         font.weight: Theme.Typography.weightRegular
         font.pixelSize: Theme.Typography.sizeSM
@@ -159,6 +170,7 @@ Rectangle {
         id: mouse
         anchors.fill: parent
         hoverEnabled: true
+        onContainsMouseChanged: if (entry.goccia) entry.goccia.punta(entry, mouse.containsMouse)
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onClicked: function(evento) {

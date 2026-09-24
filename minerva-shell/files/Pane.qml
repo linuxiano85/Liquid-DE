@@ -612,19 +612,24 @@ Item {
     //
     // È la ragione per cui il gestore file sembrava «una tabella dentro una
     // scatola» invece di un programma: la lista non arrivava mai ai bordi.
+    //
+    // In Liquid DE il riquadro è un'isola come la colonna dei posti, anche
+    // quando è solo: due isole affiancate sul fondo della finestra, con lo
+    // stesso vuoto e lo stesso raggio, non una cornice dentro una cornice.
+    // Il bordo colorato resta per dire quale riquadro ha il fuoco quando
+    // sono più d'uno.
     Rectangle {
         anchors.fill: parent
-        // Flush vuol dire «senza cornice», NON «senza fondo». Tolto anche il
-        // fondo, sotto l'elenco restava il vetro nudo della finestra: il
-        // terminale che stava dietro si leggeva ATTRAVERSO i nomi dei file.
-        // Una cosa da guardare due secondi per capire che non è un guasto.
-        radius: pane.solo ? 0 : Theme.Effects.radiusMD
+        // Il fondo non si toglie mai: senza, sotto l'elenco resterebbe il
+        // vetro nudo della finestra e il terminale dietro si leggerebbe
+        // ATTRAVERSO i nomi dei file.
+        radius: Theme.Effects.radiusLG
         color: Theme.Colors.lettura
-        border.width: pane.solo ? 0 : 1
+        border.width: Theme.Effects.hairline
         // Il riquadro col fuoco si riconosce dal bordo. Non dal colore di
         // sfondo: due sfondi diversi affiancati sembrano due programmi.
-        border.color: pane.focused ? Qt.alpha(Theme.Colors.accent, 0.55)
-                                   : Theme.Colors.edge
+        border.color: pane.focused && !pane.solo ? Qt.alpha(Theme.Colors.accent, 0.55)
+                                                 : Theme.Colors.edge
         Behavior on border.color { ColorAnimation { duration: Theme.Motion.instant } }
     }
 
@@ -646,8 +651,16 @@ Item {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.margins: Theme.Effects.space2
-        height: 32
+        anchors.margins: Theme.Effects.space3
+        height: 34
+
+        // Le tre frecce stanno in una capsula loro: sono un gruppo solo.
+        Rectangle {
+            anchors.fill: navRow
+            anchors.margins: -2
+            radius: height / 2
+            color: Theme.Colors.raised
+        }
 
         Row {
             id: navRow
@@ -671,8 +684,8 @@ Item {
                       : modelData.id === "forward" ? pane.canGoForward
                       : pane.canGoUp
 
-                    width: 26; height: 26
-                    radius: Theme.Effects.radiusXS
+                    width: 30; height: 30
+                    radius: height / 2
                     color: navMouse.containsMouse && usable ? Theme.Colors.hover
                                                             : "transparent"
                     Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
@@ -727,9 +740,11 @@ Item {
             anchors.right: closeTab.visible ? closeTab.left : parent.right
             anchors.rightMargin: closeTab.visible ? Theme.Effects.space1 : 0
             anchors.verticalCenter: parent.verticalCenter
-            height: 26
-            radius: Theme.Effects.radiusXS
-            color: pathInput.activeFocus ? Theme.Colors.raised : "transparent"
+            height: 34
+            radius: height / 2
+            // Una capsula sempre, più chiara quando ci si scrive dentro.
+            color: pathInput.activeFocus ? Theme.Colors.raisedHigh : Theme.Colors.raised
+            Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
             // ── Le briciole, e sotto il testo ────────────────────────────
             //
@@ -749,8 +764,8 @@ Item {
                 }
                 id: briciole
                 anchors.fill: parent
-                anchors.leftMargin: Theme.Effects.space2
-                anchors.rightMargin: Theme.Effects.space2
+                anchors.leftMargin: Theme.Effects.space3
+                anchors.rightMargin: Theme.Effects.space3
                 visible: !pane.scrivendoPercorso
                 percorso: pane.path
                 attivo: pane.focused
@@ -1675,6 +1690,17 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         focus: pane.focused
 
+        // Il passaggio del mouse: una goccia sola che scivola da una cella
+        // all'altra (`ui/Goccia.qml`), addosso al contenuto come la cornice
+        // della selezione. Sta nel contenuto della griglia, quindi scorre
+        // insieme alle celle.
+        Ui.Goccia {
+            id: gocciaCelle
+            margine: view.gridMode ? pane.gridPadding : 0
+            radius: view.gridMode ? Theme.Effects.radiusMD : Theme.Effects.radiusSM
+            color: Theme.Colors.raised
+        }
+
         // ── Cliccare il vuoto deseleziona ─────────────────────────────────
         //
         // Prima non esisteva: una volta selezionato un file restava
@@ -1873,14 +1899,15 @@ Item {
                 id: bg
                 anchors.fill: parent
                 anchors.margins: cell.gridMode ? pane.gridPadding : 0
-                radius: cell.gridMode ? Theme.Effects.radiusSM
-                                      : Theme.Effects.radiusXS
+                radius: cell.gridMode ? Theme.Effects.radiusMD
+                                      : Theme.Effects.radiusSM
+                // Il passaggio del mouse lo disegna la goccia della griglia;
+                // qui restano le cose che non si muovono col puntatore.
                 color: bersaglio.sopra === cell.index
                        ? Qt.alpha(Theme.Colors.accent, 0.34)
                      : cell.selected
                        ? Qt.alpha(Theme.Colors.accent, pane.focused ? 0.22 : 0.07)
                      : cell.atCursor ? Theme.Colors.hover
-                     : cellMouse.containsMouse ? Theme.Colors.raised
                      : "transparent"
                 Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
             }
@@ -1916,6 +1943,14 @@ Item {
             // esiste.
             Item {
                 id: thumb
+                // In griglia l'icona si solleva di un soffio sotto il
+                // puntatore, e ci arriva con la molla.
+                scale: cell.gridMode && cellMouse.containsMouse ? 1.06 : 1
+                transformOrigin: Item.Bottom
+                Behavior on scale {
+                    enabled: Theme.Motion.liquido
+                    SpringAnimation { spring: Theme.Motion.molla; damping: Theme.Motion.smorzamento }
+                }
                 width: cell.gridMode ? cell.width - pane.gridPadding * 2
                                      : pane.iconSize
                 height: cell.gridMode
@@ -2121,6 +2156,7 @@ Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onContainsMouseChanged: gocciaCelle.punta(cell, cellMouse.containsMouse)
 
                 /// Da dove è partito il dito. Serve alla soglia: senza, ogni
                 /// clic con un tremito di due pixel diventerebbe un
@@ -2246,8 +2282,27 @@ Item {
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.margins: Theme.Effects.space2
-        height: 22
+        anchors.margins: Theme.Effects.space3
+        height: 30
+
+        // I comandi della vista in una capsula; la vista attiva la segna
+        // una goccia che scivola da «elenco» a «griglia».
+        Rectangle {
+            id: capsulaVista
+            anchors.fill: viewRow
+            anchors.leftMargin: -Theme.Effects.space2
+            anchors.rightMargin: -Theme.Effects.space1
+            anchors.topMargin: -3
+            anchors.bottomMargin: -3
+            radius: height / 2
+            color: Theme.Colors.raised
+
+            Ui.Goccia {
+                id: gocciaVista
+                radius: height / 2
+                color: Qt.alpha(Theme.Colors.accent, 0.22)
+            }
+        }
 
         Text {
             anchors.left: parent.left
@@ -2367,13 +2422,15 @@ Item {
                     required property var modelData
 
                     readonly property bool active: pane.viewMode === modelData.id
+                    onActiveChanged: if (modeBtn.active) gocciaVista.attiva = modeBtn
+                    Component.onCompleted: if (modeBtn.active) gocciaVista.attiva = modeBtn
 
-                    width: 22; height: 20
+                    width: 26; height: 22
                     anchors.verticalCenter: parent.verticalCenter
-                    radius: Theme.Effects.radiusXS
-                    color: modeBtn.active ? Qt.alpha(Theme.Colors.accent, 0.16)
-                         : modeMouse.containsMouse ? Theme.Colors.hover
-                         : "transparent"
+                    radius: height / 2
+                    // La vista attiva la segna la goccia della capsula.
+                    color: !modeBtn.active && modeMouse.containsMouse ? Theme.Colors.hover
+                                                                      : "transparent"
                     Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
                     Ui.Icon {

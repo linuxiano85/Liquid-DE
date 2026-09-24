@@ -21,6 +21,10 @@ import "../menu"
 FloatingWindow {
     id: manager
 
+    /// Il vuoto fra le isole di Liquid DE (la colonna, i riquadri, le
+    /// capsule dei comandi) e fra loro e il bordo della finestra.
+    readonly property int isola: Theme.Effects.space2
+
     // Non ci si mostra col tema di fabbrica.
     //
     // I colori arrivano dal demone. Finché non sono arrivati, il tema è quello
@@ -1399,19 +1403,32 @@ FloatingWindow {
         anchors.top: titolo.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        height: 46
+        height: 50
 
+        // ── Due capsule, non una fascia ─────────────────────────────────
+        //
+        // In Liquid DE i comandi galleggiano: una capsula larga quanto
+        // quello che contiene, che si allarga con una molla quando compare
+        // un comando (una selezione) e si stringe quando sparisce. Sotto i
+        // pulsanti scivola una goccia sola (`ui/Goccia.qml`).
         Rectangle {
-            anchors.fill: parent
-            color: Theme.Colors.membrane
-        }
-
-        Rectangle {
-            anchors.bottom: parent.bottom
+            id: capsulaComandi
             anchors.left: parent.left
-            anchors.right: parent.right
-            height: 1
-            color: Theme.Colors.edge
+            anchors.leftMargin: manager.isola
+            anchors.verticalCenter: parent.verticalCenter
+            height: 38
+            radius: height / 2
+            width: comandiRow.implicitWidth + 2 * Theme.Effects.space1
+            color: Theme.Colors.raised
+            Behavior on width {
+                enabled: Theme.Motion.liquido
+                SpringAnimation { spring: Theme.Motion.molla; damping: Theme.Motion.smorzamento }
+            }
+
+            Ui.Goccia {
+                id: gocciaComandi
+                radius: height / 2
+            }
         }
 
         // Sotto una certa larghezza i comandi perdono l'etichetta e restano
@@ -1421,8 +1438,11 @@ FloatingWindow {
         readonly property bool compact: toolbar.width < 880
 
         Row {
-            anchors.left: parent.left
-            anchors.leftMargin: Theme.Effects.space3
+            id: comandiRow
+            // Dentro la capsula, ma figlio della barra: la capsula si allarga
+            // con la molla, i comandi stanno fermi dove devono stare.
+            anchors.left: capsulaComandi.left
+            anchors.leftMargin: Theme.Effects.space1
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.Effects.space1
 
@@ -1484,16 +1504,14 @@ FloatingWindow {
                                                   : Theme.Colors.accent
 
                     width: tool.isSep ? 13
-                                      : toolRow.implicitWidth + Theme.Effects.space3
+                                      : toolRow.implicitWidth + Theme.Effects.space4
                     height: 30
-                    radius: Theme.Effects.radiusXS
+                    radius: height / 2
                     // Un comando che ACCENDE un modo si vede che è acceso:
-                    // resta colorato anche senza il puntatore sopra. Gli altri
-                    // fanno una cosa e finiscono, e si spengono subito.
+                    // resta colorato anche senza il puntatore sopra. Il
+                    // passaggio del mouse lo disegna la goccia della capsula.
                     color: tool.modelData.acceso === true
-                           ? Qt.alpha(tone, 0.22)
-                         : !tool.isSep && toolMouse.containsMouse && usable
-                           ? Qt.alpha(tone, 0.14) : "transparent"
+                           ? Qt.alpha(tone, 0.22) : "transparent"
                     Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
                     opacity: tool.isSep ? 1 : (usable ? 1 : 0.35)
 
@@ -1538,6 +1556,7 @@ FloatingWindow {
                         anchors.fill: parent
                         hoverEnabled: true
                         enabled: tool.usable && !tool.isSep
+                        onContainsMouseChanged: gocciaComandi.punta(tool, toolMouse.containsMouse)
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             switch (tool.modelData.id) {
@@ -1560,9 +1579,18 @@ FloatingWindow {
         // I due pulsanti che spostano roba da un riquadro all'altro. Sono a
         // destra e staccati dagli altri: non agiscono sugli appunti, agiscono
         // fra i due riquadri, ed è una categoria di comando diversa.
+        Rectangle {
+            anchors.fill: incrocioRow
+            anchors.margins: -Theme.Effects.space1
+            visible: incrocioRow.visible
+            radius: height / 2
+            color: Theme.Colors.raised
+        }
+
         Row {
+            id: incrocioRow
             anchors.right: parent.right
-            anchors.rightMargin: Theme.Effects.space3
+            anchors.rightMargin: manager.isola + Theme.Effects.space1
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.Effects.space1
 
@@ -1596,11 +1624,11 @@ FloatingWindow {
                             : (manager.other
                                && manager.other.path !== manager.current.path))
 
-                    width: crossText.implicitWidth + Theme.Effects.space4
+                    width: crossText.implicitWidth + Theme.Effects.space5
                     height: 30
-                    radius: Theme.Effects.radiusXS
+                    radius: height / 2
                     color: crossMouse.containsMouse && usable
-                           ? Qt.alpha(Theme.Colors.accent, 0.14) : Theme.Colors.raised
+                           ? Qt.alpha(Theme.Colors.accent, 0.14) : "transparent"
                     Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
                     opacity: usable ? 1 : 0.35
 
@@ -1723,21 +1751,24 @@ FloatingWindow {
     // così le due metà del corpo della finestra sono un materiale solo e il
     // vetro resta dove serve — la striscia dei comandi in alto, che è quella
     // che deve far vedere che sotto c'è una scrivania.
+    //
+    // In Liquid DE la colonna è un'isola: staccata dai bordi della finestra,
+    // arrotondata, e sotto le voci scivola una goccia sola (`ui/Goccia.qml`)
+    // invece di tante voci che si accendono ognuna per conto suo.
     Rectangle {
         id: places
         anchors.top: toolbar.bottom
         anchors.left: parent.left
         anchors.bottom: transfers.top
+        anchors.leftMargin: manager.isola
+        anchors.bottomMargin: manager.isola
         width: 194
+        radius: Theme.Effects.radiusLG
         color: Theme.Colors.lettura
-
-        Rectangle {
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: 1
-            color: Theme.Colors.edge
-        }
+        // Il filo non delimita: fa cogliere la curvatura dell'isola sul vetro
+        // della finestra, che su un tema scuro ha quasi lo stesso colore.
+        border.width: Theme.Effects.hairline
+        border.color: Theme.Colors.edge
 
         Ui.Scorrimento {
             bersaglio: colonnaPosti
@@ -1752,10 +1783,14 @@ FloatingWindow {
             id: colonnaPosti
             anchors.fill: parent
             anchors.margins: Theme.Effects.space2
-            anchors.rightMargin: Theme.Effects.space2 + 1
             contentHeight: sideColumn.implicitHeight
             clip: true
             boundsBehavior: Flickable.StopAtBounds
+
+            Ui.Goccia {
+                id: gocciaPosti
+                radius: Theme.Effects.radiusSM
+            }
 
             Column {
                 id: sideColumn
@@ -1768,6 +1803,9 @@ FloatingWindow {
                     model: Files.places
                     delegate: SideEntry {
                         required property var modelData
+                        goccia: gocciaPosti
+                        attiva: manager.current !== null && path !== ""
+                                && manager.current.path === path
                         width: sideColumn.width
                         icon: modelData.icon
                         onRilasciato: function (sorgenti) {
@@ -1854,6 +1892,9 @@ FloatingWindow {
                     model: Files.pinned
                     delegate: SideEntry {
                         required property var modelData
+                        goccia: gocciaPosti
+                        attiva: manager.current !== null && path !== ""
+                                && manager.current.path === path
                         width: sideColumn.width
                         // Una cartella, non una puntina: la puntina è il
                         // pulsante che fissa, e vuol dire un'azione. Qui sono
@@ -1898,6 +1939,9 @@ FloatingWindow {
                     delegate: SideEntry {
                         id: volume
                         required property var modelData
+                        goccia: gocciaPosti
+                        attiva: manager.current !== null && path !== ""
+                                && manager.current.path === path
 
                         onRilasciato: function (sorgenti) {
                             manager.chiediCopiaOSposta(sorgenti, volume.path);
@@ -1984,9 +2028,9 @@ FloatingWindow {
         anchors.left: places.right
         anchors.right: parent.right
         anchors.bottom: transfers.top
-        anchors.margins: Theme.Effects.space2
-        anchors.leftMargin: 0
-        spacing: Theme.Effects.space2
+        anchors.margins: manager.isola
+        anchors.topMargin: 0
+        spacing: manager.isola
 
         readonly property real cell: (width - spacing * (manager.tabs.count - 1))
                                      / Math.max(1, manager.tabs.count)
