@@ -80,6 +80,9 @@ PanelWindow {
     // vogliono aprire lo chiedono da qui.
     signal cheatsheetRequested()
     signal settingsRequested()
+    /// Il pulsante del menù delle app: il menù è il Sottomarino, che non
+    /// vive nella barra (`menu/Sottomarino.qml`).
+    signal menuAppChiesto()
     signal monitorRequested()
     /// Tasto destro sul nome della finestra attiva, in coordinate globali.
     signal windowMenuRequested(point where)

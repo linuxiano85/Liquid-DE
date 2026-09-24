@@ -699,6 +699,7 @@ ShellRoot {
 
                 onCheatsheetRequested: root.toggleCheatsheet()
                 onSettingsRequested: root.openSettings()
+                onMenuAppChiesto: sottomarino.commuta()
                 onMonitorRequested: root.openMonitor()
                 onScreenshotRequested: function(modo, ritardo) {
                     root.scattaSchermata(modo, ritardo);

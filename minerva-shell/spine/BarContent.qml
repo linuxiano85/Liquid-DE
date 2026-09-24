@@ -82,7 +82,7 @@ Item {
             active: bar.spine.activePanel === "apps"
             tooltip: Core.Strings.t("apps")
             horizontalPadding: Theme.Effects.space2
-            onClicked: bar.spine.toggle("apps")
+            onClicked: bar.spine.menuAppChiesto()
 
             content: MinervaMark {
                 width: 20

@@ -50,7 +50,10 @@ export MINERVA_PROVA=1
 # sé (`WLR_BACKENDS` vuota), perché su una console libera sceglierebbe DRM.
 case "${WLR_BACKENDS:-}" in
     headless) export WLR_BACKENDS=headless ;;
-    *)        export WLR_BACKENDS=wayland ;;
+    *)        export WLR_BACKENDS=wayland
+              # In una finestra il bordo non ferma il puntatore: gli angoli
+              # attivi si allargano, o prenderli sarebbe un tiro a segno.
+              export MINERVA_ANGOLO_LATO="${MINERVA_ANGOLO_LATO:-16}" ;;
 esac
 
 # ── La riga che impedisce alla prova di toccare la sessione vera ──────────

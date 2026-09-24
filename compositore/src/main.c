@@ -5819,7 +5819,21 @@ static void bordo_alto_guarda(struct minerva *m) {
 // sosta, e `evento angolo {"quale":"via"}` quando il puntatore se ne va da un
 // angolo già detto.
 #define ANGOLO_SOSTA_MS 160
-#define ANGOLO_LATO 3
+
+// Tre pixel sul bordo dello schermo vero, dove il puntatore si ferma da solo.
+// In una prova annidata DENTRO UNA FINESTRA il bordo non ferma niente — oltre
+// c'è l'altra scrivania — e un angolo di tre pixel è quasi impossibile da
+// prendere: `MINERVA_ANGOLO_LATO` lo allarga (lo mette `prova-annidata.sh`).
+static int angolo_lato(void) {
+	static int lato = 0;
+	if (lato == 0) {
+		const char *detto = getenv("MINERVA_ANGOLO_LATO");
+		lato = detto != NULL ? atoi(detto) : 3;
+		if (lato < 1 || lato > 64)
+			lato = 3;
+	}
+	return lato;
+}
 
 static int angolo_scade(void *dati) {
 	struct minerva *m = dati;
@@ -5841,10 +5855,11 @@ static void angolo_guarda(struct minerva *m) {
 		struct wlr_box box;
 		wlr_output_layout_get_box(m->schermi, out, &box);
 		const double cx = m->cursore->x, cy = m->cursore->y;
-		const bool sx = cx < box.x + ANGOLO_LATO;
-		const bool dx = cx > box.x + box.width - 1 - ANGOLO_LATO;
-		const bool alto = cy < box.y + ANGOLO_LATO;
-		const bool basso = cy > box.y + box.height - 1 - ANGOLO_LATO;
+		const int lato = angolo_lato();
+		const bool sx = cx < box.x + lato;
+		const bool dx = cx > box.x + box.width - 1 - lato;
+		const bool alto = cy < box.y + lato;
+		const bool basso = cy > box.y + box.height - 1 - lato;
 		if ((sx || dx) && (alto || basso)) {
 			// Un angolo è vero se oltre i suoi due lati non c'è un altro
 			// schermo.
