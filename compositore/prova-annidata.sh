@@ -24,7 +24,8 @@ set -eu
 
 QUI="$(cd "$(dirname "$0")" && pwd)"
 RADICE="$(cd "$QUI/.." && pwd)"
-BIN="${MINERVA_BIN:-$HOME/.local/bin}/minerva-wayland"
+. "$RADICE/scripts/minerva-cartelle.sh"
+BIN="$CARTELLA_BIN/minerva-wayland"
 
 [ -x "$BIN" ] || { echo "manca $BIN — lancia prima ./costruisci.sh" >&2; exit 1; }
 
@@ -69,7 +70,7 @@ esac
 unset HYPRLAND_INSTANCE_SIGNATURE
 export MINERVA_COMPOSITORE=minerva-wayland
 
-REGISTRO="${TMPDIR:-/tmp}/minerva-wayland-prova.log"
+REGISTRO="${TMPDIR:-/tmp}/liquid-de-wayland-prova.log"
 : > "$REGISTRO"
 
 "$BIN" > "$REGISTRO" 2>&1 &
@@ -148,16 +149,16 @@ PORTA_PROVA="${MINERVA_IPC_PORT:-11433}"
 #
 # Le prove girano una alla volta (`prove.sh` le mette in fila), quindi il
 # nome fisso basta. Chi ne vuole due insieme lo dice: `MINERVA_CONF_PROVA`.
-CONF_PROVA="${MINERVA_CONF_PROVA:-${TMPDIR:-/tmp}/minerva-prova-conf}"
+CONF_PROVA="${MINERVA_CONF_PROVA:-${TMPDIR:-/tmp}/liquid-de-prova-conf}"
 rm -rf "$CONF_PROVA"
 mkdir -p "$CONF_PROVA"
-if [ -d "$HOME/.config/minerva" ]; then
+if [ -d "$CARTELLA_CONFIG_DI_PARTENZA" ]; then
     # Tutto TRANNE `sessioni/`, che contiene la chiave della sessione viva.
     # Copiarla vorrebbe dire portare un segreto dentro `/tmp` per niente: il
     # demone di prova la sua chiave se la genera da sé, e quella vera qui non
     # serve a nessuno. Un segreto che non si copia è un segreto che non si
     # può perdere.
-    for voce in "$HOME/.config/minerva/"* "$HOME/.config/minerva/".[!.]*; do
+    for voce in "$CARTELLA_CONFIG_DI_PARTENZA/"* "$CARTELLA_CONFIG_DI_PARTENZA/".[!.]*; do
         [ -e "$voce" ] || continue
         case "$(basename "$voce")" in sessioni) continue;; esac
         cp -a "$voce" "$CONF_PROVA/" 2>/dev/null || true
@@ -191,7 +192,7 @@ export MINERVA_IPC_SOCKET="$CONF_PROVA/canale.sock"
 #
 # Le due righe qui sopra non bastano, e la differenza è costata il 26 agosto
 # 2026. Il demone scrive porta e chiave in un file, e i posti dove lo cerca
-# sono in ordine: **`$XDG_RUNTIME_DIR/minerva/sessioni/<sessione>/canale`
+# sono in ordine: **`$XDG_RUNTIME_DIR/liquid-de/sessioni/<sessione>/canale`
 # prima della cartella di configurazione.** La sessione è la stessa, la
 # cartella di runtime è la stessa — quindi il demone di prova ha scritto la
 # SUA porta (11433) e la SUA chiave sopra quelle del demone di Giacomo.
@@ -208,7 +209,7 @@ export MINERVA_IPC_SOCKET="$CONF_PROVA/canale.sock"
 # la shell in `core/Ipc.qml`.
 export MINERVA_TOKEN_FILE="$CONF_PROVA/canale"
 
-DEMONE_LOG="${TMPDIR:-/tmp}/minerva-demone-prova.log"
+DEMONE_LOG="${TMPDIR:-/tmp}/liquid-de-demone-prova.log"
 (
     # Il demone di prova deve vedere le stesse variabili della shell di prova,
     # altrimenti usa il socket della sessione vera e collide.
@@ -249,7 +250,7 @@ MINERVA_PROVA=1 WAYLAND_DISPLAY="$DENTRO" QT_QPA_PLATFORM=wayland \
     MINERVA_IPC_SOCKET="$CONF_PROVA/canale.sock" MINERVA_TOKEN_FILE="$CONF_PROVA/canale" \
     MINERVA_CONFIG_DIR="$CONF_PROVA" \
     qs -p "$RADICE/minerva-shell/shell.qml" \
-    > "${TMPDIR:-/tmp}/minerva-shell-prova.log" 2>&1 &
+    > "${TMPDIR:-/tmp}/liquid-de-shell-prova.log" 2>&1 &
 SHELL_PID=$!
 
 if [ $# -gt 0 ]; then

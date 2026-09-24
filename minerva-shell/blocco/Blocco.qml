@@ -26,7 +26,7 @@ import "." as Schermo
 // aprirne una seconda per poi buttarla via — cioè fidarsi che vada tutto bene
 // in una strada che non porta da nessuna parte.
 //
-// Il file di configurazione è `/etc/pam.d/minerva`, e se non c'è si ripiega su
+// Il file di configurazione è `/etc/pam.d/liquid-de`, e se non c'è si ripiega su
 // quello di hyprlock — che su Arch esiste sempre ed è due righe: `auth include
 // login`. Il ripiego non è pigrizia: è che un blocco schermo che non riesce a
 // verificare NIENTE è un blocco schermo che non si apre più.
@@ -97,7 +97,7 @@ Item {
         // Lo sceglie `scripts/minerva-blocca`, che prima va a vedere quale
         // esiste: il nostro se c'è, quello di hyprlock se no. Se non ne
         // trovasse nessuno non ci lancerebbe nemmeno.
-        config: Quickshell.env("MINERVA_PAM") || "minerva"
+        config: Quickshell.env("MINERVA_PAM") || "liquid-de"
         user: blocco.utente
 
         onCompleted: function (result) {

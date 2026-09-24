@@ -55,17 +55,17 @@ inf "scrivania: ${XDG_CURRENT_DESKTOP:-(vuota)}"
 case "$COMPOSITORE" in
     nostro)
         case "${XDG_CURRENT_DESKTOP:-}" in
-            MinervaWayland*)
+            LiquidDE*)
                 ok "i portali useranno il backend di wlroots" ;;
             *)
-                bad "manca «MinervaWayland» in testa a XDG_CURRENT_DESKTOP:"
+                bad "manca «LiquidDE» in testa a XDG_CURRENT_DESKTOP:"
                 bad "i portali cercherebbero quello di Hyprland, che qui dentro"
                 bad "non risponde — e non lo direbbe" ;;
         esac
-        if [ -r "$HOME/.config/xdg-desktop-portal/minervawayland-portals.conf" ]; then
-            ok "minervawayland-portals.conf al suo posto"
+        if [ -r "$HOME/.config/xdg-desktop-portal/liquidde-portals.conf" ]; then
+            ok "liquidde-portals.conf al suo posto"
         else
-            bad "manca ~/.config/xdg-desktop-portal/minervawayland-portals.conf"
+            bad "manca ~/.config/xdg-desktop-portal/liquidde-portals.conf"
             bad "  → scripts/install-minerva.sh"
         fi
         if [ -r /usr/share/xdg-desktop-portal/portals/wlr.portal ]; then
@@ -153,8 +153,8 @@ check_proc "password (polkit)"       '[m]inerva-polkit|[h]yprpolkitagent|[p]olki
 # restare tre.
 CANALE=""
 for c in "${MINERVA_TOKEN_FILE:-}" \
-         "${XDG_RUNTIME_DIR:+$XDG_RUNTIME_DIR/minerva/sessioni/$MINERVA_SESSIONE/canale}" \
-         "${MINERVA_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/minerva}/sessioni/$MINERVA_SESSIONE/canale"; do
+         "${XDG_RUNTIME_DIR:+$CARTELLA_RUNTIME/sessioni/$MINERVA_SESSIONE/canale}" \
+         "$CARTELLA_CONFIG/sessioni/$MINERVA_SESSIONE/canale"; do
     [ -n "$c" ] && [ -f "$c" ] && { CANALE="$c"; break; }
 done
 # `MINERVA_IPC_SOCKET` vince sul file: e' un ordine, non un suggerimento, ed e'

@@ -60,10 +60,11 @@ void main() {
 
     test('il predefinito sta dove sta il file del canale', () {
       final p = WebSocketServer.socketPredefinito();
-      // Percorso completo, dentro una cartella «minerva», e con dentro il nome
-      // della sessione: sono le tre cose per cui due demoni non si incontrano.
+      // Percorso completo, dentro la cartella di Liquid DE, e con dentro il
+      // nome della sessione: sono le tre cose per cui due demoni non si
+      // incontrano — nemmeno quello di Liquid DE e quello di Minerva.
       expect(p, startsWith('/'));
-      expect(p, contains('minerva'));
+      expect(p, contains('/liquid-de'));
       expect(p, endsWith('.sock'));
       // Sotto i 100 caratteri, o il limite del kernel lo prende in faccia il
       // demone vero invece di questa prova.

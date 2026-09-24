@@ -51,6 +51,8 @@ import re
 import socket
 import subprocess
 import sys
+
+import cartelle  # le cartelle di Liquid DE, accanto a questo file
 import time
 from zlib import error as zlib_error
 
@@ -59,7 +61,7 @@ from fotogramma import diversi, leggi_png  # noqa: E402
 
 QUI = os.path.dirname(os.path.abspath(__file__))
 RADICE = os.path.dirname(QUI)
-CONF_PROVA = os.path.join(os.environ.get("TMPDIR", "/tmp"), "minerva-prova-conf")
+CONF_PROVA = os.path.join(os.environ.get("TMPDIR", "/tmp"), "liquid-de-prova-conf")
 
 
 # ── I valori da provare ────────────────────────────────────────────────────
@@ -348,8 +350,7 @@ def main():
         # Senza accendere niente: si legge la configurazione vera in sola
         # lettura e si dice cosa si proverebbe. Serve a vedere la copertura
         # senza aspettare un quarto d'ora.
-        casa = os.environ.get("MINERVA_CONFIG_DIR",
-                              os.path.expanduser("~/.config/minerva"))
+        casa = os.environ.get("MINERVA_CONFIG_DIR", cartelle.config_di_partenza())
         with open(os.path.join(casa, "settings.json")) as f:
             impostazioni = json.load(f)
         return elenca(impostazioni, solo)

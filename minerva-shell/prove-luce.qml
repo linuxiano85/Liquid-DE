@@ -11,7 +11,7 @@ import "core" as Core
 //
 // Il 17 agosto 2026 la luce notturna non funzionava, e non se ne accorgeva
 // nessuno guardando: l'impostazione si salvava, il file dello shader NASCEVA
-// davvero in ~/.local/state/minerva — quindi aprendo la cartella sembrava
+// davvero in ~/.local/state/liquid-de — quindi aprendo la cartella sembrava
 // tutto a posto — e `decoration:screen_shader` restava `[[EMPTY]]` per
 // sempre. Nessun errore, da nessuna parte.
 //

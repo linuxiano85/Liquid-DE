@@ -1,6 +1,6 @@
 # Minerva — blocco schermo.
 #
-# Lo installa `scripts/install-minerva.sh` in /etc/pam.d/minerva.
+# Lo installa `scripts/install-minerva.sh` in /etc/pam.d/liquid-de.
 # Lo usa `minerva-shell/blocco/Blocco.qml` attraverso `PamContext`.
 #
 # ── Solo righe «auth» (e una «account» per scaramanzia) ────────────────────

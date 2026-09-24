@@ -89,18 +89,13 @@ Il resto della sessione funziona.
 | `xdg-desktop-portal-gtk` | chi risponde a «apri un file» | i programmi non riescono a farti scegliere un file |
 | `xdg-desktop-portal-wlr` | il backend della sessione **minerva-wayland** | là: niente condivisione dello schermo (le finestre «apri file» reggono, ci pensa gtk) |
 
-**Sbagliare backend non dà errore, e questa è la cosa da ricordare.**
-`xdg-desktop-portal-hyprland` — che è stato disinstallato il 2 settembre 2026 —
-per lavorare cercava `HYPRLAND_INSTANCE_SIGNATURE`: dentro minerva-wayland
-quella variabile non esiste, quindi non rispondeva a nessuno. E «nessuno
-risponde» non è un errore visibile: è un silenzio. È lo stesso modo in cui si
-era rotto il portachiavi di Chrome l'11 agosto 2026.
+**Sbagliare backend non dà errore, e questa è la cosa da ricordare.** Un
+portale che sceglie un backend che non sa parlare col compositore non risponde
+a nessuno, e «nessuno risponde» non è un errore visibile: è un silenzio.
 
-Chi sceglie il backend è `XDG_CURRENT_DESKTOP`, e la sessione dichiara
-`MinervaWayland:Minerva:Hyprland` — tre nomi, in quest'ordine. Il primo trova
-`minervawayland-portals.conf`, che dice `default=wlr;gtk`; gli altri due
-restano dietro perché chiunque altro guardi quella variabile continui a
-riconoscerci, segreti compresi. Lo sorveglia
+Chi sceglie il backend è `XDG_CURRENT_DESKTOP`: la sessione dichiara
+`LiquidDE:Minerva`, e il primo nome trova `liquidde-portals.conf`, che dice
+`default=wlr;gtk` e chi custodisce i segreti. Lo sorveglia
 `minervad/test/due_sessioni_test.dart`.
 
 **L'agente di polkit è nostro** dal 1º settembre 2026: `permessi/`, in C sopra
@@ -119,7 +114,7 @@ le richieste di permesso riceveranno un errore invece di restare appese.
 **`hyprlock` non è più fra le dipendenze** (2 settembre 2026). Non è mai stato
 la nostra schermata di blocco — quella è `minerva-shell/blocco/` — e serviva
 solo perché installava `/etc/pam.d/hyprlock`, che `scripts/minerva-blocca`
-usava come ripiego se `/etc/pam.d/minerva` non si era
+usava come ripiego se `/etc/pam.d/liquid-de` non si era
 potuto creare.
 
 ---

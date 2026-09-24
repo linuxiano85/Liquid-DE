@@ -175,19 +175,12 @@ class AutostartService {
     //
     // ── I nomi si CHIEDONO, non si scrivono ─────────────────────────────
     //
-    // Qui c'era `{'minerva', 'hyprland'}` scritto a mano. Il 2 settembre 2026
-    // la sessione ha cominciato a dichiararsi `MinervaWayland:Minerva:Hyprland`
-    // — `MinervaWayland` per primo, perché è il nome con cui i portali scelgono
-    // il backend giusto — e questo elenco non lo conosceva: una voce con
-    // `OnlyShowIn=MinervaWayland;` risultava «di un altro ambiente» **a casa
-    // sua**.
-    //
-    // Il difetto non è il nome mancante, è che ce ne fosse una seconda copia.
     // `XDG_CURRENT_DESKTOP` è la risposta che il resto del sistema usa e che
     // la sessione scrive in un posto solo (`start-minerva-wayland.sh`): qui si
-    // legge quella. L'elenco scritto a mano resta come ripiego per quando la
-    // variabile non c'è — dentro una prova, o se il demone parte da un
-    // terminale.
+    // legge quella. Un secondo elenco scritto a mano andrebbe alla deriva — è
+    // già successo, e una voce per la scrivania risultava «di un altro
+    // ambiente» a casa sua. L'elenco qui sotto è solo il ripiego per quando la
+    // variabile non c'è (una prova, un demone lanciato da un terminale).
     final dichiarati = (Platform.environment['XDG_CURRENT_DESKTOP'] ?? '')
         .split(':')
         .map((s) => s.trim().toLowerCase())
@@ -195,7 +188,7 @@ class AutostartService {
         .toSet();
     final nostri = dichiarati.isNotEmpty
         ? dichiarati
-        : {'minervawayland', 'minerva', 'hyprland'};
+        : {'liquidde', 'minerva'};
     final solo = campi['OnlyShowIn'];
     if (solo != null && solo.isNotEmpty) {
       final elenco = solo.split(';').map((s) => s.trim().toLowerCase());

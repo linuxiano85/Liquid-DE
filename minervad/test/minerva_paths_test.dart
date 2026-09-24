@@ -19,8 +19,9 @@ void main() {
               'ha detto ${MinervaPaths.installRoot}');
     });
 
-    test('le preferenze stanno in una cartella «minerva» dell\'utente', () {
-      expect(MinervaPaths.configDir, endsWith('/minerva'));
+    test('le preferenze stanno in una cartella «liquid-de» dell\'utente', () {
+      expect(MinervaPaths.config(const {'HOME': '/casa'}),
+          '/casa/.config/liquid-de');
       expect(MinervaPaths.configDir, isNot(contains('Progetti')),
           reason: 'le preferenze non devono più stare dentro il progetto');
     });
@@ -71,7 +72,68 @@ void main() {
     });
   });
 
-  group('trasloco delle preferenze', () {
+  group('Liquid DE e Minerva sullo stesso computer', () {
+    // Le due scrivanie convivono solo se non scrivono mai nelle stesse
+    // cartelle. Un solo punto che scriva ancora in una cartella «minerva»
+    // e le impostazioni dell'una sovrascrivono quelle dell'altra.
+    const casa = {'HOME': '/casa', 'USER': 'giacomo'};
+
+    test('ogni base XDG prende il nome di Liquid DE', () {
+      expect(MinervaPaths.config(casa), '/casa/.config/liquid-de');
+      expect(MinervaPaths.dati(casa), '/casa/.local/share/liquid-de');
+      expect(MinervaPaths.cache(casa), '/casa/.cache/liquid-de');
+      expect(MinervaPaths.stato(casa), '/casa/.local/state/liquid-de');
+      expect(MinervaPaths.runtime({...casa, 'XDG_RUNTIME_DIR': '/run/user/1000/'}),
+          '/run/user/1000/liquid-de');
+    });
+
+    test('le variabili XDG si rispettano, e una relativa si ignora', () {
+      expect(MinervaPaths.dati({...casa, 'XDG_DATA_HOME': '/altrove'}),
+          '/altrove/liquid-de');
+      expect(MinervaPaths.cache({...casa, 'XDG_CACHE_HOME': 'relativa'}),
+          '/casa/.cache/liquid-de');
+    });
+
+    test('le sessioni di prova vincono sulle impostazioni vere', () {
+      expect(MinervaPaths.config({...casa, 'MINERVA_CONFIG_DIR': '/tmp/prova/'}),
+          '/tmp/prova');
+    });
+
+    test('senza una cartella di runtime valida si ripiega su /tmp', () {
+      // L'utente `greeter` può averla impostata su una cartella che non
+      // esiste: è successo il 10 agosto 2026.
+      expect(MinervaPaths.runtime(casa), '/tmp/liquid-de-giacomo');
+    });
+
+    test('Minerva si legge per importare, e basta', () {
+      expect(MinervaPaths.configMinerva(casa), '/casa/.config/minerva');
+    });
+
+    test('nel codice nessuno si costruisce da sé una cartella «minerva»', () {
+      final colpevoli = <String>[];
+      final percorso = RegExp(
+          r'(\.config|\.cache|\.local/share|\.local/state|RUNTIME_DIR[^/]*|\})/minerva\b');
+      for (final f in Directory('${Directory.current.path}/lib')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart'))) {
+        if (f.path.endsWith('/core/minerva_paths.dart')) continue;
+        final righe = f.readAsLinesSync();
+        for (var i = 0; i < righe.length; i++) {
+          final r = righe[i].trimLeft();
+          if (r.startsWith('//') || r.startsWith('*')) continue;
+          if (percorso.hasMatch(r)) {
+            colpevoli.add('${f.path.split('/lib/').last}:${i + 1}  $r');
+          }
+        }
+      }
+      expect(colpevoli, isEmpty,
+          reason: 'queste righe scrivono in una cartella di Minerva: passino '
+              'da MinervaPaths.\n${colpevoli.join('\n')}');
+    });
+  });
+
+  group('importazione delle impostazioni', () {
     late Directory temp;
 
     setUp(() async {
@@ -95,8 +157,7 @@ void main() {
     });
 
     test('non cancella l\'originale', () async {
-      // Se il trasloco andasse storto a metà, la copia vecchia è l'unica cosa
-      // che resta fra l'utente e la perdita di tutte le sue impostazioni.
+      // L'originale è di Minerva: importare non deve toccarlo.
       final vecchio = File('${temp.path}/vecchia/theme.json');
       await vecchio.parent.create(recursive: true);
       await vecchio.writeAsString('{}');
@@ -107,8 +168,9 @@ void main() {
     });
 
     test('non sovrascrive quello che c\'è già nella casa nuova', () async {
-      // Il trasloco avviene a ogni avvio del demone. Senza questo controllo,
-      // ogni riavvio riporterebbe indietro le impostazioni di mesi fa.
+      // L'importazione si tenta a ogni avvio del demone. Senza questo
+      // controllo, ogni riavvio rimetterebbe le impostazioni di Minerva sopra
+      // quelle di Liquid DE.
       final vecchio = File('${temp.path}/vecchia/settings.json');
       await vecchio.parent.create(recursive: true);
       await vecchio.writeAsString('vecchio');
@@ -123,7 +185,7 @@ void main() {
       expect(await nuovo.readAsString(), 'nuovo');
     });
 
-    test('senza niente da traslocare non fa niente e non si lamenta', () async {
+    test('senza niente da importare non fa niente e non si lamenta', () async {
       final fatto = await MinervaPaths.migrateFile(
         File('${temp.path}/non-esiste.json'),
         File('${temp.path}/nuova/non-esiste.json'),
@@ -139,7 +201,7 @@ void main() {
 // ─────────────────────────────────────────────────────────────────────────
 //
 // Le impostazioni stavano in `config/settings.json`, dentro il progetto.
-// Sono traslocate in `~/.config/minerva/`, ma la copia vecchia è rimasta
+// Sono traslocate nella cartella dell'utente, ma la copia vecchia è rimasta
 // nella cartella per mesi — e siccome `migrateFile` copia solo se la
 // destinazione non c'è, non dava fastidio: stava lì e basta.
 //
@@ -166,7 +228,7 @@ void main() {
         final f = File('${radice().path}/config/$nome');
         expect(f.existsSync(), isFalse,
             reason: 'config/$nome è tornato nel progetto. Il demone legge '
-                '~/.config/minerva/$nome: questa copia non la leggerà '
+                '~/.config/liquid-de/$nome: questa copia non la leggerà '
                 'nessuno, e chi la modifica non se ne accorgerà. '
                 'Se serviva un valore di partenza, va nei predefiniti di '
                 'settings_api.dart, non in un file.');

@@ -18,6 +18,7 @@
 set -u
 
 MINERVA_DIR="${MINERVA_ROOT:?minerva-dentro-wayland: manca MINERVA_ROOT}"
+. "$MINERVA_DIR/scripts/minerva-cartelle.sh"
 
 # ── PRIMA di ogni altra cosa: dire a D-Bus dove siamo ────────────────────
 #
@@ -119,8 +120,9 @@ DI_PROVA="${MINERVA_PROVA:-}"
 # spento per due giorni. Il compositore, dieci righe più in là in
 # `start-minerva-wayland.sh`, la stessa trappola non ce l'ha: prova prima il
 # percorso che conosce e solo dopo chiede al PATH. Qui si fa uguale.
-REGISTRO_PERMESSI="${XDG_RUNTIME_DIR:-/tmp}/minerva-permessi.log"
-AGENTE="${MINERVA_BIN:-$HOME/.local/bin}/minerva-polkit"
+mkdir -p "$CARTELLA_RUNTIME" 2>/dev/null
+REGISTRO_PERMESSI="$CARTELLA_RUNTIME/permessi.log"
+AGENTE="$CARTELLA_BIN/minerva-polkit"
 [ -x "$AGENTE" ] || AGENTE="$(command -v minerva-polkit 2>/dev/null)"
 if [ -n "$AGENTE" ] && [ -x "$AGENTE" ]; then
     "$AGENTE" >>"$REGISTRO_PERMESSI" 2>&1 &
@@ -128,7 +130,7 @@ if [ -n "$AGENTE" ] && [ -x "$AGENTE" ]; then
     sleep 0.5
 else
     echo "$(date '+%F %T')  minerva-polkit non trovato" \
-        "(né in ${MINERVA_BIN:-$HOME/.local/bin} né nel PATH: $PATH)" \
+        "(né in $CARTELLA_BIN né nel PATH: $PATH)" \
         >>"$REGISTRO_PERMESSI"
 fi
 if [ -z "${POLKIT_PID:-}" ] || ! kill -0 "$POLKIT_PID" 2>/dev/null; then

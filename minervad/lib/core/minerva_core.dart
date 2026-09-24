@@ -94,15 +94,10 @@ class MinervaCore {
     print('[MINERVA][CORE][INFO] Installazione: ${MinervaPaths.installRoot}');
     print('[MINERVA][CORE][INFO] Preferenze: ${MinervaPaths.configDir}');
 
-    // 0. Il trasloco.
-    //
-    // Impostazioni, tema e conteggio degli avvii stavano dentro la cartella
-    // del progetto. Adesso stanno in ~/.config/minerva, dove stanno le cose
-    // di chi usa un programma e non quelle del programma. Chi aveva già
-    // Minerva se le porta dietro senza accorgersene; chi la installa oggi non
-    // trova niente da traslocare e questa riga non fa nulla.
-    await MinervaPaths.migrateIfNeeded('settings.json');
-    await MinervaPaths.migrateIfNeeded('app_usage.json');
+    // 0. Al primo avvio si parte dalle impostazioni di Minerva, se ci sono:
+    // copiate, non spostate. Dal secondo avvio questa riga non fa nulla.
+    await MinervaPaths.importaDaMinerva('settings.json');
+    await MinervaPaths.importaDaMinerva('app_usage.json');
 
     // 1. Carica Impostazioni e Tracker
     await settingsApi.init();

@@ -1,10 +1,11 @@
-# minerva-posti.sh — Dove Minerva mette le cose di QUESTA sessione.
+# minerva-posti.sh — Dove Liquid DE mette le cose, e quelle di QUESTA sessione.
 #
 # Non si esegue: si include.
 #
 #     . "$(dirname "$(readlink -f "$0")")/minerva-posti.sh"
 #
-# Dopo, si hanno due variabili: `MINERVA_SESSIONE` e `STATO`.
+# Dopo, si hanno `MINERVA_SESSIONE`, `STATO` e le cartelle di Liquid DE
+# (vedi `minerva-cartelle.sh`).
 #
 # ── PERCHÉ ESISTE ──────────────────────────────────────────────────────────
 #
@@ -17,7 +18,7 @@
 #     [MINERVA][DEMONE] C'è già un guardiano (20252): questo esce.
 #     [MINERVA][SHELL]  C'è già un guardiano (2463): questo esce.
 #
-# I guardiani decidono guardando `~/.local/state/minerva/demone.pid`, che è
+# I guardiani decidono guardando `~/.local/state/liquid-de/demone.pid`, che è
 # **per utente**: la seconda sessione trova il guardiano della prima, lo crede
 # suo, e si fa da parte. Sopra il commento c'era scritto «Un guardiano per
 # SESSIONE» — l'intenzione era giusta da sempre, il codice non la eseguiva.
@@ -64,10 +65,18 @@ fi
 MINERVA_SESSIONE=$(printf '%s' "$MINERVA_SESSIONE" | tr -c 'A-Za-z0-9._-' '_')
 [ -n "$MINERVA_SESSIONE" ] || MINERVA_SESSIONE="unica"
 
-# La cartella. Sotto `sessioni/` e non sparse nella cartella di stato, così
-# guardando `~/.local/state/minerva` si vede subito quante sessioni ci sono
-# state e non un mucchio di file con dei numeri appiccicati al nome.
-MINERVA_STATO_BASE="${XDG_STATE_HOME:-$HOME/.local/state}/minerva"
+# Le cartelle di Liquid DE (il nome, le basi XDG): stanno in un file a sé,
+# perché servono anche a chi non è una sessione.
+# `$0` è lo script che include questo file, e vive accanto a lui. Il controllo
+# prima del `.`: in `sh` un `.` su un file che non c'è interrompe lo script.
+_cartelle="$(dirname "$(readlink -f "$0")")/minerva-cartelle.sh"
+[ -f "$_cartelle" ] || _cartelle="${MINERVA_DIR:-${ROOT:-.}}/scripts/minerva-cartelle.sh"
+. "$_cartelle"
+
+# La cartella della sessione. Sotto `sessioni/` e non sparse nella cartella di
+# stato, così guardandola si vede subito quante sessioni ci sono state e non
+# un mucchio di file con dei numeri appiccicati al nome.
+MINERVA_STATO_BASE="$CARTELLA_STATO"
 STATO="$MINERVA_STATO_BASE/sessioni/$MINERVA_SESSIONE"
 mkdir -p "$STATO" 2>/dev/null || true
 

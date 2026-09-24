@@ -23,6 +23,8 @@
 
 SELF="$(readlink -f "$0")"
 ROOT="$(dirname "$(dirname "$SELF")")"
+# Le cartelle di Liquid DE: dove sono i canali e le impostazioni da guardare.
+. "$ROOT/scripts/minerva-cartelle.sh"
 MODE="${1:-tutto}"
 
 ok()   { printf '\033[32m✓\033[0m %s\n' "$1"; }
@@ -156,7 +158,7 @@ fi
 # Qui non si dice «rotto»: si dice quale delle due cose sta succedendo.
 COMP_VECCHIO=0
 COMP_PID=$(pgrep -x minerva-wayland 2>/dev/null | head -1)
-COMP_BIN="${MINERVA_BIN:-$HOME/.local/bin}/minerva-wayland"
+COMP_BIN="$CARTELLA_BIN/minerva-wayland"
 if [ -n "$COMP_PID" ] && [ -x "$COMP_BIN" ]; then
     if cmp -s "/proc/$COMP_PID/exe" "$COMP_BIN" 2>/dev/null; then
         ok "il compositore in esecuzione è quello compilato"
@@ -261,8 +263,8 @@ guarda_modo /var/log/minerva-greeter 750 greeter
 
 # L'installazione: di root, e non scrivibile da nessun altro.
 for D in /usr/local/share/minerva /usr/local/lib/minerva \
-         /usr/local/bin/minerva-greetd /usr/local/bin/minerva-radice \
-         /usr/local/bin/minerva-utente; do
+         /usr/local/bin/minerva-greetd /usr/local/bin/liquid-de-radice \
+         /usr/local/bin/liquid-de-utente; do
     [ -e "$D" ] || continue
     SCRIVIBILI=$(find "$D" \( ! -user root -o -perm -g+w -o -perm -o+w \) \
                  -print 2>/dev/null | head -3)
@@ -271,7 +273,7 @@ for D in /usr/local/share/minerva /usr/local/lib/minerva \
 done
 
 # La parola d'ordine di ogni sessione viva: sua e di nessun altro.
-for C in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/minerva/sessioni/*/canale; do
+for C in "$CARTELLA_RUNTIME"/sessioni/*/canale; do
     [ -f "$C" ] || continue
     guarda_modo "$C" 600 "$(id -un)"
 done
@@ -1128,18 +1130,18 @@ else
     # guardava solo il primo dei due. È la forma generale del difetto che
     # Giacomo aveva già nominato: dare per buono il pezzo che non si è
     # guardato.
-    DOVE_BIN="${MINERVA_BIN:-$HOME/.local/bin}"
-    if grep -q 'XDG_BIN_HOME:-\$HOME/\.local/bin' "$ROOT/scripts/start-minerva-wayland.sh" 2>/dev/null; then
-        ok "la sessione ha ~/.local/bin nel PATH: minerva-polkit si trova"
+    DOVE_BIN="$CARTELLA_BIN"
+    if grep -q 'export PATH=.*\$CARTELLA_BIN' "$ROOT/scripts/start-minerva-wayland.sh" 2>/dev/null; then
+        ok "la sessione ha il prefisso di Liquid DE nel PATH: minerva-polkit si trova"
     else
-        bad "start-minerva-wayland.sh non mette ~/.local/bin nel PATH"
+        bad "start-minerva-wayland.sh non mette il prefisso di Liquid DE nel PATH"
         nota "minerva-polkit sta lì: senza, NESSUNA finestra della password"
     fi
 
     PERMESSI="$ROOT/permessi/prova-permessi.py"
     if [ ! -x "$PERMESSI" ]; then
         skip "prova-permessi.py non trovata"
-    elif [ ! -x "${MINERVA_BIN:-$HOME/.local/bin}/minerva-polkit" ]; then
+    elif [ ! -x "$CARTELLA_BIN/minerva-polkit" ]; then
         skip "permessi: minerva-polkit non installato (permessi/costruisci.sh)"
     elif [ -z "${WAYLAND_DISPLAY:-}" ]; then
         skip "permessi: non siamo in una sessione Wayland"
@@ -2479,7 +2481,7 @@ else
     # alzare un tetto senza spegnerlo.
     TETTO_BASE=290
     COSTO_WIDGET=1
-    IMPO="${MINERVA_CONFIG_DIR:-$HOME/.config/minerva}/settings.json"
+    IMPO="$CARTELLA_CONFIG/settings.json"
     QUANTI_WIDGET=$(python3 - "$IMPO" <<'PYCONTA' 2>/dev/null || echo 0
 import json, sys
 try:

@@ -78,7 +78,7 @@ QUI = os.path.dirname(os.path.abspath(__file__))
 # prova, copiata da quella vera. Chi apre una finestra dentro la sessione
 # annidata deve puntare LÌ, o parla col demone di Giacomo.
 CONF_PROVA = os.path.join(os.environ.get("TMPDIR", "/tmp"),
-                          "minerva-prova-conf")
+                          "liquid-de-prova-conf")
 sys.path.insert(0, QUI)
 from importlib import import_module
 

@@ -13,7 +13,7 @@ minervad/.dart_tool/
 
 # ── Le preferenze non stanno qui, e non devono tornarci ────────────────
 #
-# Stavano in `config/settings.json` fino al trasloco in ~/.config/minerva,
+# Stavano in `config/settings.json` fino al trasloco in ~/.config/liquid-de,
 # e la copia vecchia è rimasta lì per mesi a fare da esca: la si apriva, la
 # si modificava, e non succedeva NIENTE, perché il demone legge l'altra.
 # Il 10 agosto le due dicevano cose diverse — titleHeight 38 di qua, 42 di

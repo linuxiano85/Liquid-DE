@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../../core/minerva_paths.dart';
 
 /// PuntiMotore — i «punti di ritorno»: com'era la cartella, prima.
 ///
@@ -53,9 +54,7 @@ class PuntiMotore {
   final Future<ProcessResult> Function(String, List<String>) esegui;
 
   static String _radicePredefinita() {
-    final casa = Platform.environment['HOME'] ?? '/tmp';
-    final dati = Platform.environment['XDG_DATA_HOME'] ?? '$casa/.local/share';
-    return '$dati/minerva/custodia/punti';
+    return '${MinervaPaths.dati()}/custodia/punti';
   }
 
   // ── Il nome di un punto ────────────────────────────────────────────────

@@ -4,7 +4,7 @@
  "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
 
 <!--
-  org.minerva.utente — Cambiare la password del proprio account.
+  org.liquidde.utente — Cambiare la password del proprio account.
 
   ── Perché questa regola esiste ──────────────────────────────────────────
 
@@ -43,10 +43,10 @@
 -->
 <policyconfig>
 
-  <vendor>Minerva</vendor>
-  <vendor_url>https://github.com/minerva-shell</vendor_url>
+  <vendor>Liquid DE</vendor>
+  <vendor_url>https://github.com/linuxiano85/Liquid-DE</vendor_url>
 
-  <action id="org.minerva.utente.password">
+  <action id="org.liquidde.utente.password">
     <description>Change your own account password</description>
     <description xml:lang="it">Cambiare la password del proprio account</description>
     <message>Authentication is required to change your password</message>
@@ -56,7 +56,7 @@
       <allow_inactive>auth_self_keep</allow_inactive>
       <allow_active>auth_self_keep</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/bin/minerva-utente</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/bin/liquid-de-utente</annotate>
     <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
   </action>
 

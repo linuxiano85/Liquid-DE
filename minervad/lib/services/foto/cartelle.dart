@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'media.dart';
+import '../../core/minerva_paths.dart';
 
 /// Dove si cercano le fotografie, e dove non si cercano.
 ///
@@ -37,10 +38,7 @@ class Cartelle {
         percorso = percorso ?? _percorsoVero();
 
   static String _percorsoVero() {
-    final amb = Platform.environment;
-    final base = amb['MINERVA_CONFIG_DIR'] ??
-        '${amb['XDG_CONFIG_HOME'] ?? '${amb['HOME'] ?? '/tmp'}/.config'}/minerva';
-    return '$base/foto/cartelle.json';
+    return '${MinervaPaths.config()}/foto/cartelle.json';
   }
 
   /// Quante fotografie deve avere una cartella perché valga la pena proporla.

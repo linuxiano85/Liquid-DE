@@ -48,7 +48,7 @@ _annunci = import_module("prova-annunci")
 Canale = _annunci.Canale
 chiudi = _annunci.chiudi
 
-CONF = os.path.join(os.environ.get("TMPDIR", "/tmp"), "minerva-prova-conf")
+CONF = os.path.join(os.environ.get("TMPDIR", "/tmp"), "liquid-de-prova-conf")
 
 passate = 0
 fallite = 0

@@ -8761,7 +8761,7 @@ void minerva_comando(struct minerva *m, const char *riga,
 			snprintf(risposta, n, "no sospensione non disponibile in prova o senza logind protetto");
 			return;
 		}
-		if (access("/etc/pam.d/minerva", R_OK) && access("/etc/pam.d/hyprlock", R_OK)) {
+		if (access("/etc/pam.d/liquid-de", R_OK) && access("/etc/pam.d/hyprlock", R_OK)) {
 			snprintf(risposta, n, "no servizio PAM di blocco assente"); return;
 		}
 		if (!m->sospendi_timer) m->sospendi_timer =

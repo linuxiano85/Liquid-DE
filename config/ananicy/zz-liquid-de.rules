@@ -1,4 +1,4 @@
-# zz-minerva.rules — priorità di scheduling per i processi di Minerva.
+# zz-liquid-de.rules — priorità di scheduling per i processi di Minerva.
 #
 # Va in /etc/ananicy.d/. Serve solo dove gira ananicy-cpp (CachyOS lo installa
 # di serie, e lo tiene ACCESO): altrove il file non fa niente e non dà noia.

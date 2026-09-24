@@ -33,6 +33,8 @@
 
 SELF="$(readlink -f "$0")"
 MINERVA_DIR="$(dirname "$(dirname "$SELF")")"
+# Le cartelle di Liquid DE e quella di questa sessione: servono da subito.
+. "$MINERVA_DIR/scripts/minerva-posti.sh"
 
 export MINERVA_ROOT="$MINERVA_DIR"
 
@@ -53,35 +55,23 @@ export MINERVA_ROOT="$MINERVA_DIR"
 # nell'installatore, che aveva fatto il suo. Stava nel fatto che
 # `command -v minerva-polkit` fa una domanda a cui il PATH risponde per lui, e
 # il PATH era la cosa che nessuno aveva guardato.
+#
+# Prima i programmi di Liquid DE (`CARTELLA_BIN`, il suo prefisso), poi
+# `~/.local/bin` per gli altri programmi dell'utente: lì ci sono anche quelli
+# di Minerva, con gli stessi nomi, e in questa sessione devono perdere.
 CASA_BIN="${XDG_BIN_HOME:-$HOME/.local/bin}"
-export PATH="$MINERVA_DIR/scripts:$CASA_BIN:$PATH"
+export PATH="$MINERVA_DIR/scripts:$CARTELLA_BIN:$CASA_BIN:$PATH"
 
 # ── L'identità della sessione ─────────────────────────────────────────────
 #
-# `Minerva:Hyprland` anche qui, e **non è una svista**. Non descrive quale
-# compositore gira: sceglie quale file di portali si legge
-# (`minerva-portals.conf`, che è nostro) e quale backend risponde alle
-# finestre «Apri file». Cambiandolo in `Minerva:wlroots` quel file non
-# verrebbe più trovato, e insieme a lui se ne andrebbe la risposta ai segreti
-# — cioè le password di Chrome, che questa storia l'ha già pagata una volta.
-# ── E perché adesso davanti c'è un terzo nome ────────────────────────────
-#
-# `MinervaWayland` sta PRIMA, e gli altri due restano dietro. Il motivo è un
-# difetto che si rompe in silenzio, misurato il 30 agosto 2026:
-# `minerva-portals.conf` dice `default=hyprland;gtk`, e
-# `xdg-desktop-portal-hyprland` per lavorare cerca `HYPRLAND_INSTANCE_SIGNATURE`
-# (verificato: la stringa sta dentro il suo binario). Qui dentro quella
-# variabile non esiste — quindi condivisione dello schermo e finestre «apri
-# file» dei programmi cadrebbero **senza un errore**, esattamente come cadde il
-# portachiavi di Chrome l'11 agosto.
-#
-# `xdg-desktop-portal` cerca un file per OGNI nome della lista, in ordine:
-# `minervawayland-portals.conf` (nostro, dice `wlr`) vince, e se un giorno non
-# ci fosse si ricade su quello di prima. E `Minerva` e `Hyprland` restano nella
-# lista perché chiunque altro guardi questa variabile continua a riconoscerci —
-# compreso chi risponde ai segreti.
-export XDG_CURRENT_DESKTOP=MinervaWayland:Minerva:Hyprland
-export XDG_SESSION_DESKTOP=Minerva
+# XDG_CURRENT_DESKTOP non descrive quale compositore gira: sceglie quale file
+# dei portali si legge. `xdg-desktop-portal` cerca un file per OGNI nome della
+# lista, in ordine: `liquidde-portals.conf` (nostro: dice `wlr` e chi custodisce
+# i segreti) vince. Cambiarlo vorrebbe dire non trovarlo, e con lui perdere le
+# password di Chrome — in silenzio. `Minerva` resta dietro perché i programmi
+# all'avvio dichiarati per Minerva (`OnlyShowIn=Minerva;`) partano anche qui.
+export XDG_CURRENT_DESKTOP=LiquidDE:Minerva
+export XDG_SESSION_DESKTOP=LiquidDE
 export XDG_SESSION_TYPE=wayland
 export QS_NO_RELOAD_POPUP=1
 
@@ -153,7 +143,7 @@ if [ -z "$_tema_cursore" ]; then
     done
 fi
 _misura_cursore=$(sed -n 's/.*"cursorSize"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p' \
-    "$HOME/.config/minerva/settings.json" 2>/dev/null | head -1)
+    "$CARTELLA_CONFIG/settings.json" 2>/dev/null | head -1)
 case "$_misura_cursore" in
     ''|*[!0-9]*) _misura_cursore=24 ;;
 esac
@@ -183,13 +173,14 @@ fi
 [ -z "${XDG_DATA_HOME:-}" ] && export XDG_DATA_HOME="$HOME/.local/share"
 # Garantisce che la shell trovi il portale corretto anche in wlroots
 [ -z "${XDG_DATA_DIRS:-}" ] || export XDG_DATA_DIRS
+# Le applicazioni e le icone di Liquid DE stanno nel suo prefisso.
+export XDG_DATA_DIRS="$PREFISSO/share${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
 
 # ── Un registro da leggere quando qualcosa non parte ──────────────────────
 #
 # Stesso posto della sessione Hyprland, e per la stessa ragione: se la
 # sessione muore all'avvio, il gestore di accesso ributta al login senza dire
 # niente. Con questo file si può almeno sapere perché.
-. "$MINERVA_DIR/scripts/minerva-posti.sh"
 LOG="$STATO/session.log"
 
 # ── Una PROVA non azzera il registro della sessione vera ─────────────────
@@ -211,7 +202,7 @@ exec >>"$LOG" 2>&1
 
 echo "── Minerva (wlroots) $(date '+%F %T') ──────────────────"
 
-BIN="${MINERVA_BIN:-$HOME/.local/bin}/minerva-wayland"
+BIN="$CARTELLA_BIN/minerva-wayland"
 if [ ! -x "$BIN" ]; then
     BIN="$(command -v minerva-wayland 2>/dev/null)"
 fi
@@ -224,11 +215,11 @@ echo "compositore: $BIN"
 
 # ── Gli schermi ───────────────────────────────────────────────────────────
 #
-# `~/.config/minerva/schermi.conf` lo scrive il pannello Schermi e lo legge il
+# `~/.config/liquid-de/schermi.conf` lo scrive il pannello Schermi e lo legge il
 # compositore all'avvio. Se non c'è, ogni schermo prende il modo che preferisce
 # a scala 1 — che è la cosa giusta su un computer che non ha ancora scelto, ma
 # su questo portatile vuol dire tutto piccolo di un quarto.
-if [ ! -f "$HOME/.config/minerva/schermi.conf" ]; then
+if [ ! -f "$CARTELLA_CONFIG/schermi.conf" ]; then
     echo "nota: nessun schermi.conf — scala 1 e modo preferito."
 fi
 

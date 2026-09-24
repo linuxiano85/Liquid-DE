@@ -15,7 +15,7 @@
 //
 // Il difetto vero però è un altro, e più subdolo: **una chiave senza valore di
 // fabbrica non compare nel file delle impostazioni**. Chi apre
-// `~/.config/minerva/settings.json` per capire cosa si può cambiare non la
+// `~/.config/liquid-de/settings.json` per capire cosa si può cambiare non la
 // trova, e conclude che non si può cambiare.
 //
 // Il 18 agosto 2026 le chiavi senza valore di fabbrica erano quarantasei —

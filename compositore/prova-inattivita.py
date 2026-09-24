@@ -36,7 +36,7 @@ chieste» da «il compositore non conta», che dallo schermo si vedono identici.
 
 Si passa da `prova-annidata.sh`, che mette `WLR_BACKENDS=wayland` e
 `MINERVA_PROVA=1` e si costruisce una cartella di configurazione tutta sua in
-`$TMPDIR/minerva-prova-conf`. Le impostazioni che questa prova cambia sono
+`$TMPDIR/liquid-de-prova-conf`. Le impostazioni che questa prova cambia sono
 quelle della COPIA, mai quelle della sessione vera.
 """
 import json
@@ -56,7 +56,7 @@ _annunci = import_module("prova-annunci")
 Canale = _annunci.Canale
 chiudi = _annunci.chiudi
 
-CONF = os.path.join(os.environ.get("TMPDIR", "/tmp"), "minerva-prova-conf")
+CONF = os.path.join(os.environ.get("TMPDIR", "/tmp"), "liquid-de-prova-conf")
 
 passate = 0
 fallite = 0

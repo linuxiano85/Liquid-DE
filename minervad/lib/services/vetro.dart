@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../core/minerva_paths.dart';
 
 /// Lo sfondo già sfocato, calcolato una volta sola.
 ///
@@ -42,9 +43,7 @@ class Vetro {
         esegui = esegui ?? Process.run;
 
   static String _cartellaVera() {
-    final amb = Platform.environment;
-    final base = amb['XDG_CACHE_HOME'] ?? '${amb['HOME'] ?? '/tmp'}/.cache';
-    return '$base/minerva/vetro';
+    return '${MinervaPaths.cache()}/vetro';
   }
 
   /// ── Quanto si sfoca, e perché così ──────────────────────────────────

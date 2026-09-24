@@ -49,36 +49,33 @@ void main() {
     });
 
     test('la sessione nostra sceglie il proprio file dei portali', () {
-      // Il difetto che chiude: `minerva-portals.conf` dice `default=hyprland`,
-      // e quel portale cerca HYPRLAND_INSTANCE_SIGNATURE — che dentro
-      // minerva-wayland non esiste. Falliva in silenzio: niente condivisione
-      // schermo, niente finestre «apri file».
-      expect(wayland, contains('XDG_CURRENT_DESKTOP=MinervaWayland:'),
-          reason: 'senza «MinervaWayland» davanti, xdg-desktop-portal non trova\n'
-              'minervawayland-portals.conf e ricade su quello di Hyprland.');
+      // Un portale con un backend che non sa parlare col compositore non dà
+      // errore: niente condivisione schermo, niente finestre «apri file», in
+      // silenzio. Il nome in testa a XDG_CURRENT_DESKTOP sceglie il file.
+      expect(wayland, contains('XDG_CURRENT_DESKTOP=LiquidDE:'),
+          reason: 'senza «LiquidDE» davanti, xdg-desktop-portal non trova\n'
+              'liquidde-portals.conf.');
 
-      final conf = _f('config/xdg-desktop-portal/minervawayland-portals.conf');
+      final conf = _f('config/xdg-desktop-portal/liquidde-portals.conf');
       expect(conf.existsSync(), isTrue,
-          reason: 'XDG_CURRENT_DESKTOP nomina MinervaWayland ma il file dei '
-              'portali non c\'è: il portale ricadrebbe su quello di Hyprland.');
+          reason: 'XDG_CURRENT_DESKTOP nomina LiquidDE ma il file dei '
+              'portali non c\'è.');
       final testo = conf.readAsStringSync();
       expect(testo, contains('default=wlr'),
           reason: 'il backend di wlroots parla wlr-screencopy e xdg-output, che '
               'minerva-wayland implementa; quello di Hyprland no.');
-      // La riga dei segreti va RIPETUTA: questo file viene scelto INVECE di
-      // minerva-portals.conf, non insieme a lui. Senza, Chrome ricifra le
-      // password con una chiave di ripiego e alla sessione dopo le richiede.
+      // Senza chi risponde ai segreti, Chrome ricifra le password con una
+      // chiave di ripiego e alla sessione dopo le richiede.
       expect(testo, contains('org.freedesktop.impl.portal.Secret=gnome-keyring'),
-          reason: 'questo file sostituisce minerva-portals.conf, non lo integra: '
-              'senza questa riga si perde chi risponde ai segreti.');
+          reason: 'senza questa riga si perde chi risponde ai segreti.');
     });
 
     test("e l'installatore lo mette davvero al suo posto", () {
       final inst = _f('scripts/install-minerva.sh').readAsStringSync();
-      expect(inst, contains('minervawayland-portals.conf'),
+      expect(inst, contains('liquidde-portals.conf'),
           reason: 'il file esiste nel progetto ma non viene installato: sulla '
               'macchina vera non lo leggerebbe nessuno.');
-      expect(inst, contains('DesktopNames=MinervaWayland;'),
+      expect(inst, contains('DesktopNames=LiquidDE;'),
           reason: 'la voce di sessione deve annunciare lo stesso nome che '
               'start-minerva-wayland.sh esporta, o il gestore di accesso e la '
               'sessione direbbero due cose diverse.');

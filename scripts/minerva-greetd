@@ -350,7 +350,9 @@ copia_impostazioni() {
     [ -n "$CHI" ] || return 0
 
     CASA=$(getent passwd "$CHI" | cut -d: -f6)
-    SORGENTE="$CASA/.config/minerva/settings.json"
+    # Quelle di Liquid DE; di Minerva se Liquid DE non ne ha ancora.
+    SORGENTE="$CASA/.config/liquid-de/settings.json"
+    [ -r "$SORGENTE" ] || SORGENTE="$CASA/.config/minerva/settings.json"
     [ -r "$SORGENTE" ] || { grigio "nessuna impostazione da copiare"; return 0; }
 
     if ! command -v python3 >/dev/null 2>&1; then

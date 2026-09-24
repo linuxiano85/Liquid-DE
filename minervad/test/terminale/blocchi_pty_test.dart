@@ -3,11 +3,21 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:test/test.dart';
 
+/// Un programma del compositore compilato: in `build-native`, che è dove lo
+/// mette `compositore/costruisci.sh`, o in `build` se qualcuno l'ha fatto a mano.
+String _compilato(String nome) {
+  for (final cartella in ['build-native', 'build']) {
+    final f = File('../compositore/$cartella/$nome');
+    if (f.existsSync()) return f.absolute.path;
+  }
+  return File('../compositore/build-native/$nome').absolute.path;
+}
+
 void main() {
   for (final shell in ['zsh', 'bash']) {
   test('$shell reale: automatici, false, OSC falso, password e shell figlia', () async {
     final processo = await Process.start(Platform.resolvedExecutable, [
-      'run', 'bin/terminale.dart', '--pty', File('../compositore/build/minerva-pty').absolute.path,
+      'run', 'bin/terminale.dart', '--pty', _compilato('minerva-pty'),
       '--shell', '/usr/bin/$shell', '--integrazione', Directory('../config/terminale').absolute.path,
     ], environment: {'ZDOTDIR': Directory('test/terminale/fixtures/zsh').absolute.path,
       'HISTFILE': '/dev/null'});

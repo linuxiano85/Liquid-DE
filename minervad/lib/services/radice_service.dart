@@ -7,7 +7,7 @@ import 'dart:io';
 ///
 /// Questo servizio **non ha nessun privilegio**. Gira dentro il demone, che
 /// gira come te. Tutto quello che fa è chiamare `pkexec` su un aiutante
-/// installato in `/usr/local/bin/minerva-radice`, e chi decide se quella
+/// installato in `/usr/local/bin/liquid-de-radice`, e chi decide se quella
 /// chiamata è lecita è **polkit**, che chiede la password di un amministratore.
 ///
 /// Vale la pena dirlo perché la tentazione opposta è forte: sarebbe più comodo
@@ -30,7 +30,7 @@ class RadiceService {
   /// Dove sta l'aiutante. Fisso, perché la regola di polkit lo nomina
   /// carattere per carattere — e perché è di root: root non deve eseguire un
   /// file che l'utente può riscrivere.
-  static const String percorso = '/usr/local/bin/minerva-radice';
+  static const String percorso = '/usr/local/bin/liquid-de-radice';
 
   /// Le operazioni che si possono chiedere. Chiuso di proposito.
   static const Set<String> operazioni = {

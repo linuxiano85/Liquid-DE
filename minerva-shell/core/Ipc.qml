@@ -512,7 +512,7 @@ QtObject {
     // ── La galleria di Anteprima ─────────────────────────────────────────
     //
     // Il catalogo delle foto e dei video sta nella cache
-    // (`~/.cache/minerva/foto/indice.json`); le cartelle scelte e le
+    // (`~/.cache/liquid-de/foto/indice.json`); le cartelle scelte e le
     // esclusioni stanno nella configurazione, così si possono buttare le
     // miniature senza perdere le scelte.
 
@@ -1400,7 +1400,7 @@ QtObject {
 
     // ── L'indirizzo ──────────────────────────────────────────────────────
     //
-    // Un socket Unix in `$XDG_RUNTIME_DIR/minerva/`, col nome della sessione
+    // Un socket Unix in `$XDG_RUNTIME_DIR/liquid-de/`, col nome della sessione
     // dentro. Diverso dentro la schermata di accesso, e non per gusto: là c'è
     // un secondo Minerva completo — demone e shell — che gira come utente
     // `greeter` mentre la sessione di chi sta già lavorando è ancora aperta.
@@ -1420,12 +1420,53 @@ QtObject {
     /// leggere. **La stessa regola sta in `WebSocketServer.socketPredefinito`**:
     /// se si cambia una va cambiata l'altra, o la shell cerca dove il demone
     /// non è.
-    readonly property string socketDiRipiego: {
+    readonly property string socketDiRipiego:
+        ipc.cartellaRuntime + "/canale-" + ipc._sessione + ".sock"
+
+    // ── Dove stanno le cose ──────────────────────────────────────────────
+    //
+    // Le stesse regole di `minervad/lib/core/minerva_paths.dart`, e lo stesso
+    // nome: le cartelle di Liquid DE si chiamano `liquid-de` in ogni base
+    // XDG, così Liquid DE e Minerva convivono senza scriversi addosso. Il
+    // nome sta scritto qui e da nessun'altra parte della shell.
+
+    readonly property string nome: "liquid-de"
+
+    function _baseXdg(variabile, diSerie) {
+        var v = Quickshell.env(variabile);
+        if (v !== null && v !== undefined && String(v).charAt(0) === "/")
+            return ipc._senzaBarra(String(v));
+        return String(Quickshell.env("HOME") || "/tmp") + "/" + diSerie;
+    }
+
+    /// Le impostazioni: `MINERVA_CONFIG_DIR` vince, come nel demone.
+    readonly property string cartellaConfig: {
+        var detto = Quickshell.env("MINERVA_CONFIG_DIR");
+        if (detto)
+            return ipc._senzaBarra(String(detto));
+        return ipc._baseXdg("XDG_CONFIG_HOME", ".config") + "/" + ipc.nome;
+    }
+    readonly property string cartellaDati: ipc._baseXdg("XDG_DATA_HOME", ".local/share") + "/" + ipc.nome
+    readonly property string cartellaCache: ipc._baseXdg("XDG_CACHE_HOME", ".cache") + "/" + ipc.nome
+
+    /// I programmi installati di Liquid DE (`~/.local/bin` è di Minerva):
+    /// `MINERVA_BIN` li sostituisce nelle prove.
+    readonly property string cartellaBin: {
+        var detto = Quickshell.env("MINERVA_BIN");
+        if (detto)
+            return ipc._senzaBarra(String(detto));
+        var p = Quickshell.env("LIQUID_PREFISSO");
+        return (p ? ipc._senzaBarra(String(p))
+                  : String(Quickshell.env("HOME") || "/tmp") + "/.local/opt/" + ipc.nome) + "/bin";
+    }
+
+    /// Socket e file della sessione; senza una cartella di runtime valida,
+    /// /tmp con l'utente nel nome.
+    readonly property string cartellaRuntime: {
         var r = Quickshell.env("XDG_RUNTIME_DIR");
-        var base = (r !== null && r !== undefined && String(r).charAt(0) === "/")
-                 ? String(r) + "/minerva"
-                 : "/tmp/minerva-" + String(Quickshell.env("USER") || "utente");
-        return base + "/canale-" + ipc._sessione + ".sock";
+        if (r !== null && r !== undefined && String(r).charAt(0) === "/")
+            return ipc._senzaBarra(String(r)) + "/" + ipc.nome;
+        return "/tmp/" + ipc.nome + "-" + String(Quickshell.env("USER") || "utente");
     }
 
     /// Qualcuno ha DETTO dove parlare?
@@ -1511,30 +1552,19 @@ QtObject {
             return [String(detto)];
         var out = [];
         var dove = "/sessioni/" + ipc._sessione + "/canale";
-        var runtime = Quickshell.env("XDG_RUNTIME_DIR");
-        if (runtime)
-            out.push(ipc._senzaBarra(String(runtime)) + "/minerva" + dove);
-        var conf = Quickshell.env("MINERVA_CONFIG_DIR");
-        if (!conf) {
-            var xdg = Quickshell.env("XDG_CONFIG_HOME");
-            conf = xdg ? (ipc._senzaBarra(String(xdg)) + "/minerva")
-                       : (String(Quickshell.env("HOME") || "") + "/.config/minerva");
-        }
-        if (conf)
-            out.push(ipc._senzaBarra(String(conf)) + dove);
+        if (Quickshell.env("XDG_RUNTIME_DIR"))
+            out.push(ipc.cartellaRuntime + dove);
+        out.push(ipc.cartellaConfig + dove);
         return out;
     }
 
-    /// La cartella di QUESTA sessione in `$XDG_RUNTIME_DIR/minerva/sessioni/`,
+    /// La cartella di QUESTA sessione in `$XDG_RUNTIME_DIR/liquid-de/sessioni/`,
     /// o "" se non c'è una cartella di esecuzione. È 0700 e sparisce allo
     /// spegnimento: il posto per le cose che due processi della stessa
     /// sessione si passano e che nessun altro deve leggere — per esempio le
     /// notifiche da mostrare sulla schermata di blocco.
-    readonly property string cartellaSessione: {
-        var runtime = Quickshell.env("XDG_RUNTIME_DIR");
-        return runtime ? ipc._senzaBarra(String(runtime)) + "/minerva/sessioni/"
-                         + ipc._sessione : "";
-    }
+    readonly property string cartellaSessione:
+        Quickshell.env("XDG_RUNTIME_DIR") ? ipc.cartellaRuntime + "/sessioni/" + ipc._sessione : ""
 
     function _senzaBarra(p) {
         return (p.length > 1 && p.charAt(p.length - 1) === "/")

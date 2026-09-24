@@ -1,34 +1,28 @@
 import 'dart:io';
 
-/// Dove stanno le cose di Minerva.
+/// Dove stanno le cose di Liquid DE.
 ///
-/// Esiste perché per mesi la risposta è stata scritta a mano dentro quattro
-/// file diversi:
+/// Due domande separate:
 ///
-///     '~/Minerva Shell/config/settings.json'
+///  · **dov'è installato il codice**: la shell, i suoni, le scorciatoie di
+///    serie. Si legge e basta.
+///  · **dove stanno le cose di chi lo usa**: impostazioni, storia, cache. Si
+///    scrivono in continuazione, e ognuna sta nella cartella che lo standard
+///    freedesktop le dedica (`XDG_CONFIG_HOME`, `XDG_DATA_HOME`,
+///    `XDG_CACHE_HOME`, `XDG_STATE_HOME`, `XDG_RUNTIME_DIR`).
 ///
-/// Che funziona su un portatile solo, quello di chi l'ha scritto. Un altro
-/// utente, o la stessa persona che sposta la cartella, si ritrovava un demone
-/// che crea impostazioni nuove in una cartella che non esiste e non capisce
-/// perché nulla di quello che tocca resta.
+/// Il nome delle cartelle sta scritto QUI e da nessun'altra parte
+/// ([nome]). È la condizione perché Liquid DE e Minerva vivano sullo stesso
+/// computer: se un solo punto del demone scrivesse ancora in una cartella
+/// `minerva`, le due scrivanie si sovrascriverebbero le impostazioni a
+/// vicenda. Una prova (`minerva_paths_test.dart`) cerca nel codice i percorsi
+/// scritti a mano.
 ///
-/// Qui si separano due domande che erano diventate la stessa:
-///
-///  · **dov'è installata Minerva** — il codice, i moduli aggiuntivi, i suoni.
-///    Si legge e basta, può stare in /usr/share, può essere di un altro
-///    utente.
-///  · **dove stanno le cose di CHI la usa** — impostazioni, tema, quali
-///    programmi apre più spesso. Si scrivono in continuazione, e sono di una
-///    persona sola: vanno in ~/.config/minerva, che è il posto che lo standard
-///    freedesktop dedica esattamente a questo.
-///
-/// Tenerle insieme voleva dire che due utenti sullo stesso computer si
-/// sarebbero sovrascritti le impostazioni a vicenda, e che Minerva installata
-/// in una cartella di sistema non avrebbe potuto salvare niente.
+/// Ogni funzione accetta un ambiente al posto di quello vero: è il modo in
+/// cui le prove chiedono «e se `XDG_DATA_HOME` fosse questo?» senza toccare
+/// il processo.
 class MinervaPaths {
   MinervaPaths._();
-
-  static String get _home => Platform.environment['HOME'] ?? '';
 
   /// La cartella dove Minerva è installata.
   ///
@@ -78,16 +72,61 @@ class MinervaPaths {
     return _trimSlash(Directory.current.path);
   }
 
-  /// La cartella delle cose scritte dall'utente. Si crea se non c'è.
-  static final String configDir = _resolveConfigDir();
+  /// Il nome delle cartelle di Liquid DE, in tutte le basi XDG.
+  static const String nome = 'liquid-de';
 
-  static String _resolveConfigDir() {
-    final told = Platform.environment['MINERVA_CONFIG_DIR'];
-    if (told != null && told.isNotEmpty) return _trimSlash(told);
-    final xdg = Platform.environment['XDG_CONFIG_HOME'];
-    if (xdg != null && xdg.isNotEmpty) return '${_trimSlash(xdg)}/minerva';
-    return '$_home/.config/minerva';
+  /// Il nome delle cartelle di Minerva: serve solo a LEGGERE, una volta, le
+  /// impostazioni da importare al primo avvio ([importaDaMinerva]).
+  static const String nomeMinerva = 'minerva';
+
+  static Map<String, String> _amb(Map<String, String>? env) =>
+      env ?? Platform.environment;
+
+  /// Una base XDG: la variabile se c'è ed è un percorso assoluto, altrimenti
+  /// il posto di serie sotto la casa.
+  static String _base(Map<String, String> amb, String variabile, String diSerie) {
+    final v = amb[variabile];
+    if (v != null && v.startsWith('/')) return _trimSlash(v);
+    return '${amb['HOME'] ?? '/tmp'}/$diSerie';
   }
+
+  /// Le impostazioni. `MINERVA_CONFIG_DIR` vince su tutto: è quello che
+  /// usano le sessioni di prova per non toccare le impostazioni vere.
+  static String config([Map<String, String>? env]) {
+    final amb = _amb(env);
+    final detto = amb['MINERVA_CONFIG_DIR'];
+    if (detto != null && detto.isNotEmpty) return _trimSlash(detto);
+    return '${_base(amb, 'XDG_CONFIG_HOME', '.config')}/$nome';
+  }
+
+  /// I dati che si accumulano: storia, punti della Custodia, ritratti.
+  static String dati([Map<String, String>? env]) =>
+      '${_base(_amb(env), 'XDG_DATA_HOME', '.local/share')}/$nome';
+
+  /// Quello che si può buttare e rifare: miniature, indici, suoni scaldati.
+  static String cache([Map<String, String>? env]) =>
+      '${_base(_amb(env), 'XDG_CACHE_HOME', '.cache')}/$nome';
+
+  /// Lo stato che sopravvive a un riavvio ma non è una preferenza.
+  static String stato([Map<String, String>? env]) =>
+      '${_base(_amb(env), 'XDG_STATE_HOME', '.local/state')}/$nome';
+
+  /// La cartella di runtime: socket e file della sessione. Senza una
+  /// `XDG_RUNTIME_DIR` valida (l'utente `greeter` può averla impostata su una
+  /// cartella che non esiste) si ripiega su /tmp, con l'utente nel nome.
+  static String runtime([Map<String, String>? env]) {
+    final amb = _amb(env);
+    final r = amb['XDG_RUNTIME_DIR'];
+    if (r != null && r.startsWith('/')) return '${_trimSlash(r)}/$nome';
+    return '/tmp/$nome-${amb['USER'] ?? 'utente'}';
+  }
+
+  /// La cartella delle impostazioni di Minerva, da cui si importa.
+  static String configMinerva([Map<String, String>? env]) =>
+      '${_base(_amb(env), 'XDG_CONFIG_HOME', '.config')}/$nomeMinerva';
+
+  /// La cartella delle cose scritte dall'utente. Si crea se non c'è.
+  static final String configDir = config();
 
   static String settingsFile() => '$configDir/settings.json';
   static String appUsageFile() => '$configDir/app_usage.json';
@@ -102,29 +141,20 @@ class MinervaPaths {
   /// codice, e il codice non è roba da cartella delle preferenze.
   static String pluginsDir() => '$installRoot/plugins';
 
-  /// Un file di configurazione che viene CON Minerva e non dall'utente: le
-  /// scorciatoie, la configurazione di Hyprland, i suoni. Si legge dalla
-  /// cartella dell'installazione.
+  /// Un file di configurazione che viene col codice e non dall'utente: le
+  /// scorciatoie di serie, i suoni. Si legge dalla cartella dell'installazione.
   static String shippedFile(String relative) => '$installRoot/config/$relative';
 
-  /// La vecchia casa di un file, dentro il progetto.
+  /// Al primo avvio, le impostazioni di Minerva diventano quelle di partenza.
   ///
-  /// Serve solo per il trasloco qui sotto e sparirà quando non ci sarà più
-  /// nessuna installazione da traslocare.
-  static String legacyFile(String name) => '$installRoot/config/$name';
+  /// Si COPIA e non si sposta, e solo se Liquid DE non ha ancora le sue: da
+  /// lì le due scrivanie vivono ognuna per conto suo, e Minerva resta
+  /// esattamente com'era.
+  static Future<void> importaDaMinerva(String name) => migrateFile(
+      File('${configMinerva()}/$name'), File('$configDir/$name'));
 
-  /// Porta un file dalla vecchia casa alla nuova, una volta sola.
-  ///
-  /// Chi usa Minerva da prima di questa modifica ha le sue impostazioni dentro
-  /// il progetto: cambiarne il posto senza portarsele dietro vorrebbe dire
-  /// svegliarsi con l'ambiente come appena installato — sfondo, accento,
-  /// scorciatoie, tutto da rifare. Si copia e NON si cancella l'originale: se
-  /// qualcosa va storto la vecchia copia è ancora lì.
-  static Future<void> migrateIfNeeded(String name) =>
-      migrateFile(File(legacyFile(name)), File('$configDir/$name'));
-
-  /// Il trasloco vero e proprio, staccato da dove si trovano le cartelle così
-  /// che si possa provarlo su file finti senza toccare quelli veri.
+  /// La copia vera e propria, staccata da dove si trovano le cartelle così
+  /// che si possa provarla su file finti senza toccare quelli veri.
   ///
   /// Restituisce vero solo se ha copiato qualcosa.
   static Future<bool> migrateFile(File source, File destination) async {
@@ -134,11 +164,11 @@ class MinervaPaths {
     try {
       await destination.parent.create(recursive: true);
       await source.copy(destination.path);
-      print('[MINERVA][CORE][INFO] ${source.path} trasferito in '
+      print('[MINERVA][CORE][INFO] ${source.path} importato in '
           '${destination.parent.path}');
       return true;
     } catch (e) {
-      print('[MINERVA][CORE][WARN] Trasferimento fallito (${source.path}): $e');
+      print('[MINERVA][CORE][WARN] Importazione fallita (${source.path}): $e');
       return false;
     }
   }

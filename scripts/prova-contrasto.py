@@ -41,6 +41,8 @@ import re
 import socket
 import subprocess
 import sys
+
+import cartelle  # le cartelle di Liquid DE, accanto a questo file
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -48,7 +50,7 @@ from fotogramma import leggi_png, punto  # noqa: E402
 
 QUI = os.path.dirname(os.path.abspath(__file__))
 RADICE = os.path.dirname(QUI)
-CONF_PROVA = os.path.join(os.environ.get("TMPDIR", "/tmp"), "minerva-prova-conf")
+CONF_PROVA = os.path.join(os.environ.get("TMPDIR", "/tmp"), "liquid-de-prova-conf")
 FUORI = os.path.join(os.environ.get("TMPDIR", "/tmp"), "minerva-contrasto")
 
 # La soglia. Non è nostra: è quella di WCAG per il testo piccolo, ed è già
@@ -145,7 +147,7 @@ def sfondi():
     else:
         print("  --  senza «magick» non si fanno il nero e il bianco pieni")
     # E le fotografie che ci sono davvero sulla macchina.
-    casa = os.path.expanduser("~/.config/minerva/settings.json")
+    casa = os.path.join(cartelle.config_di_partenza(), "settings.json")
     try:
         with open(casa) as f:
             suo = json.load(f).get("desktop", {}).get("wallpaper", "")

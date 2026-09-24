@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'package:minervad/core/minerva_paths.dart';
 import 'package:minervad/ipc/canale_segreto.dart';
 
 /// Le prove della parola d'ordine del canale.
@@ -74,9 +75,9 @@ void main() {
       final path = '${tmp.path}/canale';
 
       await CanaleSegreto.scriviNuovo(
-          percorsoFile: path, socket: '/run/user/1000/minerva/prova.sock');
+          percorsoFile: path, socket: '/run/user/1000/liquid-de/prova.sock');
       final dentro = CanaleSegreto.leggi(await File(path).readAsString());
-      expect(dentro['socket'], '/run/user/1000/minerva/prova.sock');
+      expect(dentro['socket'], '/run/user/1000/liquid-de/prova.sock');
     });
 
     test('riscriverla la cambia', () async {
@@ -162,14 +163,24 @@ void main() {
 
       final iPrimo = testo.indexOf('MINERVA_TOKEN_FILE');
       final iSecondo = testo.indexOf('XDG_RUNTIME_DIR');
-      final iTerzo = testo.indexOf('MINERVA_CONFIG_DIR');
+      // Il terzo posto è la cartella delle impostazioni, che la shell calcola
+      // in `cartellaConfig` con la stessa regola del demone.
+      final iTerzo = testo.indexOf('ipc.cartellaConfig');
 
       expect(iPrimo, greaterThan(-1),
           reason: 'la shell non guarda MINERVA_TOKEN_FILE');
       expect(iSecondo, greaterThan(iPrimo),
           reason: 'la shell non guarda XDG_RUNTIME_DIR dopo MINERVA_TOKEN_FILE');
       expect(iTerzo, greaterThan(iSecondo),
-          reason: 'la shell non ripiega su MINERVA_CONFIG_DIR per ultimo');
+          reason: 'la shell non ripiega sulla cartella delle impostazioni per ultimo');
+
+      final i = tutto.indexOf('readonly property string cartellaConfig');
+      expect(i, greaterThan(-1), reason: 'in Ipc.qml non c\'è più `cartellaConfig`');
+      final regola = tutto.substring(i, tutto.indexOf('readonly property', i + 10));
+      expect(regola, contains('MINERVA_CONFIG_DIR'),
+          reason: 'la shell non fa vincere MINERVA_CONFIG_DIR, il demone sì');
+      expect(tutto, contains('readonly property string nome: "${MinervaPaths.nome}"'),
+          reason: 'la shell e il demone chiamano le cartelle in due modi diversi');
 
       // E il nome del file, che è la cosa più facile da cambiare da una parte
       // sola.

@@ -143,7 +143,7 @@ if [ "$MODE" = "tutto" ]; then
     # Il socket lo scrive il demone stesso nel file del canale, e ci scrive
     # DOPO averlo preso: se la riga c'e', dall'altra parte c'e' qualcuno.
     # Cercare un percorso fisso vorrebbe dire indovinare la sessione.
-    CANALE="${XDG_RUNTIME_DIR:-/tmp}/minerva/sessioni/${MINERVA_SESSIONE:-unica}/canale"
+    CANALE="$CARTELLA_RUNTIME/sessioni/${MINERVA_SESSIONE:-unica}/canale"
     SOCKET=""
     for _ in $(seq 1 20); do
         sleep 1

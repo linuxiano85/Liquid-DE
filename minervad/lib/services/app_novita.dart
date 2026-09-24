@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import '../core/minerva_paths.dart';
 
 /// Confronta identità desktop, non date dei pacchetti: un aggiornamento
 /// non rende nuova un'app già conosciuta. Primo avvio = fotografia iniziale.
@@ -12,11 +13,7 @@ class AppNovita {
   Future<void> _scrittura = Future.value();
 
   static String percorsoDiSerie() {
-    final env = Platform.environment;
-    final base = env['XDG_STATE_HOME'];
-    final dir = base != null && base.startsWith('/')
-        ? base : '${env['HOME'] ?? Directory.systemTemp.path}/.local/state';
-    return '$dir/minerva/app-novita.json';
+    return '${MinervaPaths.stato()}/app-novita.json';
   }
 
   Future<void> aggiorna(Iterable<String> ids) async {

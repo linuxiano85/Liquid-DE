@@ -106,31 +106,30 @@ void main() {
       await voce('utente', 'gnomeonly.desktop',
           '[Desktop Entry]\nName=G\nExec=x\nOnlyShowIn=GNOME;\n');
       await voce('utente', 'nonqui.desktop',
-          '[Desktop Entry]\nName=N\nExec=x\nNotShowIn=Hyprland;\n');
+          '[Desktop Entry]\nName=N\nExec=x\nNotShowIn=Minerva;\n');
       await voce('utente', 'perNoi.desktop',
           '[Desktop Entry]\nName=P\nExec=x\nOnlyShowIn=Minerva;\n');
 
-      await voce('utente', 'perNoiWayland.desktop',
-          '[Desktop Entry]\nName=W\nExec=x\nOnlyShowIn=MinervaWayland;\n');
+      await voce('utente', 'perNoiLiquid.desktop',
+          '[Desktop Entry]\nName=L\nExec=x\nOnlyShowIn=LiquidDE;\n');
 
       expect((await cerca('gnomeonly.desktop'))!['acceso'], isFalse);
       expect((await cerca('nonqui.desktop'))!['acceso'], isFalse);
       // Minerva si dichiara con più nomi insieme: una voce scritta per uno
       // qualunque di quelli deve valere.
       expect((await cerca('perNoi.desktop'))!['acceso'], isTrue);
-      // ── E «MinervaWayland», che è il PRIMO dei nomi ────────────────────
+      // ── E «LiquidDE», che è il PRIMO dei nomi ──────────────────────────
       //
-      // Il filtro aveva un elenco scritto a mano — `{'minerva', 'hyprland'}` —
-      // fermo al 2 settembre 2026, il giorno in cui la sessione ha cominciato
-      // a dichiararsi anche `MinervaWayland`. Una voce scritta per la
-      // scrivania su cui gira risultava «di un altro ambiente» a casa sua.
-      //
-      // Adesso i nomi si leggono da `XDG_CURRENT_DESKTOP`, che è dove li
-      // scrive la sessione: questa prova passa sia dentro Minerva sia in un
-      // terminale spoglio, e prima del 3 settembre 2026 falliva in tutte e due.
-      expect((await cerca('perNoiWayland.desktop'))!['acceso'], isTrue,
-          reason: 'XDG_CURRENT_DESKTOP = '
-              '${Platform.environment['XDG_CURRENT_DESKTOP']}');
+      // I nomi si leggono da `XDG_CURRENT_DESKTOP`, che è dove li scrive la
+      // sessione; senza la variabile (un terminale spoglio) vale il ripiego,
+      // che dice gli stessi nomi. Una voce scritta per Liquid DE deve valere
+      // in tutti e due i casi. Dentro un'altra scrivania — Minerva, mentre si
+      // sviluppa — ha ragione a non valere, e lì la prova lo dice.
+      final dichiarato =
+          (Platform.environment['XDG_CURRENT_DESKTOP'] ?? '').toLowerCase();
+      final aCasa = dichiarato.isEmpty || dichiarato.split(':').contains('liquidde');
+      expect((await cerca('perNoiLiquid.desktop'))!['acceso'], aCasa,
+          reason: 'XDG_CURRENT_DESKTOP = «$dichiarato»');
     });
 
     test('le voci di sistema si vedono ma risultano SPENTE', () async {

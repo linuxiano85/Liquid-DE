@@ -31,7 +31,7 @@
 #
 # ── SI CAMBIA SOLO LA PROPRIA, E IL CONTROLLO STA QUI ──────────────────────
 #
-# `config/polkit/org.minerva.utente.policy` chiede `auth_self`: la password
+# `config/polkit/org.liquidde.utente.policy` chiede `auth_self`: la password
 # che compare è la TUA, non quella di un amministratore. È giusto — cambiare
 # la propria password non è un'operazione da amministratore, e `passwd` non ha
 # mai chiesto altro — ma apre un buco se questo file non lo chiude: chiunque

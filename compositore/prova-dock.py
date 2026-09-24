@@ -25,7 +25,7 @@ che erano.
 ── ANNIDATO, SEMPRE ───────────────────────────────────────────────────────
 
 Le impostazioni che questa prova cambia sono quelle della COPIA in
-`$TMPDIR/minerva-prova-conf`, mai quelle della sessione vera.
+`$TMPDIR/liquid-de-prova-conf`, mai quelle della sessione vera.
 """
 import json
 import os
@@ -43,7 +43,7 @@ from importlib import import_module
 _annunci = import_module("prova-annunci")
 chiudi = _annunci.chiudi
 
-CONF = os.path.join(os.environ.get("TMPDIR", "/tmp"), "minerva-prova-conf")
+CONF = os.path.join(os.environ.get("TMPDIR", "/tmp"), "liquid-de-prova-conf")
 
 passate = 0
 fallite = 0

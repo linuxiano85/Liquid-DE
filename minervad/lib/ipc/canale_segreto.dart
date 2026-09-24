@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import '../core/linux_files.dart';
+import '../core/minerva_paths.dart';
 
 /// CanaleSegreto — La parola d'ordine del canale fra il demone e le finestre.
 ///
@@ -58,7 +59,7 @@ import '../core/linux_files.dart';
 /// nessuno era andato a guardare.
 ///
 /// Dal 27 agosto 2026 il demone ascolta su un socket Unix in
-/// `$XDG_RUNTIME_DIR/minerva/`, e **non ascolta più su TCP**. Quindi:
+/// `$XDG_RUNTIME_DIR/liquid-de/`, e **non ascolta più su TCP**. Quindi:
 ///
 ///  · la porta non esiste più, e con lei tutta la caccia al numero libero —
 ///    che serviva perché due sessioni insieme si contendevano la 11432, e che
@@ -124,7 +125,7 @@ class CanaleSegreto {
   ///
   ///  1. `MINERVA_TOKEN_FILE` — lo dice chi ci ha lanciati. Serve alle prove,
   ///     che non devono toccare il file vero di chi sta lavorando.
-  ///  2. `$XDG_RUNTIME_DIR/minerva/` — il posto giusto per un segreto: è in
+  ///  2. `$XDG_RUNTIME_DIR/liquid-de/` — il posto giusto per un segreto: è in
   ///     memoria (tmpfs), è 0700 di chi ha fatto l'accesso, e sparisce da solo
   ///     alla fine della sessione. Un segreto non deve sopravvivere a un
   ///     riavvio, e in una cartella di configurazione lo farebbe — magari
@@ -153,7 +154,7 @@ class CanaleSegreto {
 
     final runtime = env['XDG_RUNTIME_DIR'];
     if (runtime != null && runtime.isNotEmpty) {
-      fuori.add('${_senzaBarra(runtime)}/minerva/sessioni/$ses/$nomeFile');
+      fuori.add('${MinervaPaths.runtime(env)}/sessioni/$ses/$nomeFile');
     }
 
     final conf = cartellaConfigurazione ?? _cartellaConfigurazione();
@@ -170,14 +171,7 @@ class CanaleSegreto {
     return lista.isEmpty ? '' : lista.first;
   }
 
-  static String _cartellaConfigurazione() {
-    final env = Platform.environment;
-    final detto = env['MINERVA_CONFIG_DIR'];
-    if (detto != null && detto.isNotEmpty) return detto;
-    final xdg = env['XDG_CONFIG_HOME'];
-    if (xdg != null && xdg.isNotEmpty) return '${_senzaBarra(xdg)}/minerva';
-    return '${env['HOME'] ?? ''}/.config/minerva';
-  }
+  static String _cartellaConfigurazione() => MinervaPaths.config();
 
   static String _senzaBarra(String p) =>
       p.endsWith('/') && p.length > 1 ? p.substring(0, p.length - 1) : p;

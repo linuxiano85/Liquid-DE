@@ -161,8 +161,8 @@ void main() {
   });
 
   group('la Palestra', () {
-    final p = Guardia(casa: '/home/giacomo', radiceConsentita: '/home/giacomo/.local/share/minerva/palestra/lez-1');
-    const dentro = '/home/giacomo/.local/share/minerva/palestra/lez-1/prove';
+    final p = Guardia(casa: '/home/giacomo', radiceConsentita: '/home/giacomo/.local/share/liquid-de/palestra/lez-1');
+    const dentro = '/home/giacomo/.local/share/liquid-de/palestra/lez-1/prove';
     test('rm dentro la palestra passa, fuori si blocca', () {
       expect(p.giudica('rm appunti.txt', cartella: dentro), isNull);
       expect(p.giudica('rm -r vecchia', cartella: dentro), isNull);

@@ -28,6 +28,7 @@
 set -eu
 
 RADICE="$(cd "$(dirname "$0")/.." && pwd)"
+. "$RADICE/scripts/minerva-cartelle.sh"
 NOME="provaricon$$"
 SOCKET="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/mv-ricon-$$.sock"
 CONF="$(mktemp -d)"
@@ -37,11 +38,11 @@ DEMONE=""
 pulisci() {
     [ -n "$DEMONE" ] && kill "$DEMONE" 2>/dev/null || true
     rm -rf "$CONF" "$SOCKET" "$REG"
-    rm -rf "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/minerva/sessioni/$NOME"
+    rm -rf "$CARTELLA_RUNTIME/sessioni/$NOME"
 }
 trap pulisci EXIT INT TERM
 
-[ -d "$HOME/.config/minerva" ] && cp -a "$HOME/.config/minerva/." "$CONF/" 2>/dev/null || true
+[ -d "$CARTELLA_CONFIG_DI_PARTENZA" ] && cp -a "$CARTELLA_CONFIG_DI_PARTENZA/." "$CONF/" 2>/dev/null || true
 rm -rf "$CONF/sessioni"
 
 export MINERVA_PROVA=1

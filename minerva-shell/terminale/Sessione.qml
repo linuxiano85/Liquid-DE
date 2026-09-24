@@ -32,10 +32,7 @@ Item {
     /// con il demone; se manca si va da sorgente con `dart run`, che parte
     /// più lento ma parte.
     property string radice: ""
-    readonly property string pty: {
-        var casa = String(Quickshell.env("HOME") || "");
-        return casa + "/.local/bin/minerva-pty";
-    }
+    readonly property string pty: Core.Ipc.cartellaBin + "/minerva-pty"
 
     property var tavolozza: null
     property int corpo: Core.Ipc.get("terminale.corpo", 14)

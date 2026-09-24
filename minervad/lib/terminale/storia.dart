@@ -10,7 +10,7 @@
 //
 //     {"quando":1757900000000,"cartella":"/home/g","comando":"ls -la","codice":0,"durata":12}
 //
-// Sta in `~/.local/share/minerva/terminale/storia.jsonl`. Si legge una volta
+// Sta in `~/.local/share/liquid-de/terminale/storia.jsonl`. Si legge una volta
 // all'avvio (le ultime `massimo` righe), si aggiunge una riga per comando.
 //
 // ── Cosa NON si salva ──────────────────────────────────────────────────────
@@ -23,6 +23,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import '../core/minerva_paths.dart';
 
 class VoceStoria {
   VoceStoria({
@@ -72,9 +73,7 @@ class Storia {
   final List<VoceStoria> voci = [];
 
   static String percorsoDiSerie() {
-    final casa = Platform.environment['HOME'] ?? '/tmp';
-    final dati = Platform.environment['XDG_DATA_HOME'] ?? '$casa/.local/share';
-    return '$dati/minerva/terminale/storia.jsonl';
+    return '${MinervaPaths.dati()}/terminale/storia.jsonl';
   }
 
   /// Legge il file, se c'è. Le righe rotte si saltano: un file di storia

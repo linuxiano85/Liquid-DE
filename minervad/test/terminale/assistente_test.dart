@@ -4,6 +4,16 @@ import 'dart:io';
 import 'package:minervad/terminale/motore.dart';
 import 'package:test/test.dart';
 
+/// Un programma del compositore compilato: in `build-native`, che è dove lo
+/// mette `compositore/costruisci.sh`, o in `build` se qualcuno l'ha fatto a mano.
+String _compilato(String nome) {
+  for (final cartella in ['build-native', 'build']) {
+    final f = File('../compositore/$cartella/$nome');
+    if (f.existsSync()) return f.absolute.path;
+  }
+  return File('../compositore/build-native/$nome').absolute.path;
+}
+
 void main() {
   test('protocollo: anteprima, annullamento, conferma e controlli', () async {
     final controller = StreamController<List<int>>();
@@ -45,7 +55,7 @@ void main() {
   });
 
   test('PTY reale: predizione e inserimento senza Invio implicito', () async {
-    final pty = File('../compositore/build/minerva-pty').absolute.path;
+    final pty = _compilato('minerva-pty');
     final processo = await Process.start(Platform.resolvedExecutable, [
       'run', 'bin/terminale.dart', '--pty', pty,
       '--esegui', 'stty -echo; printf PRONTO; cat',

@@ -185,6 +185,11 @@ static void leggi_riga(struct schermi_config *c, char *riga) {
 	c->quanti++;
 }
 
+// Il nome della cartella delle impostazioni: lo stesso di
+// `minervad/lib/core/minerva_paths.dart` e di `core/Ipc.qml`. Liquid DE e
+// Minerva convivono solo se non scrivono mai nella stessa cartella.
+#define CARTELLA "liquid-de"
+
 static void percorso_di_serie(char *fuori, size_t n) {
 	const char *conf = getenv("MINERVA_CONFIG_DIR");
 	if (conf != NULL && conf[0] != '\0') {
@@ -193,11 +198,11 @@ static void percorso_di_serie(char *fuori, size_t n) {
 	}
 	const char *xdg = getenv("XDG_CONFIG_HOME");
 	if (xdg != NULL && xdg[0] != '\0') {
-		snprintf(fuori, n, "%s/minerva/schermi.conf", xdg);
+		snprintf(fuori, n, "%s/" CARTELLA "/schermi.conf", xdg);
 		return;
 	}
 	const char *casa = getenv("HOME");
-	snprintf(fuori, n, "%s/.config/minerva/schermi.conf",
+	snprintf(fuori, n, "%s/.config/" CARTELLA "/schermi.conf",
 	         casa != NULL ? casa : "");
 }
 

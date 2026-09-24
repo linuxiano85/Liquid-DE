@@ -37,6 +37,9 @@ import os
 import re
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+import cartelle  # noqa: E402  le cartelle di Liquid DE
 import time
 
 QUI = os.path.dirname(os.path.abspath(__file__))
@@ -47,8 +50,7 @@ _annunci = import_module("prova-annunci")
 Canale = _annunci.Canale
 chiudi = _annunci.chiudi
 
-BIN = os.path.join(os.environ.get("MINERVA_BIN",
-                                  os.path.expanduser("~/.local/bin")),
+BIN = os.path.join(cartelle.cartella_bin(),
                    "minerva-wayland")
 
 passate = 0

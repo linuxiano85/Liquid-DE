@@ -83,7 +83,7 @@ void main() {
             'operazione, e dirlo è una promessa di sicurezza falsa');
 
     // E la regola che rende falsa quella frase è ancora quella.
-    final policy = _leggi('config/polkit/org.minerva.radice.policy');
+    final policy = _leggi('config/polkit/org.liquidde.radice.policy');
     expect(policy, contains('auth_admin_keep'),
         reason: 'se un giorno diventa auth_admin, il messaggio va riscritto: '
             'allora la password la chiederebbe davvero ogni volta');

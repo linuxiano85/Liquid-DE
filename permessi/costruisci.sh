@@ -12,7 +12,8 @@
 set -eu
 
 QUI="$(cd "$(dirname "$0")" && pwd)"
-DOVE="${MINERVA_BIN:-$HOME/.local/bin}"
+. "$QUI/../scripts/minerva-cartelle.sh"
+DOVE="$CARTELLA_BIN"
 
 if ! pkg-config --exists polkit-agent-1; then
     echo "FERMO: mancano gli header di polkit." >&2

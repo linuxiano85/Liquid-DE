@@ -43,6 +43,9 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+import cartelle  # noqa: E402
+
 QUI = os.path.dirname(os.path.abspath(__file__))
 RADICE = os.path.dirname(QUI)
 sys.path.insert(0, QUI)
@@ -73,10 +76,7 @@ def main():
         return 2
 
     sessione = "recupero-prova"
-    stato = os.path.join(
-        os.environ.get("XDG_STATE_HOME",
-                       os.path.expanduser("~/.local/state")),
-        "minerva", "sessioni", sessione)
+    stato = os.path.join(cartelle.stato(), "sessioni", sessione)
     registro = os.path.join(stato, "session-prova.log")
 
     amb = dict(os.environ)

@@ -260,7 +260,7 @@ Page {
 
     // ── Lo stesso, per il nostro compositore ─────────────────────────────
     //
-    // `~/.config/minerva/schermi.conf`, che legge `minerva-wayland` all'avvio.
+    // `~/.config/liquid-de/schermi.conf`, che legge `minerva-wayland` all'avvio.
     //
     // Due file e non uno perché le due sintassi non sono la stessa — quella
     // di Hyprland comincia con la parola `monitor` e la nostra col nome dello

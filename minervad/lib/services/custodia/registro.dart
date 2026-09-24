@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import '../../core/minerva_paths.dart';
 
 /// Registro — quali cartelle la Custodia tiene d'occhio.
 ///
@@ -28,9 +29,7 @@ class Registro {
   final List<Progetto> progetti = [];
 
   static String _predefinito() {
-    final casa = Platform.environment['HOME'] ?? '/tmp';
-    final conf = Platform.environment['XDG_CONFIG_HOME'] ?? '$casa/.config';
-    return '$conf/minerva/custodia/progetti.json';
+    return '${MinervaPaths.config()}/custodia/progetti.json';
   }
 
   // ── Leggere e scrivere ─────────────────────────────────────────────────

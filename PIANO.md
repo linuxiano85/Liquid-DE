@@ -32,34 +32,47 @@ Le simulazioni che fanno da disegno di riferimento:
 Il generatore delle simulazioni è in `disegno/` (`python3 disegno/genera.py`
 rifà le pagine): è il riferimento con cui si confronta ogni tappa.
 
-## Tappa 0 — Due desktop sulla stessa macchina
+## Tappa 0 — Due desktop sulla stessa macchina ✔ (24 settembre)
 
-Oggi le due copie userebbero gli stessi posti: `~/.config/minerva`, lo stesso
-socket in `$XDG_RUNTIME_DIR/minerva`, gli stessi binari in `~/.local/bin`,
-la stessa voce di sessione e gli stessi file del greeter. Installare
-Liquid DE vorrebbe dire rompere Minerva: esattamente quello che non si vuole.
+Le due copie usavano gli stessi posti: `~/.config/minerva`, lo stesso socket
+in `$XDG_RUNTIME_DIR/minerva`, gli stessi programmi in `~/.local/bin`, la
+stessa voce al login, lo stesso servizio PAM, le stesse regole polkit.
+Installare Liquid DE avrebbe voluto dire rompere Minerva.
 
-Misurato: **~60 file** usano quei percorsi (22 `.config/minerva`, 8 la
-cartella di runtime, 7 `/usr/local/lib/minerva`, 6 `.local/share/minerva`,
-5 le sessioni Wayland, 5 greetd, 4 la cache, e 45 script che chiamano i
-binari per nome).
+Fatto:
 
-1. **Un nome solo, in un posto solo.** Una variabile d'ambiente
-   (`MINERVA_NOME`, di serie `minerva`; per noi `liquid`) letta da script,
-   demone e shell, da cui discendono tutti i percorsi: configurazione, dati,
-   cache, runtime, prefisso d'installazione. Niente più `minerva` scritto a
-   mano nei percorsi: si cerca con `git grep`, e una prova lo vieta.
-2. **Installazione in un prefisso suo**: `~/.local/opt/liquid-de/`, con
-   `bin/`, `lib/`, `share/`. `costruisci.sh` e `minerva-compila` imparano il
-   prefisso; `~/.local/bin` resta di Minerva.
-3. **Una voce al login in più**: «Liquid DE» accanto a «Minerva» nel
-   greeter di oggi, che non cambia. Il greeter nuovo arriva alla Tappa 6.
-4. **Le impostazioni si importano una volta**: al primo avvio Liquid DE
-   copia `~/.config/minerva/settings.json` nella sua cartella e da lì
-   vive per conto suo.
-5. **La prova che vale per tutto il piano**: prima e dopo ogni sessione di
-   Liquid DE, l'impronta di `~/.config/minerva`, `~/.local/bin/minerva-*` e
-   della cartella Minerva Shell deve restare identica.
+1. **Un nome solo, un posto solo per linguaggio.** Le cartelle si chiamano
+   `liquid-de` in ogni base XDG, e il nome sta scritto una volta in
+   `minervad/lib/core/minerva_paths.dart`, `minerva-shell/core/Ipc.qml`,
+   `scripts/minerva-cartelle.sh`, `scripts/cartelle.py` e (per il file degli
+   schermi) `compositore/src/schermi.c`. Una quarantina di punti che si
+   costruivano il percorso da soli ora passano da lì — e con loro si è chiuso
+   un difetto nascosto: alcuni ignoravano `MINERVA_CONFIG_DIR` e avrebbero
+   scritto nelle cartelle vere anche durante una prova.
+2. **Un prefisso suo**: i programmi in `~/.local/opt/liquid-de/bin`, le
+   applicazioni e le icone in `~/.local/opt/liquid-de/share`. La sessione li
+   mette in testa a PATH e XDG_DATA_DIRS; `~/.local/bin` resta di Minerva.
+3. **Nomi di sistema suoi**: `/usr/local/bin/liquid-de-sessione` e
+   `liquid-de-recupero`, le voci «Liquid DE» e «Liquid DE (recupero)» al
+   login, `/etc/pam.d/liquid-de`, le regole `org.liquidde.radice` e
+   `org.liquidde.utente` con gli aiutanti `liquid-de-radice` e
+   `liquid-de-utente`, `zz-liquid-de.rules`, XDG_CURRENT_DESKTOP
+   `LiquidDE:Minerva` e i suoi portali `liquidde-portals.conf`.
+4. **Le impostazioni si importano una volta**: al primo avvio si copiano da
+   `~/.config/minerva` (lette, mai scritte); le prove partono da lì finché
+   Liquid DE non ha le sue.
+5. **Le guardie**: `minervad/test/convivenza_test.dart` legge tutto il codice
+   e diventa rosso se una riga nomina un posto di Minerva senza un permesso
+   motivato; `minerva_paths_test.dart` prova le regole delle cartelle. Tutte
+   e due viste rosse prima.
+6. **La prova vera**: una sessione annidata di Liquid DE, fotografata, con
+   l'impronta dei posti di Minerva (impostazioni, `~/.local/bin/minerva-*`,
+   cartella Minerva Shell) presa prima e dopo: identica.
+
+Resta, e va fatto con Giacomo perché chiede `sudo`: lanciare
+`scripts/install-minerva.sh` sulla macchina vera, scegliere «Liquid DE» al
+login, e rifare l'impronta. Il greeter si separa con la Tappa 5: finché non
+c'è il suo, al login c'è quello di Minerva, con «Liquid DE» fra le sessioni.
 
 ## Tappa 0b — Via Hyprland dal codice
 

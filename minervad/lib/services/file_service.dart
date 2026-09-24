@@ -5,6 +5,7 @@ import '../core/linux_files.dart';
 
 import 'archive_service.dart';
 import 'image_dims.dart';
+import '../core/minerva_paths.dart';
 
 /// Servizio file di Minerva: elenca cartelle ed esegue i trasferimenti.
 ///
@@ -43,11 +44,7 @@ class FileService {
   Map<String, dynamic>? _aspetti;
 
   String get _percorsoAspetti {
-    final env = Platform.environment;
-    final dati = (env['XDG_DATA_HOME']?.isNotEmpty == true)
-        ? env['XDG_DATA_HOME']!
-        : '${env['HOME']}/.local/share';
-    return '$dati/minerva/cartelle.json';
+    return '${MinervaPaths.dati()}/cartelle.json';
   }
 
   void _leggiAspetti() {

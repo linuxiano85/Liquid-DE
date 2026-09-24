@@ -40,7 +40,7 @@ CARTELLA="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
 # `minervawayland` mancava, ed era un difetto silenzioso di quelli che questo
 # progetto conosce bene: un programma dichiarato `OnlyShowIn=MinervaWayland;`
 # non sarebbe partito, e non l'avrebbe detto nessuno.
-NOSTRI="minervawayland minerva hyprland"
+NOSTRI="liquidde minerva"
 
 # Legge un campo dalla sola sezione [Desktop Entry].
 #

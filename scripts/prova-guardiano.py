@@ -40,6 +40,8 @@ import shutil
 import signal
 import subprocess
 import sys
+
+import cartelle  # le cartelle di Liquid DE, accanto a questo file
 import tempfile
 import time
 
@@ -188,7 +190,7 @@ def main():
             os.unlink(amb["MINERVA_IPC_SOCKET"])
         except OSError:
             pass
-        shutil.rmtree("/run/user/%d/minerva/sessioni/%s" % (os.getuid(), marchio),
+        shutil.rmtree(os.path.join(cartelle.runtime(), "sessioni", marchio),
                       ignore_errors=True)
 
     print()

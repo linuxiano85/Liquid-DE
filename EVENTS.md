@@ -105,7 +105,7 @@ Prima di toccare qualcosa i due file si confrontano **byte per byte** con la cop
 
 ### Le cartelle che non si guardano
 
-`manutenzione_escluse` le legge, `manutenzione_escludi` e `manutenzione_includi` le cambiano. Sono **percorsi assoluti** e le conserva il demone (`~/.config/minerva/manutenzione-escluse.json`): una cartella si esclude perché è QUELLA, non perché si chiama così — `Documenti/foto` e `Scaricati/foto` sono due cose diverse, e un elenco di nomi le prenderebbe tutte e due.
+`manutenzione_escluse` le legge, `manutenzione_escludi` e `manutenzione_includi` le cambiano. Sono **percorsi assoluti** e le conserva il demone (`~/.config/liquid-de/manutenzione-escluse.json`): una cartella si esclude perché è QUELLA, non perché si chiama così — `Documenti/foto` e `Scaricati/foto` sono due cose diverse, e un elenco di nomi le prenderebbe tutte e due.
 
 Il setaccio ne salta già un elenco di serie (Progetti, le cartelle dei pacchetti e delle compilazioni, `Android`, `flutter`): roba **generata o scaricata**, dove i doppioni sono normali. Queste sono in più, e sono di chi usa il computer — nessun elenco scritto da noi può conoscere le sue cartelle.
 
@@ -129,7 +129,7 @@ Fino al 7 settembre 2026 non esisteva, e i due casi finivano in una riga del reg
 
 ## Impostazioni
 
-Le preferenze. Vivono in `~/.config/minerva/settings.json` — NON in `config/` dentro il progetto, che è una copia vecchia rimasta lì.
+Le preferenze. Vivono in `~/.config/liquid-de/settings.json` — NON in `config/` dentro il progetto, che è una copia vecchia rimasta lì.
 
 - `set_setting`
 - `set_settings`
@@ -454,7 +454,7 @@ di accesso.
 ### La modalità amministratore
 
 `radice_*` fa fare a `pkexec` una singola operazione su un percorso, tramite
-`/usr/local/bin/minerva-radice`. **Il demone non ha nessun privilegio**: chi
+`/usr/local/bin/liquid-de-radice`. **Il demone non ha nessun privilegio**: chi
 decide se si può è polkit, che chiede la password di un amministratore.
 
 `radice_azione` vuole `op` e `args`. Le operazioni sono un elenco chiuso —
@@ -761,8 +761,8 @@ file e le password.
 ## La galleria
 
 Le foto e i video di Anteprima. Il catalogo sta nella cache
-(`~/.cache/minerva/foto/indice.json`), le cartelle scelte e le esclusioni
-stanno nella configurazione (`~/.config/minerva/foto/cartelle.json`): si
+(`~/.cache/liquid-de/foto/indice.json`), le cartelle scelte e le esclusioni
+stanno nella configurazione (`~/.config/liquid-de/foto/cartelle.json`): si
 possono buttare le miniature senza perdere le scelte.
 
 Due cose non ovvie, e sono il motivo per cui queste azioni sono tante e non una.

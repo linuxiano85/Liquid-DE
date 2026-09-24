@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import '../../core/minerva_paths.dart';
 
 /// RegistroAccount — l'unico posto in cui vivono gli account online.
 ///
@@ -33,9 +34,7 @@ class RegistroAccount {
   final List<Account> account = [];
 
   static String _predefinito() {
-    final conf = Platform.environment['MINERVA_CONFIG_DIR'] ??
-        '${Platform.environment['XDG_CONFIG_HOME'] ?? '${Platform.environment['HOME'] ?? ''}/.config'}/minerva';
-    return '$conf/account/account.json';
+    return '${MinervaPaths.config()}/account/account.json';
   }
 
   Future<void> carica() async {

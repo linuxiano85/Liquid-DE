@@ -42,6 +42,9 @@ import shutil
 import signal
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
+import cartelle  # noqa: E402  le cartelle di Liquid DE
 import time
 
 # ── Un menù X11, senza toolkit di mezzo ──────────────────────────────────
@@ -81,8 +84,7 @@ carico = _annunci.carico
 chiudi = _annunci.chiudi
 e_una_prova = _annunci.e_una_prova
 
-BIN = os.path.join(os.environ.get("MINERVA_BIN",
-                                  os.path.expanduser("~/.local/bin")),
+BIN = os.path.join(cartelle.cartella_bin(),
                    "minerva-wayland")
 
 passate = 0

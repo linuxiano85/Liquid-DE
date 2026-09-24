@@ -7,6 +7,7 @@ import 'cartelle.dart';
 import 'data_scatto.dart';
 import 'exif.dart';
 import 'media.dart';
+import '../../core/minerva_paths.dart';
 
 /// Una fotografia o un video, con tutto quello che si è riusciti a sapere.
 class Voce {
@@ -157,16 +158,11 @@ class Indice {
         percorsoPreferiti = percorsoPreferiti ?? _inConfig('preferiti.json');
 
   static String _inCache(String nome) {
-    final amb = Platform.environment;
-    final base = amb['XDG_CACHE_HOME'] ?? '${amb['HOME'] ?? '/tmp'}/.cache';
-    return '$base/minerva/foto/$nome';
+    return '${MinervaPaths.cache()}/foto/$nome';
   }
 
   static String _inConfig(String nome) {
-    final amb = Platform.environment;
-    final base = amb['MINERVA_CONFIG_DIR'] ??
-        '${amb['XDG_CONFIG_HOME'] ?? '${amb['HOME'] ?? '/tmp'}/.config'}/minerva';
-    return '$base/foto/$nome';
+    return '${MinervaPaths.config()}/foto/$nome';
   }
 
   /// Quante voci per mazzetto. Cinquanta come la ricerca del gestore file:

@@ -429,7 +429,7 @@ Page {
     //
     // ── Perché la finestrella compare una volta e non due ────────────────
     //
-    // Perché `config/polkit/org.minerva.utente.policy` chiede `auth_self_keep`:
+    // Perché `config/polkit/org.liquidde.utente.policy` chiede `auth_self_keep`:
     // la conferma vale qualche minuto, quindi il cambio vero che segue non la
     // ridomanda. Senza quel file installato — cioè lanciando Minerva dalla
     // cartella del progetto senza `scripts/install-minerva.sh` — si ricade
@@ -446,13 +446,13 @@ Page {
     Core.Exec {
         id: doveSta
         Component.onCompleted: doveSta.shArgs(
-            '[ -x /usr/local/bin/minerva-utente ] '
-            + '&& { printf %s /usr/local/bin/minerva-utente; exit 0; }; '
+            '[ -x /usr/local/bin/liquid-de-utente ] '
+            + '&& { printf %s /usr/local/bin/liquid-de-utente; exit 0; }; '
             + 'printf %s "$1"',
             [Quickshell.shellDir + "/../scripts/minerva-utente"]);
         onDone: function (out) {
             page.comandoUtente = out;
-            page.installato = (out === "/usr/local/bin/minerva-utente");
+            page.installato = (out === "/usr/local/bin/liquid-de-utente");
         }
     }
 

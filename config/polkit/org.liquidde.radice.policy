@@ -4,7 +4,7 @@
  "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
 
 <!--
-  org.minerva.radice — La modalità amministratore del gestore file.
+  org.liquidde.radice — La modalità amministratore del gestore file.
 
   ── Cosa autorizza ──────────────────────────────────────────────────────
 
@@ -40,10 +40,10 @@
 -->
 <policyconfig>
 
-  <vendor>Minerva</vendor>
-  <vendor_url>https://github.com/minerva-shell</vendor_url>
+  <vendor>Liquid DE</vendor>
+  <vendor_url>https://github.com/linuxiano85/Liquid-DE</vendor_url>
 
-  <action id="org.minerva.radice.gestione">
+  <action id="org.liquidde.radice.gestione">
     <description>Manage files as administrator</description>
     <description xml:lang="it">Gestire i file come amministratore</description>
     <message>Authentication is required to manage system files</message>
@@ -53,7 +53,7 @@
       <allow_inactive>auth_admin_keep</allow_inactive>
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/bin/minerva-radice</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/bin/liquid-de-radice</annotate>
     <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
   </action>
 

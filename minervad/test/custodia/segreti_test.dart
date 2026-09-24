@@ -143,9 +143,9 @@ void main() {
     });
 
     test('una regola di polkit che nomina «auth_admin»', () async {
-      await scrivi('org.minerva.radice.policy',
+      await scrivi('org.liquidde.radice.policy',
           '<allow_active>auth_admin_keep</allow_active>\n');
-      expect(await su(['org.minerva.radice.policy']), isEmpty);
+      expect(await su(['org.liquidde.radice.policy']), isEmpty);
     });
 
     test('un indirizzo normale, senza password', () async {

@@ -53,8 +53,7 @@ Rectangle {
     /// Dove finiscono i ritratti ritagliati. Nella cartella dei dati e non fra
     /// le immagini dell'utente: è roba che abbiamo generato noi, e mescolarla
     /// alle sue foto vuol dire lasciargliela da riordinare.
-    readonly property string cartella:
-        Quickshell.env("HOME") + "/.local/share/minerva/ritratti"
+    readonly property string cartella: Core.Ipc.cartellaDati + "/ritratti"
 
     function apri(percorso) {
         ritaglio.sorgente = percorso;

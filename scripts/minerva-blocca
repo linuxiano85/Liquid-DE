@@ -13,7 +13,7 @@
 #
 # Quindi:
 #
-#  1. **Deve esistere un file PAM.** `/etc/pam.d/minerva`, e se non c'è si
+#  1. **Deve esistere un file PAM.** `/etc/pam.d/liquid-de`, e se non c'è si
 #     usa quello di hyprlock, che su Arch c'è sempre. Se non c'è nemmeno
 #     quello NON si blocca, e lo si dice: meglio uno schermo non bloccato di
 #     uno bloccato per sempre.
@@ -31,8 +31,8 @@ ROOT="$(dirname "$(dirname "$SELF")")"
 quale_pam() {
     if [ -n "${MINERVA_PAM:-}" ]; then
         echo "$MINERVA_PAM"
-    elif [ -f /etc/pam.d/minerva ]; then
-        echo minerva
+    elif [ -f /etc/pam.d/liquid-de ]; then
+        echo liquid-de
     elif [ -f /etc/pam.d/hyprlock ]; then
         # Il ripiego storico. `hyprlock` non è più fra i pacchetti di Minerva
         # dal 2 settembre 2026, quindi su una macchina nuova questo file non
@@ -54,12 +54,12 @@ if ! PAM="$(quale_pam)"; then
     echo "[MINERVA][BLOCCO] Nessun file PAM utilizzabile: NON blocco." >&2
     echo "[MINERVA][BLOCCO] Reinstalla con: scripts/install-minerva.sh" >&2
     hyprctl notify 3 8000 "rgb(f0596b)" \
-        "Minerva non può bloccare: manca /etc/pam.d/minerva" >/dev/null 2>&1
+        "Minerva non può bloccare: manca /etc/pam.d/liquid-de" >/dev/null 2>&1
     exit 1
 fi
 
 if [ "$PAM" != minerva ]; then
-    echo "[MINERVA][BLOCCO] /etc/pam.d/minerva non c'è: uso «$PAM»." >&2
+    echo "[MINERVA][BLOCCO] /etc/pam.d/liquid-de non c'è: uso «$PAM»." >&2
 fi
 export MINERVA_PAM="$PAM"
 

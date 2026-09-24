@@ -3,7 +3,8 @@
 set -eu
 QUI="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 BUILD="${MINERVA_BUILD_DIR:-$QUI/build-native}"
-DOVE="${MINERVA_BIN:-$HOME/.local/bin}"
+. "$QUI/../scripts/minerva-cartelle.sh"
+DOVE="$CARTELLA_BIN"
 RENDERERS="${MINERVA_RENDERERS:-gles2,vulkan}"
 INSTALLA=1
 case "${1:-}" in

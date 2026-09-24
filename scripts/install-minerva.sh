@@ -7,6 +7,7 @@
 set -euo pipefail
 
 MINERVA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$MINERVA_DIR/scripts/minerva-cartelle.sh"
 
 c_ok()   { printf '\033[1;32m  ✔\033[0m %s\n' "$*"; }
 c_info() { printf '\033[1;36m  ➜\033[0m %s\n' "$*"; }
@@ -152,11 +153,6 @@ c_head "Registrazione sessione «Minerva» nel display manager"
 # sta Minerva, e l'unico che lo sa con certezza è questo script. È l'unico
 # percorso assoluto che Minerva scrive da qualche parte, ed è scritto qui,
 # adesso, sapendolo.
-# Qui si installava anche il ponte della sessione su Hyprland
-# (`/usr/local/bin/minerva-session`). Sparito il 2 settembre 2026: Minerva ha
-# un compositore suo, e la via di ritorno è «Minerva (recupero)» qui sotto —
-# provata al login da Giacomo prima di togliere la vecchia.
-
 # ── E il ponte per la sessione sul NOSTRO compositore ────────────────────
 #
 # Si installa sempre, anche se `minerva-wayland` non è ancora costruito: la
@@ -165,8 +161,8 @@ c_head "Registrazione sessione «Minerva» nel display manager"
 # Meglio una voce che spiega di una voce che non c'è.
 sed "s|@MINERVA_DIR@|$MINERVA_DIR|g" \
     "$MINERVA_DIR/scripts/minerva-session-wayland" \
-    | sudo install -Dm755 /dev/stdin /usr/local/bin/minerva-session-wayland
-c_ok "/usr/local/bin/minerva-session-wayland installato ($MINERVA_DIR)"
+    | sudo install -Dm755 /dev/stdin /usr/local/bin/liquid-de-sessione
+c_ok "/usr/local/bin/liquid-de-sessione installato ($MINERVA_DIR)"
 
 # ── E il ponte del RECUPERO ──────────────────────────────────────────────
 #
@@ -180,8 +176,8 @@ c_ok "/usr/local/bin/minerva-session-wayland installato ($MINERVA_DIR)"
 # ritorno che manca proprio nel giro in cui serve.
 sed "s|@MINERVA_DIR@|$MINERVA_DIR|g" \
     "$MINERVA_DIR/scripts/minerva-session-recupero" \
-    | sudo install -Dm755 /dev/stdin /usr/local/bin/minerva-session-recupero
-c_ok "/usr/local/bin/minerva-session-recupero installato ($MINERVA_DIR)"
+    | sudo install -Dm755 /dev/stdin /usr/local/bin/liquid-de-recupero
+c_ok "/usr/local/bin/liquid-de-recupero installato ($MINERVA_DIR)"
 
 # ── Il cambio password, e la sua regola ───────────────────────────────────
 #
@@ -193,10 +189,10 @@ c_ok "/usr/local/bin/minerva-session-recupero installato ($MINERVA_DIR)"
 # La regola serve a chiedere MENO: senza, `pkexec` ricade sull'azione generica
 # e domanda la password di un amministratore per cambiare la propria. Con lei
 # domanda la tua, che è quello che ha sempre fatto `passwd`.
-sudo install -Dm755 "$MINERVA_DIR/scripts/minerva-utente" /usr/local/bin/minerva-utente
-sudo install -Dm644 "$MINERVA_DIR/config/polkit/org.minerva.utente.policy" \
-    /usr/share/polkit-1/actions/org.minerva.utente.policy
-c_ok "/usr/local/bin/minerva-utente e la sua regola polkit installati"
+sudo install -Dm755 "$MINERVA_DIR/scripts/minerva-utente" /usr/local/bin/liquid-de-utente
+sudo install -Dm644 "$MINERVA_DIR/config/polkit/org.liquidde.utente.policy" \
+    /usr/share/polkit-1/actions/org.liquidde.utente.policy
+c_ok "/usr/local/bin/liquid-de-utente e la sua regola polkit installati"
 
 # ── La modalità amministratore del gestore file ───────────────────────────
 #
@@ -206,10 +202,10 @@ c_ok "/usr/local/bin/minerva-utente e la sua regola polkit installati"
 # eseguire un file che l'utente può riscrivere. Chi gira come te — un pacchetto
 # npm, un'estensione del browser — potrebbe altrimenti riscriverlo e aspettare
 # che tu accenda la modalità amministratore.
-sudo install -Dm755 "$MINERVA_DIR/scripts/minerva-radice" /usr/local/bin/minerva-radice
-sudo install -Dm644 "$MINERVA_DIR/config/polkit/org.minerva.radice.policy" \
-    /usr/share/polkit-1/actions/org.minerva.radice.policy
-c_ok "/usr/local/bin/minerva-radice e la sua regola polkit installati"
+sudo install -Dm755 "$MINERVA_DIR/scripts/minerva-radice" /usr/local/bin/liquid-de-radice
+sudo install -Dm644 "$MINERVA_DIR/config/polkit/org.liquidde.radice.policy" \
+    /usr/share/polkit-1/actions/org.liquidde.radice.policy
+c_ok "/usr/local/bin/liquid-de-radice e la sua regola polkit installati"
 
 # ── Qui si scriveva ~/.config/hypr/minerva-paths.conf ────────────────────
 #
@@ -256,61 +252,38 @@ fi
 # che ci tengono le password (Chrome per primo) ripiegano in silenzio su un
 # archivio in chiaro con una chiave diversa: rientrando in un'altra scrivania
 # vanno rifatti tutti gli accessi. Le ragioni per esteso stanno nel file.
-install -Dm644 "$MINERVA_DIR/config/xdg-desktop-portal/minerva-portals.conf" \
-    "$HOME/.config/xdg-desktop-portal/minerva-portals.conf"
-c_ok "~/.config/xdg-desktop-portal/minerva-portals.conf creato"
+#
+# Il nome del file viene da XDG_CURRENT_DESKTOP (`LiquidDE`): è di Liquid DE
+# e di nessun altro, così installarlo non tocca i portali di Minerva.
+install -Dm644 "$MINERVA_DIR/config/xdg-desktop-portal/liquidde-portals.conf" \
+    "$HOME/.config/xdg-desktop-portal/liquidde-portals.conf"
+c_ok "~/.config/xdg-desktop-portal/liquidde-portals.conf creato"
 
-# E il gemello per la sessione sul nostro compositore. Non è una copia: là
-# risponde `hyprland`, che dentro minerva-wayland non riesce a parlare col
-# compositore e fallisce in SILENZIO. Il perché per esteso sta nel file.
-install -Dm644 "$MINERVA_DIR/config/xdg-desktop-portal/minervawayland-portals.conf" \
-    "$HOME/.config/xdg-desktop-portal/minervawayland-portals.conf"
-c_ok "~/.config/xdg-desktop-portal/minervawayland-portals.conf creato"
-
-# ── E qui c'era la voce «Minerva» al login, quella su Hyprland ───────────
+# ── La voce al login: Liquid DE ──────────────────────────────────────────
 #
-# `Exec=/usr/local/bin/minerva-session`, `DesktopNames=Minerva;Hyprland;`.
-# Sparita il 2 settembre 2026, dopo che Giacomo ha provato «Minerva
-# (recupero)» dal login e ha visto che ci si arriva.
-#
-# Se ne resta una copia sulla macchina da un'installazione precedente, va
-# tolta a mano — un'installazione non cancella file che non ha appena scritto:
-#
-#     sudo rm /usr/share/wayland-sessions/minerva.desktop
-
-# ── La seconda voce: Minerva sul nostro compositore ──────────────────────
-#
-# **Si aggiunge accanto, non al posto dell'altra.** È la regola di tutta la
-# transizione: finché il compositore nostro non è quello di ogni giorno, la
-# sessione che funziona deve restare a portata di mano — e la si sceglie
-# dallo stesso elenco, senza dover riparare niente.
-#
-# Il nome dice qual è, senza fingere che sia la stessa cosa: chi lo legge
-# deve poter capire in quale delle due sta entrando.
+# Accanto a quelle che ci sono già (Minerva compresa), mai al loro posto.
 # Il documento-qui è QUOTATO (`<<'EOF'`) e dentro non ci sono segni gravi.
 # Le due cose vanno insieme: in un documento-qui non quotato le righe che
 # cominciano con `#` sono TESTO, non commenti, e quello che sta fra due segni
 # gravi viene ESEGUITO — con `sudo` davanti. La guardia di `prove.sh` mi ha
 # preso qui il 26 agosto 2026, e aveva ragione.
 sudo install -Dm644 /dev/stdin \
-    /usr/share/wayland-sessions/minerva-wayland.desktop <<'EOF'
+    /usr/share/wayland-sessions/liquid-de.desktop <<'EOF'
 [Desktop Entry]
-Name=Minerva (compositore Minerva)
-Comment=Minerva sul proprio compositore, senza Hyprland — in prova
-Exec=/usr/local/bin/minerva-session-wayland
+Name=Liquid DE
+Comment=La scrivania liquida, sul proprio compositore
+Exec=/usr/local/bin/liquid-de-sessione
 Type=Application
-# TRE nomi, e l'ordine conta: da qui xdg-desktop-portal sceglie il file dei
-# portali, provandoli uno per uno nell'ordine scritto.
-#   · MinervaWayland → minervawayland-portals.conf, che dice «wlr» — perché
-#     il portale di Hyprland cerca HYPRLAND_INSTANCE_SIGNATURE, che qui dentro
-#     non esiste, e senza di lui fallisce IN SILENZIO;
-#   · Minerva e Hyprland restano dietro: chiunque altro guardi questa
-#     variabile continua a riconoscerci, segreti compresi.
-# Scriverci «wlroots» vorrebbe dire non trovare nessuno dei nostri file, e con
-# loro perdere le password di Chrome.
-DesktopNames=MinervaWayland;Minerva;Hyprland;
+# L'ordine conta: da qui xdg-desktop-portal sceglie il file dei portali,
+# provandoli uno per uno nell'ordine scritto.
+#   · LiquidDE → liquidde-portals.conf, che dice «wlr» e chi custodisce i
+#     segreti. Scriverci «wlroots» vorrebbe dire non trovarlo, e con lui
+#     perdere le password di Chrome;
+#   · Minerva resta dietro: i programmi all'avvio dichiarati per Minerva
+#     partono anche qui.
+DesktopNames=LiquidDE;Minerva;
 EOF
-c_ok "/usr/share/wayland-sessions/minerva-wayland.desktop creato"
+c_ok "/usr/share/wayland-sessions/liquid-de.desktop creato"
 
 # ── La terza voce: il recupero ───────────────────────────────────────────
 #
@@ -326,18 +299,18 @@ c_ok "/usr/share/wayland-sessions/minerva-wayland.desktop creato"
 # Il nome comincia con «Minerva» perché nell'elenco del login stia accanto
 # alle altre due, e dice cos'è senza spaventare chi lo legge per sbaglio.
 sudo install -Dm644 /dev/stdin \
-    /usr/share/wayland-sessions/minerva-recupero.desktop <<'EOF'
+    /usr/share/wayland-sessions/liquid-de-recupero.desktop <<'EOF'
 [Desktop Entry]
-Name=Minerva (recupero)
-Comment=Il compositore di Minerva con un solo terminale — per riparare quando la scrivania non parte
-Exec=/usr/local/bin/minerva-session-recupero
+Name=Liquid DE (recupero)
+Comment=Il compositore di Liquid DE con un solo terminale — per riparare quando la scrivania non parte
+Exec=/usr/local/bin/liquid-de-recupero
 Type=Application
 # Gli stessi nomi della sessione vera: da qui xdg-desktop-portal sceglie i
 # file dei portali, e una sessione di recupero che non trova i nostri sarebbe
 # una sessione in cui non si può nemmeno aprire un file per ripararlo.
-DesktopNames=MinervaWayland;Minerva;Hyprland;
+DesktopNames=LiquidDE;Minerva;
 EOF
-c_ok "/usr/share/wayland-sessions/minerva-recupero.desktop creato"
+c_ok "/usr/share/wayland-sessions/liquid-de-recupero.desktop creato"
 
 # ── 3a. Le applicazioni di Minerva ────────────────────────────────────────
 #
@@ -371,7 +344,12 @@ else
 fi
 
 c_head "Applicazioni di Minerva"
-mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications"
+# Tutto nel prefisso di Liquid DE: `~/.local/bin`, `~/.local/share/applications`
+# e le icone in `~/.local/share/icons` sono di Minerva, con gli stessi nomi.
+# La sessione di Liquid DE mette `$PREFISSO/bin` in testa al PATH e
+# `$PREFISSO/share` in XDG_DATA_DIRS.
+APPLICAZIONI="$PREFISSO/share/applications"
+mkdir -p "$CARTELLA_BIN" "$APPLICAZIONI"
 
 # Le icone stanno in `hicolor`, che per specifica è il tema dove ogni programma
 # installa le PROPRIE: chi cambia tema di icone non deve perderle, e nessun
@@ -381,7 +359,7 @@ mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications"
 # AppId` in cima a ogni punto d'ingresso) ed è anche il nome del `.desktop`.
 # I tre coincidono di proposito: è la catena con cui dock, barra del titolo e
 # menu risalgono da una finestra aperta al programma che l'ha aperta.
-ICONE="$HOME/.local/share/icons/hicolor/scalable/apps"
+ICONE="$PREFISSO/share/icons/hicolor/scalable/apps"
 mkdir -p "$ICONE"
 
 # `minerva-media` è entrato in questo elenco il 23 agosto 2026, e prima
@@ -393,9 +371,8 @@ for app in minerva-files minerva-settings minerva-monitor minerva-viewer \
            minerva-manutenzione minerva-terminale; do
     # Un collegamento e non una copia: il file nel progetto resta l'unico da
     # correggere, e una modifica vale subito senza reinstallare niente.
-    ln -sf "$MINERVA_DIR/scripts/$app" "$HOME/.local/bin/$app"
-    install -Dm644 "$MINERVA_DIR/desktop/$app.desktop" \
-        "$HOME/.local/share/applications/$app.desktop"
+    ln -sf "$MINERVA_DIR/scripts/$app" "$CARTELLA_BIN/$app"
+    install -Dm644 "$MINERVA_DIR/desktop/$app.desktop" "$APPLICAZIONI/$app.desktop"
     install -Dm644 "$MINERVA_DIR/assets/icons/$app.svg" "$ICONE/$app.svg"
     c_ok "$app installato"
 done
@@ -412,13 +389,12 @@ done
 # installato da nessuno: l'avviso c'era ancora, e il file che doveva toglierlo
 # stava lì da tre settimane.
 for app in minerva-blocco minerva-permessi; do
-    install -Dm644 "$MINERVA_DIR/desktop/$app.desktop" \
-        "$HOME/.local/share/applications/$app.desktop"
+    install -Dm644 "$MINERVA_DIR/desktop/$app.desktop" "$APPLICAZIONI/$app.desktop"
     c_ok "$app installato (nascosto dal menu)"
 done
 
-update-desktop-database "$HOME/.local/share/applications" >/dev/null 2>&1 || true
-gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" >/dev/null 2>&1 || true
+update-desktop-database "$APPLICAZIONI" >/dev/null 2>&1 || true
+gtk-update-icon-cache -f -t "$PREFISSO/share/icons/hicolor" >/dev/null 2>&1 || true
 
 # ── Chi apre le immagini ──────────────────────────────────────────────────
 #
@@ -462,10 +438,9 @@ done
 c_ok "Media è il lettore predefinito di audio e video"
 c_info "per tornare indietro: xdg-mime default <programma>.desktop audio/mpeg"
 
-case ":$PATH:" in
-    *":$HOME/.local/bin:"*) ;;
-    *) c_warn "~/.local/bin non è nel PATH: i comandi minerva-* non si troveranno" ;;
-esac
+# Il PATH qui non conta: è la sessione di Liquid DE a mettere il prefisso in
+# testa (`start-minerva-wayland.sh`), e fuori dalla sessione i comandi
+# `minerva-*` devono restare quelli di Minerva.
 
 # ── 3a-bis. Priorità di scheduling, dove c'è ananicy ──────────────────────
 #
@@ -475,8 +450,8 @@ esac
 # sedici punti di priorità dietro a quella di KDE, e la lentezza che si sente
 # non viene dal nostro codice. Il commento dentro al file spiega i numeri.
 if [ -d /etc/ananicy.d ]; then
-    sudo install -Dm644 "$MINERVA_DIR/config/ananicy/zz-minerva.rules" \
-        /etc/ananicy.d/zz-minerva.rules
+    sudo install -Dm644 "$MINERVA_DIR/config/ananicy/zz-liquid-de.rules" \
+        /etc/ananicy.d/zz-liquid-de.rules
     sudo systemctl try-restart ananicy-cpp >/dev/null 2>&1 || true
     c_ok "priorità di scheduling registrate in /etc/ananicy.d"
 fi
@@ -490,11 +465,11 @@ fi
 # ── Il file PAM del blocco schermo ─────────────────────────────────────────
 #
 # `scripts/minerva-blocca` chiede a PAM se la password è giusta, e PAM vuole
-# sapere COME chiederlo: è il file `/etc/pam.d/minerva`. Senza, il blocco non
+# sapere COME chiederlo: è il file `/etc/pam.d/liquid-de`. Senza, il blocco non
 # parte proprio — di proposito, perché un blocco che non riesce a verificare
 # niente è un computer perso, non un computer protetto.
 #
-# Il contenuto sta in `config/pam/minerva`, commentato riga per riga: niente
+# Il contenuto sta in `config/pam/liquid-de`, commentato riga per riga: niente
 # `nullok`, `nodelay` (la pausa fra i tentativi la fa la schermata, meglio),
 # e soglie di faillock generose perché quelle di sistema — 3 tentativi e 10
 # minuti, con un contatore condiviso col login — chiudono fuori chi sbaglia a
@@ -505,13 +480,13 @@ fi
 #
 # Il servizio PAM è obbligatorio anche su una macchina senza altri desktop.
 c_head "Blocco schermo"
-if cmp -s "$MINERVA_DIR/config/pam/minerva" /etc/pam.d/minerva; then
-    c_ok "/etc/pam.d/minerva gia aggiornato"
-elif sudo install -Dm644 "$MINERVA_DIR/config/pam/minerva" /etc/pam.d/minerva \
+if cmp -s "$MINERVA_DIR/config/pam/liquid-de" /etc/pam.d/liquid-de; then
+    c_ok "/etc/pam.d/liquid-de gia aggiornato"
+elif sudo install -Dm644 "$MINERVA_DIR/config/pam/liquid-de" /etc/pam.d/liquid-de \
         >/dev/null 2>&1; then
-    c_ok "/etc/pam.d/minerva installato"
+    c_ok "/etc/pam.d/liquid-de installato"
 else
-    c_err "Impossibile installare /etc/pam.d/minerva: blocco schermo non pronto."
+    c_err "Impossibile installare /etc/pam.d/liquid-de: blocco schermo non pronto."
     exit 1
 fi
 
@@ -557,7 +532,7 @@ for bin in qs dart cliphist wl-copy brightnessctl nmcli pactl bluetoothctl alacr
 done
 
 for bin in minerva-wayland minerva-cattura minerva-pty minerva-polkit; do
-    if [ -x "$HOME/.local/bin/$bin" ]; then
+    if [ -x "$CARTELLA_BIN/$bin" ]; then
         c_ok "$bin"
     else
         c_err "$bin manca"
@@ -567,7 +542,7 @@ done
 
 echo
 if [[ $ALL_OK -eq 1 ]]; then
-    c_ok "Installazione completata. Esci e scegli «Minerva» nel display manager,"
+    c_ok "Installazione completata. Esci e scegli «Liquid DE» nel display manager,"
     c_ok "oppure prova la sessione annidata con: ./compositore/prova-annidata.sh"
 else
     c_err "Installazione incompleta: alcuni componenti mancano."

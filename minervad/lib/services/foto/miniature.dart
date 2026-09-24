@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'exif.dart';
 import 'media.dart';
+import '../../core/minerva_paths.dart';
 
 /// Le miniature: piccole, riusate, e quasi sempre gratis.
 ///
@@ -49,9 +50,7 @@ class Miniature {
         esegui = esegui ?? Process.run;
 
   static String _cartellaVera() {
-    final amb = Platform.environment;
-    final base = amb['XDG_CACHE_HOME'] ?? '${amb['HOME'] ?? '/tmp'}/.cache';
-    return '$base/minerva/miniature';
+    return '${MinervaPaths.cache()}/miniature';
   }
 
   /// I lati che si possono chiedere.

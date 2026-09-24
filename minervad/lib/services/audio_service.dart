@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import '../core/minerva_paths.dart';
 
 /// AudioService — Quello che serve a Minerva Suono e che la finestra non può
 /// fare da sé: leggere com'è fatto un file audio, ricavarne l'onda da
@@ -346,12 +347,9 @@ class AudioService {
 
   String? _cartellaCache() {
     if (_cacheOverride != null) return _cacheOverride;
-    final env = Platform.environment;
-    final c = env['XDG_CACHE_HOME'];
-    if (c != null && c.isNotEmpty) return '$c/minerva';
-    final home = env['HOME'];
+    final home = Platform.environment['HOME'];
     if (home == null || home.isEmpty) return null;
-    return '$home/.cache/minerva';
+    return MinervaPaths.cache();
   }
 
   /// FNV-1a a 64 bit. Serve un nome di file corto e stabile, non una firma:

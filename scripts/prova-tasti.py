@@ -22,7 +22,10 @@ disposizione vera della sessione.
 """
 import fcntl
 import struct
+import os
 import sys
+
+import cartelle  # le cartelle di Liquid DE, accanto a questo file
 import time
 
 UI_SET_EVBIT = 0x40045564
@@ -56,8 +59,8 @@ def disposizione():
     except Exception:
         pass
     try:
-        casa = os.environ.get("HOME", "")
-        with open(f"{casa}/.config/minerva/settings.json", encoding="utf-8") as f:
+        with open(os.path.join(cartelle.config_di_partenza(), "settings.json"),
+                  encoding="utf-8") as f:
             d = json.load(f)
         l = str(d.get("input", {}).get("layout", "")).split(",")[0].strip()
         if l:

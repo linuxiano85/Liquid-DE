@@ -12,6 +12,16 @@ import 'dart:io';
 import 'package:test/test.dart';
 import 'package:minervad/core/linux_files.dart';
 
+/// Un programma del compositore compilato: in `build-native`, che è dove lo
+/// mette `compositore/costruisci.sh`, o in `build` se qualcuno l'ha fatto a mano.
+String _compilato(String nome) {
+  for (final cartella in ['build-native', 'build']) {
+    final f = File('../compositore/$cartella/$nome');
+    if (f.existsSync()) return f.absolute.path;
+  }
+  return File('../compositore/build-native/$nome').absolute.path;
+}
+
 void main() {
   test('headless: physical modes, rollback without UI, nonblocking IPC', () async {
     final temp = LinuxFiles.privateTemp(Directory.systemTemp, 'minerva-desktop-fix-');
@@ -24,7 +34,7 @@ void main() {
       }
       await temp.delete(recursive: true);
     });
-    final binary = File('../compositore/build/minerva-wayland').absolute.path;
+    final binary = _compilato('minerva-wayland');
     final ready = Completer<String>();
     compositor = await Process.start(binary, [], environment: {
       'MINERVA_PROVA': '1', 'MINERVA_SESSIONE': 'audit-fix',

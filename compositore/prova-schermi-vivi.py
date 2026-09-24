@@ -7,7 +7,7 @@
 
 Il verbo `schermo`: risoluzione, scala, rotazione, posizione e spegnimento,
 applicati **mentre la sessione gira**. Prima esisteva solo la lettura
-all'avvio: la pagina Schermi scriveva `~/.config/minerva/schermi.conf` e la
+all'avvio: la pagina Schermi scriveva `~/.config/liquid-de/schermi.conf` e la
 modifica si vedeva al riavvio, che non è quello che chiede chi sta guardando
 uno schermo storto.
 

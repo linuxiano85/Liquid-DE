@@ -1,7 +1,7 @@
 # minervad — il demone di Minerva
 
 Il programma che risponde. Non ha finestre, non ha interfaccia: sta in ascolto
-su un socket Unix in `$XDG_RUNTIME_DIR/minerva/` e risponde a chi chiede, in
+su un socket Unix in `$XDG_RUNTIME_DIR/liquid-de/` e risponde a chi chiede, in
 JSON, un messaggio per riga.
 
 Tutto quello che l'interfaccia non può sapere da sola passa da qui: lo stato

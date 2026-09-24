@@ -45,6 +45,7 @@ import '../services/tema_icone_service.dart';
 import '../services/foto_service.dart';
 import 'canale_segreto.dart';
 import '../core/ambiente.dart';
+import '../core/minerva_paths.dart';
 
 /// Server IPC basato su WebSocket (ws://127.0.0.1:11432).
 /// Consente la comunicazione bidirezionale tra la shell QML, i plugin e il core.
@@ -91,7 +92,7 @@ const Object _chiaveCliente = #minervaClienteRichiesta;
 
 class WebSocketServer {
   /// Dove si ascolta: `MINERVA_IPC_SOCKET` se qualcuno l'ha detto, altrimenti
-  /// `$XDG_RUNTIME_DIR/minerva/canale-<sessione>.sock`.
+  /// `$XDG_RUNTIME_DIR/liquid-de/canale-<sessione>.sock`.
   ///
   /// Il nome della sessione è lo stesso che sceglie il file del canale, e non
   /// è un caso: le due cose devono finire nella stessa cartella, o la
@@ -128,17 +129,13 @@ class WebSocketServer {
     return v;
   }
 
-  /// `$XDG_RUNTIME_DIR/minerva/canale-<sessione>.sock`, con ripiego su `/tmp`
+  /// `$XDG_RUNTIME_DIR/liquid-de/canale-<sessione>.sock`, con ripiego su `/tmp`
   /// per l'utente `greeter`, che può avere `XDG_RUNTIME_DIR` impostato su una
   /// cartella che non esiste e che non ha il diritto di creare — è successo il
   /// 10 agosto 2026, e allora il demone del greeter morì lasciando a schermo
   /// una schermata di accesso intera e con l'elenco utenti vuoto.
   static String socketPredefinito() {
-    final runtime = Platform.environment['XDG_RUNTIME_DIR'];
-    final base = (runtime != null && runtime.startsWith('/'))
-        ? '$runtime/minerva'
-        : '/tmp/minerva-${Platform.environment['USER'] ?? 'utente'}';
-    return '$base/canale-${CanaleSegreto.sessione()}.sock';
+    return '${MinervaPaths.runtime()}/canale-${CanaleSegreto.sessione()}.sock';
   }
 
   final EventBus _eventBus;

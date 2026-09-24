@@ -33,7 +33,7 @@ struct schermi_config {
 //
 // `percorso` NULL = quello di serie:
 //   `$MINERVA_CONFIG_DIR/schermi.conf`, o `$XDG_CONFIG_HOME/minerva/…`,
-//   o `~/.config/minerva/schermi.conf`.
+//   o `~/.config/liquid-de/schermi.conf`.
 //
 // Un file che non c'è non è un errore: si torna con `quanti = 0` e ogni
 // schermo prende il suo modo preferito a scala 1. Un compositore che si

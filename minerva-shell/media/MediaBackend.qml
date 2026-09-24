@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell.Io
+import "../core" as Core
 
 // MediaBackend — I comandi di Minerva Media.
 //
@@ -179,17 +180,19 @@ Item {
 
     /// Genera il PNG dell'onda con `showwavespic` e in più legge la durata
     /// con `ffprobe`: servono tutte e due al trimmer, e girano in un comando
-    /// solo. Il PNG finisce in `~/.cache/minerva-media`.
+    /// solo. Il PNG finisce nella cache di Liquid DE, sotto `media/`.
     function ondaDi(percorso, larghezza, altezza, colore) {
         var p = String(percorso || "");
         if (p === "")
             return;
         var w = Math.max(320, Math.round(larghezza || 960));
         var h = Math.max(120, Math.round(altezza || 240));
-        var tmp = "$HOME/.cache/minerva-media/onda-"
-                  + String(Date.now()) + ".png";
+        // La cartella arriva come argomento ($2) e non dentro la riga: un
+        // percorso con uno spazio non deve poterla spezzare.
+        var cartella = Core.Ipc.cartellaCache + "/media";
+        var tmp = "$2/onda-" + String(Date.now()) + ".png";
         ondaProc.command = ["sh", "-c",
-            'mkdir -p "$HOME/.cache/minerva-media" '
+            'mkdir -p "$2" '
             + '&& d=$(ffprobe -v error -show_entries format=duration '
             + '-of default=noprint_wrappers=1:nokey=1 -- "$1" 2>/dev/null) '
             + '&& ffmpeg -y -v error -i "$1" -filter_complex '
@@ -197,7 +200,7 @@ Item {
             + w + "x" + h + ':colors=0x' + backend._hex(colore) + '" '
             + '-frames:v 1 -f image2 "' + tmp + '" >/dev/null 2>&1 '
             + '&& printf "%s\\n%s\\n" "${d:-0}" "' + tmp + '"',
-            "sh", p];
+            "sh", p, cartella];
         ondaProc.running = true;
     }
 
