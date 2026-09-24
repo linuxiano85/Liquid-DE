@@ -29,6 +29,10 @@ PanelWindow {
     /// Spazio da lasciare in alto (la barra) e in basso (la dock).
     property real margineAlto: 0
     property real margineBasso: 0
+    /// Esce dal bordo sinistro invece che dal destro (`riva.cassetto`).
+    property bool aSinistra: false
+    /// Trascinato verso l'altro bordo: chi ascolta scambia i bordi.
+    signal scambioChiesto()
 
     /// Le voci, dalla più recente: `{ id, testo, immagine }`. `immagine` è
     /// il percorso della copia decodificata, o "".
@@ -213,7 +217,11 @@ PanelWindow {
         width: 380
         height: Math.max(240, cassetto.height - cassetto.margineAlto - cassetto.margineBasso - 2 * margine)
         y: cassetto.margineAlto + margine
-        x: cassetto.aperto ? cassetto.width - margine - width : cassetto.width + 30
+        x: {
+            var dentro = cassetto.aSinistra ? margine : cassetto.width - margine - width;
+            var fuori = cassetto.aSinistra ? -width - 30 : cassetto.width + 30;
+            return (cassetto.aperto ? dentro : fuori) + presa.scarto;
+        }
         Behavior on x {
             enabled: Theme.Motion.liquido
             SpringAnimation { spring: Theme.Motion.molla * 0.6; damping: 0.42 }
@@ -225,6 +233,31 @@ PanelWindow {
         border.color: Theme.Colors.edge
 
         MouseArea { anchors.fill: parent; onClicked: {} }
+
+        // ── Trascinarlo dall'altra parte ──
+        //
+        // Dalla testata: la carta segue la mano, e lasciata oltre un terzo
+        // dello schermo verso l'altro bordo scambia posto con le Stanze.
+        MouseArea {
+            id: presa
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: Theme.Effects.space4 + 32
+            preventStealing: true
+            cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+            property real inizio: 0
+            property real scarto: 0
+            onPressed: function(m) { presa.inizio = mapToItem(null, m.x, 0).x; presa.scarto = 0; }
+            onPositionChanged: function(m) { presa.scarto = mapToItem(null, m.x, 0).x - presa.inizio; }
+            onReleased: {
+                var soglia = cassetto.width / 3;
+                var verso = cassetto.aSinistra ? presa.scarto : -presa.scarto;
+                presa.scarto = 0;
+                if (verso > soglia)
+                    cassetto.scambioChiesto();
+            }
+        }
 
         Item {
             id: dentro

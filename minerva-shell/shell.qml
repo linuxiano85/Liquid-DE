@@ -464,6 +464,12 @@ ShellRoot {
     /// La barra della Riva: l'Isola che galleggia in mezzo
     /// (`menu/IsolaBarra.qml`). Con «classica» torna la barra di Minerva.
     readonly property bool barraIsola: Core.Ipc.get("bar.stile", "isola") !== "classica"
+    /// Da che parte esce il Cassetto; le Stanze dall'altra. Si scambiano
+    /// trascinandone uno verso l'altro bordo (`riva.cassetto`).
+    readonly property bool cassettoASinistra: Core.Ipc.get("riva.cassetto", "destra") === "sinistra"
+    function scambiaBordi() {
+        Core.Ipc.setSetting("riva.cassetto", root.cassettoASinistra ? "destra" : "sinistra");
+    }
     readonly property bool dockInAlto: Core.Posizioni.dockInAlto
 
     readonly property bool titleBarsOn: Core.Ipc.get("windows.titleBars", true)
@@ -893,6 +899,7 @@ ShellRoot {
             Tasti {
                 screen: scrivania.modelData
                 aperti: root.tastiAperti
+                cassettoASinistra: root.cassettoASinistra
                 margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
                 margineBasso: dock.screenRect.height > 0 && !root.dockInAlto && scrivania.modelData
                               ? Math.max(0, scrivania.modelData.height - dock.screenRect.y)
@@ -937,6 +944,8 @@ ShellRoot {
             Stanze {
                 id: stanzeLato
                 screen: scrivania.modelData
+                aDestra: root.cassettoASinistra
+                onScambioChiesto: root.scambiaBordi()
                 margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
                 margineBasso: dock.screenRect.height > 0 && !root.dockInAlto && scrivania.modelData
                               ? Math.max(0, scrivania.modelData.height - dock.screenRect.y)
@@ -947,6 +956,8 @@ ShellRoot {
             Cassetto {
                 id: cassettoAppunti
                 screen: scrivania.modelData
+                aSinistra: root.cassettoASinistra
+                onScambioChiesto: root.scambiaBordi()
                 margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
                 margineBasso: dock.screenRect.height > 0 && !root.dockInAlto && scrivania.modelData
                               ? Math.max(0, scrivania.modelData.height - dock.screenRect.y)
@@ -1006,9 +1017,13 @@ ShellRoot {
                 function onBordo(quale, schermo) {
                     if (!scrivania.modelData || schermo !== scrivania.modelData.name)
                         return;
-                    if (quale === "destra")
+                    // Chi esce da quale bordo lo decide `riva.cassetto`.
+                    var cassettoQui = (quale === "sinistra") === root.cassettoASinistra;
+                    if (quale !== "destra" && quale !== "sinistra")
+                        return;
+                    if (cassettoQui)
                         cassettoAppunti.apri();
-                    else if (quale === "sinistra")
+                    else
                         stanzeLato.apri();
                 }
                 function onAngolo(quale, schermo) {

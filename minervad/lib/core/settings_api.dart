@@ -529,6 +529,15 @@ class SettingsApi {
         'settings': {
           'lastSection': 'appearance',
         },
+        // ── La riva: che cosa esce da quale bordo ─────────────────────────
+        //
+        // «I bordi vivi: banchina in basso, stanze a sinistra, Cassetto a
+        // destra; si scambiano posto trascinandoli». `cassetto` dice da che
+        // parte esce il Cassetto (gli appunti); le Stanze escono dall'altra.
+        // Lo cambia il trascinamento di uno dei due verso l'altro bordo.
+        'riva': {
+          'cassetto': 'destra',
+        },
         'launcher': {
           // Qui c'era `'maxShown': 7` — quante voci mostrare nel menu — e
           // non la leggeva nessuno: zero occorrenze in tutto il progetto. Il

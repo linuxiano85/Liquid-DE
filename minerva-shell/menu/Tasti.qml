@@ -22,6 +22,8 @@ PanelWindow {
     property bool aperti: false
     property real margineAlto: 0
     property real margineBasso: 0
+    /// Cassetto a sinistra e Stanze a destra (`riva.cassetto`).
+    property bool cassettoASinistra: false
 
     visible: tasti.aperti || comparsa.running || tasti._opacita > 0.01
     property real _opacita: tasti.aperti ? 1 : 0
@@ -71,7 +73,7 @@ PanelWindow {
             chiavi: ["Super", "D"]
         }
         Cartello {
-            x: fondo.width - fondo.m - width
+            x: tasti.cassettoASinistra ? fondo.m : fondo.width - fondo.m - width
             y: fondo.height / 2 - height / 2
             nome: "Appunti"
             chiavi: ["Super", "V"]
@@ -84,7 +86,7 @@ PanelWindow {
             chiavi: ["Super", "O"]
         }
         Cartello {
-            x: fondo.m
+            x: tasti.cassettoASinistra ? fondo.width - fondo.m - width : fondo.m
             y: fondo.height / 2 - height / 2
             nome: "Stanza 1, 2, 3…"
             chiavi: ["Super", "1 2 3"]

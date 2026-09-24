@@ -28,6 +28,10 @@ PanelWindow {
     property bool sbirciata: false
     property real margineAlto: 0
     property real margineBasso: 0
+    /// Escono dal bordo destro (quando il Cassetto è stato messo a sinistra).
+    property bool aDestra: false
+    /// Trascinate verso l'altro bordo: chi ascolta scambia i bordi.
+    signal scambioChiesto()
 
     readonly property int attiva: Core.Compositore.scrivaniaAttiva
 
@@ -148,7 +152,11 @@ PanelWindow {
         height: Math.min(pila.implicitHeight + 2 * Theme.Effects.space3,
                          stanze.height - stanze.margineAlto - stanze.margineBasso - 2 * margine)
         y: stanze.margineAlto + (stanze.height - stanze.margineAlto - stanze.margineBasso - height) / 2
-        x: stanze.aperto || stanze.sbirciata ? margine : -width - 30
+        x: {
+            var dentro = stanze.aDestra ? stanze.width - margine - width : margine;
+            var fuori = stanze.aDestra ? stanze.width + 30 : -width - 30;
+            return (stanze.aperto || stanze.sbirciata ? dentro : fuori) + presaStanze.scarto;
+        }
         Behavior on x {
             enabled: Theme.Motion.liquido
             SpringAnimation { spring: Theme.Motion.molla * 0.6; damping: 0.42 }
@@ -160,7 +168,25 @@ PanelWindow {
         border.color: Theme.Colors.edge
         clip: true
 
-        MouseArea { anchors.fill: parent; enabled: stanze.aperto; onClicked: {} }
+        // Tutta la colonna si trascina: lasciata oltre un terzo dello
+        // schermo verso l'altro bordo, scambia posto col Cassetto. Un tocco
+        // resta delle stanze (le loro aree stanno sopra questa).
+        MouseArea {
+            id: presaStanze
+            anchors.fill: parent
+            enabled: stanze.aperto
+            preventStealing: true
+            property real inizio: 0
+            property real scarto: 0
+            onPressed: function(m) { presaStanze.inizio = mapToItem(null, m.x, 0).x; presaStanze.scarto = 0; }
+            onPositionChanged: function(m) { presaStanze.scarto = mapToItem(null, m.x, 0).x - presaStanze.inizio; }
+            onReleased: {
+                var verso = stanze.aDestra ? -presaStanze.scarto : presaStanze.scarto;
+                presaStanze.scarto = 0;
+                if (verso > stanze.width / 3)
+                    stanze.scambioChiesto();
+            }
+        }
 
         Ui.Goccia {
             id: goccia
@@ -196,6 +222,18 @@ PanelWindow {
                         cursorShape: Qt.PointingHandCursor
                         onContainsMouseChanged: goccia.punta(stanza, containsMouse)
                         onClicked: stanze.vai(stanza.modelData.numero)
+                        // Anche da una stanza si trascina la colonna intera.
+                        property real _inizio: 0
+                        onPressed: function(m) { stanzaMouse._inizio = mapToItem(null, m.x, 0).x; }
+                        onPositionChanged: function(m) {
+                            if (pressed) presaStanze.scarto = mapToItem(null, m.x, 0).x - stanzaMouse._inizio;
+                        }
+                        onReleased: {
+                            var verso = stanze.aDestra ? -presaStanze.scarto : presaStanze.scarto;
+                            presaStanze.scarto = 0;
+                            if (verso > stanze.width / 3)
+                                stanze.scambioChiesto();
+                        }
                     }
 
                     // Il numero, sempre.
