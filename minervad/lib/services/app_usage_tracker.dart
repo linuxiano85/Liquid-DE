@@ -45,6 +45,10 @@ class AppUsageTracker {
     }
   }
 
+  /// Quante volte è stata aperta un'app: serve al menù per la vista
+  /// «Frequenti» e per mettere prima, a parità di risposta, quella che si usa.
+  int lanci(String id) => _usage[id] ?? 0;
+
   /// Restituisce gli ID delle app più frequenti ordinate in modo decrescente.
   List<String> getMostFrequent({int limit = 12}) {
     final sorted = _usage.entries.toList()

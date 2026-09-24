@@ -56,23 +56,36 @@ Rectangle {
     /// posto invece di scivolare da dove era sparita.
     property bool _salta: true
 
+    /// Vera quando la goccia si vede davvero: visibile, e in una finestra
+    /// che si vede. Una molla che parte in una finestra nascosta non avanza
+    /// (nessuno disegna fotogrammi), e la goccia restava larga zero: è
+    /// successo nel menù delle app, che nasce nascosto.
+    readonly property bool _aSchermo: goccia.visible && goccia.Window.window !== null
+                                      && goccia.Window.window.visible
+
     function _misura() {
         var b = goccia.bersaglio;
         if (!b || !goccia.parent)
             return;
         var p = b.mapToItem(goccia.parent, 0, 0);
+        // Fuori schermo si salta: niente molla, la goccia è già al suo posto
+        // quando si comincia a vederla.
+        var salta = goccia._salta || !goccia._aSchermo;
+        goccia._salta = salta;
         goccia._x = p.x + goccia.margine;
         goccia._y = p.y + goccia.margine;
         goccia._l = Math.max(0, b.width - 2 * goccia.margine);
         goccia._a = Math.max(0, b.height - 2 * goccia.margine);
+        goccia._salta = false;
     }
 
     onBersaglioChanged: {
         if (!goccia.visible)
             goccia._salta = true;
         goccia._misura();
-        goccia._salta = false;
     }
+    // Quando la finestra compare, la goccia si rimette sulla sua voce.
+    on_ASchermoChanged: if (goccia._aSchermo) { goccia._salta = true; goccia._misura(); }
     Connections {
         target: goccia.bersaglio
         ignoreUnknownSignals: true

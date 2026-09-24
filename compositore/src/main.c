@@ -492,6 +492,13 @@ struct minerva {
 	/// Il puntatore è al bordo alto di uno schermo con una finestra a schermo
 	/// intero, ed è già stato detto. Vedi `bordo_alto_guarda`.
 	bool bordo_alto_detto;
+	/// Gli angoli attivi (vedi `angolo_guarda`): in quale angolo è il
+	/// puntatore adesso (NULL se in nessuno), su quale schermo, se è già stato
+	/// detto, e il timer della sosta.
+	const char *angolo_ora;
+	char angolo_schermo[64];
+	bool angolo_detto;
+	struct wl_event_source *angolo_timer;
 	/// Se il «locked» è già partito. wlroots lo consente **una volta sola**
 	/// per serratura, e chiamarlo due volte non è un errore da gestire: è un
 	/// assert che porta giù il compositore, cioè tutto lo schermo. Preso
@@ -5790,8 +5797,106 @@ static void bordo_alto_guarda(struct minerva *m) {
 	canale_annuncia(m->canale, "bordoalto", riga);
 }
 
+// ── Gli angoli attivi ────────────────────────────────────────────────────
+//
+// Liquid DE apre le cose dagli angoli dello schermo: in basso a sinistra il
+// menù delle app, in alto a destra il Centro di controllo, e così via. Chi
+// sa dov'è il puntatore è il compositore, e il sensore sta qui come quello
+// del bordo alto; cosa si apre lo decide la shell.
+//
+// Tre regole, tutte contro l'apertura per sbaglio:
+//
+//  · una SOSTA di 160 ms: passarci attraverso andando altrove non apre
+//    niente. La conta un timer, perché un puntatore fermo in un angolo non
+//    manda più movimenti;
+//  · solo gli angoli VERI: fra due schermi affiancati l'angolo interno non
+//    è un angolo, il puntatore ci passa per andare di là;
+//  · niente mentre si trascina una finestra, a schermo bloccato, o sopra una
+//    finestra a schermo intero (un gioco non deve aprire il menù perché il
+//    mouse è finito in un angolo).
+//
+// Si annuncia `evento angolo {"quale":"basso-sx","schermo":"eDP-1"}` dopo la
+// sosta, e `evento angolo {"quale":"via"}` quando il puntatore se ne va da un
+// angolo già detto.
+#define ANGOLO_SOSTA_MS 160
+#define ANGOLO_LATO 3
+
+static int angolo_scade(void *dati) {
+	struct minerva *m = dati;
+	if (m->angolo_ora == NULL || m->angolo_detto || m->canale == NULL)
+		return 0;
+	m->angolo_detto = true;
+	char riga[160];
+	snprintf(riga, sizeof(riga), "evento angolo {\"quale\":\"%s\",\"schermo\":\"%s\"}",
+		m->angolo_ora, m->angolo_schermo);
+	canale_annuncia(m->canale, "angolo", riga);
+	return 0;
+}
+
+static void angolo_guarda(struct minerva *m) {
+	const char *quale = NULL;
+	struct wlr_output *out = wlr_output_layout_output_at(m->schermi,
+		m->cursore->x, m->cursore->y);
+	if (out != NULL && !m->bloccato && m->presa == PRESA_NIENTE) {
+		struct wlr_box box;
+		wlr_output_layout_get_box(m->schermi, out, &box);
+		const double cx = m->cursore->x, cy = m->cursore->y;
+		const bool sx = cx < box.x + ANGOLO_LATO;
+		const bool dx = cx > box.x + box.width - 1 - ANGOLO_LATO;
+		const bool alto = cy < box.y + ANGOLO_LATO;
+		const bool basso = cy > box.y + box.height - 1 - ANGOLO_LATO;
+		if ((sx || dx) && (alto || basso)) {
+			// Un angolo è vero se oltre i suoi due lati non c'è un altro
+			// schermo.
+			const double fuori_x = sx ? box.x - 4 : box.x + box.width + 4;
+			const double fuori_y = alto ? box.y - 4 : box.y + box.height + 4;
+			const bool vero =
+				wlr_output_layout_output_at(m->schermi, fuori_x, cy) == NULL &&
+				wlr_output_layout_output_at(m->schermi, cx, fuori_y) == NULL;
+			bool intero = false;
+			struct finestra *f;
+			wl_list_for_each(f, &m->finestre_elenco, link) {
+				if (!f->schermo_intero || !finestra_visibile(f))
+					continue;
+				struct wlr_box fb;
+				finestra_box(f, &fb);
+				if (wlr_box_contains_point(&fb, cx, cy)) {
+					intero = true;
+					break;
+				}
+			}
+			if (vero && !intero)
+				quale = alto ? (sx ? "alto-sx" : "alto-dx")
+				             : (sx ? "basso-sx" : "basso-dx");
+		}
+	}
+
+	// Confronto per contenuto: due letterali uguali non hanno per forza lo
+	// stesso indirizzo.
+	if ((quale == NULL && m->angolo_ora == NULL)
+	    || (quale != NULL && m->angolo_ora != NULL && strcmp(quale, m->angolo_ora) == 0))
+		return;
+
+	// Cambiato angolo, o uscito: quello di prima si chiude.
+	if (m->angolo_detto && m->canale != NULL)
+		canale_annuncia(m->canale, "angolo", "evento angolo {\"quale\":\"via\"}");
+	m->angolo_detto = false;
+	m->angolo_ora = quale;
+	if (m->angolo_timer == NULL)
+		m->angolo_timer = wl_event_loop_add_timer(m->loop, angolo_scade, m);
+	if (m->angolo_timer == NULL)
+		return;
+	if (quale == NULL) {
+		wl_event_source_timer_update(m->angolo_timer, 0);
+		return;
+	}
+	snprintf(m->angolo_schermo, sizeof(m->angolo_schermo), "%s", out->name);
+	wl_event_source_timer_update(m->angolo_timer, ANGOLO_SOSTA_MS);
+}
+
 static void cursore_aggiorna(struct minerva *m, uint32_t tempo) {
 	bordo_alto_guarda(m);
+	angolo_guarda(m);
 	// ── «Qualcuno c'è» ───────────────────────────────────────────────
 	//
 	// Va detto PRIMA di ogni ritorno anticipato: durante una presa della
@@ -10613,6 +10718,8 @@ int main(int argc, char *argv[]) {
 		wl_list_remove(&m.inibitore_nuovo.link);
 	if (m.inattivo_timer != NULL)
 		wl_event_source_remove(m.inattivo_timer);
+	if (m.angolo_timer)
+		wl_event_source_remove(m.angolo_timer);
 	if (m.cartello_timer != NULL)
 		wl_event_source_remove(m.cartello_timer);
 	if (sig_chld != NULL)

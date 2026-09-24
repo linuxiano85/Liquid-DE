@@ -628,6 +628,13 @@ class WebSocketServer {
             // permette alla dock di legare una finestra aperta alla sua icona
             // invece di mostrare un quadrato con l'iniziale.
             'wmClass': app.wmClass,
+            // Per cercare un'app per quello che FA, non solo per nome: «browser»,
+            // «navigatore», «navigare il web». Sono le parole che il programma
+            // dichiara nel suo `.desktop`, nella lingua dell'utente.
+            'generico': app.generico,
+            'descrizione': app.descrizione,
+            'parole': app.parole,
+            'lanci': _appUsageTracker.lanci(app.id),
           }
       ];
 

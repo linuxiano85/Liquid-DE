@@ -245,6 +245,22 @@ ShellRoot {
         /// È la stessa ragione per cui il compositore risponde con
         /// `"inattivita": N` a `stato`: una cosa che non si può guardare da
         /// fuori è una cosa che nessuno saprà se ha smesso di funzionare.
+        /// Apre il menù delle app con un testo già scritto (vuoto: com'è),
+        /// o lo chiude se il testo è «chiudi». Risponde con quello che il
+        /// menù mostra: le prove leggono qui cosa ha trovato la ricerca.
+        function menu(testo: string): string {
+            var s = root.scrivaniaAttiva();
+            if (!s || !s.sottomarino)
+                return "nessun menù";
+            if (testo === "chiudi") {
+                s.sottomarino.chiudi();
+                return "chiuso";
+            }
+            s.sottomarino.apri(testo);
+            s.sottomarino.cerca = testo;
+            return s.sottomarino.riassunto();
+        }
+
         function dock(): string {
             // Il terzo pezzo dice PERCHÉ, e serve: «la dock non si nasconde»
             // ha due cause che da fuori si vedono identiche — il modo
@@ -475,11 +491,11 @@ ShellRoot {
 
     property var scrivanie: ({})
 
-    function iscriviScrivania(nome, barra, dock) {
+    function iscriviScrivania(nome, barra, dock, sottomarino) {
         if (!nome)
             return;
         var m = root.scrivanie;
-        m[nome] = { "barra": barra, "dock": dock };
+        m[nome] = { "barra": barra, "dock": dock, "sottomarino": sottomarino };
         root.scrivanie = m;
         root.scrivanieCambiate();
     }
@@ -517,6 +533,34 @@ ShellRoot {
     /// schermo — succede fra lo stacco di un monitor e l'attacco del
     /// successivo — non deve saltare fuori un errore, deve semplicemente non
     /// succedere niente.
+    /// Il menù delle app dello schermo attivo. Se per qualche ragione quello
+    /// schermo non ce l'ha, resta il pannello di prima.
+    function apriSottomarino() {
+        var s = root.scrivaniaAttiva();
+        if (s && s.sottomarino)
+            s.sottomarino.commuta();
+        else
+            root.pannello("apps");
+    }
+
+    /// Le azioni che il Sottomarino trova con la ricerca. Quelle che
+    /// chiudono la sessione passano dal pannello dell'energia, che chiede
+    /// conferma: la ricerca non deve poter spegnere il computer con un Invio.
+    function azioneDalMenu(id) {
+        switch (id) {
+        case "blocca":       root.run(["minerva-blocca"]); break;
+        case "notte":        Core.Ipc.setSetting("display.nightLight",
+                                                 !Core.Ipc.get("display.nightLight", false)); break;
+        case "dnd":          Core.Ipc.setSetting("notifications.doNotDisturb",
+                                                 !Core.Notifications.doNotDisturb); break;
+        case "impostazioni": root.openSettings(); break;
+        case "sospendi":
+        case "riavvia":
+        case "spegni":
+        case "esci":         root.apriPannello("power"); break;
+        }
+    }
+
     function pannello(nome) {
         var s = root.scrivaniaAttiva();
         if (s && s.barra)
@@ -672,8 +716,28 @@ ShellRoot {
                 }
             }
 
+            // ── Il menù delle app: emerge dall'angolo in basso a sinistra ──
+            Sottomarino {
+                id: sottomarino
+                screen: scrivania.modelData
+                // Sopra la dock quando è in basso e si vede: coprirla vorrebbe
+                // dire nasconderle le app sotto il menù che le cerca.
+                margineBasso: dock.screenRect.height > 0 && !root.dockInAlto && scrivania.modelData
+                              ? Math.max(0, scrivania.modelData.height - dock.screenRect.y) + Theme.Effects.space2
+                              : 0
+                onAzione: function(id) { root.azioneDalMenu(id); }
+            }
+            Connections {
+                target: Core.Compositore
+                function onAngolo(quale, schermo) {
+                    if (quale === "basso-sx" && scrivania.modelData
+                        && schermo === scrivania.modelData.name)
+                        sottomarino.apri("");
+                }
+            }
+
             Component.onCompleted: root.iscriviScrivania(
-                scrivania.modelData ? scrivania.modelData.name : "", spine, dock)
+                scrivania.modelData ? scrivania.modelData.name : "", spine, dock, sottomarino)
             Component.onDestruction: root.cancellaScrivania(
                 scrivania.modelData ? scrivania.modelData.name : "")
         }
@@ -1970,7 +2034,7 @@ ShellRoot {
 
     Core.Scorciatoia {
         name: "appmenu"
-        onPressed: root.pannello("apps")
+        onPressed: root.apriSottomarino()
     }
 
     Core.Scorciatoia {

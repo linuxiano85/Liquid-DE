@@ -153,7 +153,7 @@ Singleton {
                 // processo, e iscriversi a quelli che non servono vuol dire
                 // una shell che si sveglia a ogni finestra che si muove.
                 canale.write("ascolta scrivania scorciatoia coperchio "
-                             + "inattivo attivo schermi bordoalto risparmio\n");
+                             + "inattivo attivo schermi bordoalto risparmio angolo\n");
                 comp._inCorso.push("ascolta");
                 comp.chiedi("schermi");
                 // Com'è il risparmio adesso: l'annuncio arriva solo quando
@@ -420,6 +420,17 @@ Singleton {
         if (t.indexOf("evento risparmio ") === 0) {
             comp._risparmioDa(t.substring(17));
             comp.risparmioCambiato();
+            return;
+        }
+        if (t.indexOf("evento angolo ") === 0) {
+            var aq = "", as = "";
+            try {
+                var av = JSON.parse(t.substring(14));
+                aq = av && av.quale ? String(av.quale) : "";
+                as = av && av.schermo ? String(av.schermo) : "";
+            } catch (e6) {}
+            if (aq !== "")
+                comp.angolo(aq, as);
             return;
         }
         if (t.indexOf("evento bordoalto ") === 0) {
@@ -2174,6 +2185,12 @@ Singleton {
     /// tenere una sua superficie montata sopra il film per accorgersene —
     /// e senza superfici sopra, la finestra va allo schermo direttamente.
     signal bordoAlto(string schermo)
+
+    /// Il puntatore ha sostato in un angolo dello schermo («alto-sx»,
+    /// «alto-dx», «basso-sx», «basso-dx»), o se n'è andato («via»). Lo dice
+    /// il compositore dopo una sosta di 160 ms, e mai sopra una finestra a
+    /// schermo intero o mentre si trascina: cosa si apre lo decide la shell.
+    signal angolo(string quale, string schermo)
 
     property int _scosse: 0
 

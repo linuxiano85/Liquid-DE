@@ -27,6 +27,17 @@ class DesktopApp {
   /// si chiude senza che nessuno veda niente.
   final bool needsTerminal;
 
+  /// Che cos'è, in una parola: «Browser web», «Editor di testo». È il
+  /// `GenericName` del `.desktop`, nella lingua dell'utente quando c'è.
+  final String generico;
+
+  /// Una frase su cosa fa (`Comment`).
+  final String descrizione;
+
+  /// Le parole con cui lo si cerca (`Keywords`), in tutte e due le lingue:
+  /// chi scrive «navigatore» e chi scrive «browser» cercano la stessa cosa.
+  final List<String> parole;
+
   DesktopApp({
     required this.id,
     required this.name,
@@ -37,6 +48,9 @@ class DesktopApp {
     this.mimeTypes = const [],
     this.needsTerminal = false,
     this.iconPath,
+    this.generico = '',
+    this.descrizione = '',
+    this.parole = const [],
   });
 
   Map<String, dynamic> toJson() => {
@@ -49,6 +63,9 @@ class DesktopApp {
         'wmClass': wmClass,
         'mimeTypes': mimeTypes,
         'needsTerminal': needsTerminal,
+        'generico': generico,
+        'descrizione': descrizione,
+        'parole': parole,
       };
 
   @override
@@ -236,6 +253,31 @@ class AppScanner {
     if (_impronta.isEmpty) _impronta = await _improntaDelle();
   }
 
+  /// La lingua di chi usa il computer, da `LC_MESSAGES` o `LANG`: «it_IT».
+  static final String _lingua = (() {
+    final env = Platform.environment;
+    final v = env['LC_ALL'] ?? env['LC_MESSAGES'] ?? env['LANG'] ?? '';
+    return v.split('.').first.split('@').first;
+  })();
+
+  /// Se la riga è una chiave che la ricerca vuole localizzata, dice quale e
+  /// quanto la versione è vicina alla lingua dell'utente: 0 la versione senza
+  /// lingua, 1 la lingua («it»), 2 lingua e paese («it_IT»). Le versioni in
+  /// altre lingue restituiscono null e si ignorano.
+  static (String, int)? _chiaveLocalizzata(String riga) {
+    for (final k in const ['GenericName', 'Comment', 'Keywords']) {
+      if (riga.startsWith('$k=')) return (k, 0);
+      if (!riga.startsWith('$k[')) continue;
+      final fine = riga.indexOf(']=');
+      if (fine < 0) return null;
+      final lingua = riga.substring(k.length + 1, fine);
+      if (lingua == _lingua) return (k, 2);
+      if (lingua == _lingua.split('_').first) return (k, 1);
+      return null;
+    }
+    return null;
+  }
+
   Future<DesktopApp?> _parseDesktopFile(File file) async {
     try {
       final lines = await file.readAsLines();
@@ -248,6 +290,9 @@ class AppScanner {
       List<String> mimeTypes = [];
       bool needsTerminal = false;
       bool noDisplay = false;
+      // Le chiavi che la ricerca per funzione vuole nella lingua di chi usa
+      // il computer: `Chiave[it_IT]` batte `Chiave[it]`, che batte `Chiave`.
+      final localizzate = <String, Map<int, String>>{};
       bool isDesktopEntry = false;
 
       for (var line in lines) {
@@ -260,6 +305,14 @@ class AppScanner {
         }
 
         if (!isDesktopEntry) continue;
+
+        final chiave = _chiaveLocalizzata(line);
+        if (chiave != null) {
+          localizzate
+              .putIfAbsent(chiave.$1, () => {})
+              [chiave.$2] = line.substring(line.indexOf('=') + 1).trim();
+          continue;
+        }
 
         if (line.startsWith('Name=')) {
           // Utilizza il nome principale dell'applicazione (non localizzato per ora)
@@ -293,11 +346,24 @@ class AppScanner {
 
       final id = file.path.split('/').last;
 
+      String migliore(String k) {
+        final v = localizzate[k];
+        if (v == null || v.isEmpty) return '';
+        return v[v.keys.reduce((a, b) => a > b ? a : b)] ?? '';
+      }
+      final parole = <String>{};
+      for (final valore in (localizzate['Keywords'] ?? const <int, String>{}).values) {
+        parole.addAll(valore.split(';').map((w) => w.trim()).where((w) => w.isNotEmpty));
+      }
+
       return DesktopApp(
         id: id,
         name: name,
         exec: exec,
         icon: icon ?? 'application-x-executable',
+        generico: migliore('GenericName'),
+        descrizione: migliore('Comment'),
+        parole: parole.toList(),
         categories: categories,
         wmClass: wmClass,
         mimeTypes: mimeTypes,

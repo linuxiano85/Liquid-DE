@@ -543,6 +543,10 @@ class SettingsApi {
           // `startCategory`: con quale si apre.
           'wheelCategories': true,
           'hoverCategories': true,
+          // Il Sottomarino (`menu/Sottomarino.qml`): la vista con cui si apre
+          // («categorie», «attivita», «frequenti», «az») e il verso.
+          'vista': 'categorie',
+          'verticale': false,
           'hiddenCategories': <String>[],
           'startCategory': 'favorites',
           // Il nostro, dal 15 settembre 2026. Chi ne vuole un altro lo sceglie
