@@ -795,6 +795,10 @@ struct appoggiata {
 	/// Il fondo sfocato di questo pannello. Vedi `appoggiata_sfocatura`.
 	struct wlr_scene_rect *sfocatura;
 
+	/// Se all'ultima commit era mostrata: quando cambia, cambia anche cosa c'è
+	/// sotto il puntatore (vedi `puntatore_ricalcola`).
+	bool mappata;
+
 	struct wl_listener commit;
 	struct wl_listener distrutta;
 };
@@ -1978,6 +1982,24 @@ static void appoggiata_sfocatura(struct appoggiata *a) {
 	wlr_scene_node_set_enabled(&a->sfocatura->node, true);
 }
 
+static void cursore_aggiorna(struct minerva *m, uint32_t tempo);
+
+// ── Cosa c'è sotto il puntatore, quando non si muove ──────────────────────
+//
+// Il compositore decide chi riceve il puntatore solo quando il puntatore si
+// MUOVE. Ma una superficie può comparire o sparire sotto un puntatore fermo:
+// il Centro di controllo aperto dalla barra, un menù che si chiude. Giacomo,
+// 24 settembre 2026: «se clicco tenendo il mouse fermo e poi rifaccio clic
+// non succede nulla; devo muovere leggermente il mouse». Il clic andava alla
+// superficie di prima, o a nessuna. Qui si rifà la scelta come se il
+// puntatore si fosse mosso di zero.
+static void puntatore_ricalcola(struct minerva *m) {
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	cursore_aggiorna(m, (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000));
+	wlr_seat_pointer_notify_frame(m->seat);
+}
+
 static void appoggiata_commit(struct wl_listener *l, void *dati) {
 	(void)dati;
 	struct appoggiata *a = wl_container_of(l, a, commit);
@@ -2028,6 +2050,12 @@ static void appoggiata_commit(struct wl_listener *l, void *dati) {
 	// come le si è detto fin dall'inizio — ma è proprio il momento in cui
 	// deve prendersi la tastiera.
 	appoggiata_aggiorna_fuoco(a->m);
+
+	// Comparsa o sparita: sotto il puntatore fermo c'è un'altra superficie.
+	if (a->ls->surface->mapped != a->mappata) {
+		a->mappata = a->ls->surface->mapped;
+		puntatore_ricalcola(a->m);
+	}
 }
 
 static void appoggiata_distrutta(struct wl_listener *l, void *dati) {
@@ -2045,6 +2073,8 @@ static void appoggiata_distrutta(struct wl_listener *l, void *dati) {
 	// E la tastiera torna a chi lavorava: chiusa la finestra della password,
 	// si riprende a scrivere dove si era.
 	appoggiata_aggiorna_fuoco(m);
+	// E il puntatore a chi c'è sotto adesso, anche se non si muove.
+	puntatore_ricalcola(m);
 }
 
 static void appoggiata_nuova(struct wl_listener *l, void *dati) {
