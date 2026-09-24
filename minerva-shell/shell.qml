@@ -276,7 +276,8 @@ ShellRoot {
             return s.cassetto.riassunto();
         }
 
-        /// L'Isola: «apri», «chiudi», o niente. Risponde con quello che mostra.
+        /// L'Isola: «apri», «chiudi», «mese», «giorno», «avanti», «indietro»,
+        /// o niente. Risponde con quello che mostra.
         function isola(testo: string): string {
             var s = root.scrivaniaAttiva();
             if (!s || !s.isola)
@@ -285,6 +286,10 @@ ShellRoot {
                 s.isola.apri();
             else if (testo === "chiudi")
                 s.isola.chiudi();
+            else if (testo === "mese" || testo === "giorno")
+                s.isola.giraSu(testo);
+            else if (testo === "avanti" || testo === "indietro")
+                s.isola.sfoglia(testo === "avanti" ? 1 : -1);
             return s.isola.riassunto();
         }
 
@@ -815,7 +820,6 @@ ShellRoot {
                 dalBasso: root.barraInBasso
                 margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
                 margineBasso: root.barraInBasso ? Theme.Effects.barHeight : 0
-                onCalendarioChiesto: spine.toggle("calendar")
                 onImpostazioniChieste: root.openSettings("dataora")
             }
 

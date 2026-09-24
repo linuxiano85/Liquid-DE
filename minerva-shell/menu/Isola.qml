@@ -30,8 +30,21 @@ PanelWindow {
     /// Il rettangolo della capsula sulla barra, in coordinate dello schermo.
     property rect origine: Qt.rect(isola.width / 2 - 80, 6, 160, 32)
 
-    /// Il calendario: lo apre la barra, che ha il pannello.
-    signal calendarioChiesto()
+    /// Che faccia mostra la carta: «giorno» (il tempo della giornata) o
+    /// «mese» (il calendario). Si riapre sempre sulla giornata.
+    property string faccia: "giorno"
+    /// Il primo del mese mostrato sulla faccia «mese».
+    property date mese: new Date()
+
+    function sfoglia(quanti) {
+        var d = new Date(isola.mese.getFullYear(), isola.mese.getMonth() + quanti, 1);
+        isola.mese = d;
+    }
+    function giraSu(faccia) {
+        isola.faccia = faccia;
+        if (faccia === "mese")
+            isola.mese = new Date(isola.oggi.getFullYear(), isola.oggi.getMonth(), 1);
+    }
     /// Scegliere una località: lo fanno le Impostazioni.
     signal impostazioniChieste()
 
@@ -43,6 +56,7 @@ PanelWindow {
     function apri() {
         if (isola.aperto) return;
         isola.oggi = new Date();
+        isola.faccia = "giorno";
         isola.mostrato = true;
         isola.aperto = true;
         spegni.stop();
@@ -58,7 +72,8 @@ PanelWindow {
     /// Per le prove: che cosa si vede.
     function riassunto() {
         var o = isola.origine;
-        var r = ["aperta: " + isola.aperto,
+        var r = ["aperta: " + isola.aperto + " · faccia: " + isola.faccia
+                 + (isola.faccia === "mese" ? " (" + isola.mese.toLocaleDateString(isola._locale, "MMMM yyyy") + ")" : ""),
                  "capsula: " + Math.round(o.x) + "," + Math.round(o.y) + " " + Math.round(o.width) + "x" + Math.round(o.height)];
         if (Core.Meteo.pronto) {
             var a = Core.Meteo.adesso;
@@ -99,6 +114,8 @@ PanelWindow {
         anchors.fill: parent
         focus: isola.aperto
         Keys.onEscapePressed: isola.chiudi()
+        Keys.onLeftPressed: if (isola.faccia === "mese") isola.sfoglia(-1)
+        Keys.onRightPressed: if (isola.faccia === "mese") isola.sfoglia(1)
     }
 
     // ── La carta ────────────────────────────────────────────────────────
@@ -186,14 +203,14 @@ PanelWindow {
                 Capsula {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    testo: "Calendario"
-                    onScelta: { isola.chiudi(); isola.calendarioChiesto(); }
+                    testo: isola.faccia === "giorno" ? "Calendario" : "Giornata"
+                    onScelta: isola.giraSu(isola.faccia === "giorno" ? "mese" : "giorno")
                 }
             }
 
             // ── Senza località: una domanda, non un buco ──
             Column {
-                visible: !Core.Meteo.attivo
+                visible: !Core.Meteo.attivo && isola.faccia === "giorno"
                 width: parent.width
                 spacing: Theme.Effects.space2
                 Text {
@@ -210,7 +227,7 @@ PanelWindow {
                 }
             }
             Text {
-                visible: Core.Meteo.attivo && !Core.Meteo.pronto
+                visible: Core.Meteo.attivo && !Core.Meteo.pronto && isola.faccia === "giorno"
                 text: "Il tempo sta arrivando…"
                 color: Theme.Colors.textMuted
                 font.family: Theme.Typography.fontDisplay
@@ -220,7 +237,7 @@ PanelWindow {
             // ── Adesso ──
             Item {
                 id: adesso
-                visible: Core.Meteo.pronto
+                visible: Core.Meteo.pronto && isola.faccia === "giorno"
                 width: parent.width
                 height: 76
                 readonly property var a: Core.Meteo.adesso || ({})
@@ -288,7 +305,7 @@ PanelWindow {
             // Una colonna per ora: l'ora, il simbolo, i gradi, e la pioggia
             // solo quando c'è — uno «0%» ripetuto dodici volte è rumore.
             Rectangle {
-                visible: Core.Meteo.pronto && Core.Meteo.ore.length > 0
+                visible: Core.Meteo.pronto && Core.Meteo.ore.length > 0 && isola.faccia === "giorno"
                 width: parent.width
                 height: 92
                 radius: Theme.Effects.radiusMD
@@ -344,7 +361,7 @@ PanelWindow {
 
             // ── L'alba e il tramonto ──
             Row {
-                visible: Core.Meteo.pronto && adesso.g.alba !== undefined && adesso.g.alba !== null
+                visible: Core.Meteo.pronto && adesso.g.alba !== undefined && adesso.g.alba !== null && isola.faccia === "giorno"
                 spacing: Theme.Effects.space5
                 Row {
                     spacing: Theme.Effects.space2
@@ -371,7 +388,7 @@ PanelWindow {
             // ── I giorni che vengono ──
             Row {
                 id: giorni
-                visible: Core.Meteo.pronto && Core.Meteo.giorni.length > 1
+                visible: Core.Meteo.pronto && Core.Meteo.giorni.length > 1 && isola.faccia === "giorno"
                 width: parent.width
                 readonly property var prossimi: Core.Meteo.giorni.slice(1, 7)
                 Repeater {
@@ -413,6 +430,149 @@ PanelWindow {
                     }
                 }
             }
+
+            // ── Il mese ──
+            //
+            // Un mese alla volta, la settimana da lunedì. Niente appuntamenti:
+            // non c'è un'agenda da cui prenderli, e un calendario che finge
+            // di averla è peggio di uno che non ci prova. C'è invece il tempo:
+            // sui giorni che hanno una previsione, sotto il numero, il suo
+            // simbolo — «che tempo fa sabato?» è la domanda che si fa
+            // guardando il calendario.
+            Column {
+                id: calendario
+                visible: isola.faccia === "mese"
+                width: parent.width
+                spacing: Theme.Effects.space2
+
+                readonly property int anno: isola.mese.getFullYear()
+                readonly property int numero: isola.mese.getMonth()
+                readonly property int vuote: (new Date(anno, numero, 1).getDay() + 6) % 7
+                readonly property int quanti: new Date(anno, numero + 1, 0).getDate()
+                readonly property bool questo: anno === isola.oggi.getFullYear()
+                                               && numero === isola.oggi.getMonth()
+                /// «2026-09-26» → il giorno di previsione.
+                readonly property var previsti: {
+                    var m = {};
+                    var g = Core.Meteo.giorni || [];
+                    for (var i = 0; i < g.length; i++)
+                        m[g[i].data] = g[i];
+                    return m;
+                }
+                function chiave(giorno) {
+                    function due(n) { return n < 10 ? "0" + n : "" + n; }
+                    return calendario.anno + "-" + due(calendario.numero + 1) + "-" + due(giorno);
+                }
+
+                Item {
+                    width: parent.width
+                    height: 32
+                    Freccia {
+                        id: prima
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        verso: -1
+                        onScelta: isola.sfoglia(-1)
+                    }
+                    Text {
+                        anchors.left: prima.right
+                        anchors.leftMargin: Theme.Effects.space2
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 180
+                        horizontalAlignment: Text.AlignHCenter
+                        text: {
+                            var s = isola.mese.toLocaleDateString(isola._locale, "MMMM yyyy");
+                            return s.charAt(0).toUpperCase() + s.slice(1);
+                        }
+                        color: Theme.Colors.text
+                        font.family: Theme.Typography.fontDisplay
+                        font.pixelSize: Theme.Typography.sizeMD
+                        font.weight: Theme.Typography.weightMedium
+                    }
+                    Freccia {
+                        anchors.left: prima.right
+                        anchors.leftMargin: Theme.Effects.space2 * 2 + 180
+                        anchors.verticalCenter: parent.verticalCenter
+                        verso: 1
+                        onScelta: isola.sfoglia(1)
+                    }
+                    Capsula {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: !calendario.questo
+                        testo: "Torna a oggi"
+                        onScelta: isola.giraSu("mese")
+                    }
+                }
+
+                Row {
+                    Repeater {
+                        model: ["L", "M", "M", "G", "V", "S", "D"]
+                        delegate: Text {
+                            id: sett
+                            required property string modelData
+                            required property int index
+                            width: calendario.width / 7
+                            horizontalAlignment: Text.AlignHCenter
+                            text: sett.modelData
+                            color: sett.index >= 5 ? Theme.Colors.accent : Theme.Colors.textFaint
+                            font.family: Theme.Typography.fontDisplay
+                            font.pixelSize: Theme.Typography.sizeXS
+                            font.weight: Theme.Typography.weightMedium
+                        }
+                    }
+                }
+
+                Grid {
+                    columns: 7
+                    Repeater {
+                        // Sempre sei righe: un mese che ne vuole cinque non
+                        // deve far saltare l'altezza della carta sfogliando.
+                        model: 42
+                        delegate: Item {
+                            id: casella
+                            required property int index
+                            readonly property int giorno: casella.index - calendario.vuote + 1
+                            readonly property bool vero: casella.giorno >= 1 && casella.giorno <= calendario.quanti
+                            readonly property bool oggi: casella.vero && calendario.questo
+                                                        && casella.giorno === isola.oggi.getDate()
+                            readonly property var tempo: casella.vero ? calendario.previsti[calendario.chiave(casella.giorno)] : undefined
+                            width: calendario.width / 7
+                            height: 46
+
+                            Rectangle {
+                                anchors.centerIn: parent
+                                width: 44; height: 44
+                                radius: 22
+                                visible: casella.oggi
+                                color: Theme.Colors.accent
+                            }
+                            Column {
+                                anchors.centerIn: parent
+                                spacing: 1
+                                Text {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: casella.vero ? casella.giorno : ""
+                                    color: casella.oggi ? Theme.Colors.textOnAccent
+                                         : (casella.index % 7) >= 5 ? Theme.Colors.textMuted
+                                         : Theme.Colors.text
+                                    font.family: Theme.Typography.fontMono
+                                    font.pixelSize: Theme.Typography.sizeSM
+                                    font.weight: casella.oggi ? Theme.Typography.weightMedium
+                                                              : Theme.Typography.weightRegular
+                                }
+                                Ui.Icon {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    width: 15; height: 15
+                                    visible: casella.tempo !== undefined
+                                    name: casella.tempo ? Core.Meteo.icona(casella.tempo.codice, true) : "nuvole"
+                                    color: casella.oggi ? Theme.Colors.textOnAccent : Theme.Colors.textMuted
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -441,6 +601,32 @@ PanelWindow {
             preventStealing: true
             cursorShape: Qt.PointingHandCursor
             onClicked: cap.scelta()
+        }
+    }
+
+    // ── Una freccia per sfogliare ────────────────────────────────────────
+    component Freccia: Rectangle {
+        id: fr
+        property int verso: 1
+        signal scelta()
+        width: 32; height: 32; radius: 16
+        color: frMouse.containsMouse ? Theme.Colors.hover : "transparent"
+        Ui.Icon {
+            anchors.centerIn: parent
+            width: 22; height: 22
+            // `chevron` punta in giù: girato di un quarto a destra punta a
+            // sinistra. «prev» e «next» sono i tasti del lettore (|◀ ▶|).
+            name: "chevron"
+            rotation: fr.verso < 0 ? 90 : -90
+            color: Theme.Colors.text
+        }
+        MouseArea {
+            id: frMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            preventStealing: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: fr.scelta()
         }
     }
 }
