@@ -547,6 +547,12 @@ class SettingsApi {
           // («categorie», «attivita», «frequenti», «az») e il verso.
           'vista': 'categorie',
           'verticale': false,
+          // Le misure che si scelgono trascinando i bordi del menù: una per
+          // verso, perché un menù largo e basso e uno stretto e alto sono due
+          // scelte diverse.
+          'orizzontaleLarghezza': 960,
+          'orizzontaleAltezza': 430,
+          'verticaleLarghezza': 420,
           'hiddenCategories': <String>[],
           'startCategory': 'favorites',
           // Il nostro, dal 15 settembre 2026. Chi ne vuole un altro lo sceglie

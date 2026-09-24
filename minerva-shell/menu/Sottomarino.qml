@@ -44,6 +44,16 @@ PanelWindow {
     property string cerca: ""
     /// Quanto spazio lasciare in basso: la dock, finché c'è, non si copre.
     property real margineBasso: 0
+    /// E in alto: la barra, quando sta in alto, non si copre.
+    property real margineAlto: 0
+
+    /// Le misure scelte trascinando i bordi, una per verso.
+    property real largO: Number(Core.Ipc.get("launcher.orizzontaleLarghezza", 960))
+    property real altO: Number(Core.Ipc.get("launcher.orizzontaleAltezza", 430))
+    property real largV: Number(Core.Ipc.get("launcher.verticaleLarghezza", 420))
+    /// Vero mentre si trascina un bordo: lo scafo segue il puntatore esatto,
+    /// senza molla.
+    property bool ridimensionando: false
 
     /// Un'azione trovata con la ricerca: la esegue la shell.
     signal azione(string id)
@@ -410,23 +420,26 @@ PanelWindow {
         id: scafo
         readonly property int margine: Theme.Effects.space4
         x: margine
-        width: sub.verticale ? 420 : Math.min(sub.width - 2 * margine, 960)
-        height: sub.verticale ? sub.height - 2 * margine - sub.margineBasso
-                              : Math.min(430, sub.height - 2 * margine - sub.margineBasso)
-        y: sub.emerso ? (sub.verticale ? margine : sub.height - margine - sub.margineBasso - height)
+        readonly property real largMax: sub.width - 2 * margine
+        readonly property real altMax: sub.height - 2 * margine - sub.margineBasso - sub.margineAlto
+        width: Math.min(largMax, sub.verticale ? sub.largV : sub.largO)
+        height: sub.verticale ? altMax : Math.min(altMax, sub.altO)
+        y: sub.emerso ? (sub.verticale ? margine + sub.margineAlto : sub.height - margine - sub.margineBasso - height)
                       : sub.height + 30
         Behavior on y {
-            enabled: Theme.Motion.liquido
+            enabled: Theme.Motion.liquido && !sub.ridimensionando
             SpringAnimation { spring: Theme.Motion.molla * 0.55; damping: 0.42 }
         }
         Behavior on width {
-            enabled: Theme.Motion.liquido
+            enabled: Theme.Motion.liquido && !sub.ridimensionando
             SpringAnimation { spring: Theme.Motion.molla; damping: Theme.Motion.smorzamento }
         }
         Behavior on height {
-            enabled: Theme.Motion.liquido
+            enabled: Theme.Motion.liquido && !sub.ridimensionando
             SpringAnimation { spring: Theme.Motion.molla; damping: Theme.Motion.smorzamento }
         }
+        // Anche la y: in orizzontale lo scafo è appoggiato in basso, e
+        // allungandolo verso l'alto la sua cima deve seguire il dito.
         radius: Theme.Effects.radiusLG
         color: Theme.Colors.panel
         border.width: Theme.Effects.hairline
@@ -434,6 +447,15 @@ PanelWindow {
 
         // I clic dentro lo scafo non chiudono.
         MouseArea { anchors.fill: parent; onClicked: {} }
+
+        // ── Le maniglie: si ridimensiona trascinando i bordi ─────────────
+        //
+        // Il bordo destro cambia la larghezza; in orizzontale il bordo alto
+        // cambia l'altezza (lo scafo è appoggiato in basso), e l'angolo in
+        // alto a destra tutte e due. Le misure si ricordano, una per verso.
+        Maniglia { menu: sub; corpo: scafo; lato: "destra";  anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 12 }
+        Maniglia { menu: sub; corpo: scafo; lato: "alto";    visible: !sub.verticale; anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; height: 12 }
+        Maniglia { menu: sub; corpo: scafo; lato: "angolo";  visible: !sub.verticale; anchors.top: parent.top; anchors.right: parent.right; width: 22; height: 22 }
 
         Item {
             id: dentro
@@ -463,12 +485,52 @@ PanelWindow {
                     name: "search"
                     color: Theme.Colors.textFaint
                 }
+                // Il verso sta qui, tondo, e non nella riga delle viste: nel
+                // menù verticale le quattro viste e il pulsante non ci
+                // stavano su una riga, e lui finiva sopra le categorie.
+                Rectangle {
+                    id: verso
+                    anchors.right: parent.right
+                    anchors.rightMargin: 5
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 34; height: 34
+                    radius: height / 2
+                    color: versoMouse.containsMouse ? Theme.Colors.hover : "transparent"
+                    Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
+                    Text {
+                        anchors.centerIn: parent
+                        text: "⇆"
+                        rotation: sub.verticale ? 90 : 0
+                        Behavior on rotation {
+                            enabled: Theme.Motion.liquido
+                            SpringAnimation { spring: Theme.Motion.molla; damping: Theme.Motion.smorzamento }
+                        }
+                        color: Theme.Colors.textMuted
+                        font.family: Theme.Typography.fontDisplay
+                        font.pixelSize: Theme.Typography.sizeMD
+                    }
+                    MouseArea {
+                        id: versoMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            sub.verticale = !sub.verticale;
+                            Core.Ipc.setSetting("launcher.verticale", sub.verticale);
+                        }
+                    }
+                    Ui.ToolTipHint {
+                        text: sub.verticale ? "Orizzontale" : "Verticale"
+                        shown: versoMouse.containsMouse
+                    }
+                }
+
                 TextInput {
                     id: campo
                     anchors.left: lente.right
                     anchors.leftMargin: Theme.Effects.space3
-                    anchors.right: parent.right
-                    anchors.rightMargin: Theme.Effects.space4
+                    anchors.right: verso.left
+                    anchors.rightMargin: Theme.Effects.space2
                     anchors.verticalCenter: parent.verticalCenter
                     color: Theme.Colors.text
                     font.family: Theme.Typography.fontDisplay
@@ -522,8 +584,8 @@ PanelWindow {
                             id: tab
                             required property var modelData
                             readonly property bool attiva: sub.vista === tab.modelData.id && sub.cerca === ""
-                            onAttivaChanged: if (attiva) gocciaViste.attiva = tab
-                            Component.onCompleted: if (attiva) gocciaViste.attiva = tab
+                            onAttivaChanged: if (tab.attiva) gocciaViste.attiva = tab
+                            Component.onCompleted: if (tab.attiva) gocciaViste.attiva = tab
                             width: tabTesto.implicitWidth + Theme.Effects.space5
                             height: 30
                             Text {
@@ -548,35 +610,6 @@ PanelWindow {
                     }
                 }
 
-                Rectangle {
-                    id: verso
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: versoTesto.implicitWidth + Theme.Effects.space5
-                    height: 30
-                    radius: height / 2
-                    color: versoMouse.containsMouse ? Theme.Colors.hover : "transparent"
-                    border.width: 1
-                    border.color: Theme.Colors.edge
-                    Text {
-                        id: versoTesto
-                        anchors.centerIn: parent
-                        text: "⇆  " + (sub.verticale ? "Orizzontale" : "Verticale")
-                        color: Theme.Colors.textMuted
-                        font.family: Theme.Typography.fontDisplay
-                        font.pixelSize: Theme.Typography.sizeSM
-                    }
-                    MouseArea {
-                        id: versoMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            sub.verticale = !sub.verticale;
-                            Core.Ipc.setSetting("launcher.verticale", sub.verticale);
-                        }
-                    }
-                }
             }
 
             // Le categorie, solo nella loro vista.
@@ -702,6 +735,63 @@ PanelWindow {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // ── Una maniglia per ridimensionare ─────────────────────────────────
+    component Maniglia: MouseArea {
+        id: man
+        property string lato: "destra"
+        // Un componente in linea non vede gli id del file che lo contiene:
+        // il menù e lo scafo gli si passano.
+        property var menu: null
+        property Item corpo: null
+        property real _x0: 0
+        property real _y0: 0
+        property real _l0: 0
+        property real _a0: 0
+        hoverEnabled: true
+        preventStealing: true
+        cursorShape: man.lato === "destra" ? Qt.SizeHorCursor
+                   : man.lato === "alto" ? Qt.SizeVerCursor : Qt.SizeBDiagCursor
+
+        // Il segno che c'è: una lineetta tonda che compare sfiorando il bordo.
+        Rectangle {
+            visible: man.lato !== "angolo"
+            anchors.centerIn: parent
+            width: man.lato === "destra" ? 4 : 44
+            height: man.lato === "destra" ? 44 : 4
+            radius: 2
+            color: Theme.Colors.textMuted
+            opacity: man.containsMouse || man.pressed ? 0.6 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.Motion.quick } }
+        }
+
+        onPressed: function(ev) {
+            var p = man.mapToItem(null, ev.x, ev.y);
+            man._x0 = p.x; man._y0 = p.y;
+            man._l0 = man.corpo.width; man._a0 = man.corpo.height;
+            man.menu.ridimensionando = true;
+        }
+        onPositionChanged: function(ev) {
+            if (!man.pressed)
+                return;
+            var p = man.mapToItem(null, ev.x, ev.y);
+            if (man.lato !== "alto") {
+                var l = Math.max(380, Math.min(man.corpo.largMax, man._l0 + (p.x - man._x0)));
+                if (man.menu.verticale) man.menu.largV = l; else man.menu.largO = l;
+            }
+            if (man.lato !== "destra" && !man.menu.verticale)
+                man.menu.altO = Math.max(280, Math.min(man.corpo.altMax, man._a0 + (man._y0 - p.y)));
+        }
+        onReleased: {
+            man.menu.ridimensionando = false;
+            if (man.menu.verticale) {
+                Core.Ipc.setSetting("launcher.verticaleLarghezza", Math.round(man.menu.largV));
+            } else {
+                Core.Ipc.setSetting("launcher.orizzontaleLarghezza", Math.round(man.menu.largO));
+                Core.Ipc.setSetting("launcher.orizzontaleAltezza", Math.round(man.menu.altO));
             }
         }
     }

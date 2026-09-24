@@ -726,6 +726,7 @@ ShellRoot {
                 margineBasso: dock.screenRect.height > 0 && !root.dockInAlto && scrivania.modelData
                               ? Math.max(0, scrivania.modelData.height - dock.screenRect.y) + Theme.Effects.space2
                               : 0
+                margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
                 onAzione: function(id) { root.azioneDalMenu(id); }
             }
             Connections {
