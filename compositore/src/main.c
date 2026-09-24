@@ -1208,6 +1208,19 @@ static void fuoco_finestra(struct minerva *m, struct finestra *f) {
 	if (m->bloccato)
 		return;
 
+	// ── Già sua: non si rifà niente ─────────────────────────────────────
+	//
+	// Ogni clic su una finestra passa di qui, anche quando il fuoco ce l'ha
+	// già. Rifare tutto voleva dire riattivarla, ridisegnare la barra del
+	// titolo e la cornice e riannunciare «fuoco» alla shell a OGNI clic, e
+	// Giacomo vedeva il titolo del terminale diventare grigio per un istante e
+	// la finestra «perdere luce». Misurato il 24 settembre 2026 ascoltando il
+	// canale: dieci «fuoco» in undici secondi, sempre la stessa finestra.
+	if (f->scrivania == m->scrivania_attiva
+	    && m->seat->keyboard_state.focused_surface == finestra_superficie(f)
+	    && m->finestre_elenco.next == &f->link)
+		return;
+
 	// ── Se sta su un'altra scrivania, ci si va ───────────────────────────
 	//
 	// La dock elenca TUTTE le finestre, non solo quelle di qui: un clic su

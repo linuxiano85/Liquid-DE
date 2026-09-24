@@ -56,7 +56,12 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.namespace: "liquid-centro"
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: centro.aperto ? WlrKeyboardFocus.OnDemand
+    // La tastiera la prende SUBITO, come il Sottomarino. Con «al primo clic»
+    // (OnDemand) la finestra diventava attiva proprio sulla pressione, e Qt
+    // annullava quel clic: levette e pulsanti non rispondevano mai col
+    // touchpad vero (visto dalla sonda il 24/09: «premuto» e subito
+    // «annullato»). Le barre si salvavano solo perché proteggono la presa.
+    WlrLayershell.keyboardFocus: centro.aperto ? WlrKeyboardFocus.Exclusive
                                                : WlrKeyboardFocus.None
 
     Timer { id: spegni; interval: Theme.Motion.liquido ? 650 : 0; onTriggered: if (!centro.aperto) centro.mostrato = false }
@@ -325,6 +330,7 @@ PanelWindow {
         MouseArea {
             id: levMouse
             anchors.fill: parent
+            preventStealing: true
             cursorShape: Qt.PointingHandCursor
             onClicked: lev.scelto()
         }
@@ -340,6 +346,20 @@ PanelWindow {
         /// che il sistema ha già applicato: un volume che salta indietro
         /// sotto il dito è peggio di uno che arriva un attimo dopo.
         property int _dito: -1
+        /// Il valore da mandare al sistema: uno per volta, al passo del timer.
+        /// Mandarne uno a ogni pixel di trascinamento accodava comandi, e il
+        /// volume arrivava in ritardo e a scatti.
+        property int _daMandare: -1
+        Timer {
+            id: manda
+            interval: 40
+            repeat: true
+            running: liq._daMandare >= 0
+            onTriggered: {
+                if (liq._daMandare >= 0) liq.cambiato(liq._daMandare);
+                liq._daMandare = -1;
+            }
+        }
         readonly property int mostrato: liq._dito >= 0 ? liq._dito : Math.max(0, liq.valore)
         width: parent ? parent.width : 300
         height: 40
@@ -385,9 +405,14 @@ PanelWindow {
             onPositionChanged: function(ev) {
                 if (!pressed) return;
                 liq._dito = _da(ev);
-                liq.cambiato(liq._dito);
+                liq._daMandare = liq._dito;
             }
-            onReleased: liq._dito = -1
+            onReleased: {
+                // L'ultimo valore parte subito, non al prossimo giro del timer.
+                if (liq._dito >= 0) liq.cambiato(liq._dito);
+                liq._daMandare = -1;
+                liq._dito = -1;
+            }
             onWheel: function(ev) {
                 liq.cambiato(Math.max(0, Math.min(100, liq.valore + (ev.angleDelta.y > 0 ? 5 : -5))));
             }
@@ -447,6 +472,7 @@ PanelWindow {
         MouseArea {
             id: enMouse
             anchors.fill: parent
+            preventStealing: true
             cursorShape: Qt.PointingHandCursor
             onPressed: if (en.modelData.tieni) riempi.restart()
             onReleased: {
