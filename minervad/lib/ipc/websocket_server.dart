@@ -635,6 +635,7 @@ class WebSocketServer {
             'descrizione': app.descrizione,
             'parole': app.parole,
             'lanci': _appUsageTracker.lanci(app.id),
+            'adesso': _appUsageTracker.adesso(app.id),
           }
       ];
 
@@ -1249,9 +1250,12 @@ class WebSocketServer {
               mode: ProcessStartMode.detached);
           if (id != null && id.isNotEmpty) {
             await _appUsageTracker.recordLaunch(id);
-            if (await _appScanner.novita.vista(id)) {
-              _aTutti({'event': 'all_apps', 'payload': _allAppsPayload});
-            }
+            await _appScanner.novita.vista(id);
+            // Sempre, non solo per le app «nuove»: i lanci e l'ora di ogni
+            // lancio sono quello che ordina «Frequenti» e «Adesso, di
+            // solito». Un lancio è un evento raro: il costo è niente, e
+            // senza il menù restava fermo ai conti dell'avvio.
+            _aTutti({'event': 'all_apps', 'payload': _allAppsPayload});
           }
         }
         break;
@@ -1272,6 +1276,7 @@ class WebSocketServer {
             await Process.start('sh', ['-c', comando],
                 mode: ProcessStartMode.detached);
             await _appUsageTracker.recordLaunch(app.id);
+            _aTutti({'event': 'all_apps', 'payload': _allAppsPayload});
           } else {
             print('[MINERVA][IPC][WARN] .desktop illeggibile o senza '
                 'comando: $path');

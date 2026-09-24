@@ -230,6 +230,15 @@ DEMONE_LOG="${TMPDIR:-/tmp}/liquid-de-demone-prova.log"
     export MINERVA_CONFIG_DIR="$CONF_PROVA"
     export MINERVA_COMPOSITORE=minerva-wayland
     export MINERVA_CANALE="$CANALE"
+    # E il display di DENTRO: il demone lancia i programmi scelti dal menù
+    # con il proprio ambiente. Senza questa riga le app aperte dal menù di
+    # prova comparivano sullo schermo della sessione vera — due terminali il
+    # 24 settembre 2026, trovati e chiusi guardando /proc/PID/environ.
+    export WAYLAND_DISPLAY="$DENTRO"
+    # I programmi X11 nell'XWayland di dentro, se c'è; altrimenti in nessuno
+    # (meglio un programma che non parte che uno sullo schermo vero).
+    X_DENTRO=$(sed -n 's/^minerva-wayland: XWayland su DISPLAY=//p' "$REGISTRO" | head -1)
+    if [ -n "$X_DENTRO" ]; then export DISPLAY="$X_DENTRO"; else unset DISPLAY; fi
     cd "$RADICE/minervad" || exit 1
     # `MINERVA_DA_SORGENTE=1` salta il compilato: serve quando si è appena
     # aggiunta una chiave ai valori di fabbrica e non si vuole ricompilare

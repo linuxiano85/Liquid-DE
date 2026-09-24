@@ -227,7 +227,10 @@ PanelWindow {
                 "descrizione": sub.norma(a.descrizione || ""),
                 "fa": fa ? fa.id : "",
                 "faNome": fa ? fa.it : "",
-                "lanci": a.lanci || 0
+                "lanci": a.lanci || 0,
+                // Quante volte intorno a quest'ora (il demone conta anche
+                // l'ora di ogni lancio): «adesso, di solito».
+                "adesso": a.adesso || 0
             });
         }
         out.sort(function(x, y) { return x.nome.localeCompare(y.nome); });
@@ -349,9 +352,19 @@ PanelWindow {
             return g;
         }
         if (sub.vista === "frequenti") {
-            var ord = tutte.slice().sort(function(x, y) { return y.lanci - x.lanci; });
-            g.push({ "titolo": "Le più usate", "tipo": "grandi", "voci": ord.slice(0, 6) });
-            g.push({ "titolo": "Poi", "tipo": "tessere", "voci": ord.slice(6, 30) });
+            // Prima quelle che a quest'ora si aprono di solito (almeno due
+            // volte intorno a quest'ora: una volta sola è un caso), poi le
+            // più usate in assoluto.
+            var ora = tutte.filter(function(v) { return v.adesso >= 2; })
+                           .sort(function(x, y) { return y.adesso - x.adesso; })
+                           .slice(0, 6);
+            var resto = tutte.filter(function(v) { return ora.indexOf(v) < 0; })
+                             .sort(function(x, y) { return y.lanci - x.lanci; });
+            if (ora.length > 0)
+                g.push({ "titolo": "Adesso, di solito", "tipo": "grandi", "voci": ora });
+            g.push({ "titolo": "Le più usate", "tipo": ora.length > 0 ? "tessere" : "grandi",
+                     "voci": resto.slice(0, 6) });
+            g.push({ "titolo": "Poi", "tipo": "tessere", "voci": resto.slice(6, 30) });
             return g;
         }
         if (sub.vista === "az") {
