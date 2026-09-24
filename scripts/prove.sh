@@ -931,10 +931,11 @@ else
     # sceglie il nostro compositore, e ripiega su Hyprland quando non parte.
     # Vista ROSSA col compositore di prima, che usciva sempre con 0.
     #
+    # `prova-super.py`: Super toccato, tenuto e Super+lettera non si confondono.
     # `prova-angoli.py`: una sosta in un angolo si annuncia una volta, un
     # passaggio svelto no, e i quattro angoli hanno i loro nomi. Vista ROSSA
     # col sensore degli angoli spento.
-    for PROVA_EFF in prova-blur-contenuto.py prova-danno-blur.py prova-scanout.py prova-risparmio.py prova-greeter-avvio.py prova-angoli.py; do
+    for PROVA_EFF in prova-blur-contenuto.py prova-danno-blur.py prova-scanout.py prova-risparmio.py prova-greeter-avvio.py prova-angoli.py prova-super.py; do
         PE="$ROOT/compositore/$PROVA_EFF"
         if [ ! -x "$PE" ]; then
             skip "$PROVA_EFF non trovata"

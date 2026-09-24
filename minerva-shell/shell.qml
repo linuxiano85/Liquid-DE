@@ -271,7 +271,7 @@ ShellRoot {
                 s.cassetto.chiudi();
             else if (testo === "apri")
                 s.cassetto.apri();
-            else
+            else if (testo !== "")
                 s.cassetto.cerca = testo;
             return s.cassetto.riassunto();
         }
@@ -291,6 +291,14 @@ ShellRoot {
             else if (testo === "avanti" || testo === "indietro")
                 s.isola.sfoglia(testo === "avanti" ? 1 : -1);
             return s.isola.riassunto();
+        }
+
+        /// I tasti sulla scrivania: «apri» o «chiudi», come Super tenuto e
+        /// lasciato. Risponde «aperti» o «chiusi».
+        function tasti(testo: string): string {
+            if (testo === "apri") root.mostraTasti(true);
+            else if (testo === "chiudi") root.mostraTasti(false);
+            return root.tastiAperti ? "aperti" : "chiusi";
         }
 
         function dock(): string {
@@ -576,6 +584,10 @@ ShellRoot {
             root.pannello("apps");
     }
 
+    /// Super tenuto premuto: i tasti sulla scrivania di ogni schermo.
+    property bool tastiAperti: false
+    function mostraTasti(si) { root.tastiAperti = si; }
+
     /// Il Cassetto degli appunti dello schermo attivo; senza, il pannello di
     /// prima.
     function apriCassetto() {
@@ -813,6 +825,16 @@ ShellRoot {
                 onAzione: function(id) { root.azioneDalCentro(id); }
             }
 
+            // ── I tasti sulla scrivania, finché Super è tenuto giù ────────
+            Tasti {
+                screen: scrivania.modelData
+                aperti: root.tastiAperti
+                margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
+                margineBasso: dock.screenRect.height > 0 && !root.dockInAlto && scrivania.modelData
+                              ? Math.max(0, scrivania.modelData.height - dock.screenRect.y)
+                              : (root.barraInBasso ? Theme.Effects.barHeight : 0)
+            }
+
             // ── L'Isola: la capsula in mezzo alla barra che cresce ────────
             Isola {
                 id: isolaGiorno
@@ -833,6 +855,50 @@ ShellRoot {
                               : 0
             }
 
+            // ── Uno alla volta ────────────────────────────────────────────
+            //
+            // Menù, Centro, Cassetto e Isola escono tutti dalla riva: aprirne
+            // uno chiude gli altri e il pannello della barra. Prima si
+            // impilavano — Isola, Centro e Cassetto aperti insieme, uno sopra
+            // l'altro, visto il 24 settembre 2026 provando i tasti.
+            function soloLui(chi) {
+                var tutti = [sottomarino, centroControllo, cassettoAppunti, isolaGiorno];
+                for (var i = 0; i < tutti.length; i++)
+                    if (tutti[i] !== chi && tutti[i].aperto)
+                        tutti[i].chiudi();
+                if (spine.activePanel !== "")
+                    spine.close();
+            }
+            Connections {
+                target: sottomarino
+                function onApertoChanged() { if (sottomarino.aperto) scrivania.soloLui(sottomarino); }
+            }
+            Connections {
+                target: centroControllo
+                function onApertoChanged() { if (centroControllo.aperto) scrivania.soloLui(centroControllo); }
+            }
+            Connections {
+                target: cassettoAppunti
+                function onApertoChanged() { if (cassettoAppunti.aperto) scrivania.soloLui(cassettoAppunti); }
+            }
+            Connections {
+                target: isolaGiorno
+                function onApertoChanged() { if (isolaGiorno.aperto) scrivania.soloLui(isolaGiorno); }
+            }
+            // E al contrario: un pannello della barra (le notifiche, Super+N)
+            // chiude quelli della riva.
+            Connections {
+                target: spine
+                function onActivePanelChanged() {
+                    if (spine.activePanel === "")
+                        return;
+                    var tutti = [sottomarino, centroControllo, cassettoAppunti, isolaGiorno];
+                    for (var i = 0; i < tutti.length; i++)
+                        if (tutti[i].aperto)
+                            tutti[i].chiudi();
+                }
+            }
+
             Connections {
                 target: Core.Compositore
                 function onBordo(quale, schermo) {
@@ -850,6 +916,10 @@ ShellRoot {
                         sottomarino.apri("");
                     else if (quale === "alto-dx")
                         centroControllo.apri();
+                    // In basso a destra la scrivania si libera, e ci si torna
+                    // rientrando nell'angolo: lo stesso di Super+D.
+                    else if (quale === "basso-dx")
+                        Core.Windows.mostraScrivania();
                 }
             }
 
@@ -1061,7 +1131,7 @@ ShellRoot {
               "icon": "close", "action": "hideControls" },
             { "separator": true },
             { "label": it ? "Chiudi la finestra" : "Close the window",
-              "icon": "close", "action": "close", "shortcut": "Super+C", "danger": true }
+              "icon": "close", "action": "close", "shortcut": "Super+Q", "danger": true }
         ];
     }
 
@@ -1493,12 +1563,12 @@ ShellRoot {
         var S = Core.Strings;
         var it = Core.Strings.lang === "it";
         var items = [
-            { "label": S.t("apps"),        "icon": "apps",      "action": "apps",     "shortcut": "Super+A" },
+            { "label": S.t("apps"),        "icon": "apps",      "action": "apps",     "shortcut": "Super" },
             { "label": S.t("newTerminal"), "icon": "terminal",  "action": "terminal", "shortcut": "Super+↵" },
             { "label": S.t("openFiles"),   "icon": "folder",    "action": "files",    "shortcut": "Super+E" },
             { "label": S.t("openBrowser"), "icon": "globe",     "action": "browser",  "shortcut": "Super+B" },
             { "separator": true },
-            { "label": S.t("shortcuts"),   "icon": "keyboard",  "action": "cheatsheet", "shortcut": "F1" },
+            { "label": S.t("shortcuts"),   "icon": "keyboard",  "action": "cheatsheet", "shortcut": "Super+K" },
             { "label": S.t("settings"),    "icon": "settings",  "action": "settings",   "shortcut": "Super+I" },
             { "label": it ? "Cambia sfondo…" : "Change wallpaper…",
               "icon": "image", "action": "wallpaper" }
@@ -2082,42 +2152,20 @@ ShellRoot {
         function onTouchpadOnChanged() { root.applicaTouchpad(); }
     }
 
-    // ── Scorciatoie globali, dichiarate in keybinds.conf ─────────────────
-
-    Core.Scorciatoia {
-        name: "launcher"
-        onPressed: {
-            if (paletteLoader.active && paletteLoader.item)
-                paletteLoader.item.close();
-            else
-                root.openPalette();
-        }
-    }
-
-    // ── Alt+Tab ──────────────────────────────────────────────────────────
-    //
-    // Tre scorciatoie per un gesto solo, e servono tutte e tre: Hyprland manda
-    // un evento alla PRESSIONE di una combinazione, non al rilascio di un
-    // modificatore. Il rilascio di Alt arriva come `bindr` su `Alt_L`, ed è
-    // quello che chiude la scelta — senza, il riquadro resterebbe aperto
-    // finché non si preme altro.
-    Core.Scorciatoia {
-        // Centra il BLOCCO VISIBILE, barra del titolo compresa. Il
-        // `centerwindow` del compositore centrava la finestra e basta, e il
-        // risultato stava ventun pixel più in basso — vedi `Windows.centra`.
-        name: "centrawindow"
-        onPressed: Core.Windows.centra("")
-    }
-
-    Core.Scorciatoia {
-        name: "maximize"
-        onPressed: Core.Windows.toggleMaximize()
-    }
+    // ── Scorciatoie globali, dichiarate in config/scorciatoie.minerva ─────
 
     Core.Scorciatoia {
         name: "showdesktop"
         onPressed: Core.Windows.mostraScrivania()
     }
+
+    // ── Alt+Tab ──────────────────────────────────────────────────────────
+    //
+    // Tre scorciatoie per un gesto solo, e servono tutte e tre: il
+    // compositore manda un evento alla PRESSIONE di una combinazione, non al
+    // rilascio di un modificatore. Il rilascio di Alt arriva con il flag
+    // `al-rilascio` su `Alt_L`, ed è quello che chiude la scelta — senza, il
+    // riquadro resterebbe aperto finché non si preme altro.
 
     Core.Scorciatoia {
         name: "switcher"
@@ -2160,6 +2208,14 @@ ShellRoot {
         onPressed: root.toggleCheatsheet()
     }
 
+    // Super tenuto premuto: i tasti compaiono sulla scrivania finché non lo
+    // lasci (il compositore annuncia «tasti», e «tasti-via» al rilascio).
+    Core.Scorciatoia {
+        name: "tasti"
+        onPressed: root.mostraTasti(true)
+        onReleased: root.mostraTasti(false)
+    }
+
     Core.Scorciatoia {
         name: "settings"
         onPressed: root.openSettings()
@@ -2196,26 +2252,6 @@ ShellRoot {
     Core.Scorciatoia {
         name: "schermata"
         onPressed: root.pannello("schermata")
-    }
-
-    Core.Scorciatoia {
-        name: "minimized"
-        onPressed: root.pannello("minimized")
-    }
-
-    Core.Scorciatoia {
-        name: "power"
-        onPressed: root.pannello("power")
-    }
-
-    // ── Comandi sulla finestra attiva, anche da tastiera ─────────────────
-    //
-    // I tre pulsanti nella barra hanno il loro equivalente qui: chi li spegne
-    // dalle Impostazioni non perde le funzioni, solo i pulsanti.
-
-    Core.Scorciatoia {
-        name: "minimizewindow"
-        onPressed: Core.Windows.minimize()
     }
 
     // I tasti della luminosità passano di qui invece di chiamare

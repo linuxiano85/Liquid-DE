@@ -182,17 +182,18 @@ QtObject {
     })
 
     // ── Categorie delle scorciatoie ──────────────────────────────────────
-    // Le categorie sono scritte in italiano dentro keybinds.conf; qui le
+    // Le categorie sono scritte in italiano dentro config/scorciatoie.minerva; qui le
     // traduciamo. Una categoria non elencata viene mostrata così com'è.
     readonly property var _categories: ({
         "en": {
-            "Aiuto": "Help",
-            "Applicazioni": "Applications",
-            "Finestre": "Windows",
+            "Super da solo": "Super alone",
+            "Aprire un posto": "Open a place",
+            "La finestra": "The window",
+            "Muoversi": "Moving around",
             "Mouse": "Mouse",
-            "Scrivanie": "Desktops",
             "Sistema": "System",
-            "Multimedia": "Media"
+            "Multimedia": "Media",
+            "Accessibilità": "Accessibility"
         }
     })
 

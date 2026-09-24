@@ -79,9 +79,9 @@ const _fuoriApposta = <String>[
 ];
 
 const _famiglieAmmesse = {
-  'Scrivanie | Vai alla scrivania 1…10',
-  'Scrivanie | Sposta la finestra sulla scrivania 1…10',
-  'Mouse | Rotella del mouse con SUPER: passa alla scrivania successiva o precedente',
+  'Muoversi | Vai alla stanza 1…10',
+  'Muoversi | Vai alla stanza 1…10 portando la finestra',
+  'Mouse | Super + rotellina: la stanza accanto',
   'Sistema | Accende o spegne il touchpad',
 };
 

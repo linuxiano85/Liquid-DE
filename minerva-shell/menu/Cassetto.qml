@@ -123,7 +123,8 @@ PanelWindow {
     function riassunto() {
         var r = [];
         r.push("aperto: " + cassetto.aperto);
-        r.push("voci: " + cassetto.filtrate.length + "/" + cassetto.voci.length);
+        r.push("voci: " + cassetto.filtrate.length + "/" + cassetto.voci.length
+               + (cassetto.cerca !== "" ? " · cerca «" + cassetto.cerca + "»" : ""));
         for (var i = 0; i < Math.min(8, cassetto.filtrate.length); i++) {
             var v = cassetto.filtrate[i];
             r.push((i === cassetto.scelta ? "> " : "  ") + v.id + " "

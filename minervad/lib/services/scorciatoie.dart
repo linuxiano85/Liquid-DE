@@ -32,7 +32,7 @@ class Scorciatoia {
   /// L'ULTIMO è il tasto, quelli prima sono modificatori.
   final String tasti;
 
-  /// `anche-bloccato` · `ripete` · `mouse` · `al-rilascio` · `tocco`
+  /// `anche-bloccato` · `ripete` · `mouse` · `al-rilascio` · `tocco` · `tieni`
   ///
   /// `tocco` vuol dire «premuto e lasciato **da solo**»: il gesto con cui
   /// Super apre il menù delle applicazioni. Tira dentro `al-rilascio` — un
@@ -301,7 +301,10 @@ class Scorciatoie {
     // tasto libero.
     if (_verboDi(s.azione) == 'porta-a-scrivania') {
       final arg = s.azione.substring(s.azione.indexOf(':') + 1).trim();
-      if (int.tryParse(arg) == null) return false;
+      // La stanza accanto, portando la finestra: il compositore sa contare.
+      if (int.tryParse(arg) == null && arg != 'prossima' && arg != 'precedente') {
+        return false;
+      }
     }
     return true;
   }
@@ -360,6 +363,9 @@ class Scorciatoie {
         // mezzo», e accende `rilascio` da sé se trova questo: due parole per
         // un gesto solo sarebbero due posti da tenere d'accordo.
         if (s.flag.contains('tocco')) 'tocco',
+        // Premuto e TENUTO da solo: il compositore annuncia l'azione dopo
+        // 400 ms e, al rilascio, la stessa col suffisso `-via`.
+        if (s.flag.contains('tieni')) 'tieni',
       ];
       final riga = 'scorciatoia ${mods.isEmpty ? '-' : mods} '
           '${_sciogli(s.tasto, anche)} '

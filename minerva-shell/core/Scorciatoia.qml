@@ -77,6 +77,9 @@ Item {
         function onScorciatoiaPremuta(nome) {
             if (nome === scorciatoia.name)
                 scorciatoia.pressed();
+            // Il rilascio di un «tieni» arriva col suffisso `-via`.
+            else if (nome === scorciatoia.name + "-via")
+                scorciatoia.released();
         }
     }
 }

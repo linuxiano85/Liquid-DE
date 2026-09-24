@@ -1,19 +1,40 @@
 # ═══════════════════════════════════════════════════════════════════════════
-#  Minerva Desktop — Scorciatoie da tastiera e da mouse
+#  Liquid DE — Scorciatoie da tastiera e da mouse
 # ═══════════════════════════════════════════════════════════════════════════
 #
 #  ⚠ QUESTO FILE È LA SORGENTE UNICA DELLE SCORCIATOIE.
 #
 #  Ogni bind è preceduto da una riga di annotazione nel formato:
 #
-#      #@ Categoria | Descrizione mostrata all'utente
+#      @ Categoria | Descrizione mostrata all'utente
 #
-#  Il demone `minervad` legge questo file e costruisce il pannello
-#  «Scorciatoie» (SUPER+K). Se aggiungi un bind, aggiungi anche la sua
-#  annotazione: comparirà automaticamente nel pannello, tradotta nella
-#  lingua della tastiera configurata.
+#  Il demone `minervad` legge questo file, lo manda al compositore e ne fa il
+#  pannello «Tutti i tasti» (Super+K). Il tasto SUPER è il tasto Windows.
 #
-#  Il tasto SUPER è il tasto Windows / Comando.
+#  ── Le cinque regole (la Riva studiata, 23 settembre 2026) ────────────────
+#
+#  Erano 95, con doppioni e lettere a caso: Q apriva il pannello di
+#  controllo, T il gestore attività. Adesso seguono cinque regole, e chi ne
+#  conosce una indovina le altre. Dove si poteva sono quelle di Windows e del
+#  Mac, così chi arriva non riparte da zero.
+#
+#   1. Super da solo è la porta: toccato apre il menù, tenuto premuto
+#      disegna i tasti sulla scrivania.
+#   2. Super + lettera apre un posto: A il Centro, N le notifiche, E i file,
+#      L il blocco, V gli appunti, C il Cassetto.
+#   3. Super + frecce muovono la finestra: metà sinistra o destra,
+#      ingrandita, com'era.
+#   4. Maiuscolo vuol dire «portala con te»: Super 3 va alla stanza 3,
+#      Super Maiusc 3 ci va con la finestra.
+#   5. Ogni angolo ha il suo tasto: in alto a sinistra il menù (Super), in
+#      alto a destra il Centro (Super A), in basso a destra la scrivania
+#      (Super D).
+#
+#  Tolte: Super Spazio, Super / e F1 (doppioni: F1 torna ai programmi),
+#  Super W, Super M, Super H, Super Maiusc C, Super Ctrl + frecce per
+#  ridimensionare (si trascina il bordo), Super S, Super Maiusc Q (uscire
+#  solo dal Centro, tenendo premuto), Super Maiusc E, Super Maiusc R,
+#  Super T (il gestore attività è Ctrl Maiusc Esc), Super Maiusc P.
 # ═══════════════════════════════════════════════════════════════════════════
 
 $mod = SUPER
@@ -23,240 +44,103 @@ $filemgr = minerva-files
 
 
 # ───────────────────────────────────────────────────────────────────────────
-#  AIUTO — da imparare per prime
+#  SUPER DA SOLO
 # ───────────────────────────────────────────────────────────────────────────
 
-@ Aiuto | Mostra o nasconde questo elenco di scorciatoie
-$mod K -> minerva: cheatsheet
-
-@ Aiuto | Mostra o nasconde questo elenco di scorciatoie
-$mod slash -> minerva: cheatsheet
-
-@ Aiuto | Mostra o nasconde questo elenco di scorciatoie
-F1 -> minerva: cheatsheet
-
-@ Aiuto | Apre le impostazioni di Minerva
-$mod I -> minerva: settings
-
-# ── Super+D è «mostra la scrivania», come su Windows ───────────────────────
-#
-# Qui c'era il pannello di controllo, e la scelta era arbitraria: D non vuol
-# dire «controllo» in nessuna lingua. Su Windows invece Super+D è nelle dita di
-# chiunque — è il gesto per «togliti di mezzo, fammi vedere il desktop».
-#
-# Minerva già rispondeva come Windows su Super+I (impostazioni), Super+E (file)
-# e Super+L (blocca). Con questa diventano quattro, e sono le quattro che si
-# provano per prime senza pensarci.
-#
-# Il pannello di controllo passa a Super+Q — e non resta comunque nascosto: si
-# apre anche cliccando la zona di stato nella barra, che è come lo trova chi
-# non usa la tastiera.
-@ Finestre | Mostra la scrivania: manda giù tutto, e premuto di nuovo lo rimette
-$mod D -> minerva: showdesktop
-
-@ Aiuto | Apre il pannello di controllo (audio, rete, batteria)
-$mod Q -> minerva: control
-
-@ Aiuto | Mostra le notifiche ricevute
-$mod N -> minerva: notifications
-
-@ Aiuto | Mostra le finestre ridotte a icona
-$mod W -> minerva: minimized
-
-# ── L'uscita di sicurezza ──────────────────────────────────────────────────
-#
-# Questa riga è `exec` e non `global`, ed è l'unico motivo per cui esiste.
-# Tutte le scorciatoie qui sopra passano da `quickshell:`, cioè dal programma
-# che disegna la scrivania: se quello muore o si impalla, muoiono insieme a
-# lui e non resta un tasto che faccia qualcosa. `exec` lo esegue il
-# compositore, che è ancora vivo.
-#
-# Non rilancia `qs` a mano — farebbe due barre sovrapposte se ce n'è già una.
-# Chiede al guardiano di riavviare la sua. Vedi `scripts/minerva-risveglia`.
-#
-# Le virgolette non sono decorazione: il percorso contiene uno spazio
-# («Minerva Shell») e senza diventerebbe due comandi inesistenti.
-@ Aiuto | Riavvia l'interfaccia di Minerva se è sparita o non risponde
-$mod CTRL R -> avvia: "$minerva/scripts/minerva-risveglia"
-
-
-# ───────────────────────────────────────────────────────────────────────────
-#  APPLICAZIONI
-# ───────────────────────────────────────────────────────────────────────────
-
-@ Applicazioni | Apre il menu delle applicazioni
-$mod A -> minerva: appmenu
-
-@ Applicazioni | Apre il menu delle applicazioni (tocca e lascia Super)
-# Qui c'era «SUPER SUPER», e non poteva funzionare in nessuno dei due
-# compositori. Misurato il 30 agosto 2026 chiamando xkb direttamente:
-# `xkb_keysym_from_name("SUPER")` risponde **NoSymbol** — «SUPER» non è il nome
-# di un tasto, è il nome di un modificatore. Il nostro compositore rifiutava la
-# riga; Hyprland la prendeva come «Super mentre tieni premuto Super», che si
-# avvera nell'istante stesso in cui premi Super — quindi il menù si apriva
-# anche mentre stavi facendo Super+E.
-#
-# Il nome vero del tasto è `Super_L`, e il gesto è un TOCCO: premuto e lasciato
-# **da solo**. Senza quel «da solo» sarebbe la stessa cosa di prima con un nome
-# giusto. Vedi il flag `tocco` in `minervad/lib/services/scorciatoie.dart`.
+# Il nome vero del tasto è `Super_L` («SUPER» è un modificatore, non un
+# tasto: xkb risponde NoSymbol), e il gesto è un TOCCO — premuto e lasciato
+# da solo — o non si distinguerebbe dalla fine di Super+E.
+@ Super da solo | Tocca Super: il menù, pronto a cercare. Scrivi e basta: «navigare il web» trova i browser
 Super_L [tocco] -> minerva: appmenu
 
-@ Applicazioni | Cerca tutto: applicazioni, calcoli, comandi
-$mod Space -> minerva: launcher
+# Tenuto da solo per 400 ms: i tasti compaiono sulla scrivania finché non
+# lo lasci. Lasciarlo dopo non apre il menù (vedi `tenuto` nel compositore).
+@ Super da solo | Tieni premuto Super: i tasti compaiono sulla scrivania
+Super_L [tieni] -> minerva: tasti
 
-@ Applicazioni | Apre il terminale
-$mod Return -> avvia: $terminal
 
-@ Applicazioni | Apre il gestore file di Minerva
-$mod E -> minerva: files
+# ───────────────────────────────────────────────────────────────────────────
+#  APRIRE UN POSTO
+# ───────────────────────────────────────────────────────────────────────────
 
-@ Applicazioni | Apre il gestore attività (processi e consumi)
-$mod T -> minerva: monitor
+@ Aprire un posto | Centro di controllo: Wi-Fi, luce notturna, volume, spegnimento
+$mod A -> minerva: control
 
-@ Applicazioni | Apre il browser web
-$mod B -> avvia: $browser
+@ Aprire un posto | Notifiche
+$mod N -> minerva: notifications
 
-@ Applicazioni | Mostra la cronologia degli appunti
+@ Aprire un posto | Il Cassetto: gli appunti, dal bordo destro
+$mod C -> minerva: clipboard
+
+@ Aprire un posto | Appunti
 $mod V -> minerva: clipboard
 
-@ Applicazioni | Apre l'Isola: la giornata, col tempo che fa ora per ora
+@ Aprire un posto | File
+$mod E -> minerva: files
+
+@ Aprire un posto | Il browser
+$mod B -> avvia: $browser
+
+@ Aprire un posto | Terminale
+$mod Return -> avvia: $terminal
+
+@ Aprire un posto | Impostazioni
+$mod I -> minerva: settings
+
+@ Aprire un posto | L'Isola: oggi, il tempo ora per ora, il calendario
 $mod O -> minerva: isola
 
+@ Aprire un posto | Blocca lo schermo
+$mod L -> avvia: "$minerva/scripts/minerva-blocca"
+
+@ Aprire un posto | Tutti i tasti
+$mod K -> minerva: cheatsheet
+
 
 # ───────────────────────────────────────────────────────────────────────────
-#  FINESTRE
+#  LA FINESTRA
 # ───────────────────────────────────────────────────────────────────────────
 
-@ Finestre | Chiude la finestra attiva
-$mod C -> chiudi-finestra
+@ La finestra | Metà sinistra dello schermo
+$mod left -> sposta-finestra: l
+@ La finestra | Metà destra dello schermo
+$mod right -> sposta-finestra: r
+@ La finestra | Ingrandisci
+$mod up -> sposta-finestra: u
+@ La finestra | Torna com'era; di nuovo, riduci
+$mod down -> sposta-finestra: d
 
-@ Finestre | Chiude la finestra attiva
+@ La finestra | Chiudi
+$mod Q -> chiudi-finestra
+@ La finestra | Chiudi
 ALT F4 -> chiudi-finestra
 
-@ Finestre | Riduce a icona la finestra attiva
-$mod H -> minerva: minimizewindow
-
-@ Finestre | Schermo intero
+@ La finestra | Schermo intero
 $mod F -> schermo-intero: 0
 
-# ── «Ingrandisci» è NOSTRO, non di Hyprland ────────────────────────────────
-#
-# Qui c'era `fullscreen, 1`, cioè il «massimizza» del compositore. Non è
-# quello di Windows: è uno STATO in cui la finestra viene disegnata sopra
-# tutte le altre e non si può più né spostare né ridimensionare.
-#
-# Il risultato è che una finestra ingrandita diventa un coperchio: tutto il
-# resto ci finisce sotto, e cliccarci sopra non serve a niente perché il clic
-# arriva al coperchio. Parole di Giacomo l'11 agosto 2026: «per avere il focus
-# delle app devo cliccare sulla dock, altrimenti sono finestre fantasma».
-#
-# Il nostro «ingrandisci» invece SPOSTA dei pixel: porta la finestra a
-# riempire lo spazio utile e la lascia una finestra normale, che qualunque
-# altra può coprire e che si può rimettere com'era. Vedi `maximize()` in
-# `minerva-shell/core/Windows.qml`.
-@ Finestre | Ingrandisce la finestra mantenendo la barra
-$mod M -> minerva: maximize
-
-# Niente `togglefloating` né modo affiancato: in Minerva le finestre sono
-# libere e basta. Vedi il perché in `minerva-shell/core/WindowRules.qml` — in
-# breve: una finestra poteva diventare libera in cinque modi che non si
-# conoscevano fra loro, e sullo schermo restava un miscuglio inspiegabile.
-
-@ Finestre | Centra la finestra libera
-$mod SHIFT C -> minerva: centrawindow
-
-# ── Alt+Tab ────────────────────────────────────────────────────────────────
-#
-# Il gesto più automatico che esista per chi arriva da Windows, e fino al 10
-# agosto 2026 in Minerva non faceva niente. Nemmeno un rumore.
-#
-# Servono tre righe per un gesto solo, ed è per come funzionano i bind:
-# Hyprland manda un evento alla PRESSIONE di una combinazione, mai al rilascio
-# di un modificatore. Il rilascio di Alt arriva solo dichiarandolo a parte con
-# `bindr` sul tasto `Alt_L`, ed è quello che chiude la scelta.
-#
-# E il rilascio va dichiarato SENZA modificatore. Scritto `bindr = ALT, Alt_L`
-# non scatta mai, ed è ovvio solo dopo averlo provato: nell'istante in cui si
-# rilascia Alt, il modificatore ALT non è più premuto, quindi la combinazione
-# «ALT + Alt_L» non è più vera e Hyprland non la riconosce. Misurato il 10
-# agosto 2026 — il riquadro restava aperto sullo schermo dopo aver mollato il
-# tasto, e la finestra scelta non prendeva il fuoco.
-#
-# Senza modificatore scatta a OGNI rilascio di Alt, anche quando il selettore
-# non è aperto: la shell se ne accorge da sé e non fa niente. È il prezzo
-# giusto — l'alternativa è un riquadro che resta lì.
-@ Finestre | Passa da una finestra all'altra
-ALT Tab -> minerva: switcher
-@ Finestre | Torna indietro nell'elenco delle finestre
-ALT SHIFT Tab -> minerva: switcherprev
-# Il rilascio di Alt conferma: è il seguito dell'Alt+Tab, non una scorciatoia
-# da imparare, e nel promemoria non ci va.
-#
-# `#@-` e non «niente annotazione»: quella precedente vale finché non ne arriva
-# un'altra, e senza questa riga il pannello F1 elencava `Alt_L` sotto «torna
-# indietro nell'elenco delle finestre». Diceva il falso.
-@-
-Alt_L [al-rilascio] -> minerva: switchercommit
-@ Finestre | Annulla il passaggio fra finestre
-ALT Escape -> minerva: switchercancel
-
-@ Finestre | Raggruppa le finestre a schede
-$mod G -> gruppo: commuta
-
-@ Finestre | Passa alla scheda successiva del gruppo
-$mod Tab -> gruppo: successiva
-
-# ── Spostare il fuoco (frecce) ──
-@ Finestre | Sposta il fuoco alla finestra a sinistra
-$mod left -> fuoco: l
-@ Finestre | Sposta il fuoco alla finestra a destra
-$mod right -> fuoco: r
-@ Finestre | Sposta il fuoco alla finestra in alto
-$mod up -> fuoco: u
-@ Finestre | Sposta il fuoco alla finestra in basso
-$mod down -> fuoco: d
-
-# ── Spostare la finestra (Maiusc + frecce) ──
-@ Finestre | Sposta la finestra a sinistra
-$mod SHIFT left -> sposta-finestra: l
-@ Finestre | Sposta la finestra a destra
-$mod SHIFT right -> sposta-finestra: r
-@ Finestre | Sposta la finestra in alto
-$mod SHIFT up -> sposta-finestra: u
-@ Finestre | Sposta la finestra in basso
-$mod SHIFT down -> sposta-finestra: d
-
-# ── Ridimensionare (Ctrl + frecce) ──
-@ Finestre | Restringe la finestra
-$mod CTRL left -> ridimensiona: -60 0
-@ Finestre | Allarga la finestra
-$mod CTRL right -> ridimensiona: 60 0
-@ Finestre | Accorcia la finestra
-$mod CTRL up -> ridimensiona: 0 -60
-@ Finestre | Allunga la finestra
-$mod CTRL down -> ridimensiona: 0  60
-
-
-# ───────────────────────────────────────────────────────────────────────────
-#  MOUSE — spostare e ridimensionare le finestre trascinandole
-# ───────────────────────────────────────────────────────────────────────────
-
-@ Mouse | Tieni premuto SUPER e trascina con il tasto sinistro per spostare una finestra
+@ Mouse | Super + trascina: sposta la finestra
 $mod mouse:272 [mouse] -> sposta-finestra: 
-
-@ Mouse | Tieni premuto SUPER e trascina con il tasto destro per ridimensionare
+@ Mouse | Super + trascina col tasto destro: ridimensiona
 $mod mouse:273 [mouse] -> ridimensiona-col-mouse
 
-@ Mouse | Rotella del mouse con SUPER: passa alla scrivania successiva o precedente
-$mod mouse_down -> scrivania: prossima
-$mod mouse_up -> scrivania: precedente
-
 
 # ───────────────────────────────────────────────────────────────────────────
-#  SCRIVANIE (workspace)
+#  MUOVERSI
 # ───────────────────────────────────────────────────────────────────────────
 
-@ Scrivanie | Vai alla scrivania 1…10
+@ Muoversi | Le ultime finestre usate
+ALT Tab -> minerva: switcher
+@ Muoversi | Indietro fra le ultime finestre
+ALT SHIFT Tab -> minerva: switcherprev
+@-
+Alt_L [al-rilascio] -> minerva: switchercommit
+@ Muoversi | Annulla il passaggio fra finestre
+ALT Escape -> minerva: switchercancel
+
+@ Muoversi | Scrivania libera, e ritorno
+$mod D -> minerva: showdesktop
+
+@ Muoversi | Vai alla stanza 1…10
 $mod 1 -> scrivania: 1
 $mod 2 -> scrivania: 2
 $mod 3 -> scrivania: 3
@@ -268,7 +152,7 @@ $mod 8 -> scrivania: 8
 $mod 9 -> scrivania: 9
 $mod 0 -> scrivania: 10
 
-@ Scrivanie | Sposta la finestra sulla scrivania 1…10
+@ Muoversi | Vai alla stanza 1…10 portando la finestra
 $mod SHIFT 1 -> porta-a-scrivania: 1
 $mod SHIFT 2 -> porta-a-scrivania: 2
 $mod SHIFT 3 -> porta-a-scrivania: 3
@@ -280,82 +164,41 @@ $mod SHIFT 8 -> porta-a-scrivania: 8
 $mod SHIFT 9 -> porta-a-scrivania: 9
 $mod SHIFT 0 -> porta-a-scrivania: 10
 
-# Erano su $mod CTRL, dove però stavano GIÀ «restringi» e «allarga» la
-# finestra. Hyprland, davanti a due bind sulla stessa combinazione, ne esegue
-# uno solo: una delle due coppie era scritta qui, compariva nel promemoria
-# delle scorciatoie, e non faceva niente. Trovato il 10 agosto confrontando
-# `hyprctl binds` con questo file — non si vedeva leggendo, si vedeva
-# contando. Ora c'è una prova che impedisce di ripeterlo, in
-# `minervad/test/scorciatoie_test.dart`.
-@ Scrivanie | Scrivania successiva
-$mod ALT right -> scrivania: prossima
-@ Scrivanie | Scrivania precedente
-$mod ALT left -> scrivania: precedente
+@ Muoversi | La stanza dopo
+$mod CTRL right -> scrivania: prossima
+@ Muoversi | La stanza prima
+$mod CTRL left -> scrivania: precedente
+@ Muoversi | La stanza dopo, portando la finestra
+$mod CTRL SHIFT right -> porta-a-scrivania: prossima
+@ Muoversi | La stanza prima, portando la finestra
+$mod CTRL SHIFT left -> porta-a-scrivania: precedente
 
-@ Scrivanie | Mostra o nasconde la scrivania al volo (scratchpad)
-$mod S -> scrivania-speciale: magic
-@ Scrivanie | Sposta la finestra nella scrivania al volo
-$mod SHIFT S -> porta-a-scrivania: special:magic
+@ Mouse | Super + rotellina: la stanza accanto
+$mod mouse_down -> scrivania: prossima
+$mod mouse_up -> scrivania: precedente
 
 
 # ───────────────────────────────────────────────────────────────────────────
 #  SISTEMA
 # ───────────────────────────────────────────────────────────────────────────
 
-# Il blocco è il NOSTRO, dal 10 agosto 2026. Prima era hyprlock: funziona
-# benissimo e non è nostro, e si vedeva — tutta Minerva con la sua aurora e il
-# suo carattere, poi Super+L e compariva la schermata di un altro programma.
-# Vedi `scripts/minerva-blocca`, che prima di prendere lo schermo controlla di
-# poter verificare una password: un blocco che non verifica è un computer
-# perso.
-@ Sistema | Blocca lo schermo
-$mod L -> avvia: "$minerva/scripts/minerva-blocca"
-
-@ Sistema | Menu di spegnimento e riavvio
-$mod SHIFT E -> minerva: power
-
-# Ctrl+Alt+Canc. In KDE apre la schermata di uscita, e chi arriva da lì (o da
-# Windows) lo prova per primo quando qualcosa si è impuntato. Da noi non era
-# legato a niente: si premeva e non succedeva nulla, che è il modo peggiore di
-# rispondere a qualcuno che sta già cercando una via d'uscita.
-@ Sistema | Menu di spegnimento e riavvio
-CTRL ALT Delete -> minerva: power
-
-# Le schermate si SALVANO, non finiscono solo negli appunti.
-#
-# Prima era `grim - | wl-copy`: la schermata esisteva soltanto negli appunti, e
-# bastava copiare qualunque altra cosa per perderla. E una schermata negli
-# appunti non si può mostrare a nessuno — non si allega, non si manda. Adesso
-# c'è un file in ~/Immagini/Schermate, con la data nel nome, e gli appunti
-# restano in più.
-@ Sistema | Chiede che cosa fotografare: schermo, porzione o finestra
+@ Sistema | Schermata: schermo, porzione o finestra
 Print -> minerva: schermata
 
-@ Sistema | Cattura una porzione di schermo
-$mod SHIFT P -> avvia: "$minerva/scripts/minerva-schermata" area
+@ Sistema | Schermata di un'area
+$mod SHIFT S -> avvia: "$minerva/scripts/minerva-schermata" area
 
-@ Sistema | Cattura una porzione di schermo
-SHIFT Print -> avvia: "$minerva/scripts/minerva-schermata" area
+@ Sistema | Attività: i programmi e quanto consumano
+CTRL SHIFT Escape -> minerva: monitor
 
-@ Sistema | Cattura solo la finestra attiva
-$mod Print -> avvia: "$minerva/scripts/minerva-schermata" finestra
+@ Sistema | Centro di controllo, sulla riga dello spegnimento
+CTRL ALT Delete -> minerva: control
 
-# ── Ricarica: `hyprctl` qui era un comando che non fa niente ────────────
-#
-# Fino al 3 settembre 2026 questa riga diceva
-# `hyprctl reload && hyprctl notify …`. Sotto minerva-wayland `hyprctl` non
-# esiste: la scorciatoia c'era, si vedeva nel pannello F1, e premendola non
-# succedeva NIENTE — nemmeno un errore, perché la riga finisce in una shell
-# che non ha dove scriverlo.
-#
-# È il difetto che questo progetto si è scritto per iscritto di non fare, e
-# stava nella nostra stessa configurazione. `minerva-reload.sh` fa il lavoro
-# vero — ricarica la shell restando viva — e sa dirlo.
-@ Sistema | Ricarica la configurazione di Minerva
-$mod SHIFT R -> avvia: "$minerva/scripts/minerva-reload.sh"
-
-@ Sistema | Esci dalla sessione Minerva
-$mod SHIFT Q -> esci-dalla-sessione
+# L'uscita di sicurezza: `avvia` lo esegue il compositore, che è ancora vivo
+# quando la shell non lo è. Le virgolette servono: il percorso può contenere
+# uno spazio.
+@ Sistema | Risveglia l'interfaccia se si è bloccata
+$mod CTRL R -> avvia: "$minerva/scripts/minerva-risveglia"
 
 
 # ── Tasti multimediali (senza modificatori) ──

@@ -113,8 +113,17 @@ void main() {
       final pezzi = sc.tasti.trim().split(RegExp(r'\s+'));
       final tasto = pezzi.isEmpty ? '' : pezzi.last;
       final mods = pezzi.length > 1 ? pezzi.sublist(0, pezzi.length - 1) : [];
+      // Toccare e tenere premuto sono due gesti diversi sullo stesso tasto
+      // (Super toccato apre il menù, tenuto mostra i tasti): il gesto fa
+      // parte della combinazione.
+      final gesto = [
+        for (final g in const ['tocco', 'tieni', 'al-rilascio'])
+          if (sc.flag.contains(g)) g,
+      ].join(' ');
       combinazioni
-          .putIfAbsent(normalizza(mods.join(' '), tasto), () => [])
+          .putIfAbsent(
+              normalizza(mods.join(' '), tasto) + (gesto.isEmpty ? '' : ' [$gesto]'),
+              () => [])
           .add(sc.azione.trim());
     }
 

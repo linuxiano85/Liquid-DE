@@ -40,9 +40,10 @@ void main() {
   group('la sorgente si legge tutta', () {
     test('tutte le scorciatoie, nessuna riga incomprensibile', () {
       // `leggi` lancia su una riga che non capisce: se siamo qui, le ha
-      // capite tutte. Il numero si aggiorna a mano quando se ne aggiunge
-      // una: l'ultima è Super+O, l'Isola (24 settembre 2026).
-      expect(sorgente.tutte.length, 97);
+      // capite tutte. Il numero si aggiorna a mano quando cambia: il 24
+      // settembre 2026 le 97 di Minerva sono diventate queste, con le cinque
+      // regole della Riva (i tasti multimediali contano uno per uno).
+      expect(sorgente.tutte.length, 76);
     });
 
     test('tutte hanno un tasto', () {
@@ -111,9 +112,12 @@ void main() {
           .where((s) =>
               s.azione.startsWith('minerva:') || s.azione.startsWith('avvia:'))
           .length;
-      expect(neutre, greaterThanOrEqualTo(48),
-          reason: 'erano 48 su 95 l\'11 agosto 2026: se scendono, stiamo '
-              'riportando dentro semantica del compositore');
+      // Erano 48 su 95 l'11 agosto 2026; con i tasti della Riva sono 41 su
+      // 76. Conta la proporzione, non il numero: tolte le doppie, restano
+      // più della metà.
+      expect(neutre * 2, greaterThanOrEqualTo(tutte.length),
+          reason: '$neutre su ${tutte.length}: se scendono sotto la metà, '
+              'stiamo riportando dentro semantica del compositore');
     });
   });
 
@@ -171,7 +175,7 @@ void main() {
         // I flag si attaccano col `+`, come i modificatori: `-`,
         // `bloccato`, `rilascio`, `tocco`, `bloccato+rilascio`.
         for (final f in p[3].split('+')) {
-          expect(f, anyOf('-', 'bloccato', 'rilascio', 'tocco'), reason: r);
+          expect(f, anyOf('-', 'bloccato', 'rilascio', 'tocco', 'tieni'), reason: r);
         }
         expect(p[4], contains(RegExp(r'^[a-z-]+')), reason: r);
       }
@@ -265,8 +269,10 @@ void main() {
       // Se questo numero risale, qualcuno ha aggiunto una riga che non arriva
       // da nessuna parte: si guarda l'elenco e si decide, invece di scoprirlo
       // premendo un tasto che non fa niente.
+      // Il 24 settembre 2026, coi tasti della Riva, i gruppi a schede e la
+      // scrivania speciale se ne sono andati: restano i quattro del mouse.
       final fuori = sorgente.saltatePerMinervaWayland;
-      expect(fuori.length, 8, reason: fuori.join('\n'));
+      expect(fuori.length, 4, reason: fuori.join('\n'));
       for (final f in fuori) {
         expect(
             f,
@@ -280,7 +286,7 @@ void main() {
       }
     });
 
-    test('e le frecce ARRIVANO, tutte e dodici', () {
+    test('e le frecce ARRIVANO, tutte e quattro, e la stanza accanto', () {
       // La prova che il recupero del 31 agosto 2026 non si perda per strada:
       // dodici righe che stavano nel promemoria e non facevano niente.
       final righe = sorgente.perMinervaWayland();
@@ -290,9 +296,15 @@ void main() {
               r.contains('sposta-finestra:') ||
               r.contains('ridimensiona:'))
           .length;
-      expect(quante, 12,
-          reason: 'quattro frecce per tre azioni: se scende, quei tasti sono '
-              'tornati a non fare niente');
+      // Con la Riva le frecce sono quattro e fanno una cosa sola: muovono
+      // la finestra (metà, metà, ingrandisci, com'era).
+      expect(quante, 4,
+          reason: 'se scende, quei tasti sono tornati a non fare niente');
+      final accanto = righe
+          .where((r) => r.contains('porta-a-scrivania:prossima') ||
+              r.contains('porta-a-scrivania:precedente'))
+          .length;
+      expect(accanto, 2, reason: 'Super Ctrl Maiusc ← → portano la finestra');
     });
 
     test('il volume e la luminosità valgono anche a schermo bloccato', () {

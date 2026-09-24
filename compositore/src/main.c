@@ -64,6 +64,7 @@
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_keyboard.h>
+#include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
@@ -197,6 +198,14 @@ struct scorciatoia {
 	/// È il flag `tocco` della sorgente. Hyprland non sa esprimerlo — `bindr`
 	/// là scatta comunque — quindi quella riga non entra in `keybinds.conf`.
 	bool da_solo;
+	/// Scatta se quel tasto resta premuto DA SOLO per 400 ms, e al rilascio
+	/// annuncia la stessa azione col suffisso `-via`.
+	///
+	/// È il flag `tieni` della sorgente: Super tenuto premuto disegna i tasti
+	/// sulla scrivania finché non lo lasci. Il rilascio dopo un «tieni» non
+	/// è un tocco — senza questa regola lasciando Super si aprirebbe anche il
+	/// menù, cioè due cose per un gesto solo.
+	bool tenuto;
 };
 
 struct minerva {
@@ -349,6 +358,13 @@ struct minerva {
 	// E giù, E su, Super su — al rilascio di Super l'ultimo premuto è E, e il
 	// tocco non scatta, che è precisamente quello che si vuole.
 	uint32_t ultimo_premuto;
+
+	/// Il «tieni» in corso (vedi `tenuto` in `struct scorciatoia`): quale
+	/// tasto, quale scorciatoia, se è già scattato, e il timer dei 400 ms.
+	uint32_t tieni_tasto;
+	int tieni_quale;
+	bool tieni_scattato;
+	struct wl_event_source *tieni_timer;
 
 	struct wlr_xdg_decoration_manager_v1 *decorazioni;
 
@@ -4360,6 +4376,30 @@ static const uint32_t MODIFICATORI_CHE_CONTANO =
 	WLR_MODIFIER_SHIFT | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT
 	| WLR_MODIFIER_LOGO;
 
+/// Il modificatore che un tasto È, se è un tasto modificatore.
+///
+/// wlroots aggiorna i modificatori DOPO aver annunciato il tasto: quando si
+/// lascia Super, al momento del rilascio i modificatori dicono ancora «Super
+/// premuto». Il tocco di Super (registrato senza modificatori) non combaciava
+/// mai, e il menù non si apriva toccando Super; lo stesso per l'Alt che
+/// chiude l'Alt+Tab. Visto il 24 settembre 2026 con `prova-super.py`: il
+/// tasto stesso non conta come modificatore di sé.
+static uint32_t modificatore_del_tasto(xkb_keysym_t sim) {
+	switch (sim) {
+	case XKB_KEY_Super_L: case XKB_KEY_Super_R:
+	case XKB_KEY_Meta_L: case XKB_KEY_Meta_R:
+		return WLR_MODIFIER_LOGO;
+	case XKB_KEY_Shift_L: case XKB_KEY_Shift_R:
+		return WLR_MODIFIER_SHIFT;
+	case XKB_KEY_Control_L: case XKB_KEY_Control_R:
+		return WLR_MODIFIER_CTRL;
+	case XKB_KEY_Alt_L: case XKB_KEY_Alt_R:
+		return WLR_MODIFIER_ALT;
+	default:
+		return 0;
+	}
+}
+
 /// Avvia un programma, staccato da noi.
 ///
 /// Doppia fork: il figlio fa un altro figlio e muore subito, così il nipote
@@ -4485,8 +4525,23 @@ static void aggancia_attiva(struct minerva *m, const char *dove) {
 		finestra_ingrandisci(f, true);
 		return;
 	}
+	// Super+↓ è «torna com'era»: un'ingrandita si rimpicciolisce, una
+	// agganciata torna alla misura di prima; e se era già com'era, la
+	// seconda volta si riduce. Prima era solo «non ingrandita», e su una
+	// finestra normale il tasto non faceva niente.
 	if (dove[0] == 'd') {
-		finestra_ingrandisci(f, false);
+		if (f->ingrandita) {
+			finestra_ingrandisci(f, false);
+		} else if (f->agganciata) {
+			f->agganciata = false;
+			if (f->prima.width > 0 && f->prima.height > 0)
+				finestra_posiziona(f, f->prima.x, f->prima.y,
+					f->prima.width, f->prima.height);
+			barra_aggiorna(f);
+			annuncia(m, "stato", f);
+		} else {
+			finestra_riduci(f, true);
+		}
 		return;
 	}
 	// ── Anche gli angoli, e non solo per completezza ────────────────────
@@ -4611,8 +4666,17 @@ static void scorciatoia_esegui(struct minerva *m, const struct scorciatoia *s) {
 
 	if (strcmp(a, "porta-a-scrivania") == 0) {
 		struct finestra *f = finestra_attiva(m);
-		if (f != NULL)
-			scrivania_porta(f, atoi(arg), true);
+		if (f == NULL)
+			return;
+		// «Maiuscolo vuol dire portala con te»: Super+Maiusc+Ctrl+→ è la
+		// stanza accanto, con la finestra. Oltre la prima e la decima non si
+		// va: girare in tondo porterebbe la finestra dove non la si aspetta.
+		int quale = atoi(arg);
+		if (strcmp(arg, "prossima") == 0)
+			quale = m->scrivania_attiva < 10 ? m->scrivania_attiva + 1 : 10;
+		else if (strcmp(arg, "precedente") == 0)
+			quale = m->scrivania_attiva > 1 ? m->scrivania_attiva - 1 : 1;
+		scrivania_porta(f, quale, true);
 		return;
 	}
 
@@ -4670,6 +4734,82 @@ static void scorciatoia_esegui(struct minerva *m, const struct scorciatoia *s) {
 	wlr_log(WLR_INFO, "minerva: scorciatoia «%s» non so cosa sia", a);
 }
 
+// ── Il «tieni» ───────────────────────────────────────────────────────────
+//
+// Super premuto e tenuto da solo per 400 ms. Il timer lo conta, perché un
+// tasto fermo non manda niente; qualunque altro tasto, o un clic, lo annulla
+// azzerando `ultimo_premuto` — la stessa prova del «da solo» del tocco.
+#define TIENI_MS 400
+
+static void annuncia_scorciatoia_con(struct minerva *m, const char *nome);
+
+static int tieni_scade(void *dati) {
+	struct minerva *m = dati;
+	if (m->tieni_quale < 0 || m->tieni_quale >= m->quante_scorciatoie)
+		return 0;
+	if (m->ultimo_premuto != m->tieni_tasto || m->bloccato)
+		return 0;
+	m->tieni_scattato = true;
+	annuncia_scorciatoia_con(m, m->scorciatoie[m->tieni_quale].argomento);
+	return 0;
+}
+
+/// Alla pressione: se questo tasto ha un «tieni», parte il conto.
+static void tieni_premuto(struct minerva *m, struct wlr_keyboard *kb, uint32_t keycode) {
+	// Già scattato e ora un altro tasto (Super tenuto, guardi i tasti, poi
+	// premi A): il «tieni» resta vivo fino al rilascio di Super, che deve
+	// ancora togliere i tasti dalla scrivania. Prima qui si azzerava tutto
+	// e i tasti restavano sullo schermo per sempre.
+	if (m->tieni_scattato && keycode != m->tieni_tasto)
+		return;
+	m->tieni_quale = -1;
+	m->tieni_scattato = false;
+	if (m->tieni_timer != NULL)
+		wl_event_source_timer_update(m->tieni_timer, 0);
+	struct xkb_keymap *mappa = kb->keymap;
+	if (mappa == NULL || kb->xkb_state == NULL)
+		return;
+	xkb_keycode_t xkb = keycode + 8;
+	xkb_layout_index_t disp = xkb_state_key_get_layout(kb->xkb_state, xkb);
+	const xkb_keysym_t *simboli = NULL;
+	int quanti = xkb_keymap_key_get_syms_by_level(mappa, xkb, disp, 0, &simboli);
+	for (int i = 0; i < quanti; i++) {
+		xkb_keysym_t sim = xkb_keysym_to_lower(simboli[i]);
+		for (int j = 0; j < m->quante_scorciatoie; j++) {
+			struct scorciatoia *s = &m->scorciatoie[j];
+			if (!s->tenuto || s->tasto != sim)
+				continue;
+			if (strcmp(s->azione, "minerva") != 0)
+				continue;
+			if (m->tieni_timer == NULL)
+				m->tieni_timer = wl_event_loop_add_timer(m->loop, tieni_scade, m);
+			if (m->tieni_timer == NULL)
+				return;
+			m->tieni_tasto = keycode;
+			m->tieni_quale = j;
+			wl_event_source_timer_update(m->tieni_timer, TIENI_MS);
+			return;
+		}
+	}
+}
+
+/// Al rilascio del tasto del «tieni»: se era scattato, si annuncia la fine,
+/// e il rilascio NON è più un tocco.
+static void tieni_lasciato(struct minerva *m, uint32_t keycode) {
+	if (m->tieni_quale < 0 || keycode != m->tieni_tasto)
+		return;
+	if (m->tieni_timer != NULL)
+		wl_event_source_timer_update(m->tieni_timer, 0);
+	if (m->tieni_scattato && m->tieni_quale < m->quante_scorciatoie) {
+		char nome[sizeof(m->scorciatoie[0].argomento) + 8];
+		snprintf(nome, sizeof(nome), "%s-via", m->scorciatoie[m->tieni_quale].argomento);
+		annuncia_scorciatoia_con(m, nome);
+		m->ultimo_premuto = 0;
+	}
+	m->tieni_quale = -1;
+	m->tieni_scattato = false;
+}
+
 /// Cerca una scorciatoia per questo tasto. Torna vero se l'ha eseguita.
 static bool scorciatoia_prova(struct minerva *m, struct wlr_keyboard *kb,
                               uint32_t keycode, bool rilascio) {
@@ -4701,11 +4841,15 @@ static bool scorciatoia_prova(struct minerva *m, struct wlr_keyboard *kb,
 			// selettore che non è ancora aperto.
 			if (s->al_rilascio != rilascio)
 				continue;
+			// Il «tieni» ha la sua strada (`tieni_premuto`, il timer).
+			if (s->tenuto)
+				continue;
 			// «Premuto e lasciato DA SOLO»: senza questa riga il menù delle
 			// applicazioni si aprirebbe alla fine di ogni Super+qualcosa.
 			if (s->da_solo && !era_solo)
 				continue;
-			if (s->tasto != sim || s->modificatori != mods)
+			if (s->tasto != sim
+			    || s->modificatori != (mods & ~modificatore_del_tasto(sim)))
 				continue;
 			// Da bloccati passano solo quelle marcate: il volume, la
 			// luminosità, il lettore. Tutto il resto sarebbe un modo di
@@ -5065,12 +5209,14 @@ static void tastiera_tasto(struct wl_listener *l, void *dati) {
 		// programma sotto, e ingoiarne il rilascio lo lascerebbe a credere
 		// che Alt sia ancora premuto per sempre. È la stessa ragione per cui
 		// esiste l'elenco degli inghiottiti, vista dal verso opposto.
+		tieni_lasciato(m, e->keycode);
 		scorciatoia_prova(m, t->kb, e->keycode, true);
 	} else {
 		// Si segna PRIMA di provare le scorciatoie: `scorciatoia_prova` lo
 		// legge per sapere se questo tasto è «da solo», e un tasto appena
 		// premuto lo è sempre — è il prossimo che gli toglie il titolo.
 		m->ultimo_premuto = e->keycode;
+		tieni_premuto(m, t->kb, e->keycode);
 		if (scorciatoia_prova(m, t->kb, e->keycode, false)) {
 			if (m->quanti_inghiottiti
 					< (int)(sizeof(m->inghiottiti) / sizeof(m->inghiottiti[0])))
@@ -6302,6 +6448,13 @@ static void cursore_premuto(struct wl_listener *l, void *dati) {
 	struct minerva *m = wl_container_of(l, m, cursore_premuto);
 	struct wlr_pointer_button_event *e = dati;
 
+	// Un clic mentre Super è giù fa di Super+clic una combinazione: né il
+	// tocco (il menù al rilascio) né il «tieni» devono scattare dopo un
+	// Super+trascina. Prima, lasciando Super dopo aver spostato una finestra,
+	// si apriva il menù.
+	if (e->state == WL_POINTER_BUTTON_STATE_PRESSED)
+		m->ultimo_premuto = 0;
+
 	if (m->traccia_pulsanti)
 		fprintf(stderr, "minerva-wayland: [%u] pulsante ARRIVATO %s (0x%x) %s\n",
 			e->time_msec, nome_pulsante(e->button), e->button,
@@ -7011,10 +7164,14 @@ static void annuncia_blocco(struct minerva *m) {
 /// stesso confine che sotto Hyprland passa per `GlobalShortcut`.
 static void annuncia_scorciatoia(struct minerva *m,
                                  const struct scorciatoia *s) {
+	annuncia_scorciatoia_con(m, s->argomento);
+}
+
+static void annuncia_scorciatoia_con(struct minerva *m, const char *argomento) {
 	if (m->canale == NULL)
 		return;
 	char nome[256];
-	json_stringa(nome, sizeof(nome), s->argomento);
+	json_stringa(nome, sizeof(nome), argomento);
 	char riga[320];
 	snprintf(riga, sizeof(riga), "evento scorciatoia {\"azione\":\"%s\"}",
 		nome);
@@ -9373,6 +9530,73 @@ void minerva_comando(struct minerva *m, const char *riga,
 	//
 	// E fuori da una prova NON esiste: un canale che muove il mouse di chi
 	// sta lavorando è una cosa che nessuno ha chiesto.
+	// ── La tastiera finta, solo in prova ─────────────────────────────────
+	//
+	// `tasto <nome> premi|lascia`: come `dito` per il puntatore. Crea una
+	// tastiera DENTRO il compositore e le fa premere il tasto; il tasto passa
+	// da `tastiera_tasto`, cioè dagli stessi gestori della tastiera vera —
+	// scorciatoie, tocco, «tieni», inghiottiti. Serve a provare Super tenuto
+	// premuto senza toccare la tastiera di chi lavora (la tastiera finta di
+	// `/dev/uinput` scriverebbe nella sessione vera).
+	if (strcmp(verbo, "tasto") == 0) {
+		if (getenv("MINERVA_PROVA") == NULL) {
+			snprintf(risposta, n, "no «tasto» esiste solo in prova (MINERVA_PROVA=1)");
+			return;
+		}
+		char *nome = parola(&resto);
+		char *come = parola(&resto);
+		if (nome == NULL || come == NULL
+				|| (strcmp(come, "premi") != 0 && strcmp(come, "lascia") != 0)) {
+			snprintf(risposta, n, "no tasto vuole «<nome> premi|lascia»");
+			return;
+		}
+		static struct wlr_keyboard finta;
+		static const struct wlr_keyboard_impl finta_impl = { .name = "minerva-prova" };
+		static bool pronta = false;
+		if (!pronta) {
+			wlr_keyboard_init(&finta, &finta_impl, "minerva-prova");
+			tastiera_nuova(m, &finta.base);
+			// Senza dirlo al posto di lavoro, i programmi non sanno che c'è
+			// una tastiera e non ne chiedono una: i tasti arrivavano alle
+			// scorciatoie ma a nessun programma.
+			wlr_seat_set_capabilities(m->seat,
+				m->seat->capabilities | WL_SEAT_CAPABILITY_KEYBOARD);
+			pronta = true;
+		}
+		xkb_keysym_t cercato = xkb_keysym_from_name(nome, XKB_KEYSYM_CASE_INSENSITIVE);
+		if (cercato == XKB_KEY_NoSymbol || finta.keymap == NULL) {
+			snprintf(risposta, n, "no il tasto «%s» non esiste", nome);
+			return;
+		}
+		cercato = xkb_keysym_to_lower(cercato);
+		uint32_t codice = 0;
+		const xkb_keycode_t primo = xkb_keymap_min_keycode(finta.keymap);
+		const xkb_keycode_t ultimo = xkb_keymap_max_keycode(finta.keymap);
+		for (xkb_keycode_t k = primo; k <= ultimo && codice == 0; k++) {
+			const xkb_keysym_t *sim = NULL;
+			int q = xkb_keymap_key_get_syms_by_level(finta.keymap, k, 0, 0, &sim);
+			for (int i = 0; i < q; i++)
+				if (xkb_keysym_to_lower(sim[i]) == cercato)
+					codice = k - 8;
+		}
+		if (codice == 0) {
+			snprintf(risposta, n, "no «%s» non è su questa tastiera", nome);
+			return;
+		}
+		struct timespec ts;
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+		struct wlr_keyboard_key_event e = {
+			.time_msec = (uint32_t)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000),
+			.keycode = codice,
+			.update_state = true,
+			.state = strcmp(come, "premi") == 0
+				? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED,
+		};
+		wlr_keyboard_notify_key(&finta, &e);
+		snprintf(risposta, n, "ok %u", codice);
+		return;
+	}
+
 	if (strcmp(verbo, "dito") == 0) {
 		if (getenv("MINERVA_PROVA") == NULL) {
 			snprintf(risposta, n, "no «dito» esiste solo in prova (MINERVA_PROVA=1)");
@@ -9568,6 +9792,7 @@ void minerva_comando(struct minerva *m, const char *riga,
 		s.da_solo = strstr(flag, "tocco") != NULL;
 		if (s.da_solo)
 			s.al_rilascio = true;
+		s.tenuto = strstr(flag, "tieni") != NULL;
 
 		// `azione:argomento`, e l'argomento è tutto quello che resta —
 		// spazi compresi, perché per `avvia` è una riga di comando.
@@ -10060,6 +10285,7 @@ int main(int argc, char *argv[]) {
 	// si tocca niente di quello che libinput ha deciso da sé.
 	m.ingresso.scorrimento_naturale = -1;
 	m.ingresso.tocco_e_clic = -1;
+	m.tieni_quale = -1;
 	m.ingresso.spento_mentre_scrivi = -1;
 
 	// ── La lista di riserva di chi si disegna la barra da sé ─────────────
