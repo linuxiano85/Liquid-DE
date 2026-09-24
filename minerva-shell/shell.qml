@@ -772,7 +772,9 @@ ShellRoot {
                 function onAngolo(quale, schermo) {
                     if (!scrivania.modelData || schermo !== scrivania.modelData.name)
                         return;
-                    if (quale === "basso-sx")
+                    // Il menù dall'angolo in alto a sinistra: la mano ci arriva
+                    // di slancio, e l'esagono della barra sta già lì.
+                    if (quale === "alto-sx")
                         sottomarino.apri("");
                     else if (quale === "alto-dx")
                         centroControllo.apri();

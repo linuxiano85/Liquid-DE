@@ -37,6 +37,14 @@ PanelWindow {
     /// lavorando. In prova le due levette non toccano niente.
     readonly property bool inProva: !!Quickshell.env("MINERVA_PROVA")
 
+    /// Il pulsante dell'energia armato dal primo tocco, se c'è: UNO solo.
+    /// Toccarne un altro sposta la conferma lì, e chiudere il Centro la
+    /// toglie — tre «Ancora» accesi insieme non dicevano più cosa sarebbe
+    /// successo al tocco seguente.
+    property string armato: ""
+    onArmatoChanged: if (centro.armato !== "") disarma.restart(); else disarma.stop()
+    Timer { id: disarma; interval: 3000; onTriggered: centro.armato = "" }
+
     function apri() {
         if (centro.aperto) return;
         centro.aperto = true;
@@ -46,6 +54,7 @@ PanelWindow {
     function chiudi() {
         if (!centro.aperto) return;
         centro.aperto = false;
+        centro.armato = "";
         spegni.restart();
     }
     function commuta() { centro.aperto ? centro.chiudi() : centro.apri(); }
@@ -272,6 +281,8 @@ PanelWindow {
                     ]
                     delegate: Energia {
                         width: (colonna.width - 4 * Theme.Effects.space1) / 5
+                        armato: centro.armato === modelData.id
+                        onArma: function(id) { centro.armato = id; }
                         onFatto: function(id) { centro.chiudi(); centro.azione(id); }
                     }
                 }
@@ -424,11 +435,13 @@ PanelWindow {
         id: en
         required property var modelData
         signal fatto(string id)
+        /// Chiede di diventare il pulsante armato (o, con "", di smettere).
+        signal arma(string id)
         /// Da 0 a 1 mentre lo si tiene premuto; a 1 parte.
         property real pieno: 0
         /// Armato da un primo tocco: il secondo, entro tre secondi, conferma.
         /// È la via del touchpad, dove tenere il dito appoggiato non tiene
-        /// premuto niente.
+        /// premuto niente. Lo decide il Centro, che ne tiene acceso uno solo.
         property bool armato: false
         height: 44
         radius: Theme.Effects.radiusMD
@@ -452,7 +465,6 @@ PanelWindow {
             visible: en.armato
             color: Qt.alpha(Theme.Colors.danger, 0.35)
         }
-        Timer { id: disarma; interval: 3000; onTriggered: en.armato = false }
         Text {
             anchors.centerIn: parent
             text: en.armato ? "Ancora" : en.modelData.it
@@ -486,12 +498,10 @@ PanelWindow {
                 en.pieno = 0;
                 // Un tocco breve: il primo arma, il secondo conferma.
                 if (en.armato) {
-                    en.armato = false;
-                    disarma.stop();
+                    en.arma("");
                     en.fatto(en.modelData.id);
                 } else {
-                    en.armato = true;
-                    disarma.restart();
+                    en.arma(en.modelData.id);
                 }
             }
             onCanceled: { riempi.stop(); en.pieno = 0; }

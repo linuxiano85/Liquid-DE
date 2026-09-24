@@ -107,6 +107,30 @@ PanelWindow {
         { "id": "accessori",  "it": "Accessori",  "c": ["Utility", "Accessories", "FileTools", "FileManager", "TextEditor", "Calculator"] }
     ]
 
+    /// Le app appena installate e mai aperte: lo decide il demone
+    /// (`isNew`, da `app_novita.dart`), e smettono di esserlo al primo lancio.
+    readonly property int nuove: {
+        var tutte = Core.Ipc.allApps || [], n = 0;
+        for (var i = 0; i < tutte.length; i++) if (tutte[i].isNew) n++;
+        return n;
+    }
+    /// Vero se nella categoria c'è almeno un'app nuova.
+    function categoriaNuova(id) {
+        if (sub.nuove === 0) return false;
+        var cat = null;
+        for (var n = 0; n < sub.categorie.length; n++)
+            if (sub.categorie[n].id === id) cat = sub.categorie[n];
+        var tutte = Core.Ipc.allApps || [];
+        for (var i = 0; i < tutte.length; i++) {
+            if (!tutte[i].isNew) continue;
+            if (!cat) return true;
+            var cs = tutte[i].categories || [];
+            for (var z = 0; z < cat.c.length; z++)
+                if (cs.indexOf(cat.c[z]) !== -1) return true;
+        }
+        return false;
+    }
+
     /// Quello che si FA con un'app, dalle sue categorie: la vista «Cosa vuoi
     /// fare» e metà della ricerca per funzione. Vale la prima che combacia.
     readonly property var attivita: [
@@ -590,25 +614,43 @@ PanelWindow {
                             readonly property bool attiva: sub.vista === tab.modelData.id && sub.cerca === ""
                             onAttivaChanged: if (tab.attiva) gocciaViste.attiva = tab
                             Component.onCompleted: if (tab.attiva) gocciaViste.attiva = tab
+                            readonly property bool conNuove: tab.modelData.id === "az" && sub.nuove > 0
                             width: tabTesto.implicitWidth + Theme.Effects.space5
+                                   + (tab.conNuove ? tabNuove.width + Theme.Effects.space1 : 0)
                             height: 30
-                            Text {
-                                id: tabTesto
-                                anchors.centerIn: parent
-                                text: tab.modelData.it
-                                color: tab.attiva ? Theme.Colors.text : Theme.Colors.textMuted
-                                font.family: Theme.Typography.fontDisplay
-                                font.pixelSize: Theme.Typography.sizeSM
+                            function scegli() {
+                                if (sub.vista === tab.modelData.id && sub.cerca === "") return;
+                                campo.text = "";
+                                sub.vista = tab.modelData.id;
+                                Core.Ipc.setSetting("launcher.vista", tab.modelData.id);
                             }
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: Theme.Effects.space1
+                                Text {
+                                    id: tabTesto
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: tab.modelData.it
+                                    color: tab.attiva ? Theme.Colors.text : Theme.Colors.textMuted
+                                    font.family: Theme.Typography.fontDisplay
+                                    font.pixelSize: Theme.Typography.sizeSM
+                                }
+                                Nuova {
+                                    id: tabNuove
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: tab.conNuove
+                                    testo: sub.nuove === 1 ? "Nuova" : "Nuove"
+                                }
+                            }
+                            // Col solo puntatore, dopo una sosta breve: passarci
+                            // sopra per andare altrove non cambia vista.
+                            Timer { id: tabSosta; interval: 140; onTriggered: tab.scegli() }
                             MouseArea {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    campo.text = "";
-                                    sub.vista = tab.modelData.id;
-                                    Core.Ipc.setSetting("launcher.vista", tab.modelData.id);
-                                }
+                                onContainsMouseChanged: containsMouse ? tabSosta.restart() : tabSosta.stop()
+                                onClicked: tab.scegli()
                             }
                         }
                     }
@@ -632,25 +674,39 @@ PanelWindow {
                         id: chip
                         required property var modelData
                         readonly property bool scelta: sub.categoria === chip.modelData.id
+                        readonly property bool conNuove: sub.categoriaNuova(chip.modelData.id)
                         width: chipTesto.implicitWidth + Theme.Effects.space4
+                               + (chip.conNuove ? chipNuova.width + Theme.Effects.space1 : 0)
                         height: 28
                         radius: height / 2
                         color: chip.scelta ? Qt.alpha(Theme.Colors.accent, 0.18)
                              : chipMouse.containsMouse ? Theme.Colors.hover : "transparent"
                         Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
-                        Text {
-                            id: chipTesto
+                        Row {
                             anchors.centerIn: parent
-                            text: chip.modelData.it
-                            color: chip.scelta ? Theme.Colors.text : Theme.Colors.textMuted
-                            font.family: Theme.Typography.fontDisplay
-                            font.pixelSize: Theme.Typography.sizeSM
+                            spacing: Theme.Effects.space1
+                            Text {
+                                id: chipTesto
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: chip.modelData.it
+                                color: chip.scelta ? Theme.Colors.text : Theme.Colors.textMuted
+                                font.family: Theme.Typography.fontDisplay
+                                font.pixelSize: Theme.Typography.sizeSM
+                            }
+                            Nuova {
+                                id: chipNuova
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: chip.conNuove
+                                testo: "Nuova"
+                            }
                         }
+                        Timer { id: chipSosta; interval: 140; onTriggered: sub.categoria = chip.modelData.id }
                         MouseArea {
                             id: chipMouse
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
+                            onContainsMouseChanged: containsMouse ? chipSosta.restart() : chipSosta.stop()
                             onClicked: sub.categoria = chip.modelData.id
                         }
                     }
@@ -908,6 +964,15 @@ PanelWindow {
             }
         }
 
+        Nuova {
+            visible: !voce.azione && !!voce.app && !!voce.app.isNew
+            testo: "Nuova"
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.topMargin: voce.riga ? (voce.height - height) / 2 : 4
+            anchors.rightMargin: voce.riga ? Theme.Effects.space2 : 4
+        }
+
         MouseArea {
             id: voceMouse
             anchors.fill: parent
@@ -915,6 +980,24 @@ PanelWindow {
             cursorShape: Qt.PointingHandCursor
             onContainsMouseChanged: if (voce.goccia && !voce.azione) voce.goccia.punta(voce, voceMouse.containsMouse)
             onClicked: voce.azione ? voce.eseguita(voce.modelData.id) : voce.lanciata(voce.app)
+        }
+    }
+
+    // ── La targhetta «Nuova» ────────────────────────────────────────────
+    component Nuova: Rectangle {
+        property string testo: "Nuova"
+        width: nuovaTesto.implicitWidth + 10
+        height: 16
+        radius: height / 2
+        color: Theme.Colors.accent
+        Text {
+            id: nuovaTesto
+            anchors.centerIn: parent
+            text: parent.testo
+            color: Theme.Colors.textOnAccent
+            font.family: Theme.Typography.fontDisplay
+            font.pixelSize: 10
+            font.weight: Theme.Typography.weightMedium
         }
     }
 }
