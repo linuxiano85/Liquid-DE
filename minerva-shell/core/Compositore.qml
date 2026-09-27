@@ -888,41 +888,9 @@ Singleton {
     // che se ne dimentica diventa una riga rossa invece di un comando che
     // sparisce.
     //
-    // Nessuna di queste è un difetto. Quasi tutte sono cose che il
-    // compositore non sa **ancora** fare; una — `filtroSchermo` — non le saprà
-    // mai, perché da noi la stessa cosa si ottiene per un'altra strada. La
-    // differenza fra una mancanza dichiarata e una silenziosa è tutto quello
-    // che questo blocco aggiunge.
+    // Nessuna di queste è un difetto: è una cosa che il compositore non sa
+    // ancora fare, detta invece di taciuta.
     readonly property var senzaDestinazione: ({
-        "animazioni":
-            "il motore delle animazioni è la Tappa 5 del compositore",
-        "animazioneGruppo":
-            "le curve e i tempi delle singole animazioni: Tappa 5",
-        "animazioneAvanzata":
-            "come sopra, una animazione per volta: Tappa 5",
-        "scia":
-            "la scia è il motion blur di Hyprland; da noi è un effetto della Tappa 5",
-        // Il vetro c'è: è `effetto()`, ed è arrivato il 3 settembre 2026.
-        // Resta fuori solo il BLUR vero, che è un passaggio di rendering
-        // dentro il compositore e va misurato prima di tenerlo.
-        "sfocatura":
-            "la sfocatura vera è un passaggio di rendering nel compositore, non tre numeri da mandare: il vetro invece c'è, ed è «effetto»",
-        "margini":
-            "i margini separano le finestre affiancate, e il tiling in Minerva è stato tolto del tutto",
-        "barraDelCompositore":
-            "sono le manopole del plugin di Hyprland; da noi la barra è nativa e non si regola da fuori",
-        // Questa non è un «non ancora»: è un «da noi si fa in un altro modo».
-        // Hyprland scalda i colori con uno shader su tutto lo schermo; noi con
-        // una tabella, che è la strada di gammastep e del pannello colori di
-        // un monitor da vent'anni. Il verbo è `coloreSchermo`, e i tre numeri
-        // sono gli stessi: il conto NON si rifà da questa parte, o il giorno
-        // che uno dei due cambia sono due tinte diverse.
-        "filtroSchermo":
-            "la luce notturna passa dalla tabella dei colori («coloreSchermo»), non da uno shader: questa chiave non ha e non avrà una traduzione",
-        "chiedi:estensioni":
-            "sono i plugin di Hyprland, e dentro minerva-wayland non esistono: si risponde con un elenco vuoto, che è la verità",
-        "chiedi:animazioni":
-            "l'elenco delle animazioni lo dà il compositore, e il nostro non ne ha ancora: Tappa 5",
         "monitorAttivo":
             "quale schermo ha il puntatore. Il compositore lo sa (ogni schermo esce da «schermi» con «attivo»), ma saperlo di continuo vorrebbe dire chiederglielo a ogni movimento del mouse — cioè svegliare la shell per un dato che serve solo quando si preme una scorciatoia. Chi lo usa (shell.qml) ha già il ripiego «il primo schermo», che su una macchina a schermo singolo è sempre quello giusto; con due schermi una scorciatoia può colpire l'altro. Si chiude quando ci sarà un secondo schermo su cui provarlo"
     })
@@ -1041,11 +1009,6 @@ Singleton {
             // non obbligare chi legge a conoscerne due.
             "modoSchermo": c.schermoIntero === true ? 2
                          : (c.ingrandita === true ? 1 : 0),
-            // Il «finto schermo intero» è una cosa di Hyprland
-            // (`fullscreenstate 0 1`): un bit che accende nel PROGRAMMA il
-            // segno «sei massimizzato» senza toccare il compositore. Il
-            // nostro non ce l'ha e non lo vuole.
-            "fintoSchermo": false,
             // Fino al 25 agosto qui c'era scritto `1`, perché le scrivanie in
             // minerva-wayland non esistevano. Adesso esistono, e questo numero
             // è quello che dice a `spine/TitleBars.qml` quali barre disegnare:
@@ -1062,75 +1025,12 @@ Singleton {
     /// Ogni campo qui sotto è una TRADUZIONE, non una decisione: cosa voglia
     /// dire «ingrandita», quale finestra sia nascosta e cosa farne lo decide
     /// `core/Windows.qml`, che riceve già roba in lingua nostra.
-    function finestraDaCompositore(c, scrivaniaNascosti) {
-        // ── Due lingue, una intenzione: lo stesso `_due()` dei verbi ─────
-        //
-        // I verbi passano da `_due(comandoHyprland, verbo, argomenti)`; i
-        // sostantivi passano di qui. È lo stesso principio applicato al verso
-        // opposto, ed è il motivo per cui il demone consegna il JSON di
-        // minerva-wayland **come l'ha scritto il compositore**, senza
-        // travestirlo da Hyprland: tradurre il nostro formato nel più strano
-        // dei due — dove «schermo intero» è un numero fra zero e due e
-        // «ridotto a icona» è una scrivania di servizio — per poi ritradurlo
-        // qui sarebbe passare due volte per la stanza sbagliata.
-        //
-        // Si riconosce dalla forma e non da `comp.nostro`: durante il
-        // passaggio da un compositore all'altro può arrivare un elenco
-        // spedito un istante prima del cambio, e leggerlo con la lingua
-        // sbagliata dà una scrivania di finestre larghe zero.
-        if (c && c.id !== undefined && c.classe !== undefined)
-            return comp._finestraDaNostro(c);
-
-        var ws = c.workspace || {};
-        var at = c.at || [0, 0];
-        var size = c.size || [0, 0];
-
-        var titolo = c.title || c["class"] || "";
-        // Un titolo lunghissimo non è un titolo: è il contenuto della
-        // finestra che ci è finito dentro. Meglio il nome del programma.
-        if (titolo.length > 90)
-            titolo = c["class"] || titolo;
-
-        return {
-            "address": c.address || "",
-            // Il numero di processo: è così che una finestra di Minerva
-            // riconosce sé stessa senza dover cercare il proprio indirizzo.
-            "pid": c.pid || 0,
-            "title": titolo,
-            "appClass": c["class"] || "",
-            "minimized": (ws.name || "") === scrivaniaNascosti,
-            "floating": c.floating === true,
-            // Quanto è «davanti». Hyprland non pubblica l'ordine di
-            // sovrapposizione, ma pubblica da quanto tempo una finestra non
-            // viene toccata: `focusHistoryID` vale 0 per quella attiva, 1 per
-            // la precedente. È l'unico modo che abbiamo per sapere chi copre
-            // chi, e serve alle barre del titolo.
-            "stack": c.focusHistoryID === undefined ? 9999 : c.focusHistoryID,
-            // ── Due è schermo intero. Uno NON lo è ───────────────────────
-            //
-            // In Hyprland `fullscreen` non è un sì/no: è un modo. Zero
-            // niente, DUE lo schermo intero vero, UNO il «massimizza» del
-            // compositore — che rispetta le zone riservate e quindi lascia in
-            // cima il posto dove va la barra del titolo.
-            //
-            // Qui c'era `!== 0`, cioè uno e due trattati uguale: una finestra
-            // in stato UNO risultava «a schermo intero» e perdeva la barra.
-            // Il posto per la barra c'era, vuoto, e la barra non c'era.
-            "fullscreen": (c.fullscreen || 0) === 2,
-            /// Il modo grezzo, dove i due casi vanno distinti.
-            "modoSchermo": (c.fullscreen || 0),
-            // ── Il bit che a «ingrandisci» serviva e non c'era ───────────
-            //
-            // `fullscreenstate 0 1` accende NEL PROGRAMMA il segno «sei
-            // massimizzato» senza toccare il modo del compositore: a cambiare
-            // non è `fullscreen`, è `fullscreenClient`. Leggendo solo il
-            // primo, per i programmi che si disegnano la barra da soli il
-            // «ripristina» non scattava mai e il pulsante mentiva sempre.
-            "fintoSchermo": (c.fullscreenClient || 0) !== 0
-                            || c.fakeFullscreen === true,
-            "workspace": ws.id || 0,
-            "x": at[0], "y": at[1], "w": size[0], "h": size[1]
-        };
+    function finestraDaCompositore(c) {
+        // Una finestra come la manda il nostro compositore (`finestre`). Qui
+        // c'era anche la lettura del formato di Hyprland — `at`, `size`,
+        // `focusHistoryID`, «ridotta» come scrivania di servizio — per il mese
+        // in cui i compositori erano due. Tolta il 27 settembre 2026.
+        return comp._finestraDaNostro(c || {});
     }
 
     // ── Le intenzioni ────────────────────────────────────────────────────
@@ -1140,174 +1040,14 @@ Singleton {
     // QUESTE funzioni: chi le chiama non si accorge di niente.
     //
     // I nomi sono quello che si vuole ottenere, non come si chiama la
-    // manopola: `animazioni(false)`, non `imposta("animations:enabled", 0)`.
-
-    /// Le animazioni del compositore, accese o spente.
-    ///
-    /// Ha tre chiamanti — Accessibilità, Impostazioni e il pannello di
-    /// controllo — e prima ognuno scriveva la sua stringa. Tre posti che non
-    /// si conoscono, per una cosa sola.
-    function animazioni(accese) {
-        comp._senzaStrada("animazioni");
-    }
-
-    /// ── I GRUPPI di animazioni, in lingua nostra ─────────────────────────
-    ///
-    /// Il compositore ne conosce trentacinque, e i loro nomi sono suoi:
-    /// `windows`, `windowsIn`, `specialWorkspace`, `layersOut`… Metterli in
-    /// pagina vorrebbe dire rimettere il vocabolario di Hyprland dentro
-    /// l'interfaccia il giorno dopo averlo tolto (vedi la storia in cima a
-    /// questo file).
-    ///
-    /// Quindi la pagina parla di «finestre che si aprono» e di «cambio
-    /// scrivania», e la tabella che traduce sta QUI — l'unico posto che può
-    /// conoscerla.
-    ///
-    /// L'elenco completo resta raggiungibile: `animazioniVive()` lo chiede al
-    /// compositore e la pagina lo mostra sotto «Avanzate», dichiarando che
-    /// sono nomi suoi e non nostri.
-    readonly property var gruppiAnimazione: [
-        { "id": "finestre",  "hypr": ["windows", "windowsIn", "windowsOut"] },
-        { "id": "spostare",  "hypr": ["windowsMove"] },
-        { "id": "scrivanie", "hypr": ["workspaces", "specialWorkspace"] },
-        { "id": "dissolvenze", "hypr": ["fade"] },
-        { "id": "pannelli",  "hypr": ["layers"] },
-        { "id": "bordo",     "hypr": ["border"] }
-    ]
-
-    /// ── Che cos'è ognuna delle trentaquattro ─────────────────────────────
-    ///
-    /// I nomi del compositore sono compatti e per chi lo conosce già:
-    /// `fadeDpms`, `borderangle`, `specialWorkspaceOut`. Chi apre le
-    /// Impostazioni per capire cosa può spegnere non ha modo di indovinare, e
-    /// una riga di interruttori senza spiegazioni è un elenco da cui si sta
-    /// alla larga.
-    ///
-    /// Questa tabella sta QUI e non nella pagina, per la stessa ragione della
-    /// tabella dei gruppi: sono nomi di Hyprland, e il posto dei nomi di
-    /// Hyprland è dietro la porta.
-    ///
-    /// Un nome che non è in tabella non è un errore — il compositore può
-    /// aggiungerne — e la pagina in quel caso mostra il nome nudo dicendo che
-    /// non sappiamo descriverlo. Meglio ammetterlo che inventare.
-    readonly property var descrizioniAnimazione: ({
-        "global":       { "it": "Tutte quante", "en": "Everything",
-            "d_it": "L'interruttore generale del compositore: spegnendo questa non si muove più niente",
-            "d_en": "The compositor's master switch" },
-
-        "windows":      { "it": "Finestre", "en": "Windows",
-            "d_it": "Il gruppo: comprende l'apertura, la chiusura e lo spostamento",
-            "d_en": "The group: opening, closing and moving" },
-        "windowsIn":    { "it": "Finestre che si aprono", "en": "Windows opening",
-            "d_it": "Come compare una finestra appena avviata", "d_en": "How a new window appears" },
-        "windowsOut":   { "it": "Finestre che si chiudono", "en": "Windows closing",
-            "d_it": "Come sparisce una finestra chiusa", "d_en": "How a closed window disappears" },
-        "windowsMove":  { "it": "Finestre che si spostano", "en": "Windows moving",
-            "d_it": "Quando una finestra cambia posto o misura, anche agganciandosi a un bordo",
-            "d_en": "When a window changes place or size" },
-
-        "workspaces":    { "it": "Cambio scrivania", "en": "Switching workspace",
-            "d_it": "Il gruppo: comprende l'entrata e l'uscita", "d_en": "The group: in and out" },
-        "workspacesIn":  { "it": "Scrivania che entra", "en": "Workspace coming in",
-            "d_it": "La scrivania verso cui stai andando", "d_en": "The workspace you are going to" },
-        "workspacesOut": { "it": "Scrivania che esce", "en": "Workspace going out",
-            "d_it": "La scrivania che stai lasciando", "d_en": "The workspace you are leaving" },
-
-        "specialWorkspace":    { "it": "Scrivania di servizio", "en": "Special workspace",
-            "d_it": "Quella dove Minerva parcheggia le finestre ridotte a icona",
-            "d_en": "Where Minerva parks minimised windows" },
-        "specialWorkspaceIn":  { "it": "Scrivania di servizio che entra", "en": "Special workspace in",
-            "d_it": "", "d_en": "" },
-        "specialWorkspaceOut": { "it": "Scrivania di servizio che esce", "en": "Special workspace out",
-            "d_it": "", "d_en": "" },
-
-        "fade":        { "it": "Dissolvenze", "en": "Fades",
-            "d_it": "Il gruppo di tutte le comparse e sparizioni graduali", "d_en": "All gradual appearances" },
-        "fadeIn":      { "it": "Dissolvenza in entrata", "en": "Fade in",
-            "d_it": "", "d_en": "" },
-        "fadeOut":     { "it": "Dissolvenza in uscita", "en": "Fade out",
-            "d_it": "", "d_en": "" },
-        "fadeSwitch":  { "it": "Passaggio fra finestre", "en": "Switching windows",
-            "d_it": "Quando il fuoco passa da una finestra all'altra", "d_en": "When focus moves" },
-        "fadePopups":  { "it": "Menu a comparsa", "en": "Popups",
-            "d_it": "I menu dei programmi, non quelli di Minerva", "d_en": "Application menus" },
-        "fadePopupsIn":  { "it": "Menu che compaiono", "en": "Popups in", "d_it": "", "d_en": "" },
-        "fadePopupsOut": { "it": "Menu che spariscono", "en": "Popups out", "d_it": "", "d_en": "" },
-        "fadeLayers":    { "it": "Barre e pannelli", "en": "Bars and panels",
-            "d_it": "Le superfici appoggiate sullo schermo: la barra, la dock, i pannelli",
-            "d_en": "Surfaces laid over the screen" },
-        "fadeLayersIn":  { "it": "Barre che compaiono", "en": "Layers in", "d_it": "", "d_en": "" },
-        "fadeLayersOut": { "it": "Barre che spariscono", "en": "Layers out", "d_it": "", "d_en": "" },
-        "fadeDim":     { "it": "Oscuramento", "en": "Dimming",
-            "d_it": "Le finestre che non hanno il fuoco, quando è attivo l'oscuramento",
-            "d_en": "Unfocused windows when dimming is on" },
-        "fadeShadow":  { "it": "Ombra", "en": "Shadow",
-            "d_it": "L'ombra sotto le finestre", "d_en": "The shadow under windows" },
-        "fadeGlow":    { "it": "Alone", "en": "Glow",
-            "d_it": "L'alone attorno alla finestra attiva, se acceso", "d_en": "The glow around the active window" },
-        "fadeDpms":    { "it": "Schermo che si spegne", "en": "Screen turning off",
-            "d_it": "Quando lo schermo si spegne per inattività", "d_en": "When the screen sleeps" },
-
-        "layers":      { "it": "Pannelli di Minerva", "en": "Minerva's panels",
-            "d_it": "Il gruppo delle superfici appoggiate: barra, dock, pannelli",
-            "d_en": "The group of overlay surfaces" },
-        "layersIn":    { "it": "Pannelli che si aprono", "en": "Panels opening", "d_it": "", "d_en": "" },
-        "layersOut":   { "it": "Pannelli che si chiudono", "en": "Panels closing", "d_it": "", "d_en": "" },
-
-        "border":      { "it": "Colore del bordo", "en": "Border colour",
-            "d_it": "Il bordo che cambia colore quando la finestra prende o perde il fuoco",
-            "d_en": "The border changing colour with focus" },
-        "borderangle": { "it": "Bordo che gira", "en": "Rotating border",
-            "d_it": "Il bordo sfumato che ruota di continuo. Costa qualcosa anche da fermo",
-            "d_en": "A gradient border that keeps rotating. It costs even while idle" },
-        "glowangle":   { "it": "Alone che gira", "en": "Rotating glow",
-            "d_it": "Come sopra, ma per l'alone", "d_en": "As above, for the glow" },
-        "shadowangle": { "it": "Ombra che gira", "en": "Rotating shadow",
-            "d_it": "Come sopra, ma per l'ombra", "d_en": "As above, for the shadow" },
-
-        "monitorAdded": { "it": "Schermo collegato", "en": "Monitor plugged in",
-            "d_it": "Quando arriva un secondo schermo", "d_en": "When a second screen appears" },
-        "zoomFactor":   { "it": "Lente di ingrandimento", "en": "Magnifier",
-            "d_it": "L'ingrandimento dell'Accessibilità, quando cambia", "d_en": "The accessibility magnifier" }
-    })
-
-    /// Il nome leggibile di un'animazione, o il suo nome nudo se non lo
-    /// sappiamo descrivere.
-    function nomeAnimazione(hypr, italiano) {
-        var d = comp.descrizioniAnimazione[hypr];
-        if (!d)
-            return hypr;
-        return italiano ? d.it : d.en;
-    }
-
-    /// A che cosa serve, in una riga. Vuoto se non c'è niente da aggiungere
-    /// oltre al nome.
-    function descrizioneAnimazione(hypr, italiano) {
-        var d = comp.descrizioniAnimazione[hypr];
-        if (!d)
-            return "";
-        return italiano ? d.d_it : d.d_en;
-    }
-
-    /// Accende o spegne un gruppo, e ne cambia la velocità.
-    ///
-    /// `velocita` è quella del compositore: un numero di DECIMI DI SECONDO,
-    /// e più è alto più l'animazione è lenta — al contrario di quanto suggerisce
-    /// la parola. `undefined` la lascia com'è.
-    function animazioneGruppo(id, accesa, velocita, stile) {
-        comp._senzaStrada("animazioneGruppo");
-    }
-
-    /// Una singola animazione col suo nome vero, per la sezione «Avanzate».
-    /// Chi la chiama sta già mostrando i nomi del compositore, e lo dichiara.
-    function animazioneAvanzata(nome, accesa, velocita, curva, stile) {
-        comp._senzaStrada("animazioneAvanzata");
-    }
-
-    /// La scia dietro le finestre in movimento. Ce l'ha il compositore da sé.
-    function scia(accesa, campioni) {
-        comp._senzaStrada("scia");
-    }
+    // manopola.
+    //
+    // Le animazioni del compositore non hanno un verbo loro: l'interruttore
+    // generale (`desktop.animations`) porta a zero l'elastico delle finestre
+    // (`shell.qml`, `WindowRules.elastico`), e i movimenti liquidi della
+    // Tappa 3 si regoleranno da lì. Qui c'erano sei funzioni che non
+    // mandavano niente — gruppi, animazioni «avanzate», scia — con la tabella
+    // dei nomi delle animazioni di Hyprland: tolte il 27 settembre 2026.
 
     /// L'ingrandimento della lente attorno al puntatore. 1 = nessuno.
     function ingrandimentoPuntatore(fattore) {
@@ -1352,12 +1092,6 @@ Singleton {
     // strada in meno da leggere. Il suo posto l'ha preso `effetto()`, e la
     // sfocatura vera sarà un passaggio di rendering dentro minerva-wayland,
     // non tre numeri da mandare a qualcun altro.
-
-    /// Lo spazio fra le finestre affiancate e attorno a esse. Tutti e due
-    /// insieme perché si guardano: cambiarne uno solo sbilancia il disegno.
-    function margini(dentro, fuori) {
-        comp._senzaStrada("margini");
-    }
 
     /// Il colore del bordo della finestra attiva e di quelle che non lo sono.
     function coloriBordo(attivo, inattivo) {
@@ -1785,15 +1519,10 @@ Singleton {
     }
 
     /// Gradi puliti: 0, 90, 180 o 270. Qualunque altra cosa è «dritto».
-    ///
-    /// Accetta anche i numeri di Hyprland (0-3) per non rompere chi glieli
-    /// passa ancora: 1 è 90, non un grado.
     function _gradiInteri(g) {
         var v = Number(g);
         if (!isFinite(v))
             return 0;
-        if (v === 1 || v === 2 || v === 3)
-            v = v * 90;
         // Niente arrotondamenti: 45 gradi non è «quasi 90», è una cosa che
         // non si può fare, e trasformarlo in 90 vorrebbe dire ruotare lo
         // schermo per un valore che nessuno ha chiesto. Tutto ciò che non è
@@ -1833,11 +1562,7 @@ Singleton {
             var m = grezzi[i];
             if (!m)
                 continue;
-            // Il nostro compositore manda `nome`; Hyprland manda `name`. È
-            // l'unico modo di distinguerli che non richiede di sapere in
-            // anticipo chi ha risposto.
-            fuori.push(m.nome !== undefined ? comp._schermoNostro(m)
-                                            : comp._schermoHypr(m));
+            fuori.push(comp._schermoNostro(m));
         }
         return fuori;
     }
@@ -1858,25 +1583,6 @@ Singleton {
             "acceso": m.acceso !== false,
             "attivo": m.attivo === true,
             "modi": comp._modiPuliti(m.modi || [])
-        };
-    }
-
-    function _schermoHypr(m) {
-        return {
-            "nome": m.name || "",
-            "descrizione": m.description || "",
-            "larghezza": m.width || 0,
-            "altezza": m.height || 0,
-            "modoLarghezza": m.width || 0,
-            "modoAltezza": m.height || 0,
-            "hz": Math.round(m.refreshRate || 0),
-            "scala": m.scale || 1,
-            "gradi": comp._gradiInteri(m.transform || 0),
-            "x": m.x || 0,
-            "y": m.y || 0,
-            "acceso": m.disabled !== true,
-            "attivo": m.focused === true,
-            "modi": comp._modiPuliti(m.availableModes || [])
         };
     }
 
@@ -1912,27 +1618,20 @@ Singleton {
             return "";
         }
 
-        // Quella di Hyprland: `mice`, e il touchpad si indovina dal nome.
-        var m = d.mice || [];
-        for (var j = 0; j < m.length; j++) {
-            var n = String((m[j] && m[j].name) || "");
-            if (n.slice(-8) === "touchpad")
-                return n;
-        }
         return "";
     }
 
-    /// I modi in una forma sola: `1920x1080@60`, senza doppioni.
+    /// I modi in una forma sola, `1920x1080@60.000`, senza doppioni esatti.
     ///
-    /// Hyprland li manda come `1920x1080@60.00Hz`; il nostro compositore già
-    /// puliti. Arrotondare la frequenza è voluto: 59,997 Hz e 60 Hz sono lo
-    /// stesso modo, e mostrarli come due voci diverse in un menu è un modo
-    /// di far scegliere a caso.
+    /// La frequenza resta coi suoi tre decimali: 60,000 e 59,990 sono due
+    /// modi diversi per lo schermo, e il compositore vuole quello esatto per
+    /// applicarlo. A non farli sembrare una scelta a caso ci pensa la pagina
+    /// Schermi, che li raggruppa per risoluzione.
     function _modiPuliti(grezzi) {
         var visti = {};
         var fuori = [];
         for (var i = 0; i < grezzi.length; i++) {
-            var t = String(grezzi[i]).replace(/Hz$/, "");
+            var t = String(grezzi[i]);
             var chiocciola = t.indexOf("@");
             if (chiocciola < 0)
                 continue;
@@ -1949,30 +1648,6 @@ Singleton {
         return fuori;
     }
 
-    /// Una manopola della barra del titolo disegnata DENTRO il compositore.
-    ///
-    /// Questa non si astrae, e va detto: il plugin è codice nostro compilato
-    /// contro Hyprland, e con un altro compositore non esiste proprio — non
-    /// è una chiave da tradurre, è una funzione che non c'è. Passa di qui
-    /// solo perché la porta resti l'unico posto che scrive al compositore.
-    function barraDelCompositore(chiave, valore) {
-        comp._senzaStrada("barraDelCompositore");
-    }
-
-    /// Il filtro che ricolora tutto lo schermo — la luce notturna.
-    /// Senza argomento lo toglie.
-    ///
-    /// `[[EMPTY]]` è il modo in cui Hyprland dice «nessuno»: è una stringa
-    /// speciale, non un percorso, e questa è la sola riga che lo sa.
-    function filtroSchermo(percorso) {
-        // `LuceNotturna` si dirama già e sotto di noi chiama `coloreSchermo`,
-        // quindi qui non ci arriva. La dichiarazione sta lo stesso QUI e non
-        // solo là: fidarsi che ogni chiamante si diramì bene è un elenco di
-        // posti da ricordare, e un elenco così prima o poi ne dimentica uno —
-        // in silenzio. È la stessa ragione per cui il controllo della parola
-        // d'ordine sta dentro `send()` e non nei cinque punti che trasmettono.
-        comp._senzaStrada("filtroSchermo");
-    }
 
     /// La tinta di tutto lo schermo, in tre moltiplicatori: 1, 1, 1 è il
     /// neutro. È l'altra metà della luce notturna.

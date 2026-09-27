@@ -157,20 +157,19 @@ void main() {
   });
 
   group('finestre e spazio utile', () {
-    test('lo schermo intero è il modo DUE, non «diverso da zero»', () {
-      // Il 19 agosto 2026 questa riga si è spostata da `Windows.qml` a
-      // `Compositore.qml`: la FORMA della risposta del compositore è una
-      // traduzione, e le traduzioni stanno nella porta. Windows decide, non
-      // traduce. La regola non è cambiata di una virgola — è cambiato il
-      // posto in cui vive, e la prova l'ha seguita.
+    test('schermo intero e ingrandita non si confondono', () {
+      // In Hyprland `fullscreen` era un modo da 0 a 2, e trattare l'UNO (il
+      // «massimizza») come schermo intero toglieva la barra alle finestre
+      // ingrandite. Il nostro compositore manda due sì/no separati
+      // (`schermoIntero`, `ingrandita`): la regola resta, detta nella nostra
+      // lingua — «schermo intero» viene SOLO da `schermoIntero`.
       final testo = _codice('core/Compositore.qml');
-      expect(testo, contains("(c.fullscreen || 0) === 2"),
-          reason: 'In Hyprland `fullscreen` è un modo, non un sì/no: '
-              'UNO è il «massimizza» del compositore, che rispetta le zone '
-              'riservate e lascia in cima il posto per la barra del titolo; '
-              'DUE è lo schermo intero vero. Trattandoli allo stesso modo, '
-              'una finestra massimizzata perde la barra: il posto c\'è, '
-              'vuoto, e la barra non c\'è.');
+      expect(testo, contains('"fullscreen": c.schermoIntero === true'),
+          reason: 'lo schermo intero deve venire solo da `schermoIntero`: '
+              'una finestra ingrandita che risulta a schermo intero perde la '
+              'barra del titolo');
+      expect(testo, contains('(c.ingrandita === true ? 1 : 0)'),
+          reason: 'l\'ingrandita è il modo UNO, distinto dallo schermo intero');
     });
 
     test('lo spazio utile si rilegge, non si legge una volta sola', () {

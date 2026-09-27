@@ -114,19 +114,6 @@ ShellRoot {
                        pieno.modoSchermo === 2 && pieno.fullscreen === true,
                        String(pieno.modoSchermo));
 
-        // E la lingua di Hyprland continua a funzionare: sono due compositori
-        // per un mese, non uno dopo l'altro.
-        var hypr = Core.Compositore.finestraDaCompositore({
-            "address": "0xaa", "pid": 9, "title": "Konsole",
-            "class": "konsole", "at": [1, 2], "size": [3, 4],
-            "focusHistoryID": 0, "fullscreen": 2,
-            "workspace": { "id": 1, "name": "1" }
-        }, "speciale:minervaridotte");
-        banco.verifica("e una finestra di Hyprland si legge ancora",
-                       hypr.address === "0xaa" && hypr.w === 3
-                       && hypr.modoSchermo === 2,
-                       JSON.stringify(hypr));
-
         // ── Le scrivanie ─────────────────────────────────────────────────
         //
         // Fino al 25 agosto `workspace` era scritto `1` a mano, perché in
@@ -357,15 +344,18 @@ ShellRoot {
                        banco.ultima() === "schermo DP-2 1280x720@60 1 90 1920 0",
                        banco.ultima());
 
-        // ── La rotazione: gradi, non i numeri di Hyprland ────────────────
+        // ── La rotazione: in gradi, e solo quarti di giro ────────────────
         //
-        // Hyprland la chiama `transform` e la conta da 0 a 3. Passare quel
-        // numero al nostro compositore vorrebbe dire chiedergli di ruotare
-        // di UN grado — che lui rifiuta, e giustamente. Chi ha ancora in
-        // mano i numeri vecchi non deve rompersi in silenzio.
-        Core.Compositore.schermo("DP-2", "1280x720@60", 1, 1);
-        banco.verifica("un «1» di Hyprland diventa 90 gradi",
+        // Fino al 27 settembre 2026 un «1» valeva 90 gradi, per chi aveva
+        // ancora in mano i numeri di Hyprland (da 0 a 3). Adesso è un grado,
+        // cioè non un quarto di giro: «dritto».
+        Core.Compositore.schermo("DP-2", "1280x720@60", 1, 90);
+        banco.verifica("novanta gradi sono novanta gradi",
                        banco.ultima() === "schermo DP-2 1280x720@60 1 90",
+                       banco.ultima());
+        Core.Compositore.schermo("DP-2", "1280x720@60", 1, 1);
+        banco.verifica("un grado non è un quarto di giro: «dritto»",
+                       banco.ultima() === "schermo DP-2 1280x720@60 1 0",
                        banco.ultima());
 
         Core.Compositore.schermo("DP-2", "1280x720@60", 1, 45);
@@ -387,22 +377,19 @@ ShellRoot {
         // compositore i nomi dei campi sono altri, e chi li leggeva a mano
         // non trovava niente. Un compositore che risponde e una pagina che
         // dice «nessuno schermo rilevato» è peggio di un errore.
-        var daHypr = Core.Compositore.schermiDaTesto(JSON.stringify([{
-            "name": "eDP-1", "description": "BOE", "width": 1920,
-            "height": 1080, "refreshRate": 59.997, "scale": 1.25,
-            "transform": 1, "x": 0, "y": 0, "focused": true,
-            "availableModes": ["1920x1080@60.00Hz", "1920x1080@59.99Hz"]
+        var doppi = Core.Compositore.schermiDaTesto(JSON.stringify([{
+            "nome": "eDP-1", "descrizione": "BOE", "larghezza": 1920,
+            "altezza": 1080, "hz": 60, "scala": 1.25, "rotazione": 90,
+            "x": 0, "y": 0, "acceso": true, "attivo": true,
+            "modi": ["1920x1080@60.000", "1920x1080@60", "1920x1080@59.990"]
         }]));
-        banco.verifica("la risposta di Hyprland diventa il nostro vocabolario",
-                       daHypr.length === 1 && daHypr[0].nome === "eDP-1"
-                       && daHypr[0].larghezza === 1920 && daHypr[0].hz === 60
-                       && daHypr[0].gradi === 90 && daHypr[0].acceso === true
-                       && daHypr[0].attivo === true,
-                       JSON.stringify(daHypr[0]));
-        banco.verifica("e due modi che arrotondano uguale diventano uno",
-                       daHypr[0].modi.length === 1
-                       && daHypr[0].modi[0] === "1920x1080@60",
-                       JSON.stringify(daHypr[0].modi));
+        banco.verifica("un doppione esatto dei modi sparisce",
+                       doppi[0].modi.length === 2
+                       && doppi[0].modi[0] === "1920x1080@60.000",
+                       JSON.stringify(doppi[0].modi));
+        banco.verifica("ma due frequenze vicine restano due modi",
+                       doppi[0].modi.indexOf("1920x1080@59.990") >= 0,
+                       JSON.stringify(doppi[0].modi));
 
         var daNostro = Core.Compositore.schermiDaTesto(JSON.stringify([{
             "nome": "WL-1", "descrizione": "Wayland output 1",
@@ -540,12 +527,11 @@ ShellRoot {
         banco.verifica("e l'elenco dei dispositivi si chiede sul canale",
                        banco.ultima() === "dispositivi", banco.ultima());
 
-        // ── Chi è il touchpad, dalle due risposte ───────────────────────
+        // ── Chi è il touchpad ───────────────────────────────────────────
         //
         // Serve al tasto Fn del portatile, che senza il nome non fa niente.
-        // Hyprland lo fa indovinare dal NOME; il nostro compositore lo chiede
-        // a libinput — «sa contare le dita?» — che è la domanda giusta e non
-        // un'ipotesi. Su questo portatile l'ipotesi è già costata.
+        // Il compositore lo chiede a libinput — «sa contare le dita?» — che è
+        // la domanda giusta e non un'ipotesi sul nome.
         banco.verifica("il touchpad si riconosce nella risposta del nostro",
                        Core.Compositore.touchpadDaTesto(JSON.stringify({
                            "puntatori": [
@@ -555,11 +541,13 @@ ShellRoot {
                            ]
                        })) === "ELAN0412:00 04F3:3162 Touchpad", "");
 
-        banco.verifica("e in quella di Hyprland, che lo indovina dal nome",
+        // Una risposta nel formato di Hyprland (`mice`) non si indovina più
+        // dal nome: da noi il touchpad lo dice libinput, o non c'è.
+        banco.verifica("un elenco nella lingua di Hyprland non si indovina",
                        Core.Compositore.touchpadDaTesto(JSON.stringify({
                            "mice": [{"name": "usb-mouse"},
                                     {"name": "elan-touchpad"}]
-                       })) === "elan-touchpad", "");
+                       })) === "", "");
 
         banco.verifica("e senza touchpad si risponde «nessuno», non a caso",
                        Core.Compositore.touchpadDaTesto(JSON.stringify({

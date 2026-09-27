@@ -388,7 +388,6 @@ Item {
                 // che l'interruttore non servisse a niente.
                 onToggled: function(v) {
                     Core.Ipc.setSetting("desktop.animations", v);
-                    Core.Compositore.animazioni(v);
                 }
             }
         }

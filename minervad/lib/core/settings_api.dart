@@ -984,11 +984,9 @@ class SettingsApi {
           // velocità, 2 = metà. Separata dall'interruttore apposta, così chi
           // spegne e riaccende ritrova la sua e non quella di fabbrica.
           'animationSpeed': 1.0,
-          // La scia dietro le finestre che si muovono. Ce l'ha Hyprland da sé
-          // e non costa una riga di C++: è quel «peso fisico» per cui di
-          // solito si vogliono le wobbly windows.
-          'motionBlur': false,
-          'motionBlurSamples': 7,
+          // Qui c'era la scia dietro le finestre (`motionBlur`): era di
+          // Hyprland, e sotto il nostro compositore non la applicava nessuno.
+          // Tolta il 27 settembre 2026 con la sua levetta.
           // ── Lo sfondo ───────────────────────────────────────────────
           //
           // Erano lette da `sections/Appearance.qml` e da `core/Wallpaper.qml`

@@ -110,8 +110,9 @@ QtObject {
     // Era un gradiente ciano-viola fisso, scritto in `hyprland.conf`; adesso
     // segue il colore scelto nelle Impostazioni.
 
-    /// Da un colore QML alla forma che vuole Hyprland: `rgba(RRGGBBAA)`.
-    function hyprColor(c, alpha) {
+    /// Da un colore QML alla forma del verbo `bordo` del compositore:
+    /// `rgba(RRGGBBAA)`.
+    function rgbaEsa(c, alpha) {
         function due(v) {
             var s = Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16);
             return s.length < 2 ? "0" + s : s;
@@ -119,7 +120,7 @@ QtObject {
         return "rgba(" + due(c.r) + due(c.g) + due(c.b) + due(alpha) + ")";
     }
 
-    readonly property string borderActive: rules.hyprColor(Theme.Colors.accent, 0.95)
+    readonly property string borderActive: rules.rgbaEsa(Theme.Colors.accent, 0.95)
 
     /// La cornice di una finestra che non ha il fuoco è una velatura, e come
     /// tutte le velature deve andare NEL VERSO del tema: bianca su fondo
@@ -128,7 +129,7 @@ QtObject {
     /// nessuna cornice, e nessun modo di vedere dove finisce una finestra
     /// appoggiata su un'altra.
     readonly property string borderInactive:
-        rules.hyprColor(Theme.Colors.scura ? Qt.rgba(1, 1, 1, 1)
+        rules.rgbaEsa(Theme.Colors.scura ? Qt.rgba(1, 1, 1, 1)
                                            : Qt.rgba(0, 0, 0, 1),
                         Theme.Colors.scura ? 0.13 : 0.16)
 

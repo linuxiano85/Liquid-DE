@@ -170,7 +170,6 @@ Page {
                 checked: Core.Ipc.get("desktop.animations", true)
                 onToggled: function(v) {
                     Core.Ipc.setSetting("desktop.animations", v);
-                    Core.Compositore.animazioni(v);
                 }
             }
         }

@@ -66,39 +66,6 @@ Page {
     // Si chiede al compositore all'apertura della pagina. Finché non risponde
     // resta vuoto e la sezione non compare: meglio niente che un elenco
     // inventato.
-    property var avanzate: []
-
-    Connections {
-        target: Core.Compositore
-        function onRisposta(cosa, testo) {
-            if (cosa !== "animazioni")
-                return;
-            try {
-                var d = JSON.parse(testo);
-                var lista = Array.isArray(d) && Array.isArray(d[0]) ? d[0] : d;
-                // Si mostrano solo quelle che hanno un nome: `hyprctl` ne
-                // riporta anche di interne (`__internal_fadeCTM`), che non
-                // sono roba di chi usa il computer.
-                var fuori = [];
-                for (var i = 0; i < lista.length; i++) {
-                    var n = String(lista[i].name || "");
-                    if (n === "" || n.indexOf("__") === 0)
-                        continue;
-                    fuori.push(lista[i]);
-                }
-                fuori.sort(function (a, b) {
-                    return String(a.name).localeCompare(String(b.name));
-                });
-                page.avanzate = fuori;
-            } catch (e) {
-                // Risposta illeggibile: si resta senza elenco invece di
-                // mostrarne uno sbagliato.
-                page.avanzate = [];
-            }
-        }
-    }
-
-    Component.onCompleted: Core.Compositore.chiedi("animazioni")
 
     // ── L'interruttore che vale per TUTTO ────────────────────────────────
 
@@ -116,7 +83,6 @@ Page {
                 checked: page.accese
                 onToggled: function (v) {
                     Core.Ipc.setSetting("desktop.animations", v);
-                    Core.Compositore.animazioni(v);
                 }
             }
         }
@@ -148,33 +114,6 @@ Page {
             }
         }
 
-        // ── La scia, che è il wobbly dei poveri e non costa niente ───────
-        //
-        // Giacomo voleva le wobbly windows. Quelle vere sono un progetto a sé
-        // (una griglia massa-molla dentro il plugin, con il limite che la
-        // gelatina non può uscire dal rettangolo della finestra). Questa
-        // invece Hyprland ce l'ha già, spenta: è il «peso fisico» del
-        // movimento, e sono due righe.
-        S.SettingRow {
-            width: parent.width
-            visible: page.accese
-            label: page.it ? "Scia dietro le finestre" : "Motion blur"
-            description: page.it
-                ? "Le finestre che si spostano lasciano una scia, come una foto "
-                  + "mossa. Non sono le «wobbly windows»: quelle deformano la "
-                  + "finestra e si regolano nella sezione qui sotto"
-                : "Moving windows leave a trail, like a blurred photo. This is "
-                  + "not «wobbly windows»: those wobble the window itself, and "
-                  + "can be adjusted in the section below"
-            controlWidth: 60
-            control: S.ToggleSwitch {
-                checked: Core.Ipc.get("desktop.motionBlur", false)
-                onToggled: function (v) {
-                    Core.Ipc.setSetting("desktop.motionBlur", v);
-                    Core.Compositore.scia(v, Core.Ipc.get("desktop.motionBlurSamples", 7));
-                }
-            }
-        }
     }
 
     // ── Trasparenza ──────────────────────────────────────────────────────
@@ -386,134 +325,12 @@ Page {
         S.WobblyControls { width: parent.width }
     }
 
-    // ── I gruppi, in parole nostre ───────────────────────────────────────
-
-    Card {
-        heading: page.it ? "Che cosa si anima" : "What animates"
-        visible: page.accese
-
-        Repeater {
-            model: [
-                { "id": "finestre",
-                  "it": "Finestre che si aprono e si chiudono",
-                  "en": "Windows opening and closing",
-                  "d_it": "Come compare una finestra appena avviata, e come sparisce quando la chiudi",
-                  "d_en": "How a new window appears and how a closed one goes" },
-                { "id": "spostare",
-                  "it": "Finestre che si spostano",
-                  "en": "Windows moving",
-                  "d_it": "Quando trascini una finestra, la ingrandisci o la agganci a un bordo",
-                  "d_en": "Dragging, maximising or snapping a window" },
-                { "id": "scrivanie",
-                  "it": "Cambio scrivania",
-                  "en": "Switching workspace",
-                  "d_it": "Lo scorrimento da una scrivania all'altra, con Super e un numero",
-                  "d_en": "Sliding from one workspace to another" },
-                { "id": "dissolvenze",
-                  "it": "Dissolvenze",
-                  "en": "Fades",
-                  "d_it": "Le comparse graduali: menu dei programmi, ombre, passaggio del fuoco",
-                  "d_en": "Gradual appearances: menus, shadows, focus changes" },
-                { "id": "pannelli",
-                  "it": "Pannelli e barre",
-                  "en": "Panels and bars",
-                  "d_it": "Come scendono i pannelli di Minerva dalla barra in cima",
-                  "d_en": "How Minerva's panels come down from the top bar" },
-                { "id": "bordo",
-                  "it": "Bordo della finestra attiva",
-                  "en": "Active window border",
-                  "d_it": "Il bordo che cambia colore quando una finestra prende il fuoco",
-                  "d_en": "The border changing colour when a window takes focus" }
-            ]
-
-            delegate: S.SettingRow {
-                required property var modelData
-                width: parent.width
-                label: page.it ? modelData.it : modelData.en
-                description: page.it ? modelData.d_it : modelData.d_en
-                controlWidth: 60
-                control: S.ToggleSwitch {
-                    checked: Core.Ipc.get("desktop.anim." + modelData.id, true)
-                    onToggled: function (v) {
-                        Core.Ipc.setSetting("desktop.anim." + modelData.id, v);
-                        Core.Compositore.animazioneGruppo(modelData.id, v);
-                    }
-                }
-            }
-        }
-    }
-
-    // ── Avanzate: i nomi del compositore, dichiarati come suoi ───────────
-
-    Card {
-        heading: page.it ? "Avanzate" : "Advanced"
-        visible: page.accese && page.avanzate.length > 0
-
-        Text {
-            width: parent.width
-            wrapMode: Text.WordWrap
-            text: page.it
-                ? "Queste sono le animazioni come le chiama il compositore, "
-                  + "lette da lui adesso: " + page.avanzate.length + " in tutto. "
-                  + "I nomi sono suoi e possono cambiare con lui — le voci qui "
-                  + "sopra invece restano."
-                : "These are the animations as the compositor names them, read "
-                  + "from it right now: " + page.avanzate.length + " in total. "
-                  + "The names are its own and may change with it."
-            color: Theme.Colors.textFaint
-            font.family: Theme.Typography.fontDisplay
-            font.pixelSize: Theme.Typography.sizeXS
-        }
-
-        Repeater {
-            model: page.avanzate
-
-            delegate: S.SettingRow {
-                required property var modelData
-                width: parent.width
-
-                // Il nome LEGGIBILE davanti, quello del compositore dietro.
-                // Al contrario — nome nudo davanti e spiegazione dietro —
-                // l'elenco si scorre senza capire niente, ed è quello che
-                // Giacomo ha visto: «puoi rendere più chiare le descrizioni?».
-                label: Core.Compositore.nomeAnimazione(modelData.name, page.it)
-
-                description: {
-                    var righe = [];
-                    var spiega = Core.Compositore.descrizioneAnimazione(
-                        modelData.name, page.it);
-                    if (spiega !== "")
-                        righe.push(spiega);
-
-                    var tec = [modelData.name];
-                    if (modelData.style)  tec.push(String(modelData.style));
-                    if (modelData.speed !== undefined)
-                        tec.push((page.it ? "velocità " : "speed ") + modelData.speed);
-                    righe.push(tec.join("  ·  "));
-                    return righe.join("\n");
-                }
-                controlWidth: 60
-                control: S.ToggleSwitch {
-                    checked: modelData.enabled === true
-                    onToggled: function (v) {
-                        Core.Compositore.animazioneAvanzata(
-                            modelData.name, v,
-                            modelData.speed === undefined ? 3 : modelData.speed,
-                            modelData.bezier, modelData.style);
-                        // Si richiede l'elenco invece di credere alla propria
-                        // mossa: alcune animazioni ne trascinano altre (i
-                        // gruppi `windows` → `windowsIn`/`windowsOut`), e una
-                        // spunta che mente è peggio di una che non c'è.
-                        rileggi.restart();
-                    }
-                }
-            }
-        }
-    }
-
-    Timer {
-        id: rileggi
-        interval: 250
-        onTriggered: Core.Compositore.chiedi("animazioni")
-    }
+    // Qui c'erano «Che cosa si anima» (sei interruttori, uno per gruppo) e
+    // «Avanzate» (le animazioni col nome del compositore), con la «scia»
+    // sopra. Erano le animazioni di Hyprland: sotto il nostro compositore
+    // gli interruttori non mandavano niente, e la chiave `desktop.anim.*`
+    // non esisteva fra i valori di fabbrica, quindi il demone non la salvava
+    // nemmeno — sei levette sempre accese che non cambiavano niente. Tolte il
+    // 27 settembre 2026. I movimenti liquidi delle finestre (Tappa 3)
+    // avranno le loro, una per movimento, quando ci saranno.
 }

@@ -170,8 +170,7 @@ QtObject {
         for (var i = 0; i < list.length; i++) {
             // La FORMA della risposta la conosce solo la porta: qui arriva
             // già in lingua nostra. Vedi `Compositore.finestraDaCompositore`.
-            var entry = Compositore.finestraDaCompositore(
-                list[i], windows.minimizedWorkspace);
+            var entry = Compositore.finestraDaCompositore(list[i]);
             var hidden = entry.minimized;
             entry.own = windows.isOwn(entry.appClass);
 
