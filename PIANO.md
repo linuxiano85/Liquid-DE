@@ -198,6 +198,94 @@ Minerva, con «Liquid DE» fra le sessioni.
   aperto dal login; «Chrome Safe Storage» si migra da ksecretd prima di
   spegnerlo.
 
+## Tappa W — Il modo Windows
+
+> 27 settembre 2026. Chi aspetta di provare Liquid DE lo chiede: «una
+> modalità Windows per gli utenti di Windows 11, conservando il nostro menù
+> e la barra in basso, per la memoria visiva».
+
+Non un tema che imita Windows, ma **le stesse posizioni** — dove la mano va
+già da sola — con dentro le cose nostre. Lo stile «Windows» c'è già dai
+tempi di Minerva (`settings/sections/Stile.qml`: barra in basso con le
+finestre aperte, niente dock), ma è nato prima della Riva: va rifatto sopra
+l'Isola e il Sottomarino, non accanto.
+
+- **La barra in basso**, a tutta larghezza: al centro il pulsante del menù e
+  le app — tenute e aperte nella stessa fila, come Windows 11, con la
+  lineetta sotto quelle aperte e più lunga su quella attiva; a destra i segni
+  di stato, l'ora e la data in due righe, e il pulsante che apre il Centro.
+  Il meteo a sinistra, dove Windows mette i widget. Le app si possono
+  allineare a sinistra (Windows 10) con una levetta.
+- **Il Sottomarino, dal pulsante e da Super**, che emerge sopra la barra
+  invece che da un angolo: stessa ricerca per funzione, stesse quattro viste,
+  «Aggiunte» in cima e «Nuova» sulle app appena installate.
+- **Il Centro** si apre dall'angolo destro della barra (Wi-Fi, volume,
+  batteria insieme, come su Windows 11), le notifiche e il calendario
+  dall'ora.
+- **I tasti di Windows**, accanto ai nostri: Win (menù), Win+E (file),
+  Win+D (scrivania), Win+L (blocco), Win+frecce (aggancio), Win+Tab,
+  Alt+Tab, Win+V (Cassetto degli appunti), Win+I (Impostazioni),
+  Win+Shift+S (schermata), Alt+F4. Sono gli stessi verbi: cambia solo il
+  tasto.
+- **Le finestre**: pulsanti a destra, doppio clic sulla barra che ingrandisce,
+  e trascinando una finestra ingrandita questa torna alla sua misura sotto il
+  puntatore (oggi resta grande e esce dallo schermo). **I riquadri
+  dell'aggancio** passando sul pulsante «ingrandisci» (gli «snap layout»):
+  metà, terzi, quarti, con la molla della Tappa 3.
+- **Gli angoli attivi e i bordi vivi spenti** di serie in questo modo: su
+  Windows il puntatore in un angolo non apre niente, e sorprendere chi viene
+  da lì è il contrario della memoria visiva.
+- **Si sceglie al primo accesso** («Da dove vieni? Windows · Mac · Nuovo») e
+  si cambia dallo Stile, in un messaggio solo (`set_settings`), com'è già
+  per i quattro stili di oggi.
+
+**Verifica**: le prove annidate sulla barra (le app aperte ci sono, il clic
+porta avanti e riduce, il menù emerge sopra la barra e non sotto), i tasti
+di Windows provati uno per uno dal canale, fotografie accanto a quelle di
+Windows 11. E la prova che conta: uno che viene da Windows apre, cerca,
+chiude, blocca senza chiedere niente.
+
+## Tappa T — Il modo tablet
+
+> Stesso giorno: «una modalità che si adatti per l'uso di tablet, per quando
+> si installa appunto su tablet».
+
+Qui si parte da zero, ed è giusto dirlo: il compositore oggi ha **zero righe
+per il tocco** (`wlr_touch`), nessuna tastiera a schermo (niente
+`input-method`, `text-input`, `virtual-keyboard`), zero gesti. La rotazione
+dello schermo c'è (le trasformazioni delle uscite), ma nessuno legge il
+sensore. Quindi prima le fondamenta nel compositore, poi il modo.
+
+1. **Il tocco nel compositore**: dita al sedile (`wlr_touch` →
+   `wlr_seat_touch_notify_*`), e per chi il tocco non lo capisce il ripiego
+   al puntatore (un dito = clic e trascina). Il tocco sulle nostre barre del
+   titolo sposta e ridimensiona. Tenere premuto = tasto destro.
+2. **I gesti dai bordi**, che sono i bordi vivi della Riva detti con un dito:
+   dal basso la banchina e, lungo, la panoramica; da sinistra le Stanze, da
+   destra il Cassetto, dall'alto il Centro. Pizzico e tre dita dalla Tappa 4,
+   che li fa per il touchpad: la stessa strada.
+3. **La tastiera a schermo, nostra**: `input-method-v2` + `text-input-v3`
+   nel compositore, e una tastiera in QML che sale quando un campo prende il
+   fuoco e scende quando lo perde — italiana, con gli accenti a pressione
+   lunga e la riga dei numeri.
+4. **La rotazione**: il sensore lo legge `iio-sensor-proxy` (D-Bus,
+   `net.hadess.SensorProxy`); il demone ascolta e il compositore gira lo
+   schermo con la molla. Un lucchetto della rotazione nel Centro.
+5. **Il modo**: bersagli da un dito (almeno 44 px, le barre del titolo più
+   alte, i pulsanti dell'energia già «tieni premuto» vanno bene così), le
+   finestre nascono ingrandite, il Sottomarino a tutto schermo con le icone
+   grandi, niente puntatore finché non si tocca un mouse.
+6. **Scatta da solo**: staccando la tastiera di un 2-in-1 il kernel lo dice
+   (l'interruttore `SW_TABLET_MODE`, `wlr_switch`), e il modo si accende e si
+   spegne senza chiedere; su un tablet vero è acceso sempre.
+
+**Verifica**: il verbo di prova `dito` impara il tocco (`tocca giù|muovi|su`,
+più dita), e ogni gesto ha la sua prova annidata vista rossa prima. La
+tastiera si prova con un campo di testo vero. Poi — su questo portatile non
+c'è uno schermo tattile — la prova vera la fanno i primi che lo installano su
+un tablet: per loro un registro dei tocchi (`MINERVA_TRACCIA_TOCCO=1`) da
+mandarci indietro.
+
 ## Regole per tutto il piano
 
 - **Prestazioni estreme**: ogni effetto si misura col cronometro della
@@ -216,6 +304,12 @@ Minerva, con «Liquid DE» fra le sessioni.
 
 0 → 0b → 1 → 2 → 3 → 4 → 5 → 6. La Tappa 1 è quella che si vede tutti i giorni e
 non chiede niente di pesante al compositore: si parte da lì, subito dopo la 0.
+
+Dal 27 settembre: **W** subito dopo la 1 — è quasi tutta shell, e chi aspetta
+di provare Liquid DE la chiede per prima. **T** dopo la 4, perché i gesti
+del touchpad e quelli del tocco sono la stessa strada; le sue fondamenta nel
+compositore (il tocco, la tastiera a schermo) possono cominciare prima, in
+parallelo, perché non toccano niente di quello che esiste.
 
 ## Aperto, da decidere con Giacomo
 
