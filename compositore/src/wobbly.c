@@ -563,6 +563,33 @@ void wobbly_distruggi(struct wobbly *w) {
 	free(w);
 }
 
+struct wlr_scene_buffer *wobbly_stacca(struct wobbly *w,
+		struct wlr_scene_tree *genitore, struct wlr_swapchain **catena) {
+	if (w == NULL || !w->mostrata || genitore == NULL || catena == NULL)
+		return NULL;
+	struct wlr_scene_buffer *copia = w->proxy;
+	struct wlr_scene_buffer *nuovo = wlr_scene_buffer_create(w->cornice, NULL);
+	if (nuovo == NULL)
+		return NULL;
+	// Il frame_done serviva a inoltrare i fotogrammi alle superfici vive:
+	// la copia staccata non ha più nessuno a cui inoltrarli.
+	wl_list_remove(&w->frame.link);
+	wl_signal_add(&nuovo->events.frame_done, &w->frame);
+	nuovo->point_accepts_input = accetta_punto;
+	wlr_scene_node_set_enabled(&nuovo->node, false);
+	w->proxy = nuovo;
+	copia->point_accepts_input = NULL;
+	wlr_scene_node_reparent(&copia->node, genitore);
+	// La catena va con la copia: tornando nella riserva sarebbe ridata a
+	// un'altra finestra, che ci disegnerebbe sopra mentre questa sfuma.
+	*catena = w->swapchain;
+	w->swapchain = NULL;
+	w->mostrata = false;
+	// Il disegno torna quello vero (le foglie restano nella finestra).
+	wlr_scene_node_set_enabled(&w->originali->node, true);
+	return copia;
+}
+
 void wobbly_trasforma(struct wobbly *w, double sx, double sy, double ax, double ay, float alfa) {
 	if (w == NULL || !w->mostrata)
 		return;

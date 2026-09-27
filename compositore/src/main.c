@@ -58,6 +58,7 @@
 #include <wlr/render/allocator.h>
 #include <wlr/render/color.h>
 #include <wlr/types/wlr_damage_ring.h>
+#include <wlr/render/swapchain.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_cursor.h>
@@ -790,6 +791,10 @@ struct minerva {
 	/// un piano sotto tutte le finestre; `ponti` è quanti se ne disegnano
 	/// adesso. Vedi `mercurio_aggiorna` e src/mercurio.h.
 	bool mercurio_acceso;
+	/// Le copie delle finestre appena chiuse, che si ritirano per un respiro
+	/// (vedi `respiro_chiusura`). Vuota a riposo: nessun battito.
+	struct wl_list fantasmi;
+	int fantasmi_vivi;
 	struct wlr_scene_tree *piano_mercurio;
 	struct { struct wlr_scene_rect *filtro, *tinta; } ponte_nodi[12];
 	int ponti;
@@ -1053,6 +1058,9 @@ struct finestra {
 	// si deforma: aggancio, coordinate dei client e disposizione non cambiano.
 	struct molla molla;
 	struct wobbly *wobbly;
+	/// La copia fatta quando si è chiesto di chiuderla, che aspetta lo
+	/// smappamento per ritirarsi (vedi `chiusura_chiesta`). NULL di solito.
+	struct fantasma *fantasma_pronto;
 	double wobbly_presa_x, wobbly_presa_y;
 	struct timespec molla_ultimo;
 	bool wobbly_fallita;
@@ -1213,6 +1221,11 @@ static void respiro_fotogramma(struct minerva *m, struct wlr_output *out);
 static bool respiro_avvia(struct finestra *f, int tipo);
 static void respiro_fine(struct finestra *f);
 static void mercurio_aggiorna(struct minerva *m);
+static void respiro_chiusura(struct finestra *f);
+static void chiusura_chiesta(struct finestra *f);
+struct fantasma;
+static void fantasma_scarta(struct fantasma *g);
+static void fantasmi_fotogramma(struct minerva *m);
 static void proteggi_sonno(void *data);
 
 // ── Il fuoco ──────────────────────────────────────────────────────────────
@@ -1503,6 +1516,7 @@ static void schermo_frame(struct wl_listener *l, void *dati) {
 	// le posizioni di QUESTO fotogramma. Se niente è cambiato, niente si
 	// tocca (i nodi confrontano prima di sporcare).
 	mercurio_aggiorna(s->m);
+	fantasmi_fotogramma(s->m);
 
 	// La scena sa cosa è cambiato e ridisegna solo quello. Chiedere il
 	// disegno di tutto a ogni fotogramma funziona lo stesso e si paga in
@@ -2385,6 +2399,7 @@ static void finestra_di_schermo_intero(struct finestra *f, bool si) {
 /// «Chiuditi, per favore». Non è un'uccisione: il programma può chiedere di
 /// salvare, e deve poterlo fare.
 static void finestra_di_chiuditi(struct finestra *f) {
+	chiusura_chiesta(f);
 	if (f->razza == FINESTRA_X11) {
 		wlr_xwayland_surface_close(f->xsup);
 		return;
@@ -3539,6 +3554,8 @@ static void finestra_sparisce(struct finestra *f) {
 static void finestra_smappata(struct wl_listener *l, void *dati) {
 	(void)dati;
 	struct finestra *f = wl_container_of(l, f, smappata);
+	// La copia fatta alla richiesta di chiudere, se c'è, si ritira adesso.
+	respiro_chiusura(f);
 	finestra_sparisce(f);
 }
 
@@ -3546,6 +3563,10 @@ static void finestra_distrutta(struct wl_listener *l, void *dati) {
 	(void)dati;
 	struct finestra *f = wl_container_of(l, f, distrutta);
 	molla_ferma_finestra(f);
+	if (f->fantasma_pronto != NULL) {
+		fantasma_scarta(f->fantasma_pronto);
+		f->fantasma_pronto = NULL;
+	}
 
 	// Si annuncia PRIMA di smontare: qui il toplevel esiste ancora e il
 	// titolo si legge. Annunciando dopo, chi ascolta riceverebbe un oggetto
@@ -6065,6 +6086,178 @@ static bool respiro_avvia(struct finestra *f, int tipo) {
 	return true;
 }
 
+// ── Il respiro della chiusura ────────────────────────────────────────────
+//
+// Giacomo, 27 settembre 2026, vedendo il respiro: «l'animazione in apertura
+// nelle app, ma in chiusura? nulla». Il perché: quando un programma chiude,
+// la sua immagine se ne va con lui, e non c'è niente da animare.
+//
+// ── La copia si fa quando si CHIEDE di chiudere ──────────────────────────
+//
+// La prima versione la faceva allo smappamento, ed usciva vuota: a quel
+// punto la scena di wlroots ha già spento (o svuotato) il contenuto del
+// programma — con Alacritty restava solo la nostra barra del titolo, con una
+// finestra Qt un rettangolo trasparente. Provato riaccendendo l'albero e
+// prendendo la texture dal buffer del client: niente di affidabile.
+//
+// Quindi la copia si fa quando la chiusura si chiede (la X, Super+C,
+// «chiudi» dalla dock: tutto passa da `finestra_di_chiuditi`), finché la
+// finestra ha tutta la sua immagine. Resta nascosta; se la finestra si
+// smappa entro tre secondi diventa il fantasma che si ritira e sfuma, se no
+// — il programma ha chiesto «salvare?», o ha detto di no — si butta. Chi
+// chiude da sé (Ctrl+Q, «Esci» nel suo menù) sparisce senza respiro.
+//
+// Il fantasma sta alla stessa altezza della finestra nella pila, e la
+// finestra vera sparisce subito: chi la chiude non aspetta niente. Come una
+// goccia che si ritira: si stringe un poco, più in altezza che in
+// larghezza, e sfuma. Stesse regole del respiro: non col respiro spento, col
+// risparmio, a schermo bloccato, a schermo intero (un film che si chiude
+// sparisce e basta) o mentre la si trascina.
+struct fantasma {
+	struct wl_list link;
+	struct wlr_scene_buffer *nodo;
+	struct wlr_swapchain *catena;
+	/// Dov'era la copia (angolo, in coordinate dello schermo) e quanto era
+	/// grande, margine del wobbly compreso.
+	int x, y, larga, alta;
+	/// Quando è stata fatta (finché aspetta) e poi quando è partita.
+	struct timespec t0;
+};
+
+#define CHIUSURA_DURATA 0.24
+/// Quanto aspetta una copia fatta alla richiesta: oltre, il programma non
+/// ha chiuso (o ha chiesto qualcosa) e la copia non è più la finestra.
+#define CHIUSURA_ATTESA 3.0
+
+static void fantasma_scarta(struct fantasma *g) {
+	wlr_scene_node_destroy(&g->nodo->node);
+	if (g->catena != NULL)
+		wlr_swapchain_destroy(g->catena);
+	free(g);
+}
+
+static void fantasma_via(struct minerva *m, struct fantasma *g) {
+	wl_list_remove(&g->link);
+	fantasma_scarta(g);
+	m->fantasmi_vivi--;
+}
+
+static bool chiusura_puo_respirare(struct finestra *f) {
+	struct minerva *m = f->m;
+	return m->respiro_acceso && !m->risparmio_attivo && !m->bloccato
+		&& !f->wobbly_fallita && !f->molla.viva && !f->schermo_intero
+		&& finestra_visibile(f);
+}
+
+/// La richiesta di chiudere: si fa la copia, nascosta, finché l'immagine c'è.
+static void chiusura_chiesta(struct finestra *f) {
+	struct minerva *m = f->m;
+	if (f->fantasma_pronto != NULL) {
+		fantasma_scarta(f->fantasma_pronto);
+		f->fantasma_pronto = NULL;
+	}
+	if (!chiusura_puo_respirare(f))
+		return;
+	// Un respiro a metà (la finestra chiusa appena nata) si chiude qui: la
+	// copia parte da com'è adesso.
+	if (f->respiro != RESPIRO_NIENTE)
+		respiro_fine(f);
+	if (f->wobbly != NULL)
+		return;
+	struct wobbly *w = wobbly_crea(f->cornice, m->renderer, m->allocator, NULL);
+	if (w == NULL)
+		return;
+	struct wlr_box box;
+	finestra_box(f, &box);
+	struct ondulazione forma = {
+		.larghezza = box.width, .altezza = box.height,
+		.presa_x = box.width / 2.0, .presa_y = box.height / 2.0,
+	};
+	double scala = 1.0;
+	struct wlr_output *out = molla_schermo(f);
+	if (out) scala = out->scale;
+	struct fantasma *g = NULL;
+	if (box.width > 0 && box.height > 0 && wobbly_disegna(w, &forma, scala)
+	    && (g = calloc(1, sizeof(*g))) != NULL) {
+		g->nodo = wobbly_stacca(w, m->finestre, &g->catena);
+		if (g->nodo == NULL) {
+			free(g);
+			g = NULL;
+		}
+	}
+	wobbly_distruggi(w);
+	if (g == NULL)
+		return;
+	g->x = f->cornice->node.x + g->nodo->node.x;
+	g->y = f->cornice->node.y + g->nodo->node.y;
+	g->larga = g->nodo->dst_width;
+	g->alta = g->nodo->dst_height;
+	wlr_scene_node_set_position(&g->nodo->node, g->x, g->y);
+	wlr_scene_node_set_enabled(&g->nodo->node, false);
+	clock_gettime(CLOCK_MONOTONIC, &g->t0);
+	f->fantasma_pronto = g;
+}
+
+/// Allo smappamento: la copia fatta alla richiesta, se c'è ed è fresca,
+/// prende il posto della finestra e si ritira.
+static void respiro_chiusura(struct finestra *f) {
+	struct minerva *m = f->m;
+	struct fantasma *g = f->fantasma_pronto;
+	if (g == NULL)
+		return;
+	f->fantasma_pronto = NULL;
+	struct timespec ora;
+	clock_gettime(CLOCK_MONOTONIC, &ora);
+	const double eta = (ora.tv_sec - g->t0.tv_sec) + (ora.tv_nsec - g->t0.tv_nsec) / 1e9;
+	if (eta > CHIUSURA_ATTESA || !chiusura_puo_respirare(f)) {
+		fantasma_scarta(g);
+		return;
+	}
+	wlr_scene_node_place_above(&g->nodo->node, &f->cornice->node);
+	wlr_scene_node_set_enabled(&g->nodo->node, true);
+	g->t0 = ora;
+	wl_list_insert(&m->fantasmi, &g->link);
+	m->fantasmi_vivi++;
+	struct schermo *sc;
+	wl_list_for_each(sc, &m->schermi_elenco, link)
+		wlr_output_schedule_frame(sc->out);
+}
+
+static void fantasmi_fotogramma(struct minerva *m) {
+	if (wl_list_empty(&m->fantasmi))
+		return;
+	struct timespec ora;
+	clock_gettime(CLOCK_MONOTONIC, &ora);
+	struct fantasma *g, *tmp;
+	wl_list_for_each_safe(g, tmp, &m->fantasmi, link) {
+		const double t = (ora.tv_sec - g->t0.tv_sec)
+			+ (ora.tv_nsec - g->t0.tv_nsec) / 1e9;
+		const double p = t / CHIUSURA_DURATA;
+		if (p >= 1 || m->bloccato) {
+			fantasma_via(m, g);
+			continue;
+		}
+		// Parte piano e accelera: la goccia esita, poi si ritira.
+		const double e = p * p;
+		const double sx = 1 - 0.10 * e, sy = 1 - 0.16 * e;
+		const double cx = g->x + g->larga / 2.0, cy = g->y + g->alta / 2.0;
+		int dw = (int)lround(g->larga * sx), dh = (int)lround(g->alta * sy);
+		if (dw < 1) dw = 1;
+		if (dh < 1) dh = 1;
+		wlr_scene_buffer_set_dest_size(g->nodo, dw, dh);
+		wlr_scene_node_set_position(&g->nodo->node,
+			(int)lround(cx - dw / 2.0), (int)lround(cy - dh / 2.0));
+		const double a = 1 - p;
+		wlr_scene_buffer_set_opacity(g->nodo, (float)(a * a * (3 - 2 * a)));
+		m->respiro_passi++;
+	}
+	if (!wl_list_empty(&m->fantasmi)) {
+		struct schermo *sc;
+		wl_list_for_each(sc, &m->schermi_elenco, link)
+			wlr_output_schedule_frame(sc->out);
+	}
+}
+
 static void respiro_fine(struct finestra *f) {
 	if (f->respiro == RESPIRO_NIENTE)
 		return;
@@ -7820,7 +8013,7 @@ static void comando_stato(struct minerva *m, char *risposta, size_t n) {
 		"\"elastico\":%.2f,\"rigidita\":%.2f,\"smorzamento\":%.2f,\"blurIntensita\":%.2f,"
 		"\"tinta\":\"%.4f %.4f %.4f\",\"tintaStrada\":\"%s\","
 		"\"respiro\":%s,\"respiri\":%d,\"respiroPassi\":%u,\"copie\":%u,"
-		"\"presentati\":%u,\"mercurio\":%s,\"ponti\":%d,"
+		"\"presentati\":%u,\"mercurio\":%s,\"ponti\":%d,\"fantasmi\":%d,"
 		"\"risparmio\":%s}",
 		m->bloccato ? "true" : "false", code, m->scrivania_attiva,
 		m->inattivo_quante, corn, m->cornice_periodo, m->cornice_spessore,
@@ -7829,7 +8022,7 @@ static void comando_stato(struct minerva *m, char *risposta, size_t n) {
 		m->tinta_rgb[0], m->tinta_rgb[1], m->tinta_rgb[2], strada,
 		m->respiro_acceso ? "true" : "false", m->respiri_attivi, m->respiro_passi,
 		m->molle_attive, presentati,
-		m->mercurio_acceso ? "true" : "false", m->ponti,
+		m->mercurio_acceso ? "true" : "false", m->ponti, m->fantasmi_vivi,
 		risp);
 }
 
@@ -10867,6 +11060,7 @@ int main(int argc, char *argv[]) {
 	// dentro. Una `wl_list` non inizializzata non dà errore: dà un puntatore
 	// a caso seguito alla prima iterazione.
 	wl_list_init(&m.finestre_elenco);
+	wl_list_init(&m.fantasmi);
 	wl_list_init(&m.sovrapposte);
 	wl_list_init(&m.appoggiate);
 	wl_list_init(&m.schermi_elenco);
