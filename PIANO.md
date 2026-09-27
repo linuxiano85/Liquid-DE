@@ -198,7 +198,11 @@ Minerva, con «Liquid DE» fra le sessioni.
   aperto dal login; «Chrome Safe Storage» si migra da ksecretd prima di
   spegnerlo.
 
-## Tappa W — Il modo Windows
+## Tappa W — Il modo Windows (in pausa)
+
+> **In pausa dal 27 settembre**: «per ora lasciamo stare stile Windows e
+> tablet perché dobbiamo concentrarci sul completare liquid». Resta scritta
+> così com'è, per quando si riprende.
 
 > 27 settembre 2026. Chi aspetta di provare Liquid DE lo chiede: «una
 > modalità Windows per gli utenti di Windows 11, conservando il nostro menù
@@ -245,7 +249,9 @@ di Windows provati uno per uno dal canale, fotografie accanto a quelle di
 Windows 11. E la prova che conta: uno che viene da Windows apre, cerca,
 chiude, blocca senza chiedere niente.
 
-## Tappa T — Il modo tablet
+## Tappa T — Il modo tablet (in pausa)
+
+> In pausa insieme alla W.
 
 > Stesso giorno: «una modalità che si adatti per l'uso di tablet, per quando
 > si installa appunto su tablet».
@@ -305,7 +311,8 @@ mandarci indietro.
 0 → 0b → 1 → 2 → 3 → 4 → 5 → 6. La Tappa 1 è quella che si vede tutti i giorni e
 non chiede niente di pesante al compositore: si parte da lì, subito dopo la 0.
 
-Dal 27 settembre: **W** subito dopo la 1 — è quasi tutta shell, e chi aspetta
+W e T sono in pausa (27 settembre): prima si completa Liquid. Quando
+riprendono: **W** subito dopo la 1 — è quasi tutta shell, e chi aspetta
 di provare Liquid DE la chiede per prima. **T** dopo la 4, perché i gesti
 del touchpad e quelli del tocco sono la stessa strada; le sue fondamenta nel
 compositore (il tocco, la tastiera a schermo) possono cominciare prima, in
