@@ -69,7 +69,18 @@ Item {
     property var entries: []
 
     /// Dove sta ogni icona, per nome: { "foto.jpg": [120, 80], ... }
+    ///
+    /// Legata all'impostazione e MAI assegnata: fino al 28 settembre 2026
+    /// `ricorda` ci scriveva sopra, e un'assegnazione in QML rompe il legame —
+    /// dopo il primo trascinamento la scrivania non seguiva più niente di
+    /// quello che arrivava da fuori (il riordino, l'altro schermo, il demone).
     property var posizioni: Core.Ipc.get("files.desktopPositions", ({}))
+    /// Le mosse appena fatte, finché il demone non le conferma: senza,
+    /// l'icona lasciata tornerebbe indietro per il tempo di un giro col
+    /// demone e poi salterebbe dove è stata messa. Si svuota quando arriva
+    /// la conferma (`onPosizioniChanged`).
+    property var _appena: ({})
+    onPosizioniChanged: icons._appena = ({})
 
     /// Nome dell'icona che si sta rinominando, o vuoto.
     property string rinomina: ""
@@ -272,7 +283,11 @@ Item {
             return out;
         }
 
-        var salvate = icons.posizioni || ({});
+        var salvate = {};
+        var fonti = [icons.posizioni || ({}), icons._appena || ({})];
+        for (var f = 0; f < fonti.length; f++)
+            for (var chiave in fonti[f])
+                salvate[chiave] = fonti[f][chiave];
         var occupate = {};
         var senzaPosto = [];
 
@@ -314,11 +329,60 @@ Item {
         return p ? p : Qt.point(icons.bordo, icons.sopra);
     }
 
-    function ricorda(nome, x, y) {
-        var m = Core.Ipc.get("files.desktopPositions", ({}));
-        m[nome] = [Math.round(x), Math.round(y)];
-        icons.posizioni = m;
+    /// Scrive un nuovo deposito di posizioni: subito qui (`_appena`) e al
+    /// demone. La mappa si COPIA: quella che dà `Core.Ipc.get` è la sua, e
+    /// cambiarla sul posto vorrebbe dire credere confermato quello che il
+    /// demone non ha ancora visto.
+    function _scrivi(m) {
+        icons._appena = m;
         Core.Ipc.setSetting("files.desktopPositions", m);
+    }
+
+    /// Mette `nome` nel punto (x, y) — l'angolo dell'icona — SENZA muovere
+    /// nessun'altra.
+    ///
+    /// ── Perché si fissa tutto ────────────────────────────────────────────
+    ///
+    /// Giacomo, 27 settembre 2026: spostando Stumble Guys a destra è sparita,
+    /// spostando FORScan è ricomparsa a destra, e rimettendola a posto
+    /// «ricompariva in automatico a destra ogni volta». Le posizioni erano
+    /// pixel fuori griglia (FORScan [100, 35], Stumble Guys [63, 134]) e i
+    /// conflitti si risolvevano a ogni ridisegno, nell'ordine dell'elenco:
+    /// due icone nella stessa cella, e quale delle due si spostava lo
+    /// decideva chi veniva prima. Qualunque cambiamento rimescolava tutto —
+    /// riprodotto con la sua scrivania copiata in una prova: un trascinamento
+    /// solo, e FORScan, The Big Catch e Tomba cambiavano posto.
+    ///
+    /// Adesso, a ogni mossa, la disposizione COM'È si scrive per intero, in
+    /// celle esatte; l'icona mossa prende la cella libera più vicina al punto
+    /// in cui è stata lasciata; le altre restano dove le si vede.
+    function ricorda(nome, x, y) {
+        var d = icons.disposizione;
+        var m = {};
+        var occupate = {};
+        for (var altro in d) {
+            if (altro === nome)
+                continue;
+            m[altro] = [Math.round(d[altro].x), Math.round(d[altro].y)];
+            if (icons.allinea) {
+                var c = icons.cellaDiPunto(d[altro].x, d[altro].y);
+                occupate[c.x + "," + c.y] = true;
+            }
+        }
+        // Chi non è sulla scrivania adesso (un file tolto) non si perde: se
+        // torna, torna al suo posto.
+        var prima = icons.posizioni || ({});
+        for (var k in prima)
+            if (m[k] === undefined && k !== nome)
+                m[k] = prima[k];
+        if (icons.allinea) {
+            var libera = icons.cellaLibera(x, y, occupate);
+            var punto = icons.puntoDiCella(libera.x, libera.y);
+            m[nome] = [punto.x, punto.y];
+        } else {
+            m[nome] = [Math.round(x), Math.round(y)];
+        }
+        icons._scrivi(m);
     }
 
     /// Scrive nel deposito le posizioni che le icone hanno ADESSO.
@@ -327,12 +391,11 @@ Item {
     /// lo spegne vuole cominciare a spostare le icone, non vederle saltare
     /// tutte insieme dove stavano tre settimane fa.
     function fissaDisposizioneCorrente() {
-        var m = Core.Ipc.get("files.desktopPositions", ({}));
+        var m = JSON.parse(JSON.stringify(icons.posizioni || ({})));
         var d = icons.disposizione;
         for (var nome in d)
             m[nome] = [Math.round(d[nome].x), Math.round(d[nome].y)];
-        icons.posizioni = m;
-        Core.Ipc.setSetting("files.desktopPositions", m);
+        icons._scrivi(m);
     }
 
     /// «Riordina adesso»: mette tutto in griglia nell'ordine scelto, e lo
@@ -347,8 +410,7 @@ Item {
                                        i % icons.righe);
             m[ord[i].name] = [p.x, p.y];
         }
-        icons.posizioni = m;
-        Core.Ipc.setSetting("files.desktopPositions", m);
+        icons._scrivi(m);
     }
 
     // ── Aprire ───────────────────────────────────────────────────────────
