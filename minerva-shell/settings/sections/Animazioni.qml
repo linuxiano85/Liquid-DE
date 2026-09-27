@@ -266,6 +266,27 @@ Page {
             }
         }
 
+        // Mercurio, il secondo materiale di Liquid (27 settembre 2026): le
+        // finestre vicine si fondono. Non segue l'interruttore delle
+        // animazioni, perché non si muove da solo: è la forma delle finestre.
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "Mercurio" : "Mercury"
+            description: page.it
+                ? "Le finestre vicine si fondono con un raccordo morbido, come "
+                  + "due gocce che si toccano, e si staccano allontanandole"
+                : "Nearby windows melt together with a soft fillet, like two "
+                  + "touching drops, and come apart as you move them away"
+            searchTerms: "mercurio gocce fondono raccordo finestre vicine liquido"
+            controlWidth: 60
+            control: S.ToggleSwitch {
+                checked: Core.Ipc.get("windows.mercurio", true)
+                onToggled: function (v) {
+                    Core.Ipc.setSetting("windows.mercurio", v);
+                }
+            }
+        }
+
         // ── Quanto sfoca, che NON è quanto si vede attraverso ────────────
         //
         // Giacomo, 20 settembre 2026: «l'opzione quanto si vede attraverso

@@ -161,7 +161,7 @@ executable('minerva-pty',
 
 executable('minerva-wayland',
   files('src/main.c', 'src/barra.c', 'src/anello.c', 'src/schermi.c',
-    'src/canale.c', 'src/aggancio.c', 'src/lente.c', 'src/molla.c',
+    'src/canale.c', 'src/aggancio.c', 'src/lente.c', 'src/mercurio.c', 'src/molla.c',
     'src/ondulazione.c', 'src/wobbly.c', 'src/sonno.c', 'src/puntatore.c',
     'src/energia.c'),
   protocolli,

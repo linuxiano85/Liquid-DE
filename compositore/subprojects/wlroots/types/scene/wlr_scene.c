@@ -300,7 +300,8 @@ static void scene_node_opaque_region(struct wlr_scene_node *node, int x, int y,
 
 	if (node->type == WLR_SCENE_NODE_RECT) {
 		struct wlr_scene_rect *scene_rect = wlr_scene_rect_from_node(node);
-		if (scene_rect->color[3] != 1 || scene_rect->minerva_blur || scene_rect->clipped_region.area.width > 0) {
+		if (scene_rect->color[3] != 1 || scene_rect->minerva_blur || scene_rect->clipped_region.area.width > 0
+				|| scene_rect->minerva_mercurio.quante > 0) {
 			return;
 		}
 		angoli = scene_rect->corners;
@@ -1613,6 +1614,21 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
 
 		struct wlr_minerva_style style = minerva_style(scene_rect->corners,
 			scene_rect->clipped_region, scene_rect->width, scene_rect->height, data);
+		if (scene_rect->minerva_mercurio.quante > 0) {
+			// In pixel dello schermo, come gli angoli e il buco. Le forme
+			// seguono la rotazione dello schermo come il buco qui sopra.
+			const struct wlr_minerva_mercurio *mm = &scene_rect->minerva_mercurio;
+			style.mercurio.quante = mm->quante;
+			style.mercurio.k = mm->k * data->scale;
+			style.mercurio.raggio = mm->raggio * data->scale;
+			for (int i = 0; i < mm->quante; i++) {
+				struct wlr_fbox f;
+				wlr_fbox_transform(&f, &mm->forme[i], data->transform,
+					scene_rect->width, scene_rect->height);
+				style.mercurio.forme[i] = (struct wlr_fbox){f.x * data->scale,
+					f.y * data->scale, f.width * data->scale, f.height * data->scale};
+			}
+		}
 		if (scene_rect->minerva_blur) {
 			style.blur_radius = scene_rect->minerva_blur_radius;
 			style.acquerello = scene_rect->minerva_acquerello;
@@ -3292,6 +3308,17 @@ void wlr_minerva_rect_set_hole(struct wlr_scene_rect *r, struct wlr_minerva_clip
  // tutto a finestra piena, per mesi.
  if (memcmp(&r->clipped_region, &hole, sizeof(hole)) == 0) return;
  r->clipped_region=hole; scene_node_update(&r->node,NULL);
+}
+void wlr_minerva_rect_set_mercurio(struct wlr_scene_rect *r, const struct wlr_minerva_mercurio *m) {
+ struct wlr_minerva_mercurio nuovo = {0};
+ if (m && m->quante > 0) {
+  nuovo = *m;
+  if (nuovo.quante > WLR_MINERVA_MERCURIO_MAX) nuovo.quante = WLR_MINERVA_MERCURIO_MAX;
+ }
+ // Come per il buco: il compositore la richiama a ogni fotogramma, e una
+ // forma uguale non deve sporcare niente.
+ if (memcmp(&r->minerva_mercurio, &nuovo, sizeof(nuovo)) == 0) return;
+ r->minerva_mercurio = nuovo; scene_node_update(&r->node, NULL);
 }
 static void minerva_mask_destroy(struct wl_listener *l, void *data) {
  struct wlr_scene_rect *r=wl_container_of(l,r,minerva_mask_destroy);

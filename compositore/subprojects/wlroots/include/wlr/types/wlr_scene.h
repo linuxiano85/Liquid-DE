@@ -148,6 +148,7 @@ struct wlr_scene_rect {
 	bool minerva_blur;
 	float minerva_blur_radius;
 	bool minerva_acquerello; /* il materiale: colore a 1/32, non sfocatura */
+	struct wlr_minerva_mercurio minerva_mercurio; /* le forme che si fondono */
 	struct wlr_scene_buffer *minerva_mask;
 	struct wl_listener minerva_mask_destroy;
 	int width, height;
@@ -802,5 +803,9 @@ void wlr_minerva_blur_set_radius(struct wlr_scene_rect *, float);
  * stende il colore medio (a 1/32). Il danno che lo tocca rifà tutto il
  * rettangolo: niente pezzi, quindi niente cuciture. */
 void wlr_minerva_blur_set_acquerello(struct wlr_scene_rect *, bool);
+/* Il rettangolo si disegna solo dove l'unione morbida delle forme esce da
+ * loro (coordinate logiche, relative al rettangolo). NULL o zero forme: il
+ * rettangolo torna normale. */
+void wlr_minerva_rect_set_mercurio(struct wlr_scene_rect *, const struct wlr_minerva_mercurio *);
 void wlr_minerva_blur_set_mask(struct wlr_scene_rect *, struct wlr_scene_buffer *);
 #endif

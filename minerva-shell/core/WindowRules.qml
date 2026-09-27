@@ -173,6 +173,11 @@ QtObject {
     /// animazioni: chi le spegne — anche perché il movimento gli fa male —
     /// non deve ritrovarselo.
     property bool respiro: true
+    /// Mercurio: le finestre vicine che si fondono come gocce (vedi
+    /// `compositore/src/mercurio.h`). Non è un'animazione — è la forma — e
+    /// non costa niente a scrivania ferma, quindi ha il suo interruttore e
+    /// non segue quello delle animazioni.
+    property bool mercurio: true
     property real rigidita: 1
     property real smorzamento: 0.42
     property real blurIntensita: 50
@@ -245,6 +250,7 @@ QtObject {
     onEffettoChanged: applySoon.restart()
     onElasticoChanged: applySoon.restart()
     onRespiroChanged: applySoon.restart()
+    onMercurioChanged: applySoon.restart()
     onRigiditaChanged: applySoon.restart()
     onSmorzamentoChanged: applySoon.restart()
     onBlurIntensitaChanged: applySoon.restart()
@@ -460,6 +466,7 @@ QtObject {
         Compositore.corniceSpente(rules.corniceSpente);
         Compositore.elastico(rules.elastico);
         Compositore.respiro(rules.respiro);
+        Compositore.mercurio(rules.mercurio);
         Compositore.parametriEffetti(rules.blurIntensita, rules.rigidita, rules.smorzamento);
     }
 }

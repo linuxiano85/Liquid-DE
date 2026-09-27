@@ -128,6 +128,7 @@
 #include "anello.h"
 #include "barra.h"
 #include "lente.h"
+#include "mercurio.h"
 #include "molla.h"
 #include "wobbly.h"
 #include "sonno.h"
@@ -784,6 +785,14 @@ struct minerva {
 	/// Quanti passi di respiro sono stati disegnati da quando è partito: dice
 	/// alle prove se l'animazione avanza davvero fotogramma per fotogramma.
 	unsigned respiro_passi;
+	/// Mercurio (verbo `mercurio si|no`): le finestre vicine che si fondono
+	/// come gocce. Due nodi per ponte — il filtro sotto e la tinta sopra — in
+	/// un piano sotto tutte le finestre; `ponti` è quanti se ne disegnano
+	/// adesso. Vedi `mercurio_aggiorna` e src/mercurio.h.
+	bool mercurio_acceso;
+	struct wlr_scene_tree *piano_mercurio;
+	struct { struct wlr_scene_rect *filtro, *tinta; } ponte_nodi[12];
+	int ponti;
 	/// «batteria», «profilo», «chiesto», o NULL. Sempre una stringa fissa.
 	const char *risparmio_motivo;
 	int voluto_effetto, voluto_cornice;
@@ -1203,6 +1212,7 @@ static void molla_fotogramma(struct minerva *m, struct wlr_output *out);
 static void respiro_fotogramma(struct minerva *m, struct wlr_output *out);
 static bool respiro_avvia(struct finestra *f, int tipo);
 static void respiro_fine(struct finestra *f);
+static void mercurio_aggiorna(struct minerva *m);
 static void proteggi_sonno(void *data);
 
 // ── Il fuoco ──────────────────────────────────────────────────────────────
@@ -1489,6 +1499,10 @@ static void schermo_frame(struct wl_listener *l, void *dati) {
 	struct schermo *s = wl_container_of(l, s, frame);
 	molla_fotogramma(s->m, s->out);
 	respiro_fotogramma(s->m, s->out);
+	// Dopo la molla e il respiro, che spostano le finestre: i ponti seguono
+	// le posizioni di QUESTO fotogramma. Se niente è cambiato, niente si
+	// tocca (i nodi confrontano prima di sporcare).
+	mercurio_aggiorna(s->m);
 
 	// La scena sa cosa è cambiato e ridisegna solo quello. Chiedere il
 	// disegno di tutto a ogni fotogramma funziona lo stesso e si paga in
@@ -2758,6 +2772,91 @@ static void finestra_effetto(struct finestra *f) {
 		wlr_minerva_blur_set_radius(f->sfocatura, f->m->blur_intensita * 0.06);
 		wlr_minerva_blur_set_acquerello(f->sfocatura, acquerello);
 	}
+}
+
+// ── Mercurio: i ponti fra le finestre vicine ─────────────────────────────
+//
+// Le forme sono le finestre visibili (barra compresa), i ponti li calcola
+// src/mercurio.c, e qui si mettono in scena: per ogni ponte un rettangolo
+// grande quanto il suo riquadro, che si disegna solo dove l'unione morbida
+// esce dalle finestre. Sotto, lo stesso filtro delle finestre (acquerello o
+// blur); sopra, la tinta della barra del titolo con la trasparenza delle
+// finestre. Così il collo fra due finestre è della loro stessa materia.
+//
+// Non partecipa chi si sta deformando o respirando (la sua forma vera non è
+// il suo rettangolo), e con una finestra a schermo intero non c'è nessun
+// ponte: sotto non si vede, e un filtro in scena toglierebbe lo scanout.
+static void mercurio_aggiorna(struct minerva *m) {
+	if (m->piano_mercurio == NULL)
+		return;
+	struct mercurio_forma forme[32];
+	int quante = 0;
+	struct mercurio_ponte ponti[12];
+	int n = 0;
+	if (m->mercurio_acceso && !m->bloccato && !schermo_intero_visibile(m)) {
+		struct finestra *f;
+		wl_list_for_each(f, &m->finestre_elenco, link) {
+			if (quante >= 32)
+				break;
+			if (!finestra_visibile(f) || f->schermo_intero || f->wobbly != NULL
+			    || f->respiro != RESPIRO_NIENTE)
+				continue;
+			int w, h;
+			finestra_geometria(f, &w, &h);
+			h += finestra_barra_alta(f);
+			if (w <= 0 || h <= 0)
+				continue;
+			forme[quante++] = (struct mercurio_forma){
+				{f->cornice->node.x, f->cornice->node.y, w, h}, ANGOLO_RAGGIO};
+		}
+		n = mercurio_ponti(forme, quante, MERCURIO_K, ponti, 12);
+		// Troppe forme in un ponte: niente piuttosto che un collo tagliato.
+		if (n < 0)
+			n = 0;
+	}
+
+	const struct barra_aspetto *asp = barra_aspetto_ora();
+	const bool filtro = m->effetto_modo == EFFETTO_BLUR
+		|| m->effetto_modo == EFFETTO_ACQUERELLO;
+	const bool acquerello = m->effetto_modo == EFFETTO_ACQUERELLO;
+	const float alfa = m->effetto_modo == EFFETTO_NESSUNO ? 1.0f : m->effetto_alfa;
+	const float tinta[4] = {(float)asp->fondo_r * alfa, (float)asp->fondo_g * alfa,
+		(float)asp->fondo_b * alfa, alfa};
+	for (int i = 0; i < 12; i++) {
+		if (i >= n) {
+			if (m->ponte_nodi[i].tinta != NULL) {
+				wlr_scene_node_set_enabled(&m->ponte_nodi[i].tinta->node, false);
+				wlr_scene_node_set_enabled(&m->ponte_nodi[i].filtro->node, false);
+			}
+			continue;
+		}
+		if (m->ponte_nodi[i].tinta == NULL) {
+			m->ponte_nodi[i].filtro = wlr_minerva_blur_create(m->piano_mercurio, 1, 1);
+			m->ponte_nodi[i].tinta = wlr_scene_rect_create(m->piano_mercurio, 1, 1, tinta);
+			if (m->ponte_nodi[i].filtro == NULL || m->ponte_nodi[i].tinta == NULL)
+				return;
+		}
+		const struct riquadro d = ponti[i].dove;
+		struct wlr_minerva_mercurio mm = {.quante = ponti[i].quante,
+			.k = MERCURIO_K, .raggio = ANGOLO_RAGGIO};
+		for (int j = 0; j < ponti[i].quante; j++) {
+			const struct riquadro r = forme[ponti[i].forme[j]].r;
+			mm.forme[j] = (struct wlr_fbox){r.x - d.x, r.y - d.y, r.larghezza, r.altezza};
+		}
+		struct wlr_scene_rect *nodi[2] = {m->ponte_nodi[i].filtro, m->ponte_nodi[i].tinta};
+		for (int k = 0; k < 2; k++) {
+			wlr_scene_node_set_position(&nodi[k]->node, d.x, d.y);
+			wlr_scene_rect_set_size(nodi[k], d.larghezza, d.altezza);
+			wlr_minerva_rect_set_mercurio(nodi[k], &mm);
+		}
+		wlr_scene_rect_set_color(m->ponte_nodi[i].tinta, tinta);
+		wlr_minerva_blur_set_radius(m->ponte_nodi[i].filtro, m->blur_intensita * 0.06);
+		wlr_minerva_blur_set_acquerello(m->ponte_nodi[i].filtro, acquerello);
+		wlr_scene_node_set_enabled(&m->ponte_nodi[i].filtro->node,
+			filtro && (acquerello || m->blur_intensita > 0));
+		wlr_scene_node_set_enabled(&m->ponte_nodi[i].tinta->node, true);
+	}
+	m->ponti = n;
 }
 
 // ── Gli angoli, e la giunzione con la barra ──────────────────────────────
@@ -7721,7 +7820,7 @@ static void comando_stato(struct minerva *m, char *risposta, size_t n) {
 		"\"elastico\":%.2f,\"rigidita\":%.2f,\"smorzamento\":%.2f,\"blurIntensita\":%.2f,"
 		"\"tinta\":\"%.4f %.4f %.4f\",\"tintaStrada\":\"%s\","
 		"\"respiro\":%s,\"respiri\":%d,\"respiroPassi\":%u,\"copie\":%u,"
-		"\"presentati\":%u,"
+		"\"presentati\":%u,\"mercurio\":%s,\"ponti\":%d,"
 		"\"risparmio\":%s}",
 		m->bloccato ? "true" : "false", code, m->scrivania_attiva,
 		m->inattivo_quante, corn, m->cornice_periodo, m->cornice_spessore,
@@ -7730,6 +7829,7 @@ static void comando_stato(struct minerva *m, char *risposta, size_t n) {
 		m->tinta_rgb[0], m->tinta_rgb[1], m->tinta_rgb[2], strada,
 		m->respiro_acceso ? "true" : "false", m->respiri_attivi, m->respiro_passi,
 		m->molle_attive, presentati,
+		m->mercurio_acceso ? "true" : "false", m->ponti,
 		risp);
 }
 
@@ -9993,6 +10093,23 @@ void minerva_comando(struct minerva *m, const char *riga,
 		return;
 	}
 
+	// `mercurio si|no`: le finestre vicine si fondono (vedi
+	// `mercurio_aggiorna`), oppure restano forme separate.
+	if (strcmp(verbo, "mercurio") == 0) {
+		char *come = parola(&resto);
+		if (come != NULL && (strcmp(come, "si") == 0 || strcmp(come, "sì") == 0))
+			m->mercurio_acceso = true;
+		else if (come != NULL && strcmp(come, "no") == 0)
+			m->mercurio_acceso = false;
+		else {
+			snprintf(risposta, n, "no mercurio vuole «si» o «no»");
+			return;
+		}
+		mercurio_aggiorna(m);
+		snprintf(risposta, n, "ok");
+		return;
+	}
+
 	// `riva super|sempre`: con una finestra che riempie lo schermo, la riva
 	// (angoli, bordi, spinte, la barra dello schermo intero) risponde solo
 	// con Super giù, oppure sempre. Vedi `riva_libera`.
@@ -10767,6 +10884,7 @@ int main(int argc, char *argv[]) {
 	m.ingresso.tocco_e_clic = -1;
 	m.tieni_quale = -1;
 	m.respiro_acceso = true;
+	m.mercurio_acceso = true;
 	m.riva_col_consenso = true;
 	m.ingresso.spento_mentre_scrivi = -1;
 
@@ -11064,6 +11182,8 @@ int main(int argc, char *argv[]) {
 		wlr_scene_tree_create(&m.scena->tree);
 	m.piano[ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM] =
 		wlr_scene_tree_create(&m.scena->tree);
+	// I ponti di Mercurio: sotto TUTTE le finestre, sopra la scrivania.
+	m.piano_mercurio = wlr_scene_tree_create(&m.scena->tree);
 	m.finestre = wlr_scene_tree_create(&m.scena->tree);
 
 	// ── L'ombra dell'aggancio ────────────────────────────────────────────

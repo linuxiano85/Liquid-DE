@@ -1149,6 +1149,12 @@ Singleton {
         comp._nostro("respiro", [acceso ? "si" : "no"]);
     }
 
+    /// Mercurio: le finestre vicine si fondono con un raccordo morbido e si
+    /// staccano allontanandole. Lo disegna il compositore, sotto le finestre.
+    function mercurio(acceso) {
+        comp._nostro("mercurio", [acceso ? "si" : "no"]);
+    }
+
     function elastico(forza) {
         var f = Number(forza);
         if (!isFinite(f) || f < 0)

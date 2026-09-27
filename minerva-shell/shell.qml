@@ -550,6 +550,7 @@ ShellRoot {
         corniceTinte:   Core.Ipc.get("windows.corniceTinte", [])
         corniceSpente:  Core.Ipc.get("windows.corniceSpente", 0)
         respiro:        Core.Ipc.get("desktop.animations", true)
+        mercurio:       Core.Ipc.get("windows.mercurio", true)
         elastico:       Core.Ipc.get("desktop.animations", true)
                        ? Core.Ipc.get("windows.elastico", 0) : 0
     }

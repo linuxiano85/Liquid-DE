@@ -171,6 +171,18 @@ static void minerva_uniforms(GLuint p, struct wlr_box box, struct wlr_minerva_st
  glUniform4f(glGetUniformLocation(p,"minerva_radii"),r.top_left,r.top_right,r.bottom_right,r.bottom_left);
  glUniform4f(glGetUniformLocation(p,"minerva_hole"),b.x,b.y,b.width,b.height);
  glUniform4f(glGetUniformLocation(p,"minerva_hole_radii"),h.top_left,h.top_right,h.bottom_right,h.bottom_left);
+ /* Mercurio: le forme, e quante sono. Zero lascia il rettangolo com'era. */
+ GLint n=glGetUniformLocation(p,"mer_n");
+ if (n>=0) {
+  const struct wlr_minerva_mercurio *m=&style.mercurio;
+  GLfloat f[WLR_MINERVA_MERCURIO_MAX*4]={0};
+  for (int i=0;i<m->quante && i<WLR_MINERVA_MERCURIO_MAX;i++) {
+   f[i*4]=m->forme[i].x; f[i*4+1]=m->forme[i].y; f[i*4+2]=m->forme[i].width; f[i*4+3]=m->forme[i].height;
+  }
+  glUniform1f(n,(float)m->quante);
+  glUniform4fv(glGetUniformLocation(p,"mer_f"),WLR_MINERVA_MERCURIO_MAX,f);
+  glUniform2f(glGetUniformLocation(p,"mer_kr"),m->k>0?m->k:1,m->raggio);
+ }
 }
 
 static void render_pass_add_texture(struct wlr_render_pass *wlr_pass,
@@ -275,7 +287,8 @@ static void render_pass_add_rect(struct wlr_render_pass *wlr_pass,
 
 	push_gles2_debug(renderer);
 	enum wlr_render_blend_mode blend_mode =
-		color->a == 1.0 && !wlr_minerva_has_radii(options->minerva.corners) && options->minerva.hole.area.width == 0 ? WLR_RENDER_BLEND_MODE_NONE : options->blend_mode;
+		color->a == 1.0 && !wlr_minerva_has_radii(options->minerva.corners) && options->minerva.hole.area.width == 0
+		&& options->minerva.mercurio.quante == 0 ? WLR_RENDER_BLEND_MODE_NONE : options->blend_mode;
 	if (blend_mode == WLR_RENDER_BLEND_MODE_NONE &&
 			options->clip == NULL &&
 			box.x == 0 && box.y == 0 &&

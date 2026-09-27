@@ -719,6 +719,11 @@ class SettingsApi {
           // (`shell.windowOpacity`): partire da un valore diverso vorrebbe
           // dire che accendendo il vetro le nostre cambiano e le altre no.
           'effettoOpacita': 0.88,
+          // Mercurio: le finestre vicine si fondono come gocce, e si staccano
+          // allontanandole. Acceso di serie: è il secondo materiale di Liquid,
+          // e a scrivania ferma non costa niente (lo disegna il compositore
+          // solo fra finestre a meno di 48 pixel, e solo quando si muovono).
+          'mercurio': true,
           // ── La cornice attorno alla finestra attiva ────────────────────
           //
           // 'spento', 'fisso' o 'gira'. Non è una decorazione in più: c'era
