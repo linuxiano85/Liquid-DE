@@ -220,7 +220,6 @@ QtObject {
         var a = windows.find("address:" + attiva);
         if (a && !a.minimized)
             geo = { "x": a.x, "y": a.y, "w": a.w, "h": a.h };
-        windows._tryPendingMax();
         windows.minimized = out;
         windows._minimizedAddresses = addrs;
         windows.activeGeometry = geo;
@@ -290,8 +289,6 @@ QtObject {
         for (i = 0; i < tutti.length; i++)
             if (tutti[i].attivo) { att = tutti[i]; break; }
         windows.usable = att;
-
-        windows._tryPendingMax();
     }
 
     /// Lo spazio utile del monitor su cui sta una finestra.
@@ -408,9 +405,6 @@ QtObject {
     // che annunci un cambio di zona riservata.
     // _riletturaSpazio rimosso: le notifiche dello spazio arrivano dal demone.
 
-    /// Un «ingrandisci» arrivato prima di sapere quanto spazio c'è, o prima
-    /// di sapere dove sta la finestra. È il selettore, e basta.
-    property string _pendingMax: ""
 
     // ── Chi ha la barra del titolo SOPRA, e chi dentro ───────────────────
     //
@@ -523,22 +517,9 @@ QtObject {
     /// Un pixel di tolleranza: lo schermo è ingrandito di un quarto, e fra
     /// pixel logici e fisici gli arrotondamenti non tornano sempre.
     function isMaximized(w) {
-        if (!w)
-            return false;
-        // Lo spazio del monitor su cui sta QUESTA finestra: col fuoco
-        // altrove, confrontare con lo spazio attivo vorrebbe dire un
-        // pulsante che mente su ogni finestra dell'altro schermo.
-        var u = windows.spazioPer(w);
-        if (!u)
-            return false;
-        // Le finestre che si disegnano da sé le «ingrandisce» il bit del
-        // programma (vedi `maximize()`), che il compositore non tocca: per
-        // loro vale quello, con la geometria come riprova per l'istante in
-        // cui il bit non è ancora stato riletto.
-        if (!w.own && windows.disegnaLaSua(w.appClass))
-            return w.modoSchermo === 1 || w.fintoSchermo === true
-                || windows._riempieLoSpazio(w, u);
-        return windows._riempieLoSpazio(w, u);
+        // Lo stato lo tiene il compositore (`ingrandita`, che arriva come
+        // `modoSchermo === 1`): niente più indovinarlo dalla geometria.
+        return !!w && w.modoSchermo === 1;
     }
 
     /// Il confronto geometrico di `isMaximized`: la finestra è già al posto
@@ -866,206 +847,30 @@ QtObject {
         return null;
     }
 
-    /// Riprova l'ingrandimento rimasto in sospeso, se adesso si può.
-    function _tryPendingMax() {
-        var s = windows._pendingMax;
-        if (s === "" || !windows.usable || windows.find(s) === null)
-            return;
-        windows._pendingMax = "";
-        windows.maximize(s);
-    }
-
     Component.onCompleted: windows.refreshUsable()
 
-    /// Geometria da cui una finestra è stata ingrandita, per poterla
-    /// rimettere com'era. Chiave: il selettore con cui la si comanda.
-    property var _before: ({})
-
-    /// Ingrandisce fino ai bordi dello spazio utile, o rimette com'era.
-    ///
-    /// `selector` è ciò che Hyprland accetta per identificare una finestra:
-    /// `address:0x…` per una finestra altrui, `pid:1234` per una nostra.
-    ///
-    /// Lo spazio da lasciare alla barra del titolo non si passa più: lo decide
-    /// `barSopra()` guardando la finestra. Prima erano due parametri, e i tre
-    /// punti che chiamavano questa funzione li riempivano ognuno a modo suo.
+    /// Ingrandisce, o rimette com'era. `selector` è `address:0x…` o
+    /// `pid:1234`, come per tutti i comandi sulle finestre.
     function maximize(selector) {
         if (!selector)
             return;
-
-        // Servono DUE cose che possono non essere ancora arrivate: quanto
-        // spazio c'è (le zone riservate) e dov'è la finestra adesso (per
-        // poterla rimettere com'era). Se manca una delle due si chiedono e si
-        // riprova appena rispondono.
+        // ── Lo chiede al compositore, e basta ────────────────────────────
         //
-        // Non è pignoleria: in una finestra di Minerva — gestore file,
-        // Impostazioni — nessuno chiama mai `refresh()`, perché quel processo
-        // non ha una dock né una barra da tenere aggiornata. Il primo clic su
-        // «ingrandisci» trovava quindi l'elenco vuoto, non salvava niente, e
-        // il clic dopo re-ingrandiva invece di ripristinare.
-        var conosciuta = windows.find(selector) !== null;
-        if (!windows.usable || !conosciuta) {
-            windows._pendingMax = selector;
-            if (!windows.usable)
-                windows.refreshUsable();
-            if (!conosciuta)
-                windows.refresh();
-            return;
-        }
-
-        // ── Chi si disegna la propria barra va ingrandito DICENDOGLIELO ──
+        // Qui c'erano centoventi righe che ingrandivano a mano: si leggeva lo
+        // spazio libero, si ricordava dov'era la finestra, e si mandavano
+        // «ridimensiona» e «sposta» coi conti nostri. Era la strada di quando
+        // sotto c'era un compositore che non sapeva farlo. Il nostro lo sa
+        // (`finestra_ingrandisci`): tiene lui lo stato, dice al programma
+        // «sei ingrandito», ricorda la misura di prima, e — la cosa che coi
+        // conti nostri mancava — fa tornare piccola sotto il puntatore una
+        // finestra ingrandita che si trascina. Con i pixel spostati a mano per
+        // lui la finestra era normale e grande, e trascinandola usciva dallo
+        // schermo: visto il 27 settembre 2026 col gestore file.
         //
-        // Per una finestra con la barra di Minerva ingrandire vuol dire
-        // spostare dei pixel: il compositore non sa che in cima c'è una
-        // striscia nostra, quindi i conti li facciamo noi (più sotto).
-        //
-        // Per una finestra che si disegna da sé — Chrome, Firefox, le app
-        // GNOME — quel modo è sbagliato, e si vede. Un programma che non sa
-        // di essere massimizzato continua a disegnarsi intorno la propria
-        // ombra e i propri angoli tondi: fra il bordo della finestra e ciò
-        // che si vede resta una fascia vuota. È la «cornice trasparente
-        // intorno alla finestra» che Giacomo ha visto su Chrome.
-        //
-        // `fullscreenstate 1 1` dice due cose insieme: al compositore «tienla
-        // grande quanto lo spazio libero» e al programma «sei massimizzato».
-        // Il programma lascia cadere ombra e angoli, e la fascia sparisce.
-        // Provato su Chrome il 30 luglio 2026.
-        //
-        // Il numero conta: `1` è il massimizza, che rispetta le zone
-        // riservate — quindi la barra della scrivania resta scoperta. `2`
-        // sarebbe lo schermo intero, che copre tutto.
-        var quella = windows.find(selector);
-        if (!quella)
-            return;
-        var u = windows.spazioPer(quella);
-        if (!u)
-            return;
-
-        // ── Chi si disegna la propria barra va ingrandito DICENDOGLIELO ──
-        //
-        // Per una finestra con la barra di Minerva ingrandire vuol dire
-        // spostare dei pixel: il compositore non sa che in cima c'è una
-        // striscia nostra, quindi i conti li facciamo noi (più sotto).
-        //
-        // Per una finestra che si disegna da sé — Chrome, Firefox, le app
-        // GNOME — quel modo è sbagliato, e si vede. Un programma che non sa
-        // di essere massimizzato continua a disegnarsi intorno la propria
-        // ombra e i propri angoli tondi: fra il bordo della finestra e ciò
-        // che si vede resta una fascia vuota. È la «cornice trasparente
-        // intorno alla finestra» che Giacomo ha visto su Chrome.
-        //
-        // `fullscreenstate 0 1` dice al programma «sei massimizzato» senza
-        // toccare il compositore: il programma lascia cadere ombra e angoli,
-        // e la fascia sparisce. Provato su Chrome il 30 luglio 2026.
-        //
-        // ── Il primo numero è ZERO, e ci sono volute due settimane ────
-        //
-        // `fullscreenstate` dice due cose separate: la prima al
-        // COMPOSITORE, la seconda al PROGRAMMA.
-        //
-        // Qui c'era `1 1`. La seconda cifra è giusta e serve — dice al
-        // programma «sei massimizzato», e Chrome lascia cadere ombra e
-        // angoli tondi, che è la fascia vuota che Giacomo aveva visto.
-        // La PRIMA invece metteva la finestra nello stato «massimizzato»
-        // di Hyprland, che non è quello di Windows: è uno stato in cui la
-        // finestra viene disegnata SOPRA tutte le altre e non si può più
-        // né spostare né ridimensionare.
-        //
-        // Il risultato è che una finestra ingrandita diventa un coperchio:
-        // tutto il resto ci finisce sotto e non si riesce più a cliccarlo,
-        // perché il clic arriva al coperchio. Parole di Giacomo l'11
-        // agosto 2026: «per avere il focus delle app devo cliccare sulla
-        // dock, altrimenti sono finestre fantasma».
-        //
-        // Con `0 1` il programma sa di essere massimizzato e il
-        // compositore no: resta una finestra normale, che ridimensioniamo
-        // noi qui sotto e che qualunque altra può coprire.
-        if (!quella.own && windows.disegnaLaSua(quella.appClass)) {
-            // `fullscreenstate` vale per la finestra ATTIVA: non accetta un
-            // indirizzo. Chi ingrandisce una finestra la vuole comunque
-            // davanti, quindi darle prima il fuoco non è un effetto
-            // collaterale — è la cosa giusta.
-            Compositore.fuoco(selector);
-
-            // ── Due settimane di pulsante che mentiva ────────────────────
-            //
-            // Il ripristino si decideva su `modoSchermo === 1`, che
-            // `fullscreenstate 0 1` non accende MAI — è il modo del
-            // compositore, non il bit del programma. Quindi il ramo di
-            // ripristino non scattava, e il programma veniva lasciato a
-            // credersi massimizzato per sempre. Adesso il bit vero è
-            // `fintoSchermo`, e la geometria fa da riprova.
-            //
-            // Qui si sistema SOLO il bit: la geometria la decide il codice
-            // qui sotto, uguale per tutti.
-            var geoMax = windows._riempieLoSpazio(quella, u);
-            if (geoMax && !windows._before[selector]) {
-                // Già grande e non sappiamo dov'era: non si tocca niente —
-                // né la geometria, né il bit. Meglio coerente che inventata:
-                // è la stessa scelta del plugin, che in questo caso lascia la
-                // finestra dov'è.
-                refreshSoon.restart();
-                return;
-            }
-            // Qui si diceva al PROGRAMMA «sei massimizzato» senza toccare
-            // lo schermo — una cosa di Hyprland, e da noi una funzione vuota.
-            // Se n'è andata il 1º settembre 2026: da noi «ingrandita» è uno
-            // stato vero, e il programma lo sa da xdg-shell. Resta la
-            // geometria, coi conti nostri, qui sotto.
-        }
-
-        // ── La COMMUTAZIONE si decide dalla GEOMETRIA ────────────────────
-        //
-        // Qui c'era un interruttore nostro — `_before` pieno vuol dire
-        // «ingrandita» — e i due percorsi di Minerva, il plugin e la shell,
-        // finivano fuori fase: una finestra ingrandita dal plugin, con
-        // l'interruttore vuoto, «ripristinata» dal menu si ingrandiva di
-        // nuovo senza muoversi. E una finestra ingrandita e poi SPOSTATA
-        // tornava a un posto che nessuno aveva più scelto.
-        //
-        // Adesso vale ciò che si vede: se la finestra riempie già lo spazio
-        // che le compete, il comando la rimette dov'era — se si sa — ;
-        // altrimenti la ingrandisce.
-        if (windows.isMaximized(quella)) {
-            windows._ripristinaDovEra(selector);
-            refreshSoon.restart();
-            return;
-        }
-
-        var memoria = JSON.parse(JSON.stringify(windows._before));
-        memoria[selector] = { "x": quella.x, "y": quella.y,
-                              "w": quella.w, "h": quella.h };
-        windows._before = memoria;
-
-        var r = windows.rectMassimo(u, windows.barSopra(quella), windows.bordo);
-        Compositore.ridimensiona(selector, r.w, r.h);
-        Compositore.sposta(selector, r.x, r.y);
+        // Senza «si» o «no» il compositore commuta: ingrandisce una finestra
+        // normale e rimette com'era una ingrandita.
+        Compositore.ingrandisci(selector);
         refreshSoon.restart();
-    }
-
-    /// Rimette una finestra dove stava prima di essere ingrandita, se si sa
-    /// dov'era. Se non si sa non si inventa niente: meglio lasciarla grande
-    /// che in un posto che nessuno ha scelto.
-    function _ripristinaDovEra(selector) {
-        var salvata = windows._before[selector];
-        if (!salvata)
-            return;
-        var copia = JSON.parse(JSON.stringify(windows._before));
-        delete copia[selector];
-        windows._before = copia;
-        Compositore.ridimensiona(selector, salvata.w, salvata.h);
-        Compositore.sposta(selector, salvata.x, salvata.y);
-    }
-
-    /// Dimentica dov'era una finestra prima di essere ingrandita. Lo chiede
-    /// chi la sta trascinando: da lì in poi «ripristina» deve tornare alla
-    /// posizione NUOVA, non a quella di prima dell'ingrandimento.
-    function scordaSalvata(selector) {
-        if (!selector || windows._before[selector] === undefined)
-            return;
-        var copia = JSON.parse(JSON.stringify(windows._before));
-        delete copia[selector];
-        windows._before = copia;
     }
 
     // ── Comandi ──────────────────────────────────────────────────────────

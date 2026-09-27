@@ -734,10 +734,8 @@ PanelWindow {
             // pressione buttava via la posizione da ripristinare proprio
             // mentre il secondo clic la chiedeva — il doppio clic che
             // ingrandiva e non tornava mai indietro.
-            if (!spinta.spostata && (x !== spinta.x0 || y !== spinta.y0)) {
+            if (!spinta.spostata && (x !== spinta.x0 || y !== spinta.y0))
                 spinta.spostata = true;
-                Core.Windows.scordaSalvata("address:" + drag.address);
-            }
             spinta.ultimoX = x;
             spinta.ultimoY = y;
             Core.Compositore.sposta(drag.address, x, y);

@@ -343,12 +343,10 @@ Item {
                 return;
 
             presa.armata = false;
-            if (Window.window && Window.window.startSystemMove) {
-                // Da qui in poi «ripristina» deve tornare dove la finestra
-                // È, non dove stava prima di un ingrandimento ormai passato.
-                Core.Windows.scordaSalvata(bar.me);
+            // Una finestra ingrandita trascinata torna alla sua misura: lo
+            // fa il compositore (`presa_avanti`), che tiene la misura di prima.
+            if (Window.window && Window.window.startSystemMove)
                 Window.window.startSystemMove();
-            }
         }
 
         onReleased: presa.armata = false

@@ -16,7 +16,8 @@ due e non la consegnava. Da lì nessun clic arrivava più a nessuno.
 Una finestra (`prova-rilascio.qml`) che si sposta da sé con
 `startSystemMove`, come la barra delle app di Minerva. Si trascina, poi la si
 aggancia al bordo sinistro trascinandola, e dopo ognuno dei due gesti un clic
-semplice dentro deve arrivarle intero: pressione, rilascio, clic.
+semplice dentro deve arrivarle intero: pressione, rilascio, clic. Infine la si
+ingrandisce e la si trascina: deve tornare alla sua misura.
 """
 import json
 import os
@@ -158,6 +159,23 @@ def main():
                 verifica("trascinata al bordo sinistro si aggancia",
                          h["x"] <= 10 and h["altezza"] > g["altezza"], h)
                 clic_dentro("dopo un aggancio")
+
+                # 3. Ingrandita, e trascinata dalla sua barra: torna alla sua
+                # misura sotto il puntatore (27 settembre 2026: prima restava
+                # grande e usciva dallo schermo).
+                chiedi(canale, f"sposta {f['id']} 300 200")
+                time.sleep(0.3)
+                prima = dove()
+                assert chiedi(canale, f"ingrandisci {f['id']} si").startswith("ok")
+                time.sleep(0.5)
+                g = dove()
+                verifica("ingrandita dal canale è ingrandita", g["ingrandita"], g)
+                trascina((g["x"] + 400, g["y"] + 50), (g["x"] + 450, g["y"] + 250))
+                h = dove()
+                verifica("trascinata non è più ingrandita", not h["ingrandita"], h)
+                verifica("e ha di nuovo la misura di prima",
+                         (h["larghezza"], h["altezza"])
+                         == (prima["larghezza"], prima["altezza"]), (prima, h))
             finally:
                 for f in reversed(figli):
                     f.terminate()

@@ -662,6 +662,15 @@ Singleton {
     }
 
     /// Commuta lo schermo intero della finestra indicata (o dell'attiva).
+    /// Ingrandisce, o rimette com'era, una finestra: lo stato è del
+    /// compositore (`finestra_ingrandisci`). Senza `si` commuta.
+    function ingrandisci(indirizzo, si) {
+        var argomenti = [indirizzo ? comp._selettore(indirizzo) : "attiva"];
+        if (si !== undefined)
+            argomenti.push(si ? "si" : "no");
+        comp._nostro("ingrandisci", argomenti);
+    }
+
     function commutaSchermoIntero(indirizzo) {
         comp._nostro("schermointero",
                      [indirizzo ? comp._selettore(indirizzo) : "attiva"]);

@@ -3535,6 +3535,8 @@ static void chiede_riduci(struct wl_listener *l, void *dati) {
 	finestra_riduci(f, f->toplevel->requested.minimized);
 }
 
+static void presa_stacca(struct minerva *m, struct finestra *f);
+
 static void presa_inizia(struct finestra *f, int come, uint32_t bordi) {
 	struct minerva *m = f->m;
 	if (f->schermo_intero)
@@ -3562,6 +3564,7 @@ static void chiede_sposta(struct wl_listener *l, void *dati) {
 	fuoco_finestra(f->m, f);
 	presa_inizia(f, PRESA_SPOSTA, 0);
 	f->m->presa_mossa = true;
+	presa_stacca(f->m, f);
 	// ── Anche chi si disegna la barra da solo trema ──────────────────
 	//
 	// Qui `presa_mossa` nasce già vera: il programma chiede di essere
@@ -5830,6 +5833,47 @@ static void molla_ferma_finestra(struct finestra *f) {
 	wlr_scene_node_set_position(&f->cornice->node, f->posto_x, f->posto_y);
 }
 
+/// Una finestra ingrandita o agganciata che si comincia a trascinare torna
+/// alla sua misura sotto il puntatore. La chiamano le due strade della
+/// presa: la nostra barra (`presa_avanti`, al primo movimento) e il
+/// programma che chiede di essere spostato (`chiede_sposta`) — quella che
+/// usano le app di Minerva e Chrome. Prima c'era solo la prima, e una
+/// finestra ingrandita dal suo pulsante si trascinava grande com'era, fuori
+/// dallo schermo (27 settembre 2026).
+///
+/// Vale anche per un'AGGANCIATA. Giacomo, 7 settembre 2026: «staccala e vedi
+/// che si riaggancia da sola, e non riesco a ridimensionarla se non la voglio
+/// più a metà schermo». Staccata dal bordo restava larga mezzo schermo: il
+/// ritorno alla misura di prima c'era solo per le ingrandite.
+///
+/// Parte col MOVIMENTO e non con la pressione: un semplice clic sulla barra
+/// di una finestra ingrandita non deve rimpicciolirla.
+static void presa_stacca(struct minerva *m, struct finestra *f) {
+	if (m->presa != PRESA_SPOSTA || !(f->ingrandita || f->agganciata))
+		return;
+	const double quota = m->presa_box.width > 0
+		? (m->presa_x - m->presa_box.x) / m->presa_box.width : 0.5;
+	if (f->ingrandita) {
+		finestra_ingrandisci(f, false);
+	} else {
+		f->agganciata = false;
+		if (f->prima.width > 0 && f->prima.height > 0)
+			finestra_posiziona(f, f->prima.x, f->prima.y,
+				f->prima.width, f->prima.height);
+		barra_aggiorna(f);
+		annuncia(f->m, "stato", f);
+	}
+	// La si riaggancia al puntatore, o schizzerebbe via del suo scarto
+	// rispetto all'angolo.
+	struct wlr_box ora;
+	finestra_box(f, &ora);
+	m->presa_box = ora;
+	m->presa_box.x = (int)(m->presa_x - quota * ora.width);
+	m->presa_box.y = (int)(m->presa_y - barra_alta() / 2);
+	m->presa_x = m->cursore->x;
+	m->presa_y = m->cursore->y;
+}
+
 static bool presa_avanti(struct minerva *m) {
 	if (m->presa == PRESA_NIENTE || m->presa_di == NULL)
 		return false;
@@ -5869,27 +5913,7 @@ static bool presa_avanti(struct minerva *m) {
 		// di prima c'era solo per le ingrandite, e un'agganciata non è
 		// ingrandita — è la riga qui accanto che le distingue, giustamente,
 		// e le aveva distinte anche dove non serviva.
-		if (m->presa == PRESA_SPOSTA && (f->ingrandita || f->agganciata)) {
-			const double quota = m->presa_box.width > 0
-				? (m->presa_x - m->presa_box.x) / m->presa_box.width : 0.5;
-			if (f->ingrandita) {
-				finestra_ingrandisci(f, false);
-			} else {
-				f->agganciata = false;
-				if (f->prima.width > 0 && f->prima.height > 0)
-					finestra_posiziona(f, f->prima.x, f->prima.y,
-						f->prima.width, f->prima.height);
-				barra_aggiorna(f);
-				annuncia(f->m, "stato", f);
-			}
-			struct wlr_box ora;
-			finestra_box(f, &ora);
-			m->presa_box = ora;
-			m->presa_box.x = (int)(m->presa_x - quota * ora.width);
-			m->presa_box.y = (int)(m->presa_y - barra_alta() / 2);
-			m->presa_x = m->cursore->x;
-			m->presa_y = m->cursore->y;
-		}
+		presa_stacca(m, f);
 	}
 
 	if (m->presa == PRESA_SPOSTA) {

@@ -183,16 +183,18 @@ ShellRoot {
                                   "y": ingranditaPortatile.y,
                                   "w": ingranditaPortatile.w,
                                   "h": ingranditaPortatile.h };
-        verifica("una finestra ingrandita sul portatile è «ingrandita» anche se il fuoco è sull'esterno",
-                 W.isMaximized(fintaSulPortatile),
-                 JSON.stringify(fintaSulPortatile));
-        var spostataDiPoco = { "own": true,
-                               "x": ingranditaPortatile.x + 10,
-                               "y": ingranditaPortatile.y,
-                               "w": ingranditaPortatile.w,
-                               "h": ingranditaPortatile.h };
-        verifica("spostata di dieci pixel non è più «ingrandita»",
-                 !W.isMaximized(spostataDiPoco));
+        // «Ingrandita» è uno stato del compositore, non una geometria: una
+        // finestra ridimensionata a mano fino ai bordi NON è ingrandita, e il
+        // compositore non la farebbe tornare piccola trascinandola.
+        verifica("ingrandita è quello che dice il compositore",
+                 W.isMaximized({ "modoSchermo": 1 }));
+        verifica("grande quanto lo spazio ma non ingrandita dal compositore: no",
+                 !W.isMaximized({ "own": true, "modoSchermo": 0,
+                                  "x": fintaSulPortatile.x, "y": fintaSulPortatile.y,
+                                  "w": fintaSulPortatile.w, "h": fintaSulPortatile.h }));
+        verifica("a schermo intero non è «ingrandita»",
+                 !W.isMaximized({ "modoSchermo": 2 }));
+        verifica("nessuna finestra, nessun ingrandimento", !W.isMaximized(null));
 
         // ── Le zone di aggancio, coi numeri veri ──────────────────────────
         var zonaSx = W.rectZona("left", W.spazioPer(suEsterno));
@@ -233,27 +235,6 @@ ShellRoot {
                  JSON.stringify(massimoConBarra));
         verifica("rectMassimo senza spazio non inventa niente",
                  W.rectMassimo(null, 0, W.bordo) === null);
-
-        // ── E il confronto che decide il pulsante ─────────────────────────
-        //
-        // Una finestra messa ESATTAMENTE dove l'avrebbe messa rectMassimo è
-        // ingrandita; una quasi non lo è. Il giro completo — il segno del
-        // pulsante — si prova qui senza spostare nessuna finestra vera.
-        var giro = { "own": true,
-                     "x": massimo.x, "y": massimo.y,
-                     "w": massimo.w, "h": massimo.h };
-        W.spaziPerMonitor = [ { "id": 0, "nome": "eDP-1", "attivo": true,
-                                "x": 0, "y": 44, "w": 1536, "h": 820,
-                                "sx": 0, "sy": 0, "sw": 1536, "sh": 864 } ];
-        W.usable = banco.spazio;
-        verifica("una finestra messa dove la metterebbe «ingrandisci» è ingrandita",
-                 W.isMaximized(giro));
-        verifica("spostata di cinque pixel dal bordo non lo è più",
-                 !W.isMaximized({ "own": true,
-                                  "x": giro.x + 5, "y": giro.y,
-                                  "w": giro.w, "h": giro.h }));
-        W.spaziPerMonitor = [];
-        W.usable = null;
 
         console.log("");
         if (banco.fallite > 0)
