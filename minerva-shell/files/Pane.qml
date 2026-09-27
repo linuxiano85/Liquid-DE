@@ -291,13 +291,44 @@ Item {
     property bool trascinando: false
     signal rilasciato(var sorgenti, string destinazione)
 
-    function iniziaTrascinamento(percorsi, dove) {
+    /// ── Quello che si porta, sotto il dito ──────────────────────────────
+    ///
+    /// Fino al 28 settembre 2026 il trascinamento dava un'immagine solo per
+    /// le fotografie («un'icona sbagliata è peggio di nessuna icona»): per
+    /// tutto il resto sotto il puntatore non c'era niente, e il gesto sembrava
+    /// non esistere. Giacomo: «voglio il trascinamento delle icone e cartelle
+    /// anche nel file manager che manca da sempre» — funzionava, e non si
+    /// vedeva. Adesso si fotografa la cella afferrata (icona e nome, com'è
+    /// sullo schermo), come fa la scrivania, e l'immagine sta sotto il dito
+    /// nel punto esatto in cui la si è presa (`hotSpot`). Con più file, sulla
+    /// cella compare per il tempo della foto quanti sono.
+    property string _targaSu: ""
+    property int _targaQuante: 0
+    property bool _preparando: false
 
-        if (percorsi.length === 0)
+    function iniziaTrascinamento(percorsi, dove, cella, presa) {
+
+        if (percorsi.length === 0 || pane._preparando)
             return;
         fardello.percorsi = percorsi;
         fardello.x = dove.x;
         fardello.y = dove.y;
+        if (cella) {
+            pane._preparando = true;
+            pane._targaSu = cella.modelData.path;
+            pane._targaQuante = percorsi.length;
+            cella.grabToImage(function (esito) {
+                pane._targaSu = "";
+                pane._preparando = false;
+                // Tenuta viva per tutto il gesto: è un oggetto con un ciclo di
+                // vita, non un indirizzo.
+                fardello.fotografia = esito;
+                fardello.Drag.imageSource = esito.url;
+                fardello.Drag.hotSpot = presa || Qt.point(cella.width / 2, cella.height / 2);
+                pane.trascinando = true;
+            });
+            return;
+        }
         // ── Si accende e BASTA ───────────────────────────────────────────
         //
         // Qui c'era, subito sotto, `pane.trascinando = false;` con scritto
@@ -1557,16 +1588,17 @@ Item {
         // io ieri mi ero fermato a misurare quella — e moriva un istante dopo
         // perché `onCanceled` lo spegneva. La stessa forma del difetto di
         // ieri, entrata da un'altra porta.
-        Drag.onDragFinished: pane.trascinando = false
+        Drag.onDragFinished: {
+            pane.trascinando = false;
+            fardello.fotografia = null;
+            fardello.Drag.imageSource = "";
+        }
+        /// La fotografia della cella, per la durata del gesto.
+        property var fotografia: null
         Drag.supportedActions: Qt.CopyAction | Qt.MoveAction
         Drag.mimeData: ({ "text/uri-list": fardello.uriList })
         // L'immagine che segue il puntatore la disegna il compositore, e la
-        // vuole da noi. Per una foto è la foto stessa — trascinare una foto e
-        // vedere la foto è la cosa più chiara che ci sia. Per tutto il resto
-        // non si dà niente: un'icona sbagliata è peggio di nessuna icona.
-        Drag.imageSource: (fardello.percorsi.length === 1
-                           && Files.isImage(Files.baseName(fardello.percorsi[0])))
-                          ? "file://" + fardello.percorsi[0] : ""
+        // vuole da noi: la dà `iniziaTrascinamento`, fotografando la cella.
 
         readonly property string uriList: {
             var righe = [];
@@ -1859,6 +1891,29 @@ Item {
 
             width: view.cellWidth
             height: view.cellHeight
+
+            // Quanti file si portano, per il tempo della fotografia del
+            // trascinamento (vedi `iniziaTrascinamento`).
+            Rectangle {
+                z: 10
+                visible: pane._targaSu === cell.modelData.path && pane._targaQuante > 1
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.margins: Theme.Effects.space2
+                width: Math.max(height, conta.implicitWidth + Theme.Effects.space3)
+                height: 22
+                radius: height / 2
+                color: Theme.Colors.accent
+                Text {
+                    id: conta
+                    anchors.centerIn: parent
+                    text: pane._targaQuante
+                    color: Theme.Colors.textOnAccent
+                    font.family: Theme.Typography.fontDisplay
+                    font.weight: Theme.Typography.weightBold
+                    font.pixelSize: Theme.Typography.sizeXS
+                }
+            }
 
             // La selezione si accende SOLO nel riquadro attivo. Con due o tre
             // schede aperte, ognuna con la propria selezione tutte accese
@@ -2181,7 +2236,8 @@ Item {
                     pane.iniziaTrascinamento(
                         pane.isSelected(cell.modelData.path)
                             ? pane.selection.slice()
-                            : [cell.modelData.path], p);
+                            : [cell.modelData.path], p, cell,
+                        Qt.point(cellMouse.partenza.x, cellMouse.partenza.y));
                 }
 
                 onReleased: pane.finisciTrascinamento()

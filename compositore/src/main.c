@@ -7541,6 +7541,9 @@ static void icona_trascinata_distrutta(struct wl_listener *l, void *dati) {
 static void trascinamento_partito(struct wl_listener *l, void *dati) {
 	struct minerva *m = wl_container_of(l, m, trascinamento_partito);
 	struct wlr_drag *d = dati;
+	if (m->traccia_trascina)
+		fprintf(stderr, "minerva-wayland: trascinamento partito, %s\n",
+			d->icon != NULL ? "con l'icona" : "SENZA icona");
 	if (d->icon == NULL)
 		return;
 	m->icona_trascinata =
