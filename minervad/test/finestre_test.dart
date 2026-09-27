@@ -778,30 +778,26 @@ void main() {
 
 
     test('le Impostazioni non riportano il fuoco sotto il puntatore', () {
-      // `config/hyprland.conf` sceglie `follow_mouse = 2` — il fuoco della
-      // tastiera si sposta solo cliccando — con mezza pagina di ragioni.
-      // `settings/sections/Input.qml` riscrive lo stesso blocco `input` in un
-      // file che viene letto DOPO: se ci rimette `1`, basta salvare una
-      // qualunque impostazione del mouse perché la scelta di fondo salti in
-      // silenzio.
+      // Fino al 27 settembre 2026 `settings/sections/Input.qml` riscriveva il
+      // blocco `input` di Hyprland in `~/.config/hypr/minerva-input.conf`, e
+      // questa prova pretendeva che ci fosse `follow_mouse = 2`: con `1`
+      // bastava salvare un'impostazione del mouse perché il fuoco tornasse a
+      // seguire il puntatore, e con due finestre sovrapposte spariva la barra
+      // di quella davanti.
       //
-      // Che cosa si vedeva: con due finestre sovrapposte, spostando il
-      // puntatore fuori da quella attiva spariva la sua barra del titolo —
-      // perché «chi copre chi» lo stimiamo dall'ordine del fuoco.
+      // Quel file non lo leggeva più nessuno ed è sparito. La scelta resta
+      // (il fuoco si sposta cliccando: lo decide il compositore), e la
+      // guardia resta nel verso che conta: le Impostazioni non devono né
+      // parlare di `follow_mouse` né scrivere nella cartella di Hyprland.
       final qml = _qml('settings/sections/Input.qml').readAsStringSync();
       final righe = qml
           .split('\n')
           .where((r) => !r.trimLeft().startsWith('//'))
           .join('\n');
-      expect(righe.contains('follow_mouse = 1'), isFalse,
-          reason: 'le Impostazioni rimettono il fuoco sotto il puntatore');
-      expect(righe.contains('follow_mouse = 2'), isTrue,
-          reason: 'le Impostazioni non scrivono più follow_mouse');
-
-      // Qui si confrontava anche `config/hyprland.conf`, che diceva la stessa
-      // cosa: erano due sorgenti per una scelta sola, e questa riga esisteva
-      // per tenerle d'accordo. Il file è sparito con la sessione Hyprland il
-      // 2 settembre 2026, e con lui il problema — resta una sorgente sola.
+      expect(righe.contains('follow_mouse'), isFalse,
+          reason: 'le Impostazioni tornano a decidere il fuoco del mouse');
+      expect(righe.contains('.config/hypr') || righe.contains('/hypr"'), isFalse,
+          reason: 'le Impostazioni scrivono nella cartella di Hyprland');
     });
 
   });

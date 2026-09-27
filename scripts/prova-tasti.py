@@ -39,25 +39,15 @@ SYN_REPORT = 0
 KEY_LEFTSHIFT = 42
 
 def disposizione():
-    """Quale disposizione ha davvero questa sessione.
+    """Quale disposizione ha scelto chi usa questa sessione.
 
-    Si chiede al compositore, non alle impostazioni: quello che conta è cosa
-    sta applicando adesso, e le due cose possono divergere — è già successo col
-    fuoco che segue il mouse.
+    La dicono le impostazioni di Liquid DE: sono quelle che il compositore
+    applica all'avvio (`Compositore.applicaIngresso()`). Qui prima si
+    chiedeva a `hyprctl`, che sotto il nostro compositore non esiste: la
+    domanda falliva sempre e si ricadeva comunque sulle impostazioni.
     """
     import json
     import os
-    import subprocess
-    try:
-        r = subprocess.run(["hyprctl", "-j", "devices"],
-                           capture_output=True, text=True, timeout=2)
-        if r.returncode == 0:
-            for k in json.loads(r.stdout).get("keyboards", []):
-                l = str(k.get("layout", "")).split(",")[0].strip()
-                if l:
-                    return l
-    except Exception:
-        pass
     try:
         with open(os.path.join(cartelle.config_di_partenza(), "settings.json"),
                   encoding="utf-8") as f:

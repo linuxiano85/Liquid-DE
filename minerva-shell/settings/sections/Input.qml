@@ -5,9 +5,8 @@ import ".." as S
 
 // Input — Tastiera, touchpad e mouse.
 //
-// Tutto qui dentro finisce in ~/.config/hypr/minerva-input.conf e viene
-// applicato subito con `hyprctl keyword`. Il file si riscrive per intero a
-// ogni modifica: è corto, e rigenerarlo evita di doverlo saper leggere.
+// Le scelte stanno nelle impostazioni (le salva il demone) e le applica il
+// compositore, subito e a ogni avvio: `Compositore.applicaIngresso()`.
 Page {
     id: page
 
@@ -29,7 +28,6 @@ Page {
     readonly property bool   tapToClick:      Core.Ipc.get("input.tapToClick", true)
     readonly property bool   disableTyping:   Core.Ipc.get("input.disableWhileTyping", true)
 
-    Core.Exec { id: writer }
 
     function set(key, value) {
         Core.Ipc.setSetting("input." + key, value);
@@ -43,70 +41,13 @@ Page {
     }
 
     function apply() {
-        var lines = [
-            "# Tastiera e mouse — scritto dal pannello Impostazioni di Minerva.",
-            "input {",
-            "    kb_layout = " + page.layout,
-            "    repeat_rate = " + page.repeatRate,
-            "    repeat_delay = " + page.repeatDelay,
-            "    sensitivity = " + page.sensitivity,
-            // ── DUE, e non uno ───────────────────────────────────────────
-            //
-            // Qui c'era `1`, cioè «il fuoco segue il puntatore», mentre la
-            // configurazione principale sceglie `2` con mezza pagina di
-            // ragioni («è il modo di Windows, di KDE e di GNOME»). Questo file
-            // viene letto DOPO, quindi bastava salvare una qualunque
-            // impostazione di tastiera o mouse perché la scelta di fondo
-            // saltasse in silenzio.
-            //
-            // Che cosa si vedeva: con due finestre sovrapposte, spostando il
-            // puntatore fuori da quella attiva il fuoco passava a quella
-            // dietro — e la barra del titolo di quella davanti spariva,
-            // perché per noi «chi copre chi» si stima dall'ordine del fuoco.
-            // Parole di Giacomo: «appena sposto il mouse dalla finestra
-            // scompare la barra del titolo». Non era la barra: era il fuoco.
-            "    follow_mouse = 2",
-            // Per la stessa ragione della riga sopra: rimetteva il fuoco sotto
-            // il cursore quando una finestra cambiava modo, cioè quando
-            // nessuno aveva cliccato niente.
-            "    float_switch_override_focus = 0",
-            "    accel_profile = flat",
-            "    touchpad {",
-            "        natural_scroll = " + (page.naturalScroll ? "true" : "false"),
-            "        tap-to-click = " + (page.tapToClick ? "true" : "false"),
-            "        disable_while_typing = " + (page.disableTyping ? "true" : "false"),
-            "        scroll_factor = 0.6",
-            "    }",
-            "}"
-        ];
-
-        var body = lines.join("\n").replace(/'/g, "'\\''");
-
-        // ── Il file, che è la memoria ────────────────────────────────────
-        writer.fireSh(
-            "d=\"${XDG_CONFIG_HOME:-$HOME/.config}/hypr\"; mkdir -p \"$d\"; " +
-            "printf '%s\\n' '" + body + "' > \"$d/.minerva-input.tmp\" && " +
-            "mv \"$d/.minerva-input.tmp\" \"$d/minerva-input.conf\"");
-
-        // ── E l'effetto, subito ──────────────────────────────────────────
+        // Qui prima si scriveva anche `~/.config/hypr/minerva-input.conf`,
+        // nella lingua di Hyprland: non lo leggeva più nessuno, e stava nella
+        // cartella di un altro programma. Resta l'unica strada vera.
         //
-        // Uno per uno e non con `hyprctl reload`, che rileggerebbe tutto e
-        // farebbe ripartire gli `exec-once`: una seconda shell e un secondo
-        // demone.
-        //
-        // Passano dalla porta, e adesso sono ARGOMENTI e non pezzi di una
-        // riga di shell. Non è solo ordine: la disposizione della tastiera la
-        // sceglie chi usa il computer, e un valore che finisce dentro una
-        // riga eseguita da `sh` è un valore che può eseguire — vedi la
-        // stessa lezione in `Core.Exec.shArgs`.
-        // ── Una funzione sola, non un elenco copiato ─────────────────────
-        //
-        // Le stesse quattro manopole vanno mandate anche all'AVVIO della
-        // sessione, o sotto minerva-wayland restano «non dette» e il tocco del
-        // trackpad non clicca finché non si apre questa pagina. Chiamando la
-        // stessa funzione che usa `Compositore.applicaIngresso()` non ci sono
-        // due elenchi che un giorno non sono più d'accordo: qui si legge dal
-        // pannello, là dal demone, ma la riga che parte è la stessa.
+        // Una funzione sola, non un elenco copiato: le stesse manopole vanno
+        // mandate anche all'AVVIO della sessione, o restano «non dette» e il
+        // tocco del touchpad non clicca finché non si apre questa pagina.
         Core.Compositore.applicaIngresso();
     }
 

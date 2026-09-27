@@ -506,11 +506,9 @@ else
     exit 1
 fi
 
-c_head "Configurazioni in ~/.config/hypr"
-mkdir -p "$HOME/.config/hypr"
-# Qui si collegava `hypridle.conf`. Dal 1º settembre 2026 l'inattività non ha
-# più un programma: la conta il compositore, la politica sta nella shell, e le
-# tre soglie stanno nelle impostazioni di Minerva e in nessun altro posto.
+# Qui si creava `~/.config/hypr`, la cartella di Hyprland: vuota da quando
+# l'inattività la conta il compositore (1º settembre 2026), e comunque non di
+# Liquid DE. Tolta il 27 settembre.
 
 # ── L'agente delle password ───────────────────────────────────────────────
 #

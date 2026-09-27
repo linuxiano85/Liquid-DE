@@ -58,7 +58,7 @@ ShellRoot {
     // già passato a un altro file PAM e questa prova continuava a dire
     // «tutte passate» provando quello di prima. Una prova che sceglie da sé
     // cosa provare non prova il programma: prova sé stessa.
-    readonly property string servizio: Quickshell.env("MINERVA_PAM") || "hyprlock"
+    readonly property string servizio: Quickshell.env("MINERVA_PAM") || "liquid-de"
 
     PamContext {
         id: pam

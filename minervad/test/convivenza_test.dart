@@ -27,7 +27,7 @@ Directory _radice() {
 /// I posti di Minerva, come li scriverebbe il codice.
 final _postiDiMinerva = <String, RegExp>{
   'cartelle XDG di Minerva': RegExp(
-      r'(\.config|\.cache|\.local/share|\.local/state)/minerva(?![\w-])|RUNTIME_DIR[^/\s]*/minerva(?![\w-])|/minerva/sessioni'),
+      r'(\.config|\.cache|\.local/share|\.local/state)\}?/minerva(?![\w-])|RUNTIME_DIR[^/\s]*/minerva(?![\w-])|/minerva/sessioni'),
   'programmi in ~/.local/bin': RegExp(r'(\$HOME|~)/\.local/bin/minerva-'),
   'ponti di sessione di Minerva': RegExp(r'/usr/local/bin/minerva-session'),
   'voci al login di Minerva': RegExp(r'wayland-sessions/minerva'),
@@ -47,6 +47,7 @@ const _permessi = <String, String>{
   'scripts/minerva-greetd': 'il greeter: si separa con la Tappa 5',
   'scripts/minerva-greeter-sessione': 'il greeter: si separa con la Tappa 5',
   'scripts/minerva-greeter-avvio': 'il greeter: si separa con la Tappa 5',
+  'scripts/minerva-avvia-sessione': 'il greeter (lo avvia da /usr/local/lib/minerva): si separa con la Tappa 5',
   'scripts/prova-accesso.py': 'il greeter: si separa con la Tappa 5',
   'minerva-shell/greeter/Greeter.qml': 'il greeter: si separa con la Tappa 5',
   'minerva-shell/prove-greeter.qml': 'il greeter: si separa con la Tappa 5',

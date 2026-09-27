@@ -65,7 +65,10 @@ PRIMA=$(qs log --pid "$PID" 2>/dev/null | wc -l)
 # usando. Il ripristino non puo dipendere dall'arrivare in fondo: un Ctrl-C, un
 # pannello che non risponde, un `set -e` di domani - e Giacomo si ritroverebbe
 # la barra dall'altra parte senza sapere perche.
-IMPOSTAZIONI="${XDG_CONFIG_HOME:-$HOME/.config}/minerva/settings.json"
+# Le impostazioni di Liquid DE, dal posto unico dei nomi: con la cartella
+# scritta a mano qui si spostava la barra di MINERVA, non quella di chi prova.
+. "$ROOT/scripts/minerva-cartelle.sh"
+IMPOSTAZIONI="$CARTELLA_CONFIG/settings.json"
 LEGGI="$ROOT/scripts/posizione-barra.py"
 
 posizione_barra() { python3 "$LEGGI" "$IMPOSTAZIONI"; }

@@ -225,52 +225,22 @@ Page {
         onTriggered: page.persist()
     }
 
-    Core.Exec { id: writer }
-
+    // ── Il file degli schermi ────────────────────────────────────────────
+    //
+    // `schermi.conf` nella cartella di Liquid DE (`Core.Ipc.cartellaConfig`),
+    // che legge il compositore all'avvio (`compositore/src/schermi.c`).
+    //
+    // Qui c'erano due difetti insieme, trovati il 27 settembre 2026 togliendo
+    // Hyprland dal codice. Si scriveva ANCHE `~/.config/hypr/minerva-display.conf`,
+    // nella lingua di Hyprland, che non leggeva più nessuno. E il nostro file
+    // finiva in `~/.config/minerva`, la cartella di MINERVA: le scelte sugli
+    // schermi fatte in Liquid DE non tornavano al prossimo accesso (il
+    // compositore le cerca in `liquid-de`) e intanto cambiavano quelle
+    // dell'altro desktop.
     function persist() {
-        var lines = [
-            "# Schermi — scritto dal pannello Impostazioni di Minerva.",
-            "# Rigenerato a ogni modifica: le modifiche a mano vengono perse."
-        ];
-        for (var i = 0; i < page.monitors.length; i++) {
-            var m = page.monitors[i];
-            if (!m.acceso) {
-                lines.push("monitor = " + m.nome + ",disable");
-                continue;
-            }
-            lines.push("monitor = " + m.nome + ","
-                       + m.modoLarghezza + "x" + m.modoAltezza + "@" + Number(m.hz).toFixed(3)
-                       + "," + m.x + "x" + m.y
-                       + "," + m.scala
-                       // Hyprland conta la rotazione da 0 a 3, noi in gradi.
-                       + (m.gradi ? ",transform," + (m.gradi / 90) : ""));
-        }
-
-        // Si passa da un file temporaneo: se la scrittura si interrompe a
-        // metà, la configurazione vecchia resta intatta invece di diventare
-        // un file troncato che Hyprland non sa leggere.
-        var body = lines.join("\n").replace(/'/g, "'\\''");
-        writer.fireSh(
-            "d=\"${XDG_CONFIG_HOME:-$HOME/.config}/hypr\"; mkdir -p \"$d\"; " +
-            "printf '%s\\n' '" + body + "' > \"$d/.minerva-display.tmp\" && " +
-            "mv \"$d/.minerva-display.tmp\" \"$d/minerva-display.conf\"");
-
         page.persistiPerMinervaWayland();
     }
 
-    // ── Lo stesso, per il nostro compositore ─────────────────────────────
-    //
-    // `~/.config/liquid-de/schermi.conf`, che legge `minerva-wayland` all'avvio.
-    //
-    // Due file e non uno perché le due sintassi non sono la stessa — quella
-    // di Hyprland comincia con la parola `monitor` e la nostra col nome dello
-    // schermo — ma **i numeri sono gli stessi e li scrive lo stesso pulsante**.
-    // È la parte che conta: un numero copiato a mano in due posti è un numero
-    // che prima o poi differisce, e il sintomo sarebbe «entrando in
-    // minerva-wayland è tutto piccolo» a settimane di distanza dalla causa.
-    //
-    // Quando Hyprland uscirà di scena (Tappa 7) sparisce il file di sopra, non
-    // questo.
     function persistiPerMinervaWayland() {
         var righe = [
             "# Schermi — scritto dal pannello Impostazioni di Minerva.",
@@ -294,11 +264,12 @@ Page {
                        + " " + m.scala
                        + " " + (m.gradi || 0));
         }
-        var corpo = righe.join("\n").replace(/'/g, "'\\''");
-        scrittoreNostro.fireSh(
-            "d=\"${MINERVA_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/minerva}\"; mkdir -p \"$d\"; " +
-            "printf '%s\\n' '" + corpo + "' > \"$d/.schermi.tmp\" && " +
-            "mv \"$d/.schermi.tmp\" \"$d/schermi.conf\"");
+        // La cartella e il testo passano come ARGOMENTI, non dentro la riga:
+        // un nome di schermo non deve poter diventare un comando.
+        scrittoreNostro.fireShArgs(
+            'mkdir -p "$1" && printf "%s\\n" "$2" > "$1/.schermi.tmp" && '
+            + 'mv "$1/.schermi.tmp" "$1/schermi.conf"',
+            [Core.Ipc.cartellaConfig, righe.join("\n")]);
     }
 
     Core.Exec { id: scrittoreNostro }

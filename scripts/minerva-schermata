@@ -24,6 +24,9 @@
 # ═══════════════════════════════════════════════════════════════════════════
 set -u
 
+SELF="$(readlink -f "$0")"
+ROOT="$(dirname "$(dirname "$SELF")")"
+
 MODO="${1:-schermo}"
 RITARDO="${2:-0}"
 
@@ -102,16 +105,25 @@ case "$MODO" in
         ;;
     finestra)
         aspetta
-        # La geometria della finestra attiva la sa il compositore. Si legge in
-        # Python e non con `jq`: `jq` è un pacchetto in più da installare, e
-        # Python c'è già perché lo usano gli script di prova.
-        REGIONE=$(hyprctl activewindow -j 2>/dev/null | python3 -c '
+        # La geometria della finestra attiva la sa il compositore: chi ha il
+        # fuoco lo dice `stato`, dov'è e quanto è grande lo dice `finestre`.
+        # Qui prima si chiedeva a `hyprctl activewindow`, che sotto il nostro
+        # compositore non esiste: la schermata «della finestra» usciva sempre
+        # di tutto lo schermo, senza dirlo. Una finestra con la barra del
+        # titolo nostra (`decorata`) la porta SOPRA il contenuto: si prende
+        # anche lei, o la schermata esce decapitata.
+        REGIONE=$( { "$ROOT/scripts/minerva-compositore" stato; \
+                     "$ROOT/scripts/minerva-compositore" finestre; } 2>/dev/null | python3 -c '
 import json, sys
+righe = [r[3:] for r in sys.stdin.read().splitlines() if r.startswith("ok ")]
 try:
-    w = json.load(sys.stdin)
-    x, y = w["at"]
-    lw, lh = w["size"]
-    print(f"{x},{y} {lw}x{lh}")
+    fuoco = json.loads(righe[0])["fuoco"]
+    for w in json.loads(righe[1]):
+        if w["id"] == fuoco:
+            barra = 42 if w.get("decorata") else 0
+            print("%d,%d %dx%d" % (w["x"], w["y"] - barra,
+                                   w["larghezza"], w["altezza"] + barra))
+            break
 except Exception:
     pass
 ') || REGIONE=""

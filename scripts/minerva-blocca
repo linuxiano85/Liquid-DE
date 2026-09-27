@@ -32,14 +32,10 @@ quale_pam() {
     if [ -n "${MINERVA_PAM:-}" ]; then
         echo "$MINERVA_PAM"
     elif [ -f /etc/pam.d/liquid-de ]; then
+        # Il servizio è nostro e lo installa `install-minerva.sh`. Se manca
+        # NON si blocca, e lo si dice: uno schermo che sembra bloccato e non
+        # sa controllare la password è peggio di uno che non si blocca.
         echo liquid-de
-    elif [ -f /etc/pam.d/hyprlock ]; then
-        # Il ripiego storico. `hyprlock` non è più fra i pacchetti di Minerva
-        # dal 2 settembre 2026, quindi su una macchina nuova questo file non
-        # c'è: la riga resta perché su una macchina vecchia può esserci ancora,
-        # e perché non costa niente. Se non c'è nessuno dei due NON si blocca,
-        # e lo si dice — è la scelta scritta qui sopra.
-        echo hyprlock
     else
         return 1
     fi
@@ -53,8 +49,8 @@ fi
 if ! PAM="$(quale_pam)"; then
     echo "[MINERVA][BLOCCO] Nessun file PAM utilizzabile: NON blocco." >&2
     echo "[MINERVA][BLOCCO] Reinstalla con: scripts/install-minerva.sh" >&2
-    hyprctl notify 3 8000 "rgb(f0596b)" \
-        "Minerva non può bloccare: manca /etc/pam.d/liquid-de" >/dev/null 2>&1
+    "$ROOT/scripts/minerva-compositore" messaggio 8000 \
+        "Liquid DE non può bloccare: manca /etc/pam.d/liquid-de" >/dev/null 2>&1
     exit 1
 fi
 

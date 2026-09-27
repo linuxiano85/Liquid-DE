@@ -1,0 +1,50 @@
+#!/bin/sh
+# minerva-compositore — una riga al nostro compositore, e la sua risposta.
+#
+#     minerva-compositore finestre
+#     minerva-compositore messaggio 3000 "Il blocco non è riuscito"
+#
+# Stampa la risposta così com'è («ok …» o «no …») ed esce con 0 solo se
+# comincia con «ok». È la stessa porta che usa la shell (`core/Compositore.qml`)
+# e le prove: qui serve agli script, che prima chiedevano le stesse cose a
+# `hyprctl` — un programma che sotto il nostro compositore non esiste, e che
+# li faceva fallire in silenzio.
+#
+# Il canale lo dice `MINERVA_CANALE`, che il compositore mette nell'ambiente
+# dei programmi che avvia; se manca (uno script lanciato da un terminale
+# aperto prima) si ricava dal nome del display, che è lo stesso che il
+# compositore usa per il suo socket.
+#
+# Si parla col socket in Python e non con `socat` o `nc`: Python c'è per
+# forza (l'installatore ne dipende), gli altri due no.
+
+[ $# -gt 0 ] || { echo "uso: minerva-compositore <verbo> [argomenti…]" >&2; exit 2; }
+
+CANALE="${MINERVA_CANALE:-}"
+if [ -z "$CANALE" ] && [ -n "${WAYLAND_DISPLAY:-}" ] && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+    CANALE="$XDG_RUNTIME_DIR/minerva-wayland-$WAYLAND_DISPLAY.sock"
+fi
+[ -S "$CANALE" ] || { echo "no nessun canale del compositore" >&2; exit 1; }
+
+MINERVA_CANALE="$CANALE" python3 - "$@" <<'PYFINE'
+import os, socket, sys
+riga = " ".join(sys.argv[1:])
+try:
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(3)
+    s.connect(os.environ["MINERVA_CANALE"])
+    s.sendall((riga + "\n").encode())
+    risposta = b""
+    while not risposta.endswith(b"\n"):
+        pezzo = s.recv(65536)
+        if not pezzo:
+            break
+        risposta += pezzo
+    s.close()
+except Exception as e:
+    print(f"no {e}", file=sys.stderr)
+    sys.exit(1)
+testo = risposta.decode(errors="replace").strip()
+print(testo)
+sys.exit(0 if testo.startswith("ok") else 1)
+PYFINE

@@ -41,13 +41,13 @@ vivo_ed_e_lui() {
 
 if vivo_ed_e_lui; then
     kill -USR1 "$GUARDIANO" 2>/dev/null && \
-        hyprctl notify 1 2500 "rgb(f0407f)" "Minerva: interfaccia in riavvio…" >/dev/null 2>&1
+        "$ROOT/scripts/minerva-compositore" messaggio 2500 "Interfaccia in riavvio…" >/dev/null 2>&1
     exit 0
 fi
 
 # Nessun guardiano: si riparte da capo, staccati dal terminale o dalla
 # scorciatoia che ci ha lanciati, altrimenti muore insieme a chi lo ha
 # chiamato.
-hyprctl notify 1 2500 "rgb(f0407f)" "Minerva: riavvio dell'interfaccia da capo…" >/dev/null 2>&1
+"$ROOT/scripts/minerva-compositore" messaggio 2500 "Riavvio dell'interfaccia da capo…" >/dev/null 2>&1
 setsid "$ROOT/scripts/minerva-interfaccia" >/dev/null 2>&1 &
 exit 0
