@@ -4,34 +4,17 @@ import "../../core" as Core
 import ".." as S
 import "../../ui" as Ui
 
-// DataOra — Data, ora, fuso orario e sincronizzazione.
-//
-// Mancava, e si notava: l'orologio sta in mezzo alla barra, si guarda cento
-// volte al giorno, e per correggerlo bisognava aprire un terminale e conoscere
-// `timedatectl`. Su un ambiente pensato per chi comincia, è un vicolo cieco.
-//
-// ── QUESTA PAGINA NON POSSIEDE NIENTE ──────────────────────────────────────
-//
-// Ogni valore mostrato qui viene dal demone, che lo rilegge da `timedatectl`.
-// La pagina non tiene una propria copia da correggere dopo un clic, e il
-// motivo è concreto: fra il clic e l'effetto c'è la finestrella di polkit che
-// chiede la password, e l'utente può annullarla. Una pagina che sposta la
-// levetta e poi «si fida» resterebbe a mostrare uno stato che sul sistema non
-// è mai esistito. Qui il comando parte, si aspetta, e si ridisegna su ciò che
-// il demone risponde davvero.
-//
-// Le uniche due cose che appartengono a Minerva e non al sistema sono il
-// formato a 12 o 24 ore e i secondi: quelli vivono nelle impostazioni della
-// shell, perché riguardano come DISEGNIAMO l'ora, non che ora è.
+// Data, ora e lingua — il fuso, l'orologio, il luogo del meteo e la lingua.
+// Fino al 28 settembre 2026 la lingua era una pagina a sé, «Lingua e
+// regione», con una riga sola: riunite, perché è la stessa domanda — «dove e
+// come vivo» — e una voce in meno nella colonna.
 Page {
     id: page
 
     readonly property bool it: Core.Strings.lang === "it"
-
-    title: page.it ? "Data, ora e luogo" : "Date, time & place"
-    subtitle: page.it ? "Fuso orario, orologio e il tempo che fa"
-                      : "Time zone, clock and the weather"
-
+    title: page.it ? "Data, ora e lingua" : "Date, time and language"
+    subtitle: page.it ? "Il fuso orario, l'orologio, il luogo del meteo e la lingua"
+                      : "Time zone, clock, weather location and language"
     // ── Lo stato che arriva dal demone ───────────────────────────────────
     property string fuso: ""
     property bool ntp: false
@@ -40,20 +23,17 @@ Page {
     property string errore: ""
     property var fusi: []
     property string esito: ""
-
     // L'ora da mostrare. Un timer al secondo e non al minuto: qui si sta
     // GUARDANDO l'orologio, ed è l'unico posto in Minerva dove i secondi che
     // scorrono sono l'informazione — servono a vedere che dopo un cambio di
     // fuso l'ora è saltata davvero.
     property date adesso: new Date()
-
     Timer {
         interval: 1000
         running: true
         repeat: true
         onTriggered: page.adesso = new Date()
     }
-
     Connections {
         target: Core.Ipc
 
@@ -79,17 +59,17 @@ Page {
 
         function onConnectedChanged() { if (Core.Ipc.connected) page.chiedi(); }
     }
-
     Timer { id: svanisci; interval: 6000; onTriggered: page.esito = "" }
-
     function chiedi() {
         Core.Ipc.datetimeState();
         if (page.fusi.length === 0)
             Core.Ipc.datetimeZones();
     }
-
-    Component.onCompleted: chiedi()
-
+    Component.onCompleted: {
+        chiedi();
+        // La lingua (fino al 28 settembre 2026 una pagina sua).
+        Core.Ipc.localeState();
+    }
     // ── Che cosa è successo ─────────────────────────────────────────────
     //
     // In CIMA e non in fondo. L'esito di un comando che passa da polkit — un
@@ -111,7 +91,6 @@ Page {
             font.pixelSize: Theme.Typography.sizeSM
         }
     }
-
     // ── Adesso ───────────────────────────────────────────────────────────
 
     Card {
@@ -149,7 +128,6 @@ Page {
             }
         }
     }
-
     // ── Fuso orario ──────────────────────────────────────────────────────
 
     Card {
@@ -277,7 +255,6 @@ Page {
             }
         }
     }
-
     // ── Sincronizzazione ─────────────────────────────────────────────────
 
     Card {
@@ -312,7 +289,6 @@ Page {
             }
         }
     }
-
     // ── Ora a mano, solo quando ha senso ─────────────────────────────────
     //
     // Il riquadro NON compare con la sincronizzazione accesa, e non è per
@@ -361,11 +337,9 @@ Page {
             font.pixelSize: Theme.Typography.sizeXS
         }
     }
-
     // ── Formato dell'orologio: è nostro, non del sistema ─────────────────
 
     readonly property bool ore24: Core.Ipc.get("clock.format24", true)
-
     Card {
         heading: page.it ? "Come si legge l'orologio" : "Clock format"
         note: page.it
@@ -396,7 +370,6 @@ Page {
             }
         }
     }
-
     // ── Il tempo che fa ──────────────────────────────────────────────────
     //
     // Sta in questa pagina e non in una sua perché è la stessa domanda del
@@ -405,7 +378,6 @@ Page {
 
     property var luoghiTrovati: []
     property bool cercandoLuogo: false
-
     Connections {
         target: Core.Ipc
         function onWeatherPlaces(l) {
@@ -413,7 +385,6 @@ Page {
             page.cercandoLuogo = false;
         }
     }
-
     Card {
         heading: page.it ? "Il tempo che fa" : "Weather"
         note: page.it
@@ -527,7 +498,6 @@ Page {
             }
         }
     }
-
     // ── Pezzi comuni ─────────────────────────────────────────────────────
 
     component CampoTesto: Rectangle {
@@ -571,7 +541,6 @@ Page {
             font.pixelSize: Theme.Typography.sizeSM
         }
     }
-
     component Pulsante: Rectangle {
         id: bottone
 
@@ -604,6 +573,216 @@ Page {
             enabled: bottone.attivo
             cursorShape: Qt.PointingHandCursor
             onClicked: bottone.premuto()
+        }
+    }
+    property string localeSistema: ""
+    property var disponibili: []
+    property var campi: ({})
+    property string esitoLingua: ""
+    Connections {
+        target: Core.Ipc
+
+        function onLocaleStateReceived(s) {
+            page.localeSistema = s.lang || "";
+            page.disponibili = s.disponibili || [];
+            page.campi = s.campi || ({});
+        }
+
+        function onLocaleResult(r) {
+            page.esitoLingua = r.ok === true
+                         ? (page.it
+                            ? "Fatto. La nuova lingua si vede al prossimo accesso."
+                            : "Done. The new language appears at your next login.")
+                         : (r.errore || (page.it ? "Non riuscito." : "Failed."));
+            svanisciLingua.restart();
+        }
+
+        function onConnectedChanged() { if (Core.Ipc.connected) Core.Ipc.localeState(); }
+    }
+    Timer { id: svanisciLingua; interval: 8000; onTriggered: page.esitoLingua = "" }
+    /// Il nome di una lingua scritto NELLA LINGUA STESSA.
+    ///
+    /// «Italiano», non «Italian»: chi ha sbagliato lingua e vuole tornare
+    /// indietro deve poter riconoscere la propria in un elenco che non sa
+    /// leggere. È la ragione per cui lo fanno così tutti i sistemi operativi.
+    function nomeLocale(l) {
+        var noti = {
+            "it_IT.UTF-8": "Italiano (Italia)",
+            "en_US.UTF-8": "English (United States)",
+            "en_GB.UTF-8": "English (United Kingdom)",
+            "de_DE.UTF-8": "Deutsch (Deutschland)",
+            "fr_FR.UTF-8": "Français (France)",
+            "es_ES.UTF-8": "Español (España)",
+            "pt_BR.UTF-8": "Português (Brasil)",
+            "C.UTF-8": page.it ? "Nessuna (inglese di base)" : "None (plain English)"
+        };
+        return noti[l] !== undefined ? noti[l] : l;
+    }
+    // ── Esito, in cima ───────────────────────────────────────────────────
+
+    Card {
+        visible: page.esitoLingua !== ""
+        heading: page.it ? "Esito" : "Result"
+
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: page.esitoLingua
+            color: Theme.Colors.textMuted
+            font.family: Theme.Typography.fontDisplay
+            font.weight: Theme.Typography.weightRegular
+            font.pixelSize: Theme.Typography.sizeSM
+        }
+    }
+    // ── La lingua di Minerva ─────────────────────────────────────────────
+
+    Card {
+        heading: page.it ? "Lingua di Minerva" : "Minerva's language"
+        note: page.it
+              ? "Cambia subito, mentre guardi: riguarda solo le finestre di "
+              + "Minerva — la barra, le Impostazioni, il gestore file."
+              : "Changes immediately, as you watch: it only affects Minerva's "
+              + "own windows — the bar, Settings, the file manager."
+
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "Lingua dell'interfaccia" : "Interface language"
+            description: page.it
+                         ? "«Come il sistema» segue la lingua scelta qui sotto"
+                         : "«Follow the system» uses the language chosen below"
+            controlWidth: 320
+
+            control: S.ChoicePicker {
+                value: Core.Ipc.get("general.language", "auto")
+                options: [
+                    { "value": "auto", "label": page.it ? "Come il sistema"
+                                                        : "Follow the system" },
+                    { "value": "it",   "label": "Italiano" },
+                    { "value": "en",   "label": "English" }
+                ]
+                onPicked: function(v) { Core.Ipc.setSetting("general.language", v); }
+            }
+        }
+    }
+    // ── La lingua del sistema ────────────────────────────────────────────
+
+    Card {
+        heading: page.it ? "Lingua del sistema" : "System language"
+        note: page.it
+              ? "Vale per tutti i programmi, non solo per Minerva, e si vede "
+              + "al prossimo accesso. Compaiono solo le lingue installate: "
+              + "aggiungerne una vuol dire generarla sul computer."
+              : "Applies to every program, not just Minerva, and takes effect "
+              + "at your next login. Only installed languages are listed: "
+              + "adding one means generating it on this computer."
+
+        Repeater {
+            model: page.disponibili
+
+            delegate: Rectangle {
+                id: riga
+                required property string modelData
+
+                width: parent.width
+                height: 44
+                radius: Theme.Effects.radiusSM
+                color: riga.modelData === page.localeSistema
+                       ? Qt.alpha(Theme.Colors.accent, 0.16)
+                       : rigaMouse.containsMouse ? Theme.Colors.hover
+                                                 : "transparent"
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.leftMargin: Theme.Effects.space3
+                    text: page.nomeLocale(riga.modelData)
+                    color: riga.modelData === page.localeSistema
+                           ? Theme.Colors.accent : Theme.Colors.text
+                    font.family: Theme.Typography.fontDisplay
+                    font.weight: Theme.Typography.weightRegular
+                    font.pixelSize: Theme.Typography.sizeSM
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.Effects.space3
+                    text: riga.modelData
+                    color: Theme.Colors.textFaint
+                    font.family: Theme.Typography.fontMono
+                    font.pixelSize: Theme.Typography.sizeXS
+                }
+
+                MouseArea {
+                    id: rigaMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    enabled: riga.modelData !== page.localeSistema
+                    onClicked: Core.Ipc.localeSet(riga.modelData)
+                }
+            }
+        }
+
+        Text {
+            width: parent.width
+            visible: page.disponibili.length === 0
+            wrapMode: Text.WordWrap
+            text: page.it
+                  ? "Nessuna lingua installata risulta disponibile: forse "
+                  + "«localectl» non c'è su questo sistema."
+                  : "No installed language is available: «localectl» may be "
+                  + "missing on this system."
+            color: Theme.Colors.textFaint
+            font.family: Theme.Typography.fontDisplay
+            font.weight: Theme.Typography.weightRegular
+            font.pixelSize: Theme.Typography.sizeSM
+        }
+    }
+    // ── Che cosa segue la lingua ─────────────────────────────────────────
+    //
+    // Non è decorazione. Cambiare la lingua del sistema riscrive DIECI righe
+    // in `/etc/locale.conf`, non una: le `LC_*` hanno la precedenza su `LANG`,
+    // e finché restano inchiodate alla lingua vecchia il cambio non si vede.
+    // Mostrarle qui è il modo di far vedere che cosa si sta per toccare.
+
+    Card {
+        visible: Object.keys(page.campi).length > 1
+        heading: page.it ? "Che cosa segue la lingua" : "What follows the language"
+        note: page.it
+              ? "Numeri, date, valuta e unità di misura. Cambiando lingua "
+              + "vengono aggiornati tutti insieme."
+              : "Numbers, dates, currency and units. Changing the language "
+              + "updates them all together."
+
+        Column {
+            width: parent.width
+            spacing: 4
+
+            Repeater {
+                model: Object.keys(page.campi).sort()
+
+                delegate: Row {
+                    required property string modelData
+                    width: parent.width
+                    spacing: Theme.Effects.space2
+
+                    Text {
+                        width: 190
+                        text: modelData
+                        color: Theme.Colors.textFaint
+                        font.family: Theme.Typography.fontMono
+                        font.pixelSize: Theme.Typography.sizeXS
+                    }
+
+                    Text {
+                        text: page.campi[modelData]
+                        color: Theme.Colors.textMuted
+                        font.family: Theme.Typography.fontMono
+                        font.pixelSize: Theme.Typography.sizeXS
+                    }
+                }
+            }
         }
     }
 }

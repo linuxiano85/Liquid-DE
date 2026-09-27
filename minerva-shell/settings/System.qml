@@ -255,18 +255,22 @@ FloatingWindow {
     // differenza fra una ricerca che serve e una che chiede di indovinare il
     // nome giusto: chi cerca «luce notturna» non sa che sta dentro «Schermo».
     readonly property var sections: [
+        // Personalizzazione in quattro pagine, dal 28 settembre 2026: erano
+        // sei (Aspetto, Scrivania, Stile, La Riva, Dock e barra, Effetti e
+        // animazioni) e si pestavano i piedi — lo sfondo in Aspetto, le
+        // animazioni in due posti, le finestre in tre. Giacomo: «è diventato
+        // tutto troppo confusionario e servirebbe riorganizzare tutto in
+        // maniera più semplice e compatta». I nomi vecchi si traducono in
+        // `sezioneNuova`, così un'ultima sezione ricordata o uno script che
+        // apre «riva» arrivano nel posto giusto.
         { "id": "appearance", "icon": "image",     "it": "Aspetto",       "en": "Appearance",
-          "cerca": "sfondo tema colore accento trasparenza vetro icone contorni cornice wallpaper theme accent transparency" },
-        { "id": "scrivania",  "icon": "window",    "it": "Scrivania",     "en": "Desktop",
-          "cerca": "scrivania widget desktop processore memoria gpu temperatura rete orologio blocca personalizza pulita" },
-        { "id": "stile",      "icon": "image",     "it": "Stile",         "en": "Style",
-          "cerca": "preset mac windows minerva libero layout disposizione" },
-        { "id": "riva",       "icon": "sliders",   "it": "La Riva",       "en": "The Shore",
-          "cerca": "riva angoli bordi isola scomparsa molla liquida calma viva consenso super appunti stanze cassetto personalizza" },
-        { "id": "dock",       "icon": "apps",      "it": "Dock e barra",  "en": "Dock & bar",
-          "cerca": "dock barra posizione alto basso nascondi elude ingrandimento icone etichette taskbar" },
-        { "id": "animazioni", "icon": "shuffle",   "it": "Effetti e animazioni", "en": "Effects and animations",
-          "cerca": "animazioni velocità movimento sfocatura motion blur trasparenza vetro elasticità molleggiatura wobbly rigidità smorzamento" },
+          "cerca": "tema chiaro scuro colore accento colori tinta icone stile preset mac windows minerva libero animazioni velocità movimento theme accent style motion" },
+        { "id": "scrivania",  "icon": "home",      "it": "Scrivania",     "en": "Desktop",
+          "cerca": "sfondo wallpaper immagine cartella icone scrivania griglia widget processore memoria gpu temperatura rete orologio blocca pulita desktop" },
+        { "id": "finestre",   "icon": "window",    "it": "Finestre",      "en": "Windows",
+          "cerca": "finestre barra del titolo pulsanti chiudi riduci ingrandisci effetto vetro acquerello trasparenza mercurio cornice anello elasticità wobbly rigidità smorzamento windows" },
+        { "id": "dock",       "icon": "dock",      "it": "Barra e dock", "en": "Bar & dock",
+          "cerca": "barra dock posizione alto basso nascondi elude ingrandimento etichette riva angoli bordi isola molla appunti stanze cassetto consenso super menu applicazioni categorie taskbar" },
         { "id": "display",    "icon": "screen",    "it": "Schermo",       "en": "Display",
           "cerca": "risoluzione frequenza scala rotazione monitor hdmi estendi solo notebook disposizione luce notturna night light" },
         { "id": "notifiche",  "icon": "bell",      "it": "Notifiche",     "en": "Notifications",
@@ -281,10 +285,8 @@ FloatingWindow {
           "cerca": "bluetooth accoppiamento cuffie dispositivi" },
         { "id": "input",      "icon": "keyboard",  "it": "Tastiera e mouse", "en": "Keyboard & mouse",
           "cerca": "tastiera disposizione layout mouse touchpad sensibilità ripetizione tap puntatore cursore grandezza dimensione" },
-        { "id": "dataora",    "icon": "clock",     "it": "Data e ora",    "en": "Date & time",
-          "cerca": "ora data fuso orario orologio 24 meteo luogo" },
-        { "id": "lingua",     "icon": "globe",     "it": "Lingua e regione", "en": "Language & region",
-          "cerca": "lingua italiano inglese regione formato" },
+        { "id": "dataora",    "icon": "clock",     "it": "Data, ora e lingua", "en": "Date, time & language",
+          "cerca": "ora data fuso orario orologio 24 meteo luogo lingua italiano inglese regione formato" },
         { "id": "accesso-facile", "icon": "accessibilita", "it": "Accessibilità", "en": "Accessibility",
           "cerca": "accessibilità testo grande lente puntatore contrasto" },
         { "id": "defaults",   "icon": "apps",      "it": "App predefinite", "en": "Default apps",
@@ -298,7 +300,7 @@ FloatingWindow {
         { "id": "accesso",    "icon": "lock",      "it": "Accesso",       "en": "Login",
           "cerca": "accesso login greeter sfondo aurora automatico" },
         { "id": "shell",      "icon": "settings",  "it": "Minerva",       "en": "Minerva",
-          "cerca": "menu applicazioni scorciatoie ripristino" }
+          "cerca": "aiuto scorciatoie promemoria ripristino valori di fabbrica" }
     ]
 
     // ── Come si presentano ───────────────────────────────────────────────
@@ -315,7 +317,7 @@ FloatingWindow {
         // Sei gruppi, come COSMIC, dal 20 settembre 2026: prima c'erano
         // sette voci dirette in mezzo e la pagina Energia stava da sola.
         { "id": "g-scrivania", "icon": "image", "it": "Personalizzazione", "en": "Personalization",
-          "voci": ["appearance", "scrivania", "stile", "riva", "dock", "animazioni"] },
+          "voci": ["appearance", "scrivania", "finestre", "dock"] },
         { "id": "g-dispositivi", "icon": "screen", "it": "Dispositivi", "en": "Devices",
           "voci": ["display", "audio", "input", "bluetooth"] },
         { "id": "g-connessioni", "icon": "wifi", "it": "Connessioni", "en": "Connections",
@@ -323,7 +325,7 @@ FloatingWindow {
         { "id": "g-app", "icon": "apps", "it": "Applicazioni", "en": "Applications",
           "voci": ["defaults", "avvio"] },
         { "id": "g-sistema", "icon": "settings", "it": "Sistema", "en": "System",
-          "voci": ["notifiche", "power", "utente", "accesso", "dataora", "lingua", "shell"] },
+          "voci": ["notifiche", "power", "utente", "accesso", "dataora", "shell"] },
         { "id": "accesso-facile" }
     ]
 
@@ -395,7 +397,9 @@ FloatingWindow {
         anchors.top: titolo.bottom
         anchors.left: parent.left
         anchors.bottom: parent.bottom
-        width: 208
+        // 248 e non 208: a 208 «Personalizzazione» e «Data, ora e lingua» si
+        // leggevano tagliati a metà, con i puntini (28 settembre 2026).
+        width: 248
         color: Theme.Colors.membrane
 
         Rectangle {
@@ -740,10 +744,8 @@ FloatingWindow {
 
         source: {
             switch (settings.section) {
-            case "stile":    return "sections/Stile.qml";
-            case "riva":     return "sections/Riva.qml";
+            case "finestre": return "sections/Finestre.qml";
             case "dock":     return "sections/Dock.qml";
-            case "animazioni": return "sections/Animazioni.qml";
             case "display":  return "sections/Display.qml";
             case "scrivania": return "sections/Scrivania.qml";
             case "power":    return "sections/Power.qml";
@@ -753,7 +755,6 @@ FloatingWindow {
             case "bluetooth": return "sections/Bluetooth.qml";
             case "input":    return "sections/Input.qml";
             case "dataora":  return "sections/DataOra.qml";
-            case "lingua":   return "sections/Lingua.qml";
             case "accesso-facile": return "sections/Accessibilita.qml";
             case "defaults": return "sections/Defaults.qml";
             case "avvio":    return "sections/Avvio.qml";

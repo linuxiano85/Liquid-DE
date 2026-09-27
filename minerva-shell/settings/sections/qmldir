@@ -4,6 +4,7 @@ Card       1.0 Card.qml
 Appearance 1.0 Appearance.qml
 Scrivania  1.0 Scrivania.qml
 Dock       1.0 Dock.qml
+Finestre   1.0 Finestre.qml
 Display    1.0 Display.qml
 Power      1.0 Power.qml
 Audio      1.0 Audio.qml
@@ -16,10 +17,6 @@ Accesso    1.0 Accesso.qml
 Utente     1.0 Utente.qml
 Avvio      1.0 Avvio.qml
 DataOra    1.0 DataOra.qml
-Lingua     1.0 Lingua.qml
 Accessibilita 1.0 Accessibilita.qml
-Animazioni 1.0 Animazioni.qml
 Account    1.0 Account.qml
-Stile 1.0 Stile.qml
 Notifiche 1.0 Notifiche.qml
-Riva 1.0 Riva.qml

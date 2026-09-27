@@ -139,13 +139,28 @@ ShellRoot {
         section: {
             var wanted = Quickshell.env("MINERVA_SETTINGS_SECTION");
             if (wanted && wanted !== "")
-                return wanted;
-            return Core.Ipc.get("settings.lastSection", "appearance");
+                return app.sezioneNuova(wanted);
+            return app.sezioneNuova(Core.Ipc.get("settings.lastSection", "appearance"));
         }
 
         onSectionChanged: app.ricordaSezione()
 
         onRequestClose: pronta.chiudi()
+    }
+
+    /// I nomi delle sezioni che non ci sono più, tradotti in quella che ne ha
+    /// preso il posto (28 settembre 2026: da sei pagine di Personalizzazione
+    /// a quattro, e «Lingua» dentro «Data e ora»). Un'ultima sezione
+    /// ricordata o uno script che chiede «riva» arrivano nel posto giusto
+    /// invece che su Aspetto.
+    function sezioneNuova(id) {
+        switch (String(id)) {
+        case "stile":      return "appearance";
+        case "animazioni": return "finestre";
+        case "riva":       return "dock";
+        case "lingua":     return "dataora";
+        }
+        return String(id);
     }
 
     /// Si segna dove si è arrivati. Non a ogni cambio di valore: solo quando
@@ -185,7 +200,7 @@ ShellRoot {
         /// pagina.
         function open(section: string): string {
             if (section && section !== "")
-                panel.section = section;
+                panel.section = app.sezioneNuova(section);
             app.raise();
             return "ok";
         }

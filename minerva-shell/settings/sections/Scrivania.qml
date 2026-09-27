@@ -1,39 +1,396 @@
 import QtQuick
+import Quickshell
 import "../../theme" as Theme
 import "../../core" as Core
 import "../../ui" as Ui
 import ".." as S
 
-// Scrivania — I widget, il blocco, e la scrivania pulita.
-//
-// ── Perché una sezione a sé ────────────────────────────────────────────────
-//
-// Giacomo, 9 settembre 2026: «dobbiamo implementare una sezione desktop dove
-// possiamo personalizzare il desktop con dei widget».
-//
-// Le voci della scrivania erano sparse: le icone in Aspetto, lo sfondo in
-// Aspetto, i widget da nessuna parte. Chi cerca «come cambio la mia
-// scrivania» cerca una voce che si chiami così — è la stessa lezione della
-// dock, che aveva sette voci in fondo a una pagina da milleseicento righe e
-// Giacomo scriveva «non ci sono impostazioni per essa».
-//
-// ── E il posto dove si aggiungono è QUI ────────────────────────────────────
-//
-// Dalla scrivania si spostano e si ridimensionano, che è il gesto giusto per
-// dire DOVE. Ma «quali» è una scelta da elenco, non da trascinamento: un menù
-// con dieci voci sopra una fotografia è un menù che copre la fotografia.
+// Scrivania — lo sfondo, le icone e i widget. Lo sfondo e le icone stavano in
+// «Aspetto» fino al 28 settembre 2026, e la scheda «Scrivania» in «Minerva»:
+// tre posti per la stessa cosa.
 Page {
     id: page
 
+    title: Core.Strings.lang === "it" ? "Scrivania" : "Desktop"
+    subtitle: Core.Strings.lang === "it"
+              ? "Lo sfondo, le icone e i widget"
+              : "The wallpaper, the icons and the widgets"
+
     readonly property bool it: Core.Strings.lang === "it"
+    // La finestrella per scegliere un'immagine. `parent: page` la tira fuori
+    // dalla colonna che scorre: dichiarata lì dentro sarebbe un riquadro in
+    // fila alto quanto la pagina. Stessa disposizione di `sections/Utente.qml`.
+    S.SelettoreImmagine {
+        id: sceltaSfondo
+        parent: page
+        onScelta: function (percorso) { Core.Wallpaper.scegli(percorso); }
+    }
+    // ── Sfondi ───────────────────────────────────────────────────────────
 
-    title: page.it ? "Scrivania" : "Desktop"
-    subtitle: page.it ? "I widget, e come si guarda quello che c'è sotto"
-                      : "The widgets, and how you see what is underneath"
+    readonly property string current: Core.Ipc.get("desktop.wallpaper", "")
+    /// Cartella da cui si stanno pescando le immagini. Vuota = le solite.
+    readonly property string folder: Core.Ipc.get("desktop.wallpaperFolder", "")
+    property var images: []
+    property var _pending: []
+    property bool loading: false
+    readonly property var _extensions: [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".jxl"]
+    // ── Si guarda solo dove si sta guardando ─────────────────────────────
+    //
+    // `scan()` elenca centinaia di file e riempie il modello di una griglia
+    // di anteprime. Serve alla sola modalità «immagine»: con gli sfondi di
+    // Minerva o con la cartella che gira da sé quella griglia è invisibile,
+    // e fino all'11 agosto 2026 veniva costruita e DECODIFICATA lo stesso.
+    // Nella cartella di Giacomo (311 fotografie di telefono) erano
+    // ventiquattro immagini decodificate a 420×260 che nessuno vedeva.
+    //
+    // La regola, che vale per tutto Qt: `visible: false` NASCONDE, NON
+    // SOSPENDE. Un `Repeater` dentro un riquadro invisibile costruisce le sue
+    // celle e carica le sue immagini come se fosse in primo piano.
+    Component.onCompleted: if (page.mode === "image") scan()
+    onFolderChanged: if (page.mode === "image") scan()
+    function scan() {
+        page.images = [];
+        page.loading = true;
+        if (page.folder !== "") {
+            // Una cartella scelta a mano è LA cartella: non si mescola con le
+            // altre, altrimenti non si capisce più da dove viene cosa.
+            page._pending = [page.folder];
+        } else {
+            page._pending = [
+                page.home + "/Immagini/Sfondi",
+                page.home + "/Pictures/Wallpapers",
+                "/usr/share/backgrounds",
+                page.home + "/Immagini",
+                page.home + "/Pictures"
+            ];
+        }
+        _next();
+    }
+    function _next() {
+        if (page._pending.length === 0) {
+            page.loading = false;
+            return;
+        }
+        Core.Ipc.fsList(page._pending.shift(), false, "wallpaper");
+    }
+    function isImage(name) {
+        var lower = name.toLowerCase();
+        for (var k = 0; k < page._extensions.length; k++) {
+            var ext = page._extensions[k];
+            if (lower.lastIndexOf(ext) === lower.length - ext.length)
+                return true;
+        }
+        return false;
+    }
+    Connections {
+        target: Core.Ipc
+        function onFileListingReceived(listing) {
+            if (listing.pane !== "wallpaper")
+                return;
+            var found = page.images.slice();
+            var entries = listing.entries || [];
+            for (var i = 0; i < entries.length; i++) {
+                var e = entries[i];
+                if (e.isDir || !page.isImage(e.name))
+                    continue;
+                if (found.indexOf(e.path) === -1)
+                    found.push(e.path);
+            }
+            page.images = found;
+            if (page.images.length < 120)
+                page._next();
+            else
+                page.loading = false;
+        }
+    }
+    /// Applicare è compito di `Core.Wallpaper`, che sa anche far girare una
+    /// cartella da sola. Qui resta solo la scelta.
+    function apply(path) {
+        Core.Wallpaper.apply(path);
+    }
+    readonly property string mode: Core.Wallpaper.mode
+    /// Quante anteprime si mostrano per volta.
+    ///
+    /// Ventiquattro, e un pulsante per averne altre ventiquattro. Il difetto
+    /// da cui nasce questo numero: indicando una cartella con dentro mille
+    /// fotografie, il pannello le disegnava tutte e diventava una pagina da
+    /// scorrere per un minuto. Nessuno sceglie uno sfondo così — o si sa già
+    /// quale si vuole, e allora bastano le prime, o non si sa, e allora
+    /// conviene la modalità «cartella», che le fa girare da sé.
+    property int shown: 24
+    onModeChanged: {
+        page.shown = 24;
+        // Arrivando adesso sulla modalità «immagine», l'elenco va fatto ora:
+        // all'apertura non lo si è fatto apposta.
+        if (page.mode === "image" && page.images.length === 0 && !page.loading)
+            page.scan();
+    }
+    readonly property string home: Quickshell.env("HOME") || ""
+    // ── Scelta della cartella ────────────────────────────────────────────
 
+    Rectangle {
+        id: folderPicker
+        parent: page
+        anchors.fill: parent
+        color: Theme.Colors.scrim
+        visible: false
+        z: 20
+
+        property string path: ""
+        property var entries: []
+
+        function open(start) {
+            folderPicker.path = start;
+            folderPicker.visible = true;
+            folderPicker.load();
+        }
+
+        function load() {
+            Core.Ipc.fsList(folderPicker.path, false, "wallpaperFolder");
+        }
+
+        function up() {
+            var p = folderPicker.path;
+            if (p.length > 1 && p.charAt(p.length - 1) === "/")
+                p = p.substring(0, p.length - 1);
+            var cut = p.lastIndexOf("/");
+            folderPicker.path = cut <= 0 ? "/" : p.substring(0, cut);
+            folderPicker.load();
+        }
+
+        Connections {
+            target: Core.Ipc
+            function onFileListingReceived(listing) {
+                if (listing.pane !== "wallpaperFolder")
+                    return;
+                // Solo cartelle: si sta scegliendo dove cercare, non cosa.
+                var dirs = [];
+                var all = listing.entries || [];
+                for (var i = 0; i < all.length; i++)
+                    if (all[i].isDir)
+                        dirs.push(all[i]);
+                folderPicker.entries = dirs;
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: folderPicker.visible = false
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(520, parent.width - Theme.Effects.space6 * 2)
+            height: Math.min(460, parent.height - Theme.Effects.space6 * 2)
+            radius: Theme.Effects.radiusMD
+            color: Theme.Colors.panel
+            border.width: 1
+            border.color: Theme.Colors.edge
+
+            MouseArea { anchors.fill: parent }
+
+            Item {
+                id: pickerHeader
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: Theme.Effects.space4
+                height: 30
+
+                Rectangle {
+                    id: upButton
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 28; height: 28
+                    radius: Theme.Effects.radiusXS
+                    color: upMouse.containsMouse ? Theme.Colors.hover : "transparent"
+
+                    Ui.Icon {
+                        anchors.centerIn: parent
+                        width: 15; height: 15
+                        name: "chevronUp"
+                        color: Theme.Colors.textMuted
+                        alwaysDrawn: true
+                    }
+
+                    MouseArea {
+                        id: upMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: folderPicker.up()
+                    }
+                }
+
+                Text {
+                    anchors.left: upButton.right
+                    anchors.leftMargin: Theme.Effects.space3
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    elide: Text.ElideMiddle
+                    text: folderPicker.path
+                    color: Theme.Colors.textMuted
+                    font.family: Theme.Typography.fontMono
+                    font.pixelSize: Theme.Typography.sizeSM
+                }
+            }
+
+            Ui.Scorrimento {
+                bersaglio: elencoCartelle
+                anchors {
+                    right: elencoCartelle.right
+                    top: elencoCartelle.top
+                    bottom: elencoCartelle.bottom
+                }
+            }
+
+            ListView {
+                id: elencoCartelle
+                anchors.top: pickerHeader.bottom
+                anchors.topMargin: Theme.Effects.space2
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: pickerFooter.top
+                anchors.leftMargin: Theme.Effects.space3
+                anchors.rightMargin: Theme.Effects.space3
+                clip: true
+                spacing: 1
+                model: folderPicker.entries
+                boundsBehavior: Flickable.StopAtBounds
+
+                delegate: Rectangle {
+                    id: dir
+                    required property var modelData
+
+                    width: ListView.view.width
+                    height: 34
+                    radius: Theme.Effects.radiusXS
+                    color: dirMouse.containsMouse ? Theme.Colors.hover : "transparent"
+
+                    Ui.Icon {
+                        id: dirIcon
+                        anchors.left: parent.left
+                        anchors.leftMargin: Theme.Effects.space2
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 15; height: 15
+                        name: "folder"
+                        color: Theme.Colors.accent
+                    }
+
+                    Text {
+                        anchors.left: dirIcon.right
+                        anchors.leftMargin: Theme.Effects.space2
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.Effects.space2
+                        anchors.verticalCenter: parent.verticalCenter
+                        elide: Text.ElideRight
+                        text: dir.modelData.name
+                        color: Theme.Colors.textMuted
+                        font.family: Theme.Typography.fontDisplay
+                        font.weight: Theme.Typography.weightRegular
+                        font.pixelSize: Theme.Typography.sizeSM
+                    }
+
+                    MouseArea {
+                        id: dirMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            folderPicker.path = dir.modelData.path;
+                            folderPicker.load();
+                        }
+                    }
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    visible: folderPicker.entries.length === 0
+                    text: page.it ? "Nessuna sottocartella" : "No subfolders"
+                    color: Theme.Colors.textFaint
+                    font.family: Theme.Typography.fontDisplay
+                    font.weight: Theme.Typography.weightRegular
+                    font.pixelSize: Theme.Typography.sizeSM
+                }
+            }
+
+            Item {
+                id: pickerFooter
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: Theme.Effects.space4
+                height: 34
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: page.it ? "Entra nelle cartelle, poi conferma"
+                                  : "Browse into a folder, then confirm"
+                    color: Theme.Colors.textFaint
+                    font.family: Theme.Typography.fontDisplay
+                    font.weight: Theme.Typography.weightRegular
+                    font.pixelSize: Theme.Typography.sizeXS
+                }
+
+                Row {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: Theme.Effects.space2
+
+                    Repeater {
+                        model: [
+                            { "id": "cancel",  "primary": false },
+                            { "id": "confirm", "primary": true }
+                        ]
+
+                        delegate: Rectangle {
+                            id: pickBtn
+                            required property var modelData
+
+                            width: pickLabel.implicitWidth + Theme.Effects.space5
+                            height: 32
+                            radius: Theme.Effects.radiusXS
+                            color: modelData.primary
+                                   ? (pickMouse.containsMouse ? Theme.Colors.accent
+                                      : Qt.alpha(Theme.Colors.accent, 0.85))
+                                   : (pickMouse.containsMouse ? Theme.Colors.hover
+                                      : Theme.Colors.raised)
+                            Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
+
+                            Text {
+                                id: pickLabel
+                                anchors.centerIn: parent
+                                text: pickBtn.modelData.id === "cancel"
+                                      ? (page.it ? "Annulla" : "Cancel")
+                                      : (page.it ? "Usa questa cartella" : "Use this folder")
+                                color: pickBtn.modelData.primary
+                                       ? Theme.Colors.textOnAccent : Theme.Colors.textMuted
+                                font.family: Theme.Typography.fontDisplay
+                                font.pixelSize: Theme.Typography.sizeSM
+                                font.weight: Theme.Typography.weightSemiBold
+                            }
+
+                            MouseArea {
+                                id: pickMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    folderPicker.visible = false;
+                                    if (pickBtn.modelData.id === "confirm")
+                                        Core.Ipc.setSetting("desktop.wallpaperFolder",
+                                                            folderPicker.path);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     readonly property var messi: Core.Ipc.get("desktop.widgets", [])
     readonly property bool bloccati: Core.Ipc.get("desktop.widgetBloccati", true)
-
     // ── Quali widget esistono ────────────────────────────────────────────
     //
     // Il costo sta accanto al nome, e non è pedanteria: il progetto lo fa già
@@ -80,14 +437,12 @@ Page {
         { "tipo": "meteo",       "it": "Meteo", "en": "Weather",
           "detta": page.it ? "Va acceso in Data e ora" : "Turn it on in Date & time" }
     ]
-
     function nomeDi(tipo) {
         for (var i = 0; i < page.disponibili.length; i++)
             if (page.disponibili[i].tipo === tipo)
                 return page.it ? page.disponibili[i].it : page.disponibili[i].en;
         return tipo;
     }
-
     /// Una copia della voce: `Core.Ipc.get` restituisce l'oggetto vero, e
     /// cambiarlo sul posto vorrebbe dire che nessun legame se ne accorge.
     function copia(v) {
@@ -95,14 +450,12 @@ Page {
                  "righe": v.righe, "grafico": v.grafico,
                  "fx": v.fx, "fy": v.fy, "fw": v.fw, "fh": v.fh };
     }
-
     function tutti() {
         var l = [];
         for (var k = 0; k < page.messi.length; k++)
             l.push(page.copia(page.messi[k]));
         return l;
     }
-
     function aggiungi(tipo) {
         var l = page.tutti();
         var n = l.length;
@@ -119,7 +472,6 @@ Page {
                  "fw": grande ? 0.24 : 0.19, "fh": grande ? 0.62 : 0.19 });
         Core.Ipc.setSetting("desktop.widgets", l);
     }
-
     function togli(i) {
         var l = [];
         for (var k = 0; k < page.messi.length; k++)
@@ -127,7 +479,6 @@ Page {
                 l.push(page.copia(page.messi[k]));
         Core.Ipc.setSetting("desktop.widgets", l);
     }
-
     // ── La barra ─────────────────────────────────────────────────────────
     //
     // Non tutti i tipi: il riassunto è una colonna, e una colonna dentro una
@@ -138,9 +489,7 @@ Page {
         "processore", "memoria", "gpu", "temperatura",
         "rete", "disco", "batteria", "carico"
     ]
-
     readonly property var nellaBarra: Core.Ipc.get("bar.widgets", [])
-
     /// Accende o spegne un valore nella barra, tenendo l'ordine dell'elenco
     /// qui sopra: chi ne riaccende uno se lo ritrova al suo posto.
     function barra(quale, acceso) {
@@ -154,7 +503,6 @@ Page {
         }
         Core.Ipc.setSetting("bar.widgets", l);
     }
-
     // ── Le righe che un riassunto può contenere ──────────────────────────
     //
     // Non tutte quelle che esistono: dentro una colonna alta cinque righe,
@@ -164,7 +512,6 @@ Page {
         "processore", "memoria", "gpu", "temperatura",
         "rete", "disco", "batteria", "carico", "acceso"
     ]
-
     /// Le righe di un riassunto, con il valore di serie quando non le ha
     /// ancora scelte nessuno. Lo stesso elenco è scritto in `Riassunto.qml`
     /// come ripiego: qui è quello che si VEDE nelle spunte, e devono
@@ -174,11 +521,9 @@ Page {
             return v.righe;
         return ["processore", "memoria", "gpu", "temperatura"];
     }
-
     function dentroLeRighe(v, quale) {
         return page.leRighe(v).indexOf(quale) !== -1;
     }
-
     /// Accende o spegne una riga, tenendo l'ordine dell'elenco qui sopra: chi
     /// riaccende «memoria» se la ritrova al suo posto e non in fondo.
     function riga(i, quale, acceso) {
@@ -201,7 +546,6 @@ Page {
         l[i].righe = nuove;
         Core.Ipc.setSetting("desktop.widgets", l);
     }
-
     function cambia(i, campo, valore) {
         var l = page.tutti();
         if (i < 0 || i >= l.length)
@@ -209,7 +553,729 @@ Page {
         l[i][campo] = valore;
         Core.Ipc.setSetting("desktop.widgets", l);
     }
+    Card {
+        heading: page.it ? "Sfondo della scrivania" : "Desktop wallpaper"
+        note: page.it
+              ? "Si arriva qui anche col tasto destro sulla scrivania."
+              : "You can also get here by right-clicking the desktop."
 
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "Da dove" : "Where from"
+            controlWidth: 360
+            control: S.ChoicePicker {
+                value: page.mode
+                options: [
+                    { "value": "minerva",
+                      "label": page.it ? "Di Minerva" : "Minerva's" },
+                    { "value": "image",
+                      "label": page.it ? "Una tua immagine" : "An image of yours" },
+                    { "value": "folder",
+                      "label": page.it ? "Una cartella che gira" : "A rotating folder" }
+                ]
+                onPicked: function(v) {
+                    Core.Ipc.setSetting("desktop.wallpaperMode", v);
+                }
+            }
+        }
+
+        // ── Una sola immagine, presa dove sta ────────────────────────────
+        //
+        // Giacomo, 18 agosto 2026: «per impostare lo sfondo devo copiare il
+        // percorso dal file manager e incollarlo in impostazioni».
+        //
+        // Il selettore per farlo esisteva da giorni — `SelettoreImmagine`,
+        // scritto per il ritratto utente — e questa pagina non lo usava: qui
+        // si poteva scegliere una CARTELLA e poi pescare da una griglia, che è
+        // il gesto giusto per farsi girare gli sfondi e quello sbagliato per
+        // mettere quella foto lì.
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "Una immagine precisa" : "One particular image"
+            description: page.it
+                ? "Si sfoglia il disco e si sceglie, senza uscire da qui"
+                : "Browse the disk and pick one, without leaving this page"
+            controlWidth: 200
+            control: Rectangle {
+                width: parent ? parent.width : 200
+                height: 30
+                radius: Theme.Effects.radiusXS
+                color: sceglMouse.containsMouse
+                       ? Qt.alpha(Theme.Colors.accent, 0.16) : Theme.Colors.raisedHigh
+                Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: page.it ? "Scegli dal disco…" : "Choose from disk…"
+                    color: sceglMouse.containsMouse ? Theme.Colors.accent
+                                                    : Theme.Colors.textMuted
+                    font.family: Theme.Typography.fontDisplay
+                    font.weight: Theme.Typography.weightMedium
+                    font.pixelSize: Theme.Typography.sizeSM
+                }
+
+                MouseArea {
+                    id: sceglMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: sceltaSfondo.apri(page.folder !== "" ? page.folder
+                                                                    : page.home)
+                }
+            }
+        }
+
+        // ── Gli sfondi di Minerva ────────────────────────────────────────
+        //
+        // Sei, disegnati dalla stessa tavolozza dell'interfaccia. Ci stanno
+        // tutti in due righe: non c'è niente da scorrere, e questo è il punto.
+
+        Grid {
+            id: ownGrid
+            width: parent.width
+            columns: 3
+            spacing: Theme.Effects.space2
+            visible: page.mode === "minerva"
+
+            readonly property real cell: (width - spacing * (columns - 1)) / columns
+
+            Repeater {
+                model: Core.Wallpaper.own
+
+                delegate: Rectangle {
+                    id: ownThumb
+                    required property var modelData
+
+                    readonly property string path: Core.Wallpaper.ownPath(modelData.file)
+                    readonly property bool chosen: path === Core.Wallpaper.current
+
+                    width: ownGrid.cell
+                    height: Math.round(ownGrid.cell * 9 / 16)
+                    radius: Theme.Effects.radiusSM
+                    color: Theme.Colors.sunken
+                    border.width: chosen ? 2 : 1
+                    border.color: chosen ? Theme.Colors.accent
+                               : ownMouse.containsMouse ? Theme.Colors.edgeBright
+                               : Theme.Colors.edge
+                    Behavior on border.color { ColorAnimation { duration: Theme.Motion.instant } }
+                    clip: true
+
+                    Image {
+                        anchors.fill: parent
+                        anchors.margins: ownThumb.chosen ? 2 : 1
+                        // Niente sorgente se la griglia non si vede: senza
+                        // questa guardia l'immagine si decodifica lo stesso.
+                        source: ownGrid.visible ? "file://" + ownThumb.path : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        sourceSize.width: 420
+                        sourceSize.height: 260
+                        smooth: true
+                    }
+
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: 24
+                        color: Qt.rgba(0, 0, 0, 0.55)
+
+                        Text {
+                            anchors.fill: parent
+                            anchors.leftMargin: Theme.Effects.space2
+                            verticalAlignment: Text.AlignVCenter
+                            text: page.it ? ownThumb.modelData.it : ownThumb.modelData.en
+                            color: "#FFFFFF"
+                            font.family: Theme.Typography.fontDisplay
+                            font.pixelSize: Theme.Typography.sizeXS
+                            font.weight: Theme.Typography.weightMedium
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.margins: Theme.Effects.space2
+                        width: 22; height: 22
+                        radius: 11
+                        visible: ownThumb.chosen
+                        color: Theme.Colors.accent
+
+                        Ui.Icon {
+                            anchors.centerIn: parent
+                            width: 13; height: 13
+                            name: "check"
+                            color: Theme.Colors.textOnAccent
+                        }
+                    }
+
+                    MouseArea {
+                        id: ownMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: page.apply(ownThumb.path)
+                    }
+                }
+            }
+        }
+
+        // Da dove pescare
+        Item {
+            width: parent.width
+            visible: page.mode !== "minerva"
+            height: visible ? 34 : 0
+
+            Text {
+                id: folderLabel
+                anchors.left: parent.left
+                anchors.right: folderButtons.left
+                anchors.rightMargin: Theme.Effects.space3
+                anchors.verticalCenter: parent.verticalCenter
+                elide: Text.ElideMiddle
+                text: page.folder !== ""
+                      ? page.folder
+                      : (page.it ? "Immagini, Sfondi e sfondi di sistema"
+                                 : "Pictures, Wallpapers and system backgrounds")
+                color: Theme.Colors.textMuted
+                font.family: page.folder !== "" ? Theme.Typography.fontMono
+                                                : Theme.Typography.fontDisplay
+                font.pixelSize: Theme.Typography.sizeSM
+            }
+
+            Row {
+                id: folderButtons
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Theme.Effects.space2
+
+                Rectangle {
+                    width: resetFolderText.implicitWidth + Theme.Effects.space3
+                    height: 28
+                    radius: Theme.Effects.radiusXS
+                    visible: page.folder !== ""
+                    color: resetFolderMouse.containsMouse ? Theme.Colors.hover
+                                                          : "transparent"
+
+                    Text {
+                        id: resetFolderText
+                        anchors.centerIn: parent
+                        text: page.it ? "Le solite" : "Default"
+                        color: Theme.Colors.textFaint
+                        font.family: Theme.Typography.fontDisplay
+                        font.weight: Theme.Typography.weightRegular
+                        font.pixelSize: Theme.Typography.sizeXS
+                    }
+
+                    MouseArea {
+                        id: resetFolderMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: Core.Ipc.setSetting("desktop.wallpaperFolder", "")
+                    }
+                }
+
+                Rectangle {
+                    width: pickFolderText.implicitWidth + Theme.Effects.space4
+                    height: 28
+                    radius: Theme.Effects.radiusXS
+                    color: pickFolderMouse.containsMouse
+                           ? Qt.alpha(Theme.Colors.accent, 0.16) : Theme.Colors.raisedHigh
+                    Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
+
+                    Text {
+                        id: pickFolderText
+                        anchors.centerIn: parent
+                        text: page.it ? "Scegli una cartella…" : "Choose a folder…"
+                        color: pickFolderMouse.containsMouse ? Theme.Colors.accent
+                                                             : Theme.Colors.textMuted
+                        font.family: Theme.Typography.fontDisplay
+                        font.weight: Theme.Typography.weightRegular
+                        font.pixelSize: Theme.Typography.sizeXS
+                    }
+
+                    MouseArea {
+                        id: pickFolderMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: folderPicker.open(page.folder !== "" ? page.folder
+                                                                        : page.home)
+                    }
+                }
+            }
+        }
+
+        // La griglia. Tre per riga, alte abbastanza da riconoscere una
+        // fotografia: era questo il problema della striscia di prima.
+        Grid {
+            id: grid
+            width: parent.width
+            columns: 3
+            spacing: Theme.Effects.space2
+            visible: page.mode === "image"
+
+            readonly property real cell: (width - spacing * (columns - 1)) / columns
+
+            Repeater {
+                model: page.images.slice(0, page.shown)
+
+                delegate: Rectangle {
+                    id: thumb
+                    required property var modelData
+
+                    readonly property bool chosen: modelData === page.current
+
+                    width: grid.cell
+                    height: Math.round(grid.cell * 9 / 16)
+                    radius: Theme.Effects.radiusSM
+                    color: Theme.Colors.sunken
+                    border.width: chosen ? 2 : 1
+                    border.color: chosen ? Theme.Colors.accent
+                               : thumbMouse.containsMouse ? Theme.Colors.edgeBright
+                               : Theme.Colors.edge
+                    Behavior on border.color { ColorAnimation { duration: Theme.Motion.instant } }
+                    clip: true
+
+                    Image {
+                        anchors.fill: parent
+                        anchors.margins: thumb.chosen ? 2 : 1
+                        source: grid.visible ? "file://" + thumb.modelData : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        // Ridotte in memoria: caricare a piena risoluzione
+                        // cento fotografie da otto megapixel blocca tutto.
+                        sourceSize.width: 420
+                        sourceSize.height: 260
+                        smooth: true
+                    }
+
+                    // Il nome del file, solo al passaggio: serve a distinguere
+                    // due fotografie simili, non a stare sempre lì.
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: 22
+                        visible: thumbMouse.containsMouse
+                        color: Qt.rgba(0, 0, 0, 0.65)
+
+                        Text {
+                            anchors.fill: parent
+                            anchors.leftMargin: Theme.Effects.space2
+                            anchors.rightMargin: Theme.Effects.space2
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideMiddle
+                            text: {
+                                var p = thumb.modelData;
+                                var cut = p.lastIndexOf("/");
+                                return cut < 0 ? p : p.substring(cut + 1);
+                            }
+                            color: "#FFFFFF"
+                            font.family: Theme.Typography.fontDisplay
+                            font.weight: Theme.Typography.weightRegular
+                            font.pixelSize: Theme.Typography.sizeXS
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.margins: Theme.Effects.space2
+                        width: 22; height: 22
+                        radius: 11
+                        visible: thumb.chosen
+                        color: Theme.Colors.accent
+
+                        Ui.Icon {
+                            anchors.centerIn: parent
+                            width: 13; height: 13
+                            name: "check"
+                            color: Theme.Colors.textOnAccent
+                        }
+                    }
+
+                    MouseArea {
+                        id: thumbMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: page.apply(thumb.modelData)
+                    }
+                }
+            }
+        }
+
+        // «Ne mostro altre», invece di mostrarle tutte e sempre.
+        Item {
+            width: parent.width
+            visible: page.mode === "image" && page.images.length > page.shown
+            height: visible ? 38 : 0
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: moreText.implicitWidth + Theme.Effects.space5
+                height: 30
+                radius: Theme.Effects.radiusXS
+                color: moreMouse.containsMouse ? Theme.Colors.hover : Theme.Colors.raised
+                Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
+
+                Text {
+                    id: moreText
+                    anchors.centerIn: parent
+                    text: {
+                        var left = page.images.length - page.shown;
+                        var n = Math.min(24, left);
+                        return page.it ? "Mostrane altre " + n + " (ne restano " + left + ")"
+                                       : "Show " + n + " more (" + left + " left)";
+                    }
+                    color: Theme.Colors.textMuted
+                    font.family: Theme.Typography.fontDisplay
+                    font.weight: Theme.Typography.weightRegular
+                    font.pixelSize: Theme.Typography.sizeSM
+                }
+
+                MouseArea {
+                    id: moreMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: page.shown += 24
+                }
+            }
+        }
+
+        Text {
+            width: parent.width
+            visible: page.mode === "image" && page.images.length === 0
+            wrapMode: Text.WordWrap
+            text: page.loading
+                  ? (page.it ? "Cerco…" : "Looking…")
+                  : (page.it
+                     ? "Nessuna immagine in questa cartella. Provane un'altra con "
+                       + "«Scegli una cartella…»."
+                     : "No image in this folder. Try another with “Choose a folder…”.")
+            color: Theme.Colors.textFaint
+            font.family: Theme.Typography.fontDisplay
+            font.weight: Theme.Typography.weightRegular
+            font.pixelSize: Theme.Typography.sizeSM
+        }
+
+        // ── La cartella che gira da sola ─────────────────────────────────
+        //
+        // Qui NON c'è nessuna griglia, ed è una scelta. Chi indica una
+        // cartella con mille fotografie non sta scegliendo una fotografia:
+        // sta dicendo «pescale tu». Quindi si mostra quella di adesso, ogni
+        // quanto cambia, e un pulsante per saltare avanti — che è tutto ciò
+        // che serve, e sta in mezzo schermo invece che in dieci.
+
+        Column {
+            width: parent.width
+            spacing: Theme.Effects.space2
+            visible: page.mode === "folder"
+
+            Rectangle {
+                width: parent.width
+                height: Math.round(width * 9 / 16 * 0.45)
+                radius: Theme.Effects.radiusSM
+                color: Theme.Colors.sunken
+                border.width: 1
+                border.color: Theme.Colors.edge
+                clip: true
+
+                Image {
+                    anchors.fill: parent
+                    anchors.margins: 1
+                    source: page.mode === "folder" && Core.Wallpaper.current !== ""
+                            ? "file://" + Core.Wallpaper.current : ""
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    sourceSize.width: 900
+                    sourceSize.height: 500
+                    smooth: true
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    visible: Core.Wallpaper.pool.length === 0
+                    text: page.it ? "Scegli una cartella con delle immagini"
+                                  : "Choose a folder with images in it"
+                    color: Theme.Colors.textFaint
+                    font.family: Theme.Typography.fontDisplay
+                    font.weight: Theme.Typography.weightRegular
+                    font.pixelSize: Theme.Typography.sizeSM
+                }
+
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: 26
+                    color: Qt.rgba(0, 0, 0, 0.6)
+                    visible: Core.Wallpaper.pool.length > 0
+
+                    Text {
+                        anchors.fill: parent
+                        anchors.leftMargin: Theme.Effects.space3
+                        anchors.rightMargin: Theme.Effects.space3
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideMiddle
+                        text: {
+                            var n = Core.Wallpaper.pool.length;
+                            var at = Core.Wallpaper.poolAt + 1;
+                            var name = Core.Wallpaper.current;
+                            var cut = name.lastIndexOf("/");
+                            if (cut >= 0)
+                                name = name.substring(cut + 1);
+                            return name + "   ·   " + (at > 0 ? at : "?") + " di " + n;
+                        }
+                        color: "#FFFFFF"
+                        font.family: Theme.Typography.fontDisplay
+                        font.weight: Theme.Typography.weightRegular
+                        font.pixelSize: Theme.Typography.sizeXS
+                    }
+                }
+            }
+        }
+
+        // ── Il giro, per tutti e due i mazzi ─────────────────────────────
+        //
+        // Questi tre comandi stavano DENTRO il blocco della cartella, e con
+        // gli sfondi di Minerva davanti sparivano. Ma «cambia ogni cinque
+        // minuti, a caso» ha senso identico su sei sfondi nostri e su mille
+        // fotografie tue: quello che cambia è dove si pescano, non che
+        // girino. Adesso stanno fuori da tutti e due i blocchi e valgono per
+        // entrambi. Restano nascosti solo per «una tua immagine», dove il
+        // mazzo è di una carta e non c'è niente da far girare.
+
+        Column {
+            width: parent.width
+            spacing: Theme.Effects.space2
+            visible: page.mode === "minerva" || page.mode === "folder"
+
+            S.SettingRow {
+                width: parent.width
+                label: page.it ? "Cambia ogni" : "Change every"
+                controlWidth: 380
+                control: S.ChoicePicker {
+                    value: String(Core.Wallpaper.rotateMinutes)
+                    options: [
+                        { "value": "0",    "label": page.it ? "Mai" : "Never" },
+                        { "value": "5",    "label": "5 min" },
+                        { "value": "15",   "label": "15 min" },
+                        { "value": "60",   "label": page.it ? "1 ora" : "1 hour" },
+                        { "value": "1440", "label": page.it ? "1 giorno" : "1 day" }
+                    ]
+                    onPicked: function(v) {
+                        Core.Ipc.setSetting("desktop.rotateMinutes", parseInt(v, 10));
+                    }
+                }
+            }
+
+            S.SettingRow {
+                width: parent.width
+                label: page.it ? "In che ordine" : "In what order"
+                controlWidth: 260
+                control: S.ChoicePicker {
+                    value: Core.Wallpaper.rotateRandom ? "random" : "order"
+                    options: [
+                        { "value": "order",  "label": page.it ? "In ordine" : "In order" },
+                        { "value": "random", "label": page.it ? "A caso" : "At random" }
+                    ]
+                    onPicked: function(v) {
+                        Core.Ipc.setSetting("desktop.rotateRandom", v === "random");
+                    }
+                }
+            }
+
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Theme.Effects.space2
+
+                Repeater {
+                    model: [
+                        { "id": "prev", "it": "Precedente", "en": "Previous" },
+                        { "id": "next", "it": "La prossima", "en": "Next one" }
+                    ]
+
+                    delegate: Rectangle {
+                        id: skip
+                        required property var modelData
+
+                        width: skipText.implicitWidth + Theme.Effects.space5
+                        height: 32
+                        radius: Theme.Effects.radiusXS
+                        enabled: Core.Wallpaper.pool.length > 0
+                        opacity: enabled ? 1 : 0.4
+                        color: skipMouse.containsMouse ? Theme.Colors.hover
+                                                       : Theme.Colors.raised
+                        Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
+
+                        Text {
+                            id: skipText
+                            anchors.centerIn: parent
+                            text: page.it ? skip.modelData.it : skip.modelData.en
+                            color: Theme.Colors.textMuted
+                            font.family: Theme.Typography.fontDisplay
+                            font.weight: Theme.Typography.weightRegular
+                            font.pixelSize: Theme.Typography.sizeSM
+                        }
+
+                        MouseArea {
+                            id: skipMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            enabled: skip.enabled
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Core.Wallpaper.next(skip.modelData.id === "prev" ? -1 : 1)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // ── Colore d'accento ─────────────────────────────────────────────────
+
+    Card {
+        heading: page.it ? "Scrivania" : "Desktop"
+        note: page.it
+              ? "Le icone dei file, come su ogni ambiente classico: doppio clic per aprire, trascina per spostarle."
+              : "File icons, like on any classic desktop: double-click to open, drag to move them."
+
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "Icone sulla scrivania" : "Desktop icons"
+            description: page.it
+                ? "Il contenuto della cartella Scrivania, e il posto di ogni icona resta dove lo metti"
+                : "The contents of the Desktop folder, and every icon remembers where you put it"
+            control: S.ToggleSwitch {
+                checked: Core.Ipc.get("desktop.icons", true)
+                onToggled: function(v) { Core.Ipc.setSetting("desktop.icons", v); }
+            }
+        }
+
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "Menu col tasto destro" : "Right-click menu"
+            description: page.it
+                ? "Aprire programmi e cambiare sfondo dal tasto destro sulla scrivania"
+                : "Open programs and change the wallpaper from the desktop right-click"
+            control: S.ToggleSwitch {
+                checked: Core.Ipc.get("desktop.rightClickMenu", true)
+                onToggled: function(v) { Core.Ipc.setSetting("desktop.rightClickMenu", v); }
+            }
+        }
+
+        // ── Le cinque che si potevano toccare SOLO dal tasto destro ───────
+        //
+        // `iconSize`, `iconAutoArrange`, `iconSnap`, `iconSort`,
+        // `iconSortDesc`: tutte e cinque funzionano da sempre, e stavano
+        // dentro il menù della scrivania e in nessun altro posto. Un'opzione
+        // che si trova solo se sai già dove cliccare è un'opzione che per
+        // molti non esiste — è la stessa cosa che è successa alla dock, che
+        // aveva sette voci e Giacomo scriveva «non ci sono impostazioni per
+        // essa».
+        //
+        // Restano anche nel menù: là si aggiustano mentre si guardano le
+        // icone, che è il momento in cui uno lo vuole fare.
+        S.SettingRow {
+            width: parent.width
+            visible: Core.Ipc.get("desktop.icons", true)
+            label: page.it ? "Dimensione delle icone" : "Icon size"
+            controlWidth: 220
+            control: S.ValueSlider {
+                width: 220
+                from: 32
+                to: 96
+                unit: "pixel"
+                value: Core.Ipc.get("desktop.iconSize", 46)
+                onReleased: function(v) {
+                    Core.Ipc.setSetting("desktop.iconSize", Math.round(v));
+                }
+            }
+        }
+
+        S.SettingRow {
+            width: parent.width
+            visible: Core.Ipc.get("desktop.icons", true)
+            label: page.it ? "Disponile da sole" : "Arrange them automatically"
+            description: page.it
+                ? "Si mettono in colonna da sé, e non si possono più trascinare"
+                : "They line up by themselves, and can no longer be dragged"
+            control: S.ToggleSwitch {
+                checked: Core.Ipc.get("desktop.iconAutoArrange", false)
+                onToggled: function(v) {
+                    Core.Ipc.setSetting("desktop.iconAutoArrange", v);
+                }
+            }
+        }
+
+        S.SettingRow {
+            width: parent.width
+            visible: Core.Ipc.get("desktop.icons", true)
+                     && !Core.Ipc.get("desktop.iconAutoArrange", false)
+            label: page.it ? "Allinea alla griglia" : "Snap to the grid"
+            description: page.it
+                ? "Lasciandole cadere si mettono in riga con le altre"
+                : "When dropped, they line up with the others"
+            control: S.ToggleSwitch {
+                checked: Core.Ipc.get("desktop.iconSnap", true)
+                onToggled: function(v) {
+                    Core.Ipc.setSetting("desktop.iconSnap", v);
+                }
+            }
+        }
+
+        S.SettingRow {
+            width: parent.width
+            visible: Core.Ipc.get("desktop.icons", true)
+                     && Core.Ipc.get("desktop.iconAutoArrange", false)
+            label: page.it ? "In che ordine" : "In what order"
+            controlWidth: 320
+            control: S.ChoicePicker {
+                value: Core.Ipc.get("desktop.iconSort", "name")
+                options: [
+                    { "value": "name",     "label": page.it ? "Nome" : "Name" },
+                    { "value": "type",     "label": page.it ? "Tipo" : "Type" },
+                    { "value": "size",     "label": page.it ? "Dimensione" : "Size" },
+                    { "value": "modified", "label": page.it ? "Data" : "Date" }
+                ]
+                onPicked: function(v) {
+                    Core.Ipc.setSetting("desktop.iconSort", v);
+                }
+            }
+        }
+
+        S.SettingRow {
+            width: parent.width
+            visible: Core.Ipc.get("desktop.icons", true)
+                     && Core.Ipc.get("desktop.iconAutoArrange", false)
+            label: page.it ? "Dal fondo" : "Reversed"
+            description: page.it ? "Z prima di A, il più grande per primo"
+                                 : "Z before A, biggest first"
+            control: S.ToggleSwitch {
+                checked: Core.Ipc.get("desktop.iconSortDesc", false)
+                onToggled: function(v) {
+                    Core.Ipc.setSetting("desktop.iconSortDesc", v);
+                }
+            }
+        }
+    }
+    Card {
+        heading: page.it ? "Scrivania" : "Desktop"
+
+        S.SettingRow {
+            width: parent.width
+            label: Core.Strings.t("rightClickMenu")
+            description: Core.Strings.t("rightClickMenuDesc")
+            controlWidth: 60
+            control: S.ToggleSwitch {
+                checked: Core.Ipc.get("desktop.rightClickMenu", true)
+                onToggled: function(v) { Core.Ipc.setSetting("desktop.rightClickMenu", v); }
+            }
+        }
+    }
     // ── Il blocco ────────────────────────────────────────────────────────
 
     Card {
@@ -265,7 +1331,6 @@ Page {
             }
         }
     }
-
     // ── Quelli che ci sono ───────────────────────────────────────────────
 
     Card {
@@ -421,7 +1486,6 @@ Page {
             }
         }
     }
-
     // ── E gli stessi, nella barra ────────────────────────────────────────
 
     Card {
@@ -455,7 +1519,6 @@ Page {
             }
         }
     }
-
     // ── Quelli che si possono aggiungere ─────────────────────────────────
 
     Card {
