@@ -168,6 +168,11 @@ QtObject {
     /// da qui parte un numero quando si cambia idea, non centoventicinque
     /// messaggi al secondo.
     property real elastico: 0
+    /// Le finestre che nascono come una goccia e si riducono con un
+    /// risucchio (il «respiro», nel compositore). Segue l'interruttore delle
+    /// animazioni: chi le spegne — anche perché il movimento gli fa male —
+    /// non deve ritrovarselo.
+    property bool respiro: true
     property real rigidita: 1
     property real smorzamento: 0.42
     property real blurIntensita: 50
@@ -239,6 +244,7 @@ QtObject {
     // al compositore, e nemmeno il resto di questi.
     onEffettoChanged: applySoon.restart()
     onElasticoChanged: applySoon.restart()
+    onRespiroChanged: applySoon.restart()
     onRigiditaChanged: applySoon.restart()
     onSmorzamentoChanged: applySoon.restart()
     onBlurIntensitaChanged: applySoon.restart()
@@ -453,6 +459,7 @@ QtObject {
         Compositore.corniceColori(rules.corniceTinte);
         Compositore.corniceSpente(rules.corniceSpente);
         Compositore.elastico(rules.elastico);
+        Compositore.respiro(rules.respiro);
         Compositore.parametriEffetti(rules.blurIntensita, rules.rigidita, rules.smorzamento);
     }
 }

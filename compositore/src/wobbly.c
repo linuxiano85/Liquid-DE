@@ -562,3 +562,19 @@ void wobbly_distruggi(struct wobbly *w) {
 	conserva(w->riserva, w->swapchain);
 	free(w);
 }
+
+void wobbly_trasforma(struct wobbly *w, double sx, double sy, double ax, double ay, float alfa) {
+	if (w == NULL || !w->mostrata)
+		return;
+	const double lw = w->forma.larghezza + 2 * PAD, lh = w->forma.altezza + 2 * PAD;
+	// Il proxy sta in (-PAD, -PAD) grande lw×lh; scalato attorno ad (ax, ay)
+	// il suo angolo va in ax + (-PAD - ax)·s.
+	const double x0 = ax + (-PAD - ax) * sx;
+	const double y0 = ay + (-PAD - ay) * sy;
+	int dw = (int)lround(lw * sx), dh = (int)lround(lh * sy);
+	if (dw < 1) dw = 1;
+	if (dh < 1) dh = 1;
+	wlr_scene_buffer_set_dest_size(w->proxy, dw, dh);
+	wlr_scene_node_set_position(&w->proxy->node, (int)lround(x0), (int)lround(y0));
+	wlr_scene_buffer_set_opacity(w->proxy, alfa < 0 ? 0 : (alfa > 1 ? 1 : alfa));
+}

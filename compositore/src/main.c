@@ -777,6 +777,13 @@ struct minerva {
 	/// La percentuale sotto cui «auto» comincia a risparmiare.
 	int risparmio_soglia;
 	bool risparmio_attivo;
+	/// Il respiro delle finestre acceso (verbo `respiro si|no`), e quanti
+	/// respiri sono in corso: a riposo nessun battito.
+	bool respiro_acceso;
+	int respiri_attivi;
+	/// Quanti passi di respiro sono stati disegnati da quando è partito: dice
+	/// alle prove se l'animazione avanza davvero fotogramma per fotogramma.
+	unsigned respiro_passi;
 	/// «batteria», «profilo», «chiesto», o NULL. Sempre una stringa fissa.
 	const char *risparmio_motivo;
 	int voluto_effetto, voluto_cornice;
@@ -1041,6 +1048,10 @@ struct finestra {
 	struct timespec molla_ultimo;
 	bool wobbly_fallita;
 	int molla_dx, molla_dy;
+	/// Il respiro (vedi `respiro_avvia`): la finestra che nasce, che viene
+	/// risucchiata riducendola, che torna. RESPIRO_NIENTE a riposo.
+	int respiro;
+	struct timespec respiro_t0;
 	int posto_x, posto_y;
 
 	/// Quale pulsante sta sotto il puntatore adesso: -1 nessuno.
@@ -1187,7 +1198,11 @@ static void monitor_recover(void *);
 static void annuncia_blocco(struct minerva *m);
 static void blocco_verifica_presentazione(struct minerva *m);
 static int sospendi_scaduta(void *data);
+enum { RESPIRO_NIENTE, RESPIRO_NASCITA, RESPIRO_RISUCCHIO, RESPIRO_RITORNO };
 static void molla_fotogramma(struct minerva *m, struct wlr_output *out);
+static void respiro_fotogramma(struct minerva *m, struct wlr_output *out);
+static bool respiro_avvia(struct finestra *f, int tipo);
+static void respiro_fine(struct finestra *f);
 static void proteggi_sonno(void *data);
 
 // ── Il fuoco ──────────────────────────────────────────────────────────────
@@ -1473,6 +1488,7 @@ static void schermo_frame(struct wl_listener *l, void *dati) {
 	(void)dati;
 	struct schermo *s = wl_container_of(l, s, frame);
 	molla_fotogramma(s->m, s->out);
+	respiro_fotogramma(s->m, s->out);
 
 	// La scena sa cosa è cambiato e ridisegna solo quello. Chiedere il
 	// disegno di tutto a ogni fotogramma funziona lo stesso e si paga in
@@ -2968,7 +2984,12 @@ static void finestra_riduci(struct finestra *f, bool si) {
 	if (f->ridotta == si)
 		return;
 	f->ridotta = si;
-	finestra_mostra_o_nascondi(f);
+	// Riducendo, prima il risucchio: la finestra si nasconde davvero alla
+	// fine (`respiro_fine`). Riportandola, si accende e ne esce.
+	if (!(si && respiro_avvia(f, RESPIRO_RISUCCHIO)))
+		finestra_mostra_o_nascondi(f);
+	if (!si)
+		respiro_avvia(f, RESPIRO_RITORNO);
 	finestra_di_ridotta(f, si);
 	if (si) {
 		finestra_di_attiva(f, false);
@@ -3289,6 +3310,9 @@ static void finestra_misura_alla_nascita(struct finestra *f, struct wlr_box *uti
 /// due: le finestre Wayland dal segnale della loro superficie, e quelle X11
 /// da `x11_mappata`, che prima deve costruirsi l'albero di scena.
 static void finestra_appare(struct finestra *f) {
+	// La PRIMA comparsa respira (vedi `respiro_avvia`); una finestra che si
+	// rimappa — un programma che si nasconde e si rimostra — no.
+	const bool prima_volta = !f->comparsa;
 	f->comparsa = true;
 	f->mappata_ora = true;
 	// Ultima occasione, e per una finestra X11 è l'unica: `WM_CLASS` X la
@@ -3362,6 +3386,11 @@ static void finestra_appare(struct finestra *f) {
 	} else if (finestra_vuole_ingrandita(f)) {
 		finestra_ingrandisci(f, true);
 	}
+
+	// Nasce come una goccia che si posa. Non a schermo intero: un gioco o un
+	// film che parte non deve «crescere», deve esserci.
+	if (prima_volta && !f->schermo_intero)
+		respiro_avvia(f, RESPIRO_NASCITA);
 }
 
 static void finestra_mappata(struct wl_listener *l, void *dati) {
@@ -5796,12 +5825,189 @@ static void molla_fotogramma(struct minerva *m, struct wlr_output *out) {
 		wlr_output_schedule_frame(out);
 }
 
+// ── Il respiro delle finestre ────────────────────────────────────────────
+//
+// La Tappa 3 del piano: «apertura e chiusura che gocciolano; "riduci" come
+// un risucchio». Una finestra che nasce non compare a scatto: cresce da un
+// soffio più piccola, supera di un niente e si posa, mentre prende colore.
+// Riducendola viene risucchiata verso il fondo dello schermo, dove sta la
+// dock, stringendosi più in altezza che in larghezza; riportata, ne esce
+// all'incontrario.
+//
+// Si fa con la stessa copia dell'elastico (`wobbly`): per quei trecento
+// millisecondi si disegna la copia invece della finestra, scalata e
+// sfumata, e alla fine si torna alla finestra vera — a riposo costo zero,
+// come l'elastico. Il battito c'è solo mentre un respiro è in corso.
+//
+// Non respira: col modo risparmio acceso, col respiro spento (`respiro no`),
+// mentre la si trascina (c'è già l'elastico), o se la copia non si può fare.
+
+static double respiro_durata(int tipo) {
+	switch (tipo) {
+	case RESPIRO_NASCITA: return 0.40;
+	case RESPIRO_RISUCCHIO: return 0.30;
+	case RESPIRO_RITORNO: return 0.32;
+	}
+	return 0;
+}
+
+/// Dove va a finire il risucchio, in coordinate della finestra: il fondo
+/// dello schermo, in mezzo — dove sta la dock.
+static void respiro_ancora(struct finestra *f, double *ax, double *ay) {
+	struct wlr_box b;
+	finestra_box(f, &b);
+	struct wlr_output *out = wlr_output_layout_output_at(f->m->schermi,
+		f->posto_x + b.width / 2.0, f->posto_y + b.height / 2.0);
+	struct wlr_box sb = {0};
+	if (out != NULL)
+		wlr_output_layout_get_box(f->m->schermi, out, &sb);
+	else
+		sb = (struct wlr_box){f->posto_x, f->posto_y, b.width, b.height};
+	*ax = sb.x + sb.width / 2.0 - f->posto_x;
+	*ay = sb.y + sb.height - f->posto_y;
+}
+
+/// Disegna il respiro al punto `p` (0…1) del suo corso.
+static void respiro_disegna(struct finestra *f, double p) {
+	if (f->wobbly == NULL)
+		return;
+	struct wlr_box box;
+	finestra_box(f, &box);
+	struct ondulazione forma = {
+		.larghezza = box.width, .altezza = box.height,
+		.presa_x = box.width / 2.0, .presa_y = box.height / 2.0,
+	};
+	double scala = 1.0;
+	struct wlr_output *out = molla_schermo(f);
+	if (out) scala = out->scale;
+	if (!wobbly_disegna(f->wobbly, &forma, scala)) {
+		f->wobbly_fallita = true;
+		respiro_fine(f);
+		return;
+	}
+	if (p < 0) p = 0;
+	if (p > 1) p = 1;
+	double sx = 1, sy = 1, ax = box.width / 2.0, ay = box.height / 2.0, alfa = 1;
+	switch (f->respiro) {
+	case RESPIRO_NASCITA: {
+		// Una goccia che si posa: cresce superando di un soffio (una curva
+		// «ease out back») e l'altezza arriva un attimo dopo la larghezza,
+		// come una goccia che si allarga e poi si alza. Prende colore
+		// dolcemente, tutto nella prima metà.
+		const double c1 = 1.4, c3 = c1 + 1;
+		double q = p - 1;
+		const double e = 1 + c3 * q * q * q + c1 * q * q;
+		double p2 = (p - 0.08) / 0.92;
+		if (p2 < 0) p2 = 0;
+		q = p2 - 1;
+		const double e2 = 1 + c3 * q * q * q + c1 * q * q;
+		sx = 0.84 + 0.16 * e;
+		sy = 0.80 + 0.20 * e2;
+		const double a = p < 0.5 ? p / 0.5 : 1;
+		alfa = a * a * (3 - 2 * a);
+		break;
+	}
+	case RESPIRO_RISUCCHIO: {
+		// Verso la dock, più stretta in altezza che in larghezza.
+		const double e = p * p * p;
+		respiro_ancora(f, &ax, &ay);
+		sx = 1 - 0.82 * e;
+		sy = 1 - 0.94 * e;
+		alfa = 1 - e;
+		break;
+	}
+	case RESPIRO_RITORNO: {
+		const double q = 1 - p, e = 1 - q * q * q;
+		respiro_ancora(f, &ax, &ay);
+		sx = 0.18 + 0.82 * e;
+		sy = 0.06 + 0.94 * e;
+		alfa = e < 1 ? e : 1;
+		break;
+	}
+	}
+	wobbly_trasforma(f->wobbly, sx, sy, ax, ay, (float)alfa);
+	f->m->respiro_passi++;
+}
+
+static bool respiro_avvia(struct finestra *f, int tipo) {
+	struct minerva *m = f->m;
+	if (!m->respiro_acceso || m->risparmio_attivo || f->wobbly_fallita
+	    || f->molla.viva || m->bloccato)
+		return false;
+	if (f->respiro != RESPIRO_NIENTE)
+		respiro_fine(f);
+	if (f->wobbly == NULL) {
+		f->wobbly = wobbly_crea(f->cornice, m->renderer, m->allocator, NULL);
+		if (f->wobbly == NULL) {
+			f->wobbly_fallita = true;
+			return false;
+		}
+		m->molle_attive++;
+	}
+	f->respiro = tipo;
+	clock_gettime(CLOCK_MONOTONIC, &f->respiro_t0);
+	m->respiri_attivi++;
+	// Il primo fotogramma subito: la finestra vera non deve vedersi per un
+	// fotogramma prima della copia.
+	respiro_disegna(f, 0);
+	struct wlr_output *out = molla_schermo(f);
+	if (out) wlr_output_schedule_frame(out);
+	return true;
+}
+
+static void respiro_fine(struct finestra *f) {
+	if (f->respiro == RESPIRO_NIENTE)
+		return;
+	const int era = f->respiro;
+	f->respiro = RESPIRO_NIENTE;
+	f->m->respiri_attivi--;
+	if (!f->molla.viva && f->wobbly != NULL) {
+		f->m->molle_attive--;
+		wobbly_distruggi(f->wobbly);
+		f->wobbly = NULL;
+	}
+	// Il risucchio finisce nascondendo davvero la finestra: fino a qui è
+	// rimasta accesa perché si vedesse andare via.
+	if (era == RESPIRO_RISUCCHIO)
+		finestra_mostra_o_nascondi(f);
+}
+
+static void respiro_fotogramma(struct minerva *m, struct wlr_output *out) {
+	if (m->respiri_attivi <= 0)
+		return;
+	struct timespec ora;
+	clock_gettime(CLOCK_MONOTONIC, &ora);
+	bool ancora = false;
+	struct finestra *f, *tmp;
+	wl_list_for_each_safe(f, tmp, &m->finestre_elenco, link) {
+		if (f->respiro == RESPIRO_NIENTE)
+			continue;
+		if (molla_schermo(f) != out)
+			continue;
+		const double t = (ora.tv_sec - f->respiro_t0.tv_sec)
+			+ (ora.tv_nsec - f->respiro_t0.tv_nsec) / 1e9;
+		const double p = t / respiro_durata(f->respiro);
+		if (p >= 1 || !f->cornice->node.enabled) {
+			respiro_fine(f);
+			continue;
+		}
+
+		respiro_disegna(f, p);
+		ancora = true;
+	}
+	if (ancora)
+		wlr_output_schedule_frame(out);
+}
+
 /// Accende l'elastico su una finestra e fa partire il battito.
 static void molla_avvia(struct finestra *f) {
 	struct minerva *m = f->m;
 	if (m->elastico <= 0.0 || f->wobbly_fallita)
 		return;
 	if (f->molla.viva) return;
+	// Un respiro in corso cede all'elastico: la mano ha la precedenza.
+	if (f->respiro != RESPIRO_NIENTE)
+		respiro_fine(f);
 	f->wobbly = wobbly_crea(f->cornice, m->renderer, m->allocator,
 		m->effetto_modo == EFFETTO_BLUR ? f->sfocatura : NULL);
 	if (!f->wobbly) { f->wobbly_fallita = true; return; }
@@ -5822,6 +6028,12 @@ static void molla_avvia(struct finestra *f) {
 /// e disegnata trenta pixel più in là, per sempre, con la maniglia del
 /// ridimensionamento che non sta dove si vede il bordo.
 static void molla_ferma_finestra(struct finestra *f) {
+	// Anche il respiro usa la copia che qui si distrugge: si chiude prima lui,
+	// per bene. Senza, una finestra chiusa mentre nasceva lasciava il conto
+	// dei respiri in corso a uno per sempre, e il compositore li cercava a
+	// ogni fotogramma; e un «riduci» interrotto a metà lasciava la finestra
+	// accesa. `respiro_fine` la nasconde, se stava andando via.
+	respiro_fine(f);
 	if (f->wobbly) f->m->molle_attive--;
 	wobbly_distruggi(f->wobbly);
 	f->wobbly = NULL;
@@ -7470,6 +7682,14 @@ static void comando_stato(struct minerva *m, char *risposta, size_t n) {
 	char risp[256];
 	risparmio_json(m, risp, sizeof(risp));
 
+	// Quanti fotogrammi sono stati davvero mandati agli schermi: dice alle
+	// prove se un'animazione si vede passo per passo o salta alla fine.
+	unsigned presentati = 0;
+	{
+		struct schermo *sp;
+		wl_list_for_each(sp, &m->schermi_elenco, link)
+			presentati += (unsigned)sp->out->commit_seq;
+	}
 	const char *strada = "spenta";
 	if (m->tinta != NULL) {
 		strada = "schermo";
@@ -7487,12 +7707,17 @@ static void comando_stato(struct minerva *m, char *risposta, size_t n) {
 		"\"effetto\":\"%s\",\"effettoAlfa\":%.2f,"
 		"\"elastico\":%.2f,\"rigidita\":%.2f,\"smorzamento\":%.2f,\"blurIntensita\":%.2f,"
 		"\"tinta\":\"%.4f %.4f %.4f\",\"tintaStrada\":\"%s\","
+		"\"respiro\":%s,\"respiri\":%d,\"respiroPassi\":%u,\"copie\":%u,"
+		"\"presentati\":%u,"
 		"\"risparmio\":%s}",
 		m->bloccato ? "true" : "false", code, m->scrivania_attiva,
 		m->inattivo_quante, corn, m->cornice_periodo, m->cornice_spessore,
 		m->cornice_quante_tinte, m->cornice_spente,
 		eff, (double)m->effetto_alfa, m->elastico, m->rigidita, m->smorzamento, m->blur_intensita,
-		m->tinta_rgb[0], m->tinta_rgb[1], m->tinta_rgb[2], strada, risp);
+		m->tinta_rgb[0], m->tinta_rgb[1], m->tinta_rgb[2], strada,
+		m->respiro_acceso ? "true" : "false", m->respiri_attivi, m->respiro_passi,
+		m->molle_attive, presentati,
+		risp);
 }
 
 /// Quali scrivanie esistono adesso.
@@ -9734,6 +9959,22 @@ void minerva_comando(struct minerva *m, const char *riga,
 	//
 	// E fuori da una prova NON esiste: un canale che muove il mouse di chi
 	// sta lavorando è una cosa che nessuno ha chiesto.
+	// `respiro si|no`: le finestre nascono, si riducono e tornano col respiro
+	// (vedi `respiro_avvia`), oppure a scatto.
+	if (strcmp(verbo, "respiro") == 0) {
+		char *come = parola(&resto);
+		if (come != NULL && (strcmp(come, "si") == 0 || strcmp(come, "sì") == 0))
+			m->respiro_acceso = true;
+		else if (come != NULL && strcmp(come, "no") == 0)
+			m->respiro_acceso = false;
+		else {
+			snprintf(risposta, n, "no respiro vuole «si» o «no»");
+			return;
+		}
+		snprintf(risposta, n, "ok");
+		return;
+	}
+
 	// `riva super|sempre`: con una finestra che riempie lo schermo, la riva
 	// (angoli, bordi, spinte, la barra dello schermo intero) risponde solo
 	// con Super giù, oppure sempre. Vedi `riva_libera`.
@@ -10507,6 +10748,7 @@ int main(int argc, char *argv[]) {
 	m.ingresso.scorrimento_naturale = -1;
 	m.ingresso.tocco_e_clic = -1;
 	m.tieni_quale = -1;
+	m.respiro_acceso = true;
 	m.riva_col_consenso = true;
 	m.ingresso.spento_mentre_scrivi = -1;
 

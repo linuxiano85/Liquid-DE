@@ -1137,6 +1137,13 @@ Singleton {
         comp._nostro("riva", [conConsenso ? "super" : "sempre"]);
     }
 
+    /// Il respiro delle finestre: nascono come una goccia che si posa, e
+    /// «riduci» è un risucchio verso la dock. Il compositore lo spegne da sé
+    /// col modo risparmio; qui lo spegne l'interruttore delle animazioni.
+    function respiro(acceso) {
+        comp._nostro("respiro", [acceso ? "si" : "no"]);
+    }
+
     function elastico(forza) {
         var f = Number(forza);
         if (!isFinite(f) || f < 0)
