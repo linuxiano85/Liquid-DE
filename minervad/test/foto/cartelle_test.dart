@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:minervad/services/foto/cartelle.dart';
 import 'package:test/test.dart';
+import '../codice_vivo.dart';
 
 void main() {
   late Directory tana;
@@ -44,7 +45,7 @@ void main() {
 
     test('si scrive intero o non si scrive', () {
       c.aggiungi(fai('Immagini').path);
-      final scritto = jsonDecode(File(c.percorso).readAsStringSync());
+      final scritto = jsonDecode(File(c.percorso).codiceVivo());
       expect(scritto['cartelle'], hasLength(1));
       expect(File('${c.percorso}.nuovo').existsSync(), isFalse,
           reason: 'il temporaneo non deve restare in giro');

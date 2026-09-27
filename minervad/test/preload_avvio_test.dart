@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// Un'app «tenuta pronta» ha il suo nome scritto in QUATTRO posti che nessun
 /// compilatore mette a confronto:
@@ -31,11 +32,11 @@ File _trova(String relativo) {
 }
 
 void main() {
-  final appPronte = _trova('minerva-shell/core/AppPronte.qml').readAsStringSync();
+  final appPronte = _trova('minerva-shell/core/AppPronte.qml').codiceVivo();
   final impostazioni =
-      _trova('minervad/lib/core/settings_api.dart').readAsStringSync();
+      _trova('minervad/lib/core/settings_api.dart').codiceVivo();
   final avvio =
-      _trova('minerva-shell/settings/sections/Avvio.qml').readAsStringSync();
+      _trova('minerva-shell/settings/sections/Avvio.qml').codiceVivo();
 
   /// Le voci dell'elenco di `AppPronte`, lette dal file.
   final voci = RegExp(
@@ -84,9 +85,9 @@ void main() {
       // giusto.
       for (final v in voci) {
         final script = v.group(3)!;
-        var testo = _trova('scripts/$script').readAsStringSync();
+        var testo = _trova('scripts/$script').codiceVivo();
         if (testo.contains('scripts/minerva-ospite')) {
-          testo = _trova('scripts/minerva-ospite').readAsStringSync();
+          testo = _trova('scripts/minerva-ospite').codiceVivo();
         }
         expect(testo, contains('qs ipc'),
             reason: '$script non chiede niente a un\'istanza già viva');
@@ -137,7 +138,7 @@ void main() {
       // `TenutaPronta` e le chiama per nome (`prontaEditor.chiudi()`).
       final passaPerChiudi = RegExp(r'onRequestClose:\s*[A-Za-z_][\w]*\.chiudi\(\)');
       for (final f in ingressi) {
-        final testo = _trova('minerva-shell/$f').readAsStringSync();
+        final testo = _trova('minerva-shell/$f').codiceVivo();
         expect(testo, contains('Core.TenutaPronta'), reason: f);
         expect(passaPerChiudi.hasMatch(testo), isTrue,
             reason: '$f non passa da TenutaPronta per chiudersi');
@@ -159,7 +160,7 @@ void main() {
         'viewer/Viewer.qml',
       ];
       for (final f in finestre) {
-        final testo = _trova('minerva-shell/$f').readAsStringSync();
+        final testo = _trova('minerva-shell/$f').codiceVivo();
         expect(RegExp(r'dormiente\s*=').hasMatch(testo), isFalse,
             reason: '$f scrive su «dormiente» e spezza il legame');
       }
@@ -181,8 +182,8 @@ void main() {
   //
   // Nessun pezzo era sbagliato da solo: si erano solo persi di vista.
   group('preparare un\'app non vuol dire aprirla', () {
-    final ospite = _trova('scripts/minerva-ospite').readAsStringSync();
-    final appQml = _trova('minerva-shell/app.qml').readAsStringSync();
+    final ospite = _trova('scripts/minerva-ospite').codiceVivo();
+    final appQml = _trova('minerva-shell/app.qml').codiceVivo();
 
     test('l\'ospite ha una strada per «preparala e basta»', () {
       expect(ospite, contains('MINERVA_APP_PREPARA'),
@@ -208,7 +209,7 @@ void main() {
     test('i tre script dell\'ospite passano tutti di lì', () {
       for (final s in ['minerva-calcolatrice', 'minerva-editor',
                        'minerva-monitor']) {
-        final testo = _trova('scripts/$s').readAsStringSync();
+        final testo = _trova('scripts/$s').codiceVivo();
         expect(testo, contains('scripts/minerva-ospite'),
             reason: '$s si è scritto la sua strada invece di usare quella '
                 'comune: è così che il difetto è nato');
@@ -224,7 +225,7 @@ void main() {
       for (final v in voci) {
         final script = v.group(3)!;
         final variabile = v.group(2)!;
-        final testo = _trova('scripts/$script').readAsStringSync();
+        final testo = _trova('scripts/$script').codiceVivo();
         if (!testo.contains('scripts/minerva-ospite')) continue;
         expect(testo, contains('DORMIENTE=$variabile'),
             reason: '$script aspetta una variabile diversa da quella che '

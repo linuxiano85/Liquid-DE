@@ -30,6 +30,7 @@
 
 import 'dart:io';
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 Directory _radice() {
   for (final base in ['.', '..', '../..']) {
@@ -95,7 +96,7 @@ Map<String, Set<String>> _chiaviLette() {
   for (final v in Directory('$radice/minerva-shell')
       .listSync(recursive: true, followLinks: false)) {
     if (v is! File || !v.path.endsWith('.qml')) continue;
-    for (final m in re.allMatches(v.readAsStringSync())) {
+    for (final m in re.allMatches(v.codiceVivo())) {
       final chiave = m.group(1)!;
       // Le chiavi COSTRUITE a pezzi — `Ipc.get("desktop.anim." + nome)` —
       // finiscono in questa lista con il punto in fondo. Non si possono
@@ -117,7 +118,7 @@ Map<String, Set<String>> _chiaviLette() {
 /// una chiave scritta due volte o annidata dove non doveva.
 Set<String> _valoriDiFabbrica() {
   final src = File('${_radice().path}/minervad/lib/core/settings_api.dart')
-      .readAsStringSync();
+      .codiceVivo();
   final inizio = src.indexOf('static Map<String, dynamic> defaultSettings()');
   expect(inizio, isNot(-1), reason: 'defaultSettings() non si trova più');
 
@@ -233,7 +234,7 @@ void main() {
         if (v is! File) continue;
         if (!v.path.endsWith('.qml') && !v.path.endsWith('.dart')) continue;
         if (v.path.endsWith('settings_api.dart')) continue;
-        buf.write(v.readAsStringSync());
+        buf.write(v.codiceVivo());
       }
     }
     final tutto = buf.toString();

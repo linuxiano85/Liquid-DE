@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// Le Impostazioni sono l'unico posto in Minerva dove una voce esiste in TRE
 /// punti che nessun compilatore mette a confronto:
@@ -25,8 +26,8 @@ File _trova(String relativo) {
 
 void main() {
   group('sezioni delle Impostazioni', () {
-    final system = _trova('minerva-shell/settings/System.qml').readAsStringSync();
-    final qmldir = _trova('minerva-shell/settings/sections/qmldir').readAsStringSync();
+    final system = _trova('minerva-shell/settings/System.qml').codiceVivo();
+    final qmldir = _trova('minerva-shell/settings/sections/qmldir').codiceVivo();
 
     // ── `[\w-]` e non `\w` ────────────────────────────────────────────────
     //
@@ -257,7 +258,7 @@ void main() {
 
     test('e il ripiego non è più una percentuale muta', () {
       final vs = _trova('minerva-shell/settings/ValueSlider.qml')
-          .readAsStringSync();
+          .codiceVivo();
       expect(vs, contains('case "percento":'),
           reason: 'la percentuale dev\'essere un caso dichiarato come gli '
               'altri, non il posto dove finisce ciò che non si è capito');

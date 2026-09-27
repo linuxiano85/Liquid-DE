@@ -22,6 +22,7 @@
 import 'dart:io';
 import 'package:test/test.dart';
 import 'package:minervad/services/scorciatoie.dart';
+import 'codice_vivo.dart';
 
 File _file(String relativo) {
   for (final base in ['.', '..', '../..']) {
@@ -32,7 +33,7 @@ File _file(String relativo) {
 }
 
 Scorciatoie _sorgente() =>
-    Scorciatoie.leggi(_file('config/scorciatoie.minerva').readAsStringSync());
+    Scorciatoie.leggi(_file('config/scorciatoie.minerva').codiceVivo());
 
 class _Voce {
   final int riga;
@@ -141,7 +142,7 @@ void main() {
       // Il lettore si è spostato: dall'11 agosto 2026 il formato è nostro
       // (`@-`) e sta in `scorciatoie.dart`; `keybind_service` non fa più il
       // parsing della lingua di Hyprland.
-      final s = _file('minervad/lib/services/scorciatoie.dart').readAsStringSync();
+      final s = _file('minervad/lib/services/scorciatoie.dart').codiceVivo();
       expect(s, contains('_spegni'));
       expect(s, contains(r"RegExp(r'^@\s*-\s*$')"));
     });

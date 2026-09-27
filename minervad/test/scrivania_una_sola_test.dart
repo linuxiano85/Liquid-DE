@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// Chi comanda le impostazioni di SISTEMA è uno solo.
 ///
@@ -42,7 +43,7 @@ void main() {
     return d.path;
   }
 
-  String leggi(String rel) => File('${radice()}/$rel').readAsStringSync();
+  String leggi(String rel) => File('${radice()}/$rel').codiceVivo();
 
   group('le impostazioni di sistema le manda una sola', () {
     test('la scrivania si dichiara, e la schermata di accesso pure', () {
@@ -69,7 +70,7 @@ void main() {
         if (nome == 'shell.qml' || nome == 'greeter.qml') continue;
         // Le prove possono farlo: servono proprio a provare quel ramo.
         if (nome.startsWith('prove-')) continue;
-        if (f.readAsStringSync().contains('Compositore.scrivania = true')) {
+        if (f.codiceVivo().contains('Compositore.scrivania = true')) {
           colpevoli.add(nome);
         }
       }

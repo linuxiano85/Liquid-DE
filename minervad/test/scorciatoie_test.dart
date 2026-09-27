@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:minervad/services/scorciatoie.dart';
+import 'codice_vivo.dart';
 
 File _trova(String relativo) {
   var dir = Directory.current;
@@ -21,8 +22,8 @@ void main() {
   // file è sparito con la sessione Hyprland; la sorgente invece resta, e in
   // lingua nostra la stessa cosa si scrive `minerva: <nome>`.
   final sorgente =
-      _trova('config/scorciatoie.minerva').readAsStringSync();
-  final shell = _trova('minerva-shell/shell.qml').readAsStringSync();
+      _trova('config/scorciatoie.minerva').codiceVivo();
+  final shell = _trova('minerva-shell/shell.qml').codiceVivo();
 
   /// I nomi che la sorgente manda alla shell: `minerva: nome`.
   final chiamati = RegExp(r'minerva:\s*([\w-]+)')
@@ -176,7 +177,7 @@ void main() {
 
     for (final f in ingressi) {
       test('$f prende tema e dimensione del testo dagli altri', () {
-        final testo = _trova(f).readAsStringSync();
+        final testo = _trova(f).codiceVivo();
         expect(testo, contains('Theme.LegaTema'),
             reason: 'questa finestra resterebbe col tema e il testo di '
                 'fabbrica mentre le altre cambiano');
@@ -184,7 +185,7 @@ void main() {
     }
 
     test('e LegaTema lega davvero tutto quello che serve', () {
-      final lega = _trova('minerva-shell/theme/LegaTema.qml').readAsStringSync();
+      final lega = _trova('minerva-shell/theme/LegaTema.qml').codiceVivo();
       // Una per una, col nome dell'impostazione: se un legame sparisce, il
       // messaggio dice quale invece di dire «manca qualcosa».
       const legami = {
@@ -207,12 +208,12 @@ void main() {
       // shell e in nessun'altra finestra. Legarlo anche nelle applicazioni
       // non farebbe danno, ma direbbe una cosa falsa — che quelle durate le
       // usano loro.
-      final shell = _trova('minerva-shell/shell.qml').readAsStringSync();
+      final shell = _trova('minerva-shell/shell.qml').codiceVivo();
       expect(shell, contains('animazioni: true'),
           reason: 'senza, spegnere le animazioni non toccherebbe i pannelli: '
               'è il difetto segnalato il 19 agosto 2026');
       for (final f in ingressi.where((f) => !f.endsWith('shell.qml'))) {
-        expect(_trova(f).readAsStringSync(), isNot(contains('animazioni: true')),
+        expect(_trova(f).codiceVivo(), isNot(contains('animazioni: true')),
             reason: '$f dichiarerebbe di animare quello che non anima');
       }
     });

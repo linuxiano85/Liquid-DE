@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:minervad/services/meteo_service.dart';
+import 'codice_vivo.dart';
 
 /// Le risposte vere di open-meteo, copiate da questa macchina il 10 agosto
 /// 2026. Provare su un JSON inventato da noi dimostrerebbe solo che sappiamo
@@ -142,7 +143,7 @@ String _iconQml() {
   var dir = Directory.current;
   for (var i = 0; i < 4; i++) {
     final f = File('${dir.path}/minerva-shell/ui/Icon.qml');
-    if (f.existsSync()) return f.readAsStringSync();
+    if (f.existsSync()) return f.codiceVivo();
     dir = dir.parent;
   }
   fail('non trovo minerva-shell/ui/Icon.qml');

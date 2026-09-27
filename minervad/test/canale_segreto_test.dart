@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 import 'package:minervad/core/minerva_paths.dart';
 import 'package:minervad/ipc/canale_segreto.dart';
+import 'codice_vivo.dart';
 
 /// Le prove della parola d'ordine del canale.
 ///
@@ -147,7 +148,7 @@ void main() {
         markTestSkipped('Ipc.qml non trovato da qui');
         return;
       }
-      final tutto = await qml.readAsString();
+      final tutto = qml.codiceVivo();
 
       // Si guarda solo il CORPO della funzione, non tutto il file: i nomi
       // delle variabili d'ambiente compaiono anche nei commenti qui sopra, e
@@ -285,7 +286,7 @@ void main() {
           throwsA(isA<StateError>()),
           reason: 'quella sessione resterebbe senza demone');
 
-      expect(File(file).readAsStringSync(), contains('segreto=vecchio'),
+      expect(File(file).codiceVivo(), contains('segreto=vecchio'),
           reason: 'e il file deve essere ancora quello di prima, intatto');
       await server.close();
     });
@@ -302,7 +303,7 @@ void main() {
       final segreto = await CanaleSegreto.scriviNuovo(
           percorsoFile: file, socket: '${tmp.path}/mio.sock');
       expect(segreto, isNotEmpty);
-      expect(File(file).readAsStringSync(), contains('mio.sock'));
+      expect(File(file).codiceVivo(), contains('mio.sock'));
     });
 
     test('e un demone che riparte riscrive il PROPRIO indirizzo', () async {
@@ -317,7 +318,7 @@ void main() {
       final segreto =
           await CanaleSegreto.scriviNuovo(percorsoFile: file, socket: suo);
       expect(segreto, isNotEmpty);
-      expect(File(file).readAsStringSync(), isNot(contains('vecchio')),
+      expect(File(file).codiceVivo(), isNot(contains('vecchio')),
           reason: 'la parola d\'ordine nuova deve aver preso il posto');
       await server.close();
     });

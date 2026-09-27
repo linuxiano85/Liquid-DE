@@ -25,6 +25,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 void main() {
   final dir = Directory('${Directory.current.parent.path}/minerva-shell/spine/panels');
@@ -35,7 +36,7 @@ void main() {
     final mancanti = <String>[];
     for (final f in dir.listSync().whereType<File>()) {
       if (!f.path.endsWith('.qml')) continue;
-      final testo = f.readAsStringSync();
+      final testo = f.codiceVivo();
       if (!testo.contains('implicitPanelHeight')) continue;
 
       // Il conto dichiarato: da `implicitPanelHeight:` fino alla riga vuota.
@@ -65,7 +66,7 @@ void main() {
 
   test('e il pannello di controllo somma i suoi due margini', () {
     final f = File('${dir.path}/ControlPanel.qml');
-    final testo = f.readAsStringSync();
+    final testo = f.codiceVivo();
     expect(testo, contains('Theme.Effects.space5'));
     expect(testo, contains('Theme.Effects.space4'));
     final i = testo.indexOf('implicitPanelHeight');

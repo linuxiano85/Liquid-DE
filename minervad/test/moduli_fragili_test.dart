@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// Le tre cartelle condivise — `theme`, `core`, `ui` — non possono nominare un
 /// modulo Qt che potrebbe non essere installato.
@@ -139,7 +140,7 @@ void main() {
           fail('«$nome/qmldir» dichiara $file, che non esiste. '
               'Una cartella con un qmldir che mente non si importa affatto.');
         }
-        for (final modulo in _moduliImportati(f.readAsStringSync())) {
+        for (final modulo in _moduliImportati(f.codiceVivo())) {
           if (sicuro(modulo)) continue;
           if (eccezioni['$nome/$file'] == modulo) continue;
           colpevoli.add('$nome/$file importa «$modulo»');
@@ -165,14 +166,14 @@ void main() {
     expect(campioni.existsSync(), isTrue,
         reason: 'core/suoni/Campioni.qml è il posto dove QtMultimedia può '
             'essere nominato senza portare giù la schermata di accesso.');
-    expect(campioni.readAsStringSync(), contains('import QtMultimedia'));
+    expect(campioni.codiceVivo(), contains('import QtMultimedia'));
 
     final suoni =
         File('${_cartella('minerva-shell/core').path}/Sounds.qml');
-    expect(suoni.readAsStringSync(), isNot(contains('import QtMultimedia')),
+    expect(suoni.codiceVivo(), isNot(contains('import QtMultimedia')),
         reason: 'Sounds.qml è dichiarato in core/qmldir: un import qui vale '
             'uno schermo nero al prossimo pacchetto rimosso.');
-    expect(suoni.readAsStringSync(), contains('suoni/Campioni.qml'),
+    expect(suoni.codiceVivo(), contains('suoni/Campioni.qml'),
         reason: 'il Loader deve caricare il file per INDIRIZZO. Un '
             'sourceComponent scritto in linea si compila insieme a Sounds.qml, '
             'quindi sarebbe pigro all\'esecuzione e avido alla compilazione — '

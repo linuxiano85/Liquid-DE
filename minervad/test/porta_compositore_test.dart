@@ -10,6 +10,7 @@
 
 import 'dart:io';
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// La radice del progetto, da qualunque cartella si lancino le prove.
 Directory _radice() {
@@ -90,7 +91,7 @@ void main() {
     late String porta;
     setUpAll(() =>
         porta = File('${_radice().path}/minerva-shell/core/Compositore.qml')
-            .readAsStringSync());
+            .codiceVivo());
 
     test('non tiene stato: si può usare anche dentro una nostra app', () {
       // Le nostre applicazioni girano in processi loro e non hanno nessun
@@ -235,10 +236,68 @@ void main() {
           }
         }
       }
-      expect(quante, lessThanOrEqualTo(2),
+      // Il tetto era 2 mentre le chiamate vere erano già zero: due chiamate
+      // nuove potevano entrare senza che nessuno lo vedesse. Un tetto che non
+      // scende col lavoro smette di sorvegliare (27 settembre 2026).
+      expect(quante, isZero,
           reason: 'erano quarantuno l\'11 agosto 2026 contandole in tutte e due '
-              'le forme, e devono solo calare.\n'
+              'le forme, e sono a zero: sotto il nostro compositore `hyprctl` '
+              'non esiste.\n'
               'Trovate in: ${sparse.toSet().join(", ")}');
+    });
+
+    test('nessuno script lancia hyprctl', () {
+      // Il 27 settembre 2026 quattro cose non funzionavano in silenzio perché
+      // chiamavano `hyprctl` da uno SCRIPT — la schermata della finestra,
+      // gli avvisi del blocco e del riavvio — e nessuna guardia guardava lì:
+      // quella qui sopra conta il QML, quella del demone il Dart. Per parlare
+      // al compositore c'è `scripts/minerva-compositore`.
+      //
+      // Si cerca `hyprctl` USATO: in una shell come comando, in Python come
+      // argomento di un processo. Citato in un messaggio o in una
+      // spiegazione non conta.
+      const tollerati = {
+        'scripts/minerva-greetd':
+            'la schermata di accesso è ancora quella di Minerva, su Hyprland '
+            'come riserva: si separa con la Tappa 5',
+      };
+      final comandoShell =
+          RegExp(r'(^|[\s;&|(`]|\$\()hyprctl(\s|$)', multiLine: true);
+      final comandoPython = RegExp('[\\[(,]\\s*["\']hyprctl["\']');
+      final radice = _radice().path;
+      final file = <File>[
+        ...Directory('$radice/scripts').listSync().whereType<File>(),
+        ...Directory('$radice/compositore').listSync().whereType<File>()
+            .where((f) => f.path.endsWith('.sh') || f.path.endsWith('.py')),
+      ];
+      final colpevoli = <String>[];
+      var visti = 0;
+      for (final f in file) {
+        final nome = f.path.substring(radice.length + 1);
+        if (tollerati.containsKey(nome)) continue;
+        String testo;
+        try {
+          testo = f.codiceVivo();
+        } catch (_) {
+          continue; // un file che non è testo
+        }
+        final prima = testo.split('\n').first;
+        final python = f.path.endsWith('.py') || prima.contains('python');
+        final shell =
+            !python && (f.path.endsWith('.sh') || prima.startsWith('#!'));
+        if (!python && !shell) continue;
+        visti++;
+        final regola = python ? comandoPython : comandoShell;
+        for (final r in testo.split('\n')) {
+          if (regola.hasMatch(r)) colpevoli.add('$nome: ${r.trim()}');
+        }
+      }
+      expect(visti, greaterThan(30),
+          reason: 'la prova non riconosce più gli script: non sta guardando');
+      expect(colpevoli, isEmpty,
+          reason: 'sotto il nostro compositore `hyprctl` non esiste: la riga '
+              'fallisce in silenzio. Si usa `scripts/minerva-compositore '
+              '<verbo>`.\n${colpevoli.join("\n")}');
     });
 
     // ── I VERBI sono passati, i SOSTANTIVI no ───────────────────────────

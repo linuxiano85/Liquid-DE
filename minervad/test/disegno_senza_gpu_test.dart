@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// Le sei app di Minerva disegnano **col processore**, non con la scheda video
 /// (`QT_QUICK_BACKEND=software`, incluso da `scripts/minerva-ambiente-app`).
@@ -134,7 +135,7 @@ void main() {
           .where((f) => f.path.endsWith('.qml'))) {
         final nome = v.path.split('minerva-shell/').last;
         if (conGpu.any((c) => nome.startsWith('$c/'))) continue;
-        if (_senzaCommenti(v.readAsStringSync()).contains('Shape.CurveRenderer')) {
+        if (_senzaCommenti(v.codiceVivo()).contains('Shape.CurveRenderer')) {
           colpe.add(nome);
         }
       }
@@ -170,7 +171,7 @@ void main() {
   group('le Shape non si nascondono', () {
     test('l\'icona svuota il tracciato invece di sparire', () {
       final t = _senzaCommenti(
-          _trova('minerva-shell/ui/Icon.qml').readAsStringSync());
+          _trova('minerva-shell/ui/Icon.qml').codiceVivo());
       final i = t.indexOf('Shape {');
       expect(i, greaterThan(0), reason: 'la Shape di `Icon.qml` non si trova');
       final corpo = t.substring(i, i + 400);
@@ -185,7 +186,7 @@ void main() {
   group('capsule sottili', () {
     test('la barra di scorrimento calcola il raggio dalla propria misura', () {
       final testo = _senzaCommenti(
-          _trova('minerva-shell/ui/Scorrimento.qml').readAsStringSync());
+          _trova('minerva-shell/ui/Scorrimento.qml').codiceVivo());
       expect(testo, isNot(contains('radiusFull')),
           reason: 'il pollice è largo sei pixel: con 999 il renderer software '
               'lo disegna a scalini, e sullo schermo si vede una scaletta di '
@@ -204,7 +205,7 @@ void main() {
             .listSync(recursive: true)
             .whereType<File>()
             .where((f) => f.path.endsWith('.qml'))) {
-          final testo = _senzaCommenti(f.readAsStringSync());
+          final testo = _senzaCommenti(f.codiceVivo());
           for (final v in vietati.entries) {
             if (testo.contains(v.key)) {
               colpe.add('${f.path.split('minerva-shell/').last}: '
@@ -221,7 +222,7 @@ void main() {
     test('e nemmeno nei sei punti d\'ingresso', () {
       for (final f in ingressi) {
         final testo = _senzaCommenti(
-            _trova('minerva-shell/$f').readAsStringSync());
+            _trova('minerva-shell/$f').codiceVivo());
         for (final v in vietati.keys) {
           expect(testo.contains(v), isFalse, reason: '$f usa «$v»');
         }
@@ -241,9 +242,9 @@ void main() {
   // guardia sull'ordine dei piani del compositore: una prova che conta una
   // cosa diversa da quella che dice di controllare è peggio di nessuna prova.
   String chiAvvia(String script) {
-    final testo = _trova('scripts/$script').readAsStringSync();
+    final testo = _trova('scripts/$script').codiceVivo();
     if (!testo.contains('scripts/minerva-ospite')) return testo;
-    return _trova('scripts/minerva-ospite').readAsStringSync();
+    return _trova('scripts/minerva-ospite').codiceVivo();
   }
 
   group('l\'ambiente arriva davvero alle app', () {
@@ -271,7 +272,7 @@ void main() {
     });
 
     test('la variabile è quella giusta', () {
-      final amb = _trova('scripts/minerva-ambiente-app').readAsStringSync();
+      final amb = _trova('scripts/minerva-ambiente-app').codiceVivo();
       expect(amb, contains('QT_QUICK_BACKEND=software'));
       expect(amb, contains('export QT_QUICK_BACKEND'),
           reason: 'senza export la variabile resta nello script e non arriva '
@@ -321,7 +322,7 @@ void main() {
 
     test('e il cursore a barra piena ha la larghezza a pixel interi', () {
       final t = _senzaCommenti(
-          _trova('minerva-shell/ui/Slider.qml').readAsStringSync());
+          _trova('minerva-shell/ui/Slider.qml').codiceVivo());
       expect(t, contains('Math.round('),
           reason: 'una larghezza a virgola lascia una riga di pixel che '
               'nessuno ridipinge');
@@ -335,7 +336,7 @@ void main() {
       // dello sporco lo tiene Qt e non e' nostro: si toglie l'occasione
       // ridipingendo tutto quando la finestra cambia da cima a fondo.
       final t = _senzaCommenti(
-          _trova('minerva-shell/settings/System.qml').readAsStringSync());
+          _trova('minerva-shell/settings/System.qml').codiceVivo());
       expect(t, contains('function ridipingiTutto()'));
       expect(t, contains('Qt.callLater(settings.ridipingiTutto)'),
           reason: 'si ridipinge DOPO che la pagina nuova si e\' disposta: '
@@ -393,21 +394,21 @@ void main() {
         'minerva-shell/files/Pane.qml',
         'minerva-shell/menu/DesktopIcons.qml'
       ]) {
-        final t = _senzaCommenti(_trova(via).readAsStringSync());
+        final t = _senzaCommenti(_trova(via).codiceVivo());
         expect(t, contains('Drag.onDragFinished'),
             reason: '$via: senza, il gesto o si annulla subito o resta acceso '
                 'per sempre');
       }
       // E `onCanceled` non deve spegnerlo a scatola chiusa.
       final pane = _senzaCommenti(
-          _trova('minerva-shell/files/Pane.qml').readAsStringSync());
+          _trova('minerva-shell/files/Pane.qml').codiceVivo());
       expect(pane, isNot(contains('onCanceled: pane.trascinando = false')),
           reason: 'perdere la presa non vuol dire che il gesto e\' finito');
     });
 
     test('e c\'e\' chi lo spegne, al posto giusto', () {
       // Toglierlo e basta lascerebbe il gesto acceso per sempre.
-      final pane = _trova('minerva-shell/files/Pane.qml').readAsStringSync();
+      final pane = _trova('minerva-shell/files/Pane.qml').codiceVivo();
       expect(pane, contains('function finisciTrascinamento()'));
       expect(pane, contains('onCanceled'));
       // Sulla scrivania lo spegne `Drag.onDragFinished`, non `lascia()`:
@@ -417,7 +418,7 @@ void main() {
       // scritta prima di sapere che perdere la presa non vuol dire aver
       // finito.
       final icone = _senzaCommenti(
-          _trova('minerva-shell/menu/DesktopIcons.qml').readAsStringSync());
+          _trova('minerva-shell/menu/DesktopIcons.qml').codiceVivo());
       final i = icone.indexOf('Drag.onDragFinished');
       expect(i, greaterThan(0));
       expect(icone.substring(i, i + 200), contains('trascinando = false'));
@@ -446,7 +447,7 @@ void main() {
           .listSync(recursive: true)
           .whereType<File>()
           .where((f) => f.path.endsWith('.qml'))) {
-        final t = _senzaCommenti(f.readAsStringSync());
+        final t = _senzaCommenti(f.codiceVivo());
         // Il corpo di un `Exec` si prende contando le graffe, non con
         // un'espressione: la prima versione sconfinava nel blocco dopo e
         // accusava due innocenti — `action` in Bluetooth e in Rete, che un
@@ -490,7 +491,7 @@ void main() {
         'minerva-greetd'
       ]) {
         final f = _trova('scripts/$s');
-        expect(f.readAsStringSync().contains('minerva-ambiente-app'), isFalse,
+        expect(f.codiceVivo().contains('minerva-ambiente-app'), isFalse,
             reason: '$s non deve disegnare col processore');
       }
     });

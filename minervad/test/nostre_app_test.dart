@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// Le nostre applicazioni, viste da fuori: `desktop/*.desktop`.
 ///
@@ -180,7 +181,7 @@ void main() {
       // Un programma che non è in questo elenco non viene installato, quindi
       // non è nel menu, quindi non esiste. È successo a `minerva-media`, che
       // era pronto da giorni.
-      final inst = _trova('scripts/install-minerva.sh').readAsStringSync();
+      final inst = _trova('scripts/install-minerva.sh').codiceVivo();
       for (final f in voci) {
         if (_campi(f)['NoDisplay'] == 'true') continue;
         expect(inst, contains(nome(f)),

@@ -31,6 +31,27 @@ ok()   { printf '\033[32m✓\033[0m %s\n' "$1"; }
 bad()  { printf '\033[31m✗\033[0m %s\n' "$1"; FAILED=$((FAILED + 1)); }
 skip() { printf '\033[33m–\033[0m %s\n' "$1"; }
 nota() { printf '       \033[36m·\033[0m %s\n' "$1"; }
+
+# Il codice di un file senza i commenti di riga intera e a blocco, per i
+# controlli che cercano un testo: uno che cerca `trattieni(f, &x, &y);` deve
+# trovarlo nel codice, non in un commento che dice «qui c'era». Stessa regola
+# di `minervad/test/codice_vivo.dart` (27 settembre 2026).
+codice_vivo() {
+    [ -f "$1" ] || return 0
+    case "$1" in
+        *.c|*.h|*.qml|*.js|*.dart)
+            awk 'BEGIN { b = 0 }
+                 { s = $0; sub(/^[ \t]+/, "", s)
+                   if (b) { if (index(s, "*/")) b = 0; next }
+                   if (substr(s, 1, 2) == "//") next
+                   if (substr(s, 1, 2) == "/*") { if (!index(s, "*/")) b = 1; next }
+                   print }' "$1" || true ;;
+        *)  grep -v '^[[:space:]]*#' "$1" || true ;;
+    esac
+    # `|| true`: un `grep -q` che trova subito chiude il tubo, e chi scrive
+    # riceve SIGPIPE. Senza `pipefail` non conta, ma con `pipefail` ogni
+    # controllo diventerebbe falso — provato, non temuto.
+}
 head_() { printf '\n\033[1m── %s\033[0m\n' "$1"; }
 
 FAILED=0
@@ -203,7 +224,7 @@ rm -rf "$STATO_FINTO"
 
 # La schermata non deve rimettere una shell davanti al comando: quella ce la
 # mette già greetd, e due interpreti in fila spezzano le righe di due parole.
-if grep -q '"sh", "-lc", greeter.sessione.comando' "$ROOT/minerva-shell/greeter/Greeter.qml" 2>/dev/null; then
+if codice_vivo "$ROOT/minerva-shell/greeter/Greeter.qml" | grep -q '"sh", "-lc", greeter.sessione.comando'; then
     bad "la schermata rimette un «sh -lc» davanti al comando di sessione"
     nota "greetd unisce cmd con degli spazi e lo dà già a /bin/sh -c:"
     nota "un secondo interprete rispezza le righe Exec= di due parole (KDE)."
@@ -302,8 +323,15 @@ if [ ! -f "$SORGENTE" ]; then
 elif ! pkg-config --exists wlroots-0.20 2>/dev/null; then
     skip "wlroots 0.20 non installata: compositore non provato"
 else
-    if [ -d "$ROOT/compositore/build" ]; then
-        if ninja -C "$ROOT/compositore/build" > /tmp/minerva-compositore.log 2>&1; then
+    # La costruzione sta in `build-native` da quando c'è il fork di wlroots
+    # (`costruisci.sh`). Qui si guardava `build`, che non esiste più: il giro
+    # non compilava il compositore e non faceva girare le sue prove in C, e
+    # diceva «mai configurato» — onesto, ma per settimane nessuno l'ha visto
+    # (27 settembre 2026).
+    COMP_BUILD="$ROOT/compositore/build-native"
+    [ -d "$COMP_BUILD" ] || COMP_BUILD="$ROOT/compositore/build"
+    if [ -d "$COMP_BUILD" ]; then
+        if nice -n 15 ninja -C "$COMP_BUILD" minerva-wayland prova-schermi prova-aggancio prova-lente minerva-cattura > /tmp/minerva-compositore.log 2>&1; then
             ok "minerva-wayland compila senza avvisi"
         else
             bad "minerva-wayland non compila"
@@ -318,7 +346,7 @@ else
     # In wlroots 0.20 `wlr_backend_autocreate` vuole il `wl_event_loop`.
     # Fino alla 0.18 voleva il `wl_display`, e ogni esempio in circolazione
     # fa così: compila con un avviso e poi non parte.
-    if grep -q "wlr_backend_autocreate(m.loop" "$SORGENTE"; then
+    if codice_vivo "$SORGENTE" | grep -q "wlr_backend_autocreate(m.loop"; then
         ok "il backend si crea sul ciclo di eventi"
     else
         bad "wlr_backend_autocreate non riceve più m.loop"
@@ -335,7 +363,7 @@ else
     # compare: contando, il commento che la spiega vale come una delle due, e
     # la prova resta verde anche togliendo quella vera. Provato: succede.
     MANCA=""
-    grep -q "f->toplevel->base->initial_commit" "$SORGENTE" || MANCA="finestre"
+    codice_vivo "$SORGENTE" | grep -q "f->toplevel->base->initial_commit" || MANCA="finestre"
     grep -q "a->ls->initial_commit" "$SORGENTE" \
         || MANCA="${MANCA:+$MANCA e }pannelli"
     if [ -z "$MANCA" ]; then
@@ -363,7 +391,7 @@ else
     # superficie** — dice a una finestra a che risoluzione disegnare — e non
     # dice a nessuno quanto è grande la scrivania. Quella la porta xdg-output.
     MANCA=""
-    grep -q "wlr_output_state_set_scale" "$SORGENTE" || MANCA="la scala"
+    codice_vivo "$SORGENTE" | grep -q "wlr_output_state_set_scale" || MANCA="la scala"
     grep -q "wlr_viewporter_create" "$SORGENTE" \
         || MANCA="${MANCA:+$MANCA, }viewporter"
     grep -q "wlr_fractional_scale_manager_v1_create" "$SORGENTE" \
@@ -387,7 +415,7 @@ else
     # volte che compare una chiamata: contare vuol dire che un commento in più
     # tiene la prova verde. È lo stesso errore già evitato per la prima
     # configure, qualche riga più in su.
-    if grep -q "ripreso con i valori sicuri" "$SORGENTE"; then
+    if codice_vivo "$SORGENTE" | grep -q "ripreso con i valori sicuri"; then
         ok "una configurazione degli schermi sbagliata non lascia lo schermo nero"
     else
         bad "manca il secondo tentativo coi valori sicuri in schermo_nuovo"
@@ -419,7 +447,7 @@ else
         # virgolette in un file QML sono dappertutto.
         VERBI=$(python3 "$ROOT/scripts/verbi-compositore.py" "$QML_COMP")
         for V in $VERBI; do
-            grep -q "\"$V\"" "$SORGENTE" || SCONOSCIUTI="${SCONOSCIUTI:+$SCONOSCIUTI }$V"
+            codice_vivo "$SORGENTE" | grep -q "\"$V\"" || SCONOSCIUTI="${SCONOSCIUTI:+$SCONOSCIUTI }$V"
         done
         if [ -z "$SCONOSCIUTI" ]; then
             ok "ogni verbo che la shell manda, il compositore lo conosce"
@@ -514,7 +542,7 @@ else
     # non ce l'ha, e chi legge vede una finestra che cambia forma a seconda di
     # come l'ha saputa — un difetto che si manifesta solo quando due strade
     # portano allo stesso dato, cioè quasi mai, cioè tardi.
-    if grep -q "static int finestra_json(" "$SORGENTE"; then
+    if codice_vivo "$SORGENTE" | grep -q "static int finestra_json("; then
         COSTRUZIONI=$(grep -c 'id..:..0x%llx' "$SORGENTE" || true)
         if [ "$COSTRUZIONI" -le 1 ]; then
             ok "una finestra si descrive in un posto solo"
@@ -547,7 +575,7 @@ else
     # qualcuno lo rimette, questa riga torna rossa.
     CANALE_C="$ROOT/compositore/src/canale.c"
     if [ -f "$CANALE_C" ]; then
-        if grep -q "WL_EVENT_WRITABLE" "$CANALE_C" && ! grep -q "poll(&pf" "$CANALE_C"; then
+        if codice_vivo "$CANALE_C" | grep -q "WL_EVENT_WRITABLE" && ! codice_vivo "$CANALE_C" | grep -q "poll(&pf"; then
             ok "un cliente che non legge si stacca, e nessuno lo aspetta"
         else
             bad "canale.c aspetta un cliente lento dentro il ciclo di eventi"
@@ -563,7 +591,7 @@ else
     # compositore acceso. Il 24 agosto 2026 il demone della sessione VERA ci è
     # cascato: ha chiesto le finestre a un compositore morto, e la scrivania è
     # rimasta senza finestre senza un errore da nessuna parte.
-    if grep -q "wl_event_loop_add_signal(m.loop, SIGTERM" "$SORGENTE"; then
+    if codice_vivo "$SORGENTE" | grep -q "wl_event_loop_add_signal(m.loop, SIGTERM"; then
         ok "un compositore fermato toglie il proprio socket"
     else
         bad "minerva-wayland non ascolta SIGTERM"
@@ -571,8 +599,8 @@ else
     fi
 
     # ── Le prove del lettore di schermi ───────────────────────────────────
-    if [ -x "$ROOT/compositore/build/prova-schermi" ]; then
-        USCITA_SCH=$("$ROOT/compositore/build/prova-schermi" 2>&1) && ESI=0 || ESI=1
+    if [ -x "$COMP_BUILD/prova-schermi" ]; then
+        USCITA_SCH=$("$COMP_BUILD/prova-schermi" 2>&1) && ESI=0 || ESI=1
         CONTO_SCH=$(printf '%s' "$USCITA_SCH" | sed -n 's/^TUTTE PASSATE (\([0-9]*\)).*/\1/p')
         if [ "$ESI" -eq 0 ]; then
             ok "${CONTO_SCH:-?} prove degli schermi passate"
@@ -594,8 +622,8 @@ else
     # «agganciata in alto finisce sotto la barra di sistema»: è già successo
     # una volta in `spine/TitleBars.qml`, dove il conto partiva dallo schermo
     # intero invece che dallo spazio utile.
-    if [ -x "$ROOT/compositore/build/prova-aggancio" ]; then
-        USCITA_AGG=$("$ROOT/compositore/build/prova-aggancio" 2>&1) && ESI=0 || ESI=1
+    if [ -x "$COMP_BUILD/prova-aggancio" ]; then
+        USCITA_AGG=$("$COMP_BUILD/prova-aggancio" 2>&1) && ESI=0 || ESI=1
         CONTO_AGG=$(printf '%s' "$USCITA_AGG" | sed -n 's/^TUTTE PASSATE (\([0-9]*\)).*/\1/p')
         if [ "$ESI" -eq 0 ]; then
             ok "${CONTO_AGG:-?} prove dell'aggancio ai bordi passate"
@@ -616,8 +644,8 @@ else
     # scanout, e `grim` cattura la scena — due catture con lente spenta e
     # accesa sono identiche al pixel. Per le barre del titolo fantasma la
     # fotografia è stata la sola strada; qui quella strada non c'è.
-    if [ -x "$ROOT/compositore/build/prova-lente" ]; then
-        USCITA_LEN=$("$ROOT/compositore/build/prova-lente" 2>&1) && ESI=0 || ESI=1
+    if [ -x "$COMP_BUILD/prova-lente" ]; then
+        USCITA_LEN=$("$COMP_BUILD/prova-lente" 2>&1) && ESI=0 || ESI=1
         CONTO_LEN=$(printf '%s' "$USCITA_LEN" | sed -n 's/^TUTTE PASSATE (\([0-9]*\)).*/\1/p')
         if [ "$ESI" -eq 0 ]; then
             ok "${CONTO_LEN:-?} prove del ritaglio della lente passate"
@@ -950,7 +978,11 @@ else
             skip "$PROVA_EFF: manca la build del fork (compositore/costruisci.sh --build-only)"
         else
             USCITA_PE=$(python3 "$PE" 2>&1) && ESI=0 || ESI=1
-            if [ "$ESI" -eq 0 ]; then
+            # Una prova che si salta da sola esce con 0, ma non ha provato
+            # niente: si conta come saltata, dicendo perché.
+            if printf '%s' "$USCITA_PE" | grep -q '^SALTATA'; then
+                skip "$PROVA_EFF: $(printf '%s' "$USCITA_PE" | grep -m1 '^SALTATA' | cut -c1-100)"
+            elif [ "$ESI" -eq 0 ]; then
                 ok "$PROVA_EFF: $(printf '%s' "$USCITA_PE" | grep -E '^(ok|durante|TUTTE)' | tail -1 | cut -c1-110)"
             else
                 bad "$PROVA_EFF è rossa:"
@@ -1106,8 +1138,10 @@ else
             skip "$NOME: saltata da MINERVA_SENZA_ANNIDATE"
         else
             USCITA_PV=$(python3 "$PRV" 2>&1) && ESI=0 || ESI=1
-            if [ "$ESI" -eq 0 ]; then
-                ok "$(printf '%s' "$USCITA_PV" | grep -m1 -E 'VERDE|SALTATA' \
+            if printf '%s' "$USCITA_PV" | grep -q 'SALTATA'; then
+                skip "prova-$NOME: $(printf '%s' "$USCITA_PV" | grep -m1 'SALTATA' | cut -c1-100)"
+            elif [ "$ESI" -eq 0 ]; then
+                ok "$(printf '%s' "$USCITA_PV" | grep -m1 'VERDE' \
                      | sed 's/^VERDE: //')"
             else
                 bad "prova-$NOME: rossa"
@@ -1141,7 +1175,7 @@ else
     # Giacomo aveva già nominato: dare per buono il pezzo che non si è
     # guardato.
     DOVE_BIN="$CARTELLA_BIN"
-    if grep -q 'export PATH=.*\$CARTELLA_BIN' "$ROOT/scripts/start-minerva-wayland.sh" 2>/dev/null; then
+    if codice_vivo "$ROOT/scripts/start-minerva-wayland.sh" | grep -q 'export PATH=.*\$CARTELLA_BIN'; then
         ok "la sessione ha il prefisso di Liquid DE nel PATH: minerva-polkit si trova"
     else
         bad "start-minerva-wayland.sh non mette il prefisso di Liquid DE nel PATH"
@@ -1288,7 +1322,7 @@ else
     for L in $CARICATORI; do
         # Solo gli id che sono davvero dei Loader di finestra: quelli citati
         # dentro un `laFinestra:`.
-        if grep -q "laFinestra: $L\.item" "$APPQML"; then
+        if codice_vivo "$APPQML" | grep -q "laFinestra: $L\.item"; then
             case "$ELENCO" in
                 *"$L"*) ;;
                 *) MANCANTI="$MANCANTI $L" ;;
@@ -1360,7 +1394,7 @@ else
         if grep -rqs "pragma AppId $CLS\$" "$ROOT/minerva-shell"/*.qml; then
             continue
         fi
-        grep -q "\"$N.desktop\"" "$APPSQML" || SENZANOME="$SENZANOME $N"
+        codice_vivo "$APPSQML" | grep -q "\"$N.desktop\"" || SENZANOME="$SENZANOME $N"
     done
     if [ -z "$SENZANOME" ]; then
         ok "ogni applicazione di Minerva si riconosce dal titolo"
@@ -1431,7 +1465,7 @@ else
     # scrivania mentre se ne riconfigura un'altra.
     ANNIDATA="$ROOT/compositore/prova-annidata.sh"
     if [ -f "$ANNIDATA" ] \
-       && grep -q "^unset HYPRLAND_INSTANCE_SIGNATURE" "$ANNIDATA"; then
+       && codice_vivo "$ANNIDATA" | grep -q "^unset HYPRLAND_INSTANCE_SIGNATURE"; then
         ok "la prova annidata è cieca al Hyprland vero"
     else
         bad "prova-annidata.sh non toglie HYPRLAND_INSTANCE_SIGNATURE"
@@ -1494,8 +1528,8 @@ else
     # nessun'altra parte.
     QUANTE=$(grep -c "wlr_xdg_toplevel_decoration_v1_set_mode" "$SORGENTE")
     if [ "$QUANTE" = "1" ] \
-       && grep -q "if (!f->toplevel->base->initialized)" "$SORGENTE" \
-       && grep -q "decorazione_applica(f);" "$SORGENTE"; then
+       && codice_vivo "$SORGENTE" | grep -q "if (!f->toplevel->base->initialized)" \
+       && codice_vivo "$SORGENTE" | grep -q "decorazione_applica(f);"; then
         ok "alla decorazione si risponde solo a superficie pronta"
     else
         bad "set_mode fuori da decorazione_applica, o senza il controllo"
@@ -1507,7 +1541,7 @@ else
     # Una finestra trascinata sotto il pannello non si riprende più: è il
     # difetto «non hanno la barra e devo chiuderle con super+C», che in Minerva
     # è già costato una volta.
-    if grep -q "trattieni(f, &x, &y);" "$SORGENTE"; then
+    if codice_vivo "$SORGENTE" | grep -q "trattieni(f, &x, &y);"; then
         ok "una finestra non si può trascinare dove non si riprende"
     else
         bad "manca il freno al trascinamento"
@@ -1547,7 +1581,7 @@ else
             | grep -q "wl_display_add_socket_auto"; then
         bad "il compositore prende il primo wayland-N libero"
         nota "una prova non deve poter rubare wayland-0 alla sessione vera"
-    elif grep -q '"minerva-%d"' "$SORGENTE"; then
+    elif codice_vivo "$SORGENTE" | grep -q '"minerva-%d"'; then
         ok "il socket si chiama minerva-N, non wayland-N"
     else
         bad "non trovo il nome del socket"
@@ -1558,10 +1592,10 @@ else
     # `cp` TRONCA il file e lo riempie: se qualcuno sta eseguendo quel
     # binario, le sue pagine di codice diventano spazzatura mentre le esegue.
     COSTRUISCI="$ROOT/compositore/costruisci.sh"
-    if grep -qE '^[[:space:]]*cp[[:space:]]+"\$BIN"[[:space:]]+"\$DOVE/minerva-wayland"' "$COSTRUISCI"; then
+    if codice_vivo "$COSTRUISCI" | grep -qE '^[[:space:]]*cp[[:space:]]+"\$BIN"[[:space:]]+"\$DOVE/minerva-wayland"'; then
         bad "costruisci.sh copia il binario SUL POSTO"
         nota "si scrive di fianco e si rinomina, o si tronca il codice in esecuzione"
-    elif grep -q 'mv "\$DOVE/.minerva-wayland.nuovo" "\$DOVE/minerva-wayland"' "$COSTRUISCI" ||
+    elif codice_vivo "$COSTRUISCI" | grep -q 'mv "\$DOVE/.minerva-wayland.nuovo" "\$DOVE/minerva-wayland"' ||
          grep -Fq 'mv -f "$STAGING/$nome" "$DOVE/$nome"' "$COSTRUISCI"; then
         ok "il compositore si installa per rinomina"
     else
@@ -2093,27 +2127,17 @@ else
     # Prova la luce notturna FINO AL COMPOSITORE, che è l'unico anello che si
     # era rotto: il file dello shader nasceva lo stesso, e guardando la
     # cartella sembrava tutto a posto.
-    # ── E questa vuole un compositore vero, non solo il demone ───────────
+    # ── La luce notturna, col canale FINTO ──────────────────────────────
     #
-    # `prove-luce.qml` verifica l'anello FINO AL COMPOSITORE, ed è il punto
-    # del suo valore: il 17 agosto 2026 il file dello shader nasceva
-    # regolarmente e nessuno lo diceva a Hyprland, quindi guardando la
-    # cartella sembrava tutto a posto. Per verificarlo chiede
-    # `hyprctl getoption`, e fuori da una sessione Minerva quella domanda non
-    # ha nessuno a cui essere fatta: due righe rosse che non parlano del
-    # codice.
-    #
-    # Si salta DICENDOLO, e a voce alta: un banco che smette di provare in
-    # silenzio è il modo in cui una prova muore senza che nessuno se ne
-    # accorga — è scritto nel banco stesso, ed è giusto.
-    if [ "$DENTRO_MINERVA" = "1" ]; then
-        prove_qml "della luce notturna"        prove-luce.qml
-    else
-        skip "prove della luce notturna SALTATE: chiedono al compositore"
-        nota "(«hyprctl getoption»), e qui fuori non risponde nessuno."
-        nota "Sono l'unico anello che si era davvero rotto: rilanciale"
-        nota "dentro una sessione Minerva prima di fidarti di questo verde."
-    fi
+    # `prove-luce.qml` verifica la riga che la porta costruisce per il
+    # compositore (`colore r g b`): la legge da `ultimaRiga`, che si scrive
+    # anche senza un compositore collegato. Fino al 27 settembre 2026 girava
+    # col canale VERO quando si era dentro una sessione, e mandava davvero la
+    # tinta calda allo schermo di chi lanciava le prove; alla fine rimetteva
+    # l'impostazione com'era, ma se era già spenta nessuno ritrasmetteva il
+    # neutro, e lo schermo poteva restare caldo. Col canale finto la prova
+    # controlla la stessa cosa senza toccare lo schermo.
+    MINERVA_CANALE=/non/esisto prove_qml "della luce notturna" prove-luce.qml
     prove_qml "delle animazioni"          prove-animazioni.qml
     prove_qml "della scrivania"            prove-scrivania.qml
 

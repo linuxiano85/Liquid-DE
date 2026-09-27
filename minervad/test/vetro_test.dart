@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:test/test.dart';
 import 'package:minervad/services/vetro.dart';
+import 'codice_vivo.dart';
 
 // Lo sfondo già sfocato.
 //
@@ -231,7 +232,7 @@ void main() {
           .where((f) => f.path.endsWith('.qml'))) {
         final nome = f.path.split('minerva-shell/').last;
         if (nome == 'core/Vetro.qml') continue;
-        final testo = f.readAsStringSync();
+        final testo = f.codiceVivo();
         // `onPercorsoChanged` da solo non vuol dire niente: mezza shell ha una
         // proprietà `percorso` sua — le briciole del gestore file, il
         // visualizzatore. Conta solo dentro un file che ascolta `Core.Vetro`.
@@ -253,7 +254,7 @@ void main() {
 
     /// E il verso opposto: che `daDisegnare` sappia davvero tacere.
     test('daDisegnare tace col blur vero', () {
-      final v = _trovaSu('minerva-shell/core/Vetro.qml').readAsStringSync();
+      final v = _trovaSu('minerva-shell/core/Vetro.qml').codiceVivo();
       expect(v.contains('windows.effetto'), isTrue,
           reason: 'senza leggere l\'effetto del compositore, `blurVero` '
               'non può sapere niente');
@@ -266,12 +267,12 @@ void main() {
 
     /// E la membrana deve APRIRSI, o il blur resta dietro un muro.
     test('col blur vero barra e dock leggono la loro chiave', () {
-      final l = _trovaSu('minerva-shell/theme/LegaTema.qml').readAsStringSync();
+      final l = _trovaSu('minerva-shell/theme/LegaTema.qml').codiceVivo();
       expect(l.contains('shell.membraneOpacityBlur'), isTrue,
           reason: 'col blur la membrana ha una memoria sua');
       expect(l.contains('shell.membraneOpacity"'), isTrue,
           reason: 'e senza blur resta quella di prima');
-      final d = _trovaSu('minerva-shell/shell.qml').readAsStringSync();
+      final d = _trovaSu('minerva-shell/shell.qml').codiceVivo();
       expect(d.contains('dock.opacityBlur'), isTrue,
           reason: 'e la dock ha la sua coppia');
     });
@@ -287,7 +288,7 @@ void main() {
     /// scrivania deve scrivere la chiave del modo in cui si è.
     test('e le Impostazioni scrivono la chiave giusta', () {
       final a = _trovaSu('minerva-shell/settings/sections/Animazioni.qml')
-          .readAsStringSync();
+          .codiceVivo();
       expect(a.contains('shell.membraneOpacityBlur'), isTrue,
           reason: 'col blur il cursore della barra deve scrivere DOVE si '
               'legge, o si gira e non cambia niente');
@@ -295,7 +296,7 @@ void main() {
           reason: 'e gli estremi devono seguire: col blur si scende sotto '
               '0,75, che senza sarebbe illeggibile');
       final d = _trovaSu('minerva-shell/settings/sections/Dock.qml')
-          .readAsStringSync();
+          .codiceVivo();
       expect(d.contains('dock.opacityBlur'), isTrue,
           reason: 'stessa cosa per la dock');
     });
@@ -308,7 +309,7 @@ void main() {
     /// una finestra di chiunque altro resta a 0,73. Due finestre affiancate,
     /// due trasparenze diverse, e nessuno dei due cursori lo diceva.
     test('col compositore acceso la trasparenza delle finestre è una', () {
-      final l = _trovaSu('minerva-shell/theme/LegaTema.qml').readAsStringSync();
+      final l = _trovaSu('minerva-shell/theme/LegaTema.qml').codiceVivo();
       final i = l.indexOf('property: "windowOpacity"');
       expect(i, greaterThan(0), reason: 'il legame deve esserci');
       final blocco = l.substring(i, (i + 300).clamp(0, l.length));
@@ -316,7 +317,7 @@ void main() {
           reason: 'col compositore che mette la sua alfa, il QML non deve '
               'metterne una seconda');
       final a = _trovaSu('minerva-shell/settings/sections/Animazioni.qml')
-          .readAsStringSync();
+          .codiceVivo();
       expect(a.contains('visible: !page._effettoAcceso'), isTrue,
           reason: 'e il cursore che non regola più niente non si mostra: '
               'una manopola che si gira a vuoto è peggio di una che manca');
@@ -329,7 +330,7 @@ void main() {
     /// costavano 0,12 s di processore per ogni scatto di cursore, misurati il
     /// 9 settembre 2026. Girando nove volte una manopola: 1,07 s contro 0,13.
     test('il pennello lungo scatta per le icone, non per ogni manopola', () {
-      final y = _trovaSu('minerva-shell/settings/System.qml').readAsStringSync();
+      final y = _trovaSu('minerva-shell/settings/System.qml').codiceVivo();
       final i = y.indexOf('function onSettingsChanged()');
       expect(i, greaterThan(0));
       final blocco = y.substring(i, (i + 500).clamp(0, y.length));
@@ -344,7 +345,7 @@ void main() {
     /// cursore torna indietro da solo.
     test('le chiavi nuove esistono nei valori di fabbrica', () {
       final f = _trovaSu('minervad/lib/core/settings_api.dart')
-          .readAsStringSync();
+          .codiceVivo();
       expect(f.contains("'membraneOpacityBlur'"), isTrue);
       expect(f.contains("'opacityBlur'"), isTrue);
     });

@@ -28,6 +28,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// Legge un file dell'albero. Lancia invece di usare `expect`: questa
 /// funzione gira anche FUORI da un test — i due file si leggono una volta
@@ -38,7 +39,7 @@ String _leggi(String rel) {
   if (!f.existsSync()) {
     throw StateError('manca $rel');
   }
-  return f.readAsStringSync();
+  return f.codiceVivo();
 }
 
 void main() {

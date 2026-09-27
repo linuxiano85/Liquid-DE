@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// Una conferma sola per volta, nel pannello dello spegnimento.
 ///
@@ -35,7 +36,7 @@ File _trova(String relativo) {
 void main() {
   group('lo spegnimento chiede una conferma per volta', () {
     final p =
-        _trova('minerva-shell/spine/panels/PowerPanel.qml').readAsStringSync();
+        _trova('minerva-shell/spine/panels/PowerPanel.qml').codiceVivo();
 
     test('lo stato della conferma è uno solo, del pannello', () {
       expect(p, contains('property string inAttesa'),

@@ -23,6 +23,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 File _qml(String relativo) {
   var dir = Directory.current;
@@ -147,7 +148,7 @@ void main() {
         dir = dir.parent;
       }
       expect(f, isNotNull, reason: 'non trovo settings_api.dart');
-      final t = f!.readAsStringSync();
+      final t = f!.codiceVivo();
       final i = t.indexOf("'media': {");
       expect(i, greaterThan(0), reason: 'manca il gruppo `media`');
       final blocco = t.substring(i, t.indexOf('},', i));

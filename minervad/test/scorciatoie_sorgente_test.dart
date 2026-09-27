@@ -21,6 +21,7 @@
 import 'dart:io';
 import 'package:test/test.dart';
 import 'package:minervad/services/scorciatoie.dart';
+import 'codice_vivo.dart';
 
 File _file(String relativo) {
   for (final base in ['.', '..', '../..']) {
@@ -34,7 +35,7 @@ void main() {
   late Scorciatoie sorgente;
 
   setUpAll(() {
-    sorgente = Scorciatoie.leggi(_file('config/scorciatoie.minerva').readAsStringSync());
+    sorgente = Scorciatoie.leggi(_file('config/scorciatoie.minerva').codiceVivo());
   });
 
   group('la sorgente si legge tutta', () {

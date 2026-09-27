@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import '../codice_vivo.dart';
 
 // Le due guardie della finestra di Manutenzione.
 //
@@ -13,7 +14,7 @@ import 'package:test/test.dart';
 // 2026 guardando la finestra.
 void main() {
   final finestra =
-      File('../minerva-shell/manutenzione/Manutenzione.qml').readAsStringSync();
+      File('../minerva-shell/manutenzione/Manutenzione.qml').codiceVivo();
 
   group('una mappa non si riassegna a sé stessa', () {
     // ── Il difetto ───────────────────────────────────────────────────────
@@ -124,7 +125,7 @@ void main() {
       for (final nome in dentroLaLista) {
         final f = File('../minerva-shell/manutenzione/$nome');
         expect(f.existsSync(), isTrue, reason: '$nome non c\'è più?');
-        final testo = senzaCommenti(f.readAsStringSync());
+        final testo = senzaCommenti(f.codiceVivo());
         if (testo.contains('QtQuick.Shapes')) colpe.add('$nome importa Shapes');
         if (RegExp(r'\bUi\.Icon\b').hasMatch(testo)) {
           colpe.add('$nome usa Ui.Icon, che è una Shape');

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// I widget della scrivania esistono in TRE elenchi che nessun compilatore
 /// mette a confronto:
@@ -51,11 +52,11 @@ List<String> _elenco(String qml, String nome) {
 
 void main() {
   final scrivania =
-      _trova('minerva-shell/settings/sections/Scrivania.qml').readAsStringSync();
+      _trova('minerva-shell/settings/sections/Scrivania.qml').codiceVivo();
   final contenuto =
-      _trova('minerva-shell/widget/Contenuto.qml').readAsStringSync();
+      _trova('minerva-shell/widget/Contenuto.qml').codiceVivo();
   final macchina =
-      _trova('minerva-shell/core/Macchina.qml').readAsStringSync();
+      _trova('minerva-shell/core/Macchina.qml').codiceVivo();
 
   /// I tipi offerti dalla pagina: `{ "tipo": "processore", …`.
   final offerti = RegExp('"tipo":\\s*"([a-z]+)"')
@@ -106,7 +107,7 @@ void main() {
       // perché non hanno un simbolo». Un tipo senza `case` prenderebbe
       // «info», cioè un simbolo che non dice niente — e un nome di icona
       // che non esiste in `ui/Icon.qml` disegnerebbe un quadrato vuoto.
-      final icone = _trova('minerva-shell/ui/Icon.qml').readAsStringSync();
+      final icone = _trova('minerva-shell/ui/Icon.qml').codiceVivo();
       final senza = <String>[];
       final inesistenti = <String>[];
       for (final t in valori) {
@@ -133,7 +134,7 @@ void main() {
     });
 
     test('ogni composito ha il suo pezzo in Widgets.qml', () {
-      final widgets = _trova('minerva-shell/widget/Widgets.qml').readAsStringSync();
+      final widgets = _trova('minerva-shell/widget/Widgets.qml').codiceVivo();
       for (final t in compositi) {
         expect(offerti, contains(t),
             reason: '«$t» è dichiarato composito ma la pagina non lo offre');

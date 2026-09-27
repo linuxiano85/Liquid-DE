@@ -27,11 +27,12 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 import 'package:minervad/services/radice_service.dart';
+import 'codice_vivo.dart';
 
 String _leggi(String rel) {
   final f = File('${Directory.current.parent.path}/$rel');
   expect(f.existsSync(), isTrue, reason: 'manca $rel');
-  return f.readAsStringSync();
+  return f.codiceVivo();
 }
 
 void main() {

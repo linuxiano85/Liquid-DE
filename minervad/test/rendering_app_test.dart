@@ -23,10 +23,11 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 void main() {
   final radice = Directory.current.parent.path;
-  String leggi(String s) => File('$radice/$s').readAsStringSync();
+  String leggi(String s) => File('$radice/$s').codiceVivo();
 
   test('minerva-media chiede la scheda video, e prima di includere l\'ambiente',
       () {
@@ -65,7 +66,7 @@ void main() {
     ]) {
       final f = File('$radice/scripts/$app');
       if (!f.existsSync()) continue;
-      expect(f.readAsStringSync(), isNot(contains('MINERVA_APP_GPU=1')),
+      expect(f.codiceVivo(), isNot(contains('MINERVA_APP_GPU=1')),
           reason: '$app non mostra video: la scheda video le costerebbe una '
               'quarantina di MB per niente');
     }

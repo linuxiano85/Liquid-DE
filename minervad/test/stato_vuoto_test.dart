@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// «Non c'è niente da mostrare» si dice UNA volta sola.
 ///
@@ -43,7 +44,7 @@ Iterable<String> _codice(String testo) => testo
 
 void main() {
   group('lo stato «vuoto» del gestore file', () {
-    final pane = _trova('minerva-shell/files/Pane.qml').readAsStringSync();
+    final pane = _trova('minerva-shell/files/Pane.qml').codiceVivo();
 
     test('un solo blocco compare quando l\'elenco è vuoto', () {
       final quanti = _codice(pane)

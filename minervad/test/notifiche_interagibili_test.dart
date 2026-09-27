@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// Le notifiche devono poter essere cliccate.
 ///
@@ -41,11 +42,11 @@ File _trova(String relativo) {
 void main() {
   group('una notifica si può cliccare', () {
     final notif =
-        _trova('minerva-shell/core/Notifications.qml').readAsStringSync();
-    final toast = _trova('minerva-shell/spine/Toasts.qml').readAsStringSync();
+        _trova('minerva-shell/core/Notifications.qml').codiceVivo();
+    final toast = _trova('minerva-shell/spine/Toasts.qml').codiceVivo();
     final pannello =
         _trova('minerva-shell/spine/panels/NotificationsPanel.qml')
-            .readAsStringSync();
+            .codiceVivo();
 
     test('la notifica si tiene viva, o le azioni muoiono con lei', () {
       expect(notif, contains('notif.tracked = true'),
@@ -93,7 +94,7 @@ void main() {
 
     test('e chi manda quel suggerimento esiste davvero', () {
       // Una chiave che nessuno scrive è una funzione che non si accende mai.
-      final schermata = _trova('scripts/minerva-schermata').readAsStringSync();
+      final schermata = _trova('scripts/minerva-schermata').codiceVivo();
       expect(schermata, contains('string:x-minerva-file:'),
           reason: 'la schermata è il primo caso che Giacomo ha nominato: se '
               'non mette il suggerimento, cliccare la sua notifica non apre '

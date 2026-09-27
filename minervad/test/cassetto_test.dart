@@ -7,6 +7,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 Directory _radice() {
   var dir = Directory.current;
@@ -19,8 +20,8 @@ Directory _radice() {
 
 void main() {
   final radice = _radice();
-  final prova = File('${radice.path}/compositore/prova-annidata.sh').readAsStringSync();
-  final cassetto = File('${radice.path}/minerva-shell/menu/Cassetto.qml').readAsStringSync();
+  final prova = File('${radice.path}/compositore/prova-annidata.sh').codiceVivo();
+  final cassetto = File('${radice.path}/minerva-shell/menu/Cassetto.qml').codiceVivo();
 
   test('la prova annidata ha il suo archivio degli appunti', () {
     expect(prova, matches(RegExp(r'^export CLIPHIST_DB_PATH="\$CONF_PROVA/', multiLine: true)),

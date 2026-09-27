@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:minervad/core/minerva_paths.dart';
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// Il bus è il punto in cui due programmi che non si conoscono devono essere
 /// d'accordo, e il modo in cui si rompe non è un errore: è il SILENZIO.
@@ -21,17 +22,17 @@ void main() {
   final doc = File('$radice/EVENTS.md');
 
   Set<String> azioniNelCodice() => RegExp(r"case '([a-z_0-9]+)':")
-      .allMatches(server.readAsStringSync())
+      .allMatches(server.codiceVivo())
       .map((m) => m.group(1)!)
       .toSet();
 
   Set<String> eventiNelCodice() => RegExp(r"'event':\s*'([a-z_0-9]+)'")
-      .allMatches(server.readAsStringSync())
+      .allMatches(server.codiceVivo())
       .map((m) => m.group(1)!)
       .toSet();
 
   Set<String> nomiNelDocumento() => RegExp(r'`([a-z_0-9]+)`')
-      .allMatches(doc.readAsStringSync())
+      .allMatches(doc.codiceVivo())
       .map((m) => m.group(1)!)
       .toSet();
 
@@ -51,7 +52,7 @@ void main() {
     // aggiorna è la forma più tranquilla di bugia, perché chi legge si fida
     // del numero e non conta le righe.
     test('e i due totali in cima dicono il vero', () {
-      final testo = doc.readAsStringSync();
+      final testo = doc.codiceVivo();
       final m = RegExp(r'\*\*(\d+) azioni\*\*.*?\*\*(\d+) eventi\*\*',
               dotAll: true)
           .firstMatch(testo);

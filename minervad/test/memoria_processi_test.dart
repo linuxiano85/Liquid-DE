@@ -13,11 +13,12 @@
 
 import 'dart:io';
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 String _sorgente(String relativo) {
   for (final base in ['.', '..', 'minervad']) {
     final f = File('$base/$relativo');
-    if (f.existsSync()) return f.readAsStringSync();
+    if (f.existsSync()) return f.codiceVivo();
   }
   fail('non trovo $relativo');
 }

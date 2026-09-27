@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 // La sessione di Minerva, e i portali che deve trovare.
 //
@@ -45,7 +46,7 @@ void main() {
     late String wayland;
 
     setUpAll(() {
-      wayland = _f('scripts/start-minerva-wayland.sh').readAsStringSync();
+      wayland = _f('scripts/start-minerva-wayland.sh').codiceVivo();
     });
 
     test('la sessione nostra sceglie il proprio file dei portali', () {
@@ -60,7 +61,7 @@ void main() {
       expect(conf.existsSync(), isTrue,
           reason: 'XDG_CURRENT_DESKTOP nomina LiquidDE ma il file dei '
               'portali non c\'è.');
-      final testo = conf.readAsStringSync();
+      final testo = conf.codiceVivo();
       expect(testo, contains('default=wlr'),
           reason: 'il backend di wlroots parla wlr-screencopy e xdg-output, che '
               'minerva-wayland implementa; quello di Hyprland no.');
@@ -71,7 +72,7 @@ void main() {
     });
 
     test("e l'installatore lo mette davvero al suo posto", () {
-      final inst = _f('scripts/install-minerva.sh').readAsStringSync();
+      final inst = _f('scripts/install-minerva.sh').codiceVivo();
       expect(inst, contains('liquidde-portals.conf'),
           reason: 'il file esiste nel progetto ma non viene installato: sulla '
               'macchina vera non lo leggerebbe nessuno.');
@@ -112,7 +113,7 @@ void main() {
   // COPIATO in una cartella di sistema. Adesso lo sfondo fa uguale.
   group('la schermata di accesso si porta dietro lo sfondo', () {
     late String greetd;
-    setUpAll(() => greetd = _f('scripts/minerva-greetd').readAsStringSync());
+    setUpAll(() => greetd = _f('scripts/minerva-greetd').codiceVivo());
 
     test('il file viene copiato, non solo nominato', () {
       expect(greetd, contains('copia_sfondo'),
@@ -165,7 +166,7 @@ void main() {
   group('il puntatore vale anche fuori da Minerva', () {
     late String sessione;
     setUpAll(() {
-      sessione = _f('scripts/start-minerva-wayland.sh').readAsStringSync();
+      sessione = _f('scripts/start-minerva-wayland.sh').codiceVivo();
     });
 
     test('la sessione dice quale tema di puntatori usare', () {

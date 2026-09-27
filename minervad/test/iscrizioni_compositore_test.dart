@@ -15,6 +15,7 @@
 
 import 'dart:io';
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 Directory _radice() {
   for (final base in ['.', '..', '../..']) {
@@ -29,7 +30,7 @@ void main() {
   /// I nomi della riga `ascolta …` in `core/Compositore.qml`, anche se la
   /// stringa è spezzata su più righe con `+`.
   List<String> iscrizioneDellaShell() {
-    final testo = File('$radice/minerva-shell/core/Compositore.qml').readAsStringSync();
+    final testo = File('$radice/minerva-shell/core/Compositore.qml').codiceVivo();
     final m = RegExp(r'canale\.write\(((?:\s*\+?\s*"[^"]*")+)\s*\)')
         .allMatches(testo)
         .map((m) => RegExp(r'"([^"]*)"').allMatches(m[1]!).map((x) => x[1]!).join())
@@ -45,7 +46,7 @@ void main() {
     final nomi = <String>{};
     for (final f in Directory('$radice/compositore/src').listSync()) {
       if (f is! File || !f.path.endsWith('.c')) continue;
-      final testo = f.readAsStringSync();
+      final testo = f.codiceVivo();
       for (final m in RegExp(r'canale_annuncia\([^,]+,\s*"(\w+)"').allMatches(testo)) {
         nomi.add(m[1]!);
       }
@@ -57,7 +58,7 @@ void main() {
   }
 
   int filtriMax() {
-    final testo = File('$radice/compositore/src/canale.c').readAsStringSync();
+    final testo = File('$radice/compositore/src/canale.c').codiceVivo();
     final m = RegExp(r'#define\s+FILTRI_MAX\s+(\d+)').firstMatch(testo);
     expect(m, isNotNull, reason: 'FILTRI_MAX sparito da canale.c');
     return int.parse(m![1]!);

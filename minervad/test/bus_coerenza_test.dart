@@ -12,6 +12,7 @@
 
 import 'dart:io';
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 Directory _radice() {
   for (final base in ['.', '..', '../..']) {
@@ -20,7 +21,7 @@ Directory _radice() {
   fail('non trovo la radice del progetto');
 }
 
-String _leggi(String relativo) => File('${_radice().path}/$relativo').readAsStringSync();
+String _leggi(String relativo) => File('${_radice().path}/$relativo').codiceVivo();
 
 List<File> _qml() {
   final f = <File>[];
@@ -49,7 +50,7 @@ Map<String, Set<String>> _mandate() {
   final fuori = <String, Set<String>>{};
   final re = RegExp(r'send\(\s*\{[^}]*?"action"\s*:\s*"([a-z0-9_]+)"', dotAll: true);
   for (final f in _qml()) {
-    for (final m in re.allMatches(f.readAsStringSync())) {
+    for (final m in re.allMatches(f.codiceVivo())) {
       fuori.putIfAbsent(m.group(1)!, () => {}).add(f.uri.pathSegments.last);
     }
   }
@@ -62,7 +63,7 @@ Set<String> _pubblicati() {
   for (final v in Directory('${_radice().path}/minervad/lib')
       .listSync(recursive: true, followLinks: false)) {
     if (v is! File || !v.path.endsWith('.dart')) continue;
-    final t = v.readAsStringSync();
+    final t = v.codiceVivo();
     for (final re in [
       RegExp(r"MinervaEvent\(\s*type:\s*'([a-z0-9_]+)'"),
       RegExp(r"'event'\s*:\s*'([a-z0-9_]+)'"),
@@ -91,7 +92,7 @@ Set<String> _sulBus() {
       .listSync(recursive: true, followLinks: false)) {
     if (v is! File || !v.path.endsWith('.dart')) continue;
     fuori.addAll(RegExp(r"MinervaEvent\(\s*type:\s*'([a-z0-9_]+)'")
-        .allMatches(v.readAsStringSync())
+        .allMatches(v.codiceVivo())
         .map((m) => m.group(1)!));
   }
   return fuori;
@@ -242,7 +243,7 @@ void main() {
       for (final v in Directory('${_radice().path}/minervad/lib/services')
           .listSync()) {
         if (v is! File || !v.path.endsWith('.dart')) continue;
-        final t = v.readAsStringSync();
+        final t = v.codiceVivo();
         if (!t.contains('Future<void> init(')) continue;
         final m = RegExp(r'^class\s+(\w+Service)\b', multiLine: true).firstMatch(t);
         if (m != null) servizi.add(m.group(1)!);

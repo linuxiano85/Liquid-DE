@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// L'elenco delle applicazioni che si disegnano la barra da sole esiste in
 /// DUE posti: le impostazioni del demone (la sorgente) e la lista di riserva
@@ -22,7 +23,7 @@ void main() {
 
   List<String> dalDemone() {
     final t = File('${radice()}/minervad/lib/core/settings_api.dart')
-        .readAsStringSync();
+        .codiceVivo();
     final i = t.indexOf("'csdApps': [");
     expect(i, isNot(-1), reason: 'csdApps sparito da settings_api.dart');
     // Via i commenti PRIMA di cercare le stringhe: dentro c'è più di un
@@ -41,7 +42,7 @@ void main() {
   }
 
   List<String> dalCompositore() {
-    final t = File('${radice()}/compositore/src/main.c').readAsStringSync();
+    final t = File('${radice()}/compositore/src/main.c').codiceVivo();
     final i = t.indexOf('static const char *riserva[] = {');
     expect(i, isNot(-1), reason: 'la lista di riserva sparita da main.c');
     final blocco = t.substring(i, t.indexOf('};', i));

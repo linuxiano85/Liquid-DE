@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import Quickshell
 import "../theme" as Theme
+import "../ui" as Ui
 
 Rectangle {
     id: pannello
@@ -33,11 +34,11 @@ Rectangle {
         color: Theme.Colors.textMuted
     }
     ListView {
+        id: elencoBlocchi
         anchors.top: intestazione.bottom; anchors.bottom: parent.bottom
         anchors.left: parent.left; anchors.right: parent.right; anchors.margins: 8
         visible: pannello.aperto
         clip: true; spacing: 10; model: pannello.blocchi
-        ScrollBar.vertical: ScrollBar {}
         delegate: Rectangle {
             id: scheda
             required property var modelData
@@ -101,6 +102,20 @@ Rectangle {
                     }
                 }
             }
+        }
+    }
+    // La nostra barra, fuori dall'elenco: quella di serie di Qt aveva il
+    // colore e la forma di un'altra scrivania, e dentro un ListView i figli
+    // scorrono insieme al contenuto.
+    Ui.Scorrimento {
+        // Quando serve lo decide lei (`_serve`); qui si aggiunge solo che col
+        // pannello chiuso non c'è niente da scorrere.
+        visible: pannello.aperto && _serve
+        bersaglio: elencoBlocchi
+        anchors {
+            right: elencoBlocchi.right
+            top: elencoBlocchi.top
+            bottom: elencoBlocchi.bottom
         }
     }
 }

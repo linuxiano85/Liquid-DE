@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:minervad/services/schemi.dart';
+import 'codice_vivo.dart';
 
 /// La tavolozza, che è l'unico posto in cui si sceglie un colore.
 File _colorsQml() {
@@ -19,7 +20,7 @@ File _colorsQml() {
 /// Si legge il QML invece di ripetere l'elenco qui: ripeterlo vorrebbe dire
 /// avere due verità e nessun modo di sapere quale è quella buona.
 Map<String, bool> _temiDalQml() {
-  final testo = _colorsQml().readAsStringSync();
+  final testo = _colorsQml().codiceVivo();
   final righe = RegExp(r'"(\w+)":\s*\{\s*"base":\s*"#[0-9A-Fa-f]{6}",\s*'
           r'"scura":\s*(true|false)')
       .allMatches(testo);
@@ -74,7 +75,7 @@ void main() {
       // `raised: Qt.rgba(1,1,1,0.055)` cuocevano la SCUREZZA dentro la
       // derivazione, e su fondo bianco erano invisibili. Adesso tutto passa
       // da `velo()` e da `mix()`, che conoscono il verso del tema.
-      final testo = _colorsQml().readAsStringSync();
+      final testo = _colorsQml().codiceVivo();
       final corpo = testo
           .split('\n')
           .where((r) => !r.trimLeft().startsWith('//'))
@@ -121,7 +122,7 @@ void main() {
     // Nessuno se ne accorgerebbe: il colore si salva, il pannello lo mostra,
     // e sullo schermo non succede nulla.
     test('ogni colore scavalcabile è davvero applicato, e viceversa', () {
-      final tavolozza = _colorsQml().readAsStringSync();
+      final tavolozza = _colorsQml().codiceVivo();
 
       final elenco = RegExp(r'scavalcabili:\s*\[([^\]]*)\]')
           .firstMatch(tavolozza);
@@ -160,13 +161,13 @@ void main() {
       }
       expect(f, isNotNull, reason: 'non trovo Appearance.qml');
 
-      final pannello = f!.readAsStringSync();
+      final pannello = f!.codiceVivo();
       final offerti = RegExp(r'"nome":\s*"([a-z]+)"')
           .allMatches(pannello)
           .map((m) => m.group(1)!)
           .toSet();
 
-      final tavolozza = _colorsQml().readAsStringSync();
+      final tavolozza = _colorsQml().codiceVivo();
       final elenco = RegExp(r'scavalcabili:\s*\[([^\]]*)\]')
           .firstMatch(tavolozza)!;
       final dichiarati = RegExp('"([a-z]+)"')

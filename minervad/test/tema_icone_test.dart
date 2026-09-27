@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:minervad/services/tema_icone_service.dart';
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// Prove sull'installazione di un set di icone preso da fuori.
 ///
@@ -195,7 +196,7 @@ void main() {
         dir = dir.parent;
       }
       expect(f, isNotNull, reason: 'non trovo icon_resolver.dart');
-      final t = f!.readAsStringSync();
+      final t = f!.codiceVivo();
 
       expect(t, contains('_radiciAnnidate'),
           reason: 'senza, un tema estratto dentro una cartella del proprio '

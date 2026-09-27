@@ -17,11 +17,12 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 String _main() {
   for (final base in ['.', '..', '../..']) {
     final f = File('$base/compositore/src/main.c');
-    if (f.existsSync()) return f.readAsStringSync();
+    if (f.existsSync()) return f.codiceVivo();
   }
   fail('non trovo compositore/src/main.c');
 }

@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:minervad/services/finestre_service.dart';
+import 'codice_vivo.dart';
 
 /// Un file della shell, cercato risalendo dalla cartella corrente.
 File _qml(String relativo) {
@@ -516,7 +517,7 @@ void main() {
   group('shell e demone combaciano', () {
     test('ogni azione che la shell manda esiste nel demone', () {
       final ipc = _codice('core/Ipc.qml');
-      final server = _dart('lib/ipc/websocket_server.dart').readAsStringSync();
+      final server = _dart('lib/ipc/websocket_server.dart').codiceVivo();
 
       // Ogni `"action": "qualcosa"` scritto nel QML.
       final chieste = RegExp(r'"action"\s*:\s*"([a-z_]+)"')
@@ -557,7 +558,7 @@ void main() {
 
     test('ogni evento che la shell può ricevere, lo sa leggere', () {
       final ipc = _codice('core/Ipc.qml');
-      final server = _dart('lib/ipc/websocket_server.dart').readAsStringSync();
+      final server = _dart('lib/ipc/websocket_server.dart').codiceVivo();
 
       final chieste = RegExp(r'"action"\s*:\s*"([a-z_]+)"')
           .allMatches(ipc)
@@ -620,7 +621,7 @@ void main() {
       //
       // Va per la strada dei flussi, quella dell'avanzamento dei
       // trasferimenti: direttamente a tutti i client collegati.
-      final server = _dart('lib/ipc/websocket_server.dart').readAsStringSync();
+      final server = _dart('lib/ipc/websocket_server.dart').codiceVivo();
       expect(server, contains("_finestre.finestre.listen"),
           reason: 'lo stato delle finestre deve arrivare da FinestreService '
               'e andare a tutti i client, senza passare dal bus');
@@ -635,7 +636,7 @@ void main() {
     });
 
     test('un\'azione sconosciuta si lamenta invece di sparire', () {
-      final server = _dart('lib/ipc/websocket_server.dart').readAsStringSync();
+      final server = _dart('lib/ipc/websocket_server.dart').codiceVivo();
       expect(server, contains('Azione sconosciuta'),
           reason: 'Senza un ramo predefinito che lo dica, shell e demone '
               'possono smettere di combaciare e nessuno se ne accorge. È '
@@ -657,7 +658,7 @@ void main() {
       // Quindi la prova si sposta sul provider che c'è, e diventa più severa:
       // non «niente hyprctl», ma **niente processi affatto**.
       final p =
-          _dart('lib/providers/minerva/minerva_provider.dart').readAsStringSync();
+          _dart('lib/providers/minerva/minerva_provider.dart').codiceVivo();
       expect(p.contains('Process.run'), isFalse,
           reason: 'interrogare il compositore lanciando un processo costa '
               'venti volte di più, e qui si legge fino a sedici volte al '
@@ -667,7 +668,7 @@ void main() {
     });
 
     test('il passo di riposo si spegne a scrivania vuota', () {
-      final s = _dart('lib/services/finestre_service.dart').readAsStringSync();
+      final s = _dart('lib/services/finestre_service.dart').codiceVivo();
       expect(s, contains('_nessunaFinestra'),
           reason: 'Il passo di riposo costa 1,3% di un core, misurato. Senza '
               'finestre non c\'è niente da trascinare e quel costo non ha '
@@ -686,7 +687,7 @@ void main() {
       //
       // Il provider di Hyprland non c'è più; la trappola sì.
       final p =
-          _dart('lib/providers/minerva/minerva_provider.dart').readAsStringSync();
+          _dart('lib/providers/minerva/minerva_provider.dart').codiceVivo();
       final r = RegExp(r'void _riprendi\(\)\s*\{[\s\S]*?\n  \}')
           .firstMatch(p)
           ?.group(0);
@@ -712,7 +713,7 @@ void main() {
       }
       expect(f, isNotNull, reason: 'non trovo lib/ipc/websocket_server.dart');
 
-      final testo = f!.readAsStringSync();
+      final testo = f!.codiceVivo();
       final metodo =
           RegExp(r'void _applyIconThemeFromSettings\(\)\s*\{[\s\S]*?\n  \}')
               .firstMatch(testo);
@@ -788,7 +789,7 @@ void main() {
       // (il fuoco si sposta cliccando: lo decide il compositore), e la
       // guardia resta nel verso che conta: le Impostazioni non devono né
       // parlare di `follow_mouse` né scrivere nella cartella di Hyprland.
-      final qml = _qml('settings/sections/Input.qml').readAsStringSync();
+      final qml = _qml('settings/sections/Input.qml').codiceVivo();
       final righe = qml
           .split('\n')
           .where((r) => !r.trimLeft().startsWith('//'))
@@ -802,7 +803,7 @@ void main() {
   });
   group('centrare vuol dire centrare quello che si VEDE', () {
     late String windows;
-    setUpAll(() => windows = _qml('core/Windows.qml').readAsStringSync());
+    setUpAll(() => windows = _qml('core/Windows.qml').codiceVivo());
 
     test('il blocco comprende barra e cornice, non solo la finestra', () {
       // La barra del titolo di Minerva sta FUORI dalla finestra, sopra.
@@ -832,7 +833,7 @@ void main() {
       // lei. Alla nascita il centro coincide col centro dello spazio utile al
       // pixel: è così che si riconosce che è stata una regola e non il
       // programma.
-      final regole = _qml('core/WindowRules.qml').readAsStringSync();
+      final regole = _qml('core/WindowRules.qml').codiceVivo();
       expect(regole, contains('function _eraCentrata(w)'));
       expect(regole, contains('if (rules._eraCentrata(w))'));
       expect(regole, contains('Core.Windows.centra(w.address)'));
@@ -850,7 +851,7 @@ void main() {
 
   group('nessuna finestra fantasma', () {
     late String windows;
-    setUpAll(() => windows = _qml('core/Windows.qml').readAsStringSync());
+    setUpAll(() => windows = _qml('core/Windows.qml').codiceVivo());
 
     test('il modo «ingrandito» del compositore viene tolto', () {
       // Minerva quel modo non lo chiede MAI: «ingrandisci» qui è geometria.
@@ -896,7 +897,7 @@ void main() {
 
   group('le garanzie girano anche con le barre del compositore', () {
     late String windows;
-    setUpAll(() => windows = _qml('core/Windows.qml').readAsStringSync());
+    setUpAll(() => windows = _qml('core/Windows.qml').codiceVivo());
 
     test('«nessuna finestra sotto la barra» non dipende più da TitleBars', () {
       // `assicuraSpazio()` aveva UN SOLO chiamante: `spine/TitleBars.qml`,
@@ -917,7 +918,7 @@ void main() {
     test('la porta non offre più il modo che fa le finestre fantasma', () {
       // Un attrezzo offerto è un attrezzo che qualcuno userà. `fullscreenstate
       // 1 -1` non serve a Minerva e ha già fatto danno una volta.
-      final porta = _qml('core/Compositore.qml').readAsStringSync();
+      final porta = _qml('core/Compositore.qml').codiceVivo();
       expect(porta, isNot(contains('function ingrandimentoDelCompositore')));
       expect(porta, isNot(contains('"fullscreenstate " + (acceso ? "1" : "0")')));
     });

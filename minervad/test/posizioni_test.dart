@@ -24,6 +24,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 File _qml(String relativo) {
   var dir = Directory.current;
@@ -124,7 +125,7 @@ void main() {
         dir = dir.parent;
       }
       expect(f, isNotNull);
-      final t = f!.readAsStringSync();
+      final t = f!.codiceVivo();
       expect(t, contains("case 'set_settings':"));
       expect(t, contains('setValues('));
     });
@@ -179,14 +180,14 @@ void main() {
         }
         dir = dir.parent;
       }
-      expect(f!.readAsStringSync(), contains("'listaFinestre'"));
+      expect(f!.codiceVivo(), contains("'listaFinestre'"));
     });
 
     test('ed è dichiarata in qmldir, o non è un tipo', () {
       // «ListaFinestre is not a type»: costato un giro di prove il 5 settembre
       // 2026. Un file QML nuovo dentro una cartella con `qmldir` non basta
       // metterlo lì.
-      final q = _qml('spine/qmldir').readAsStringSync();
+      final q = _qml('spine/qmldir').codiceVivo();
       expect(q, contains('ListaFinestre'));
     });
   });
@@ -250,7 +251,7 @@ void main() {
         }
         dir = dir.parent;
       }
-      final fab = f!.readAsStringSync();
+      final fab = f!.codiceVivo();
       final mancanti = <String>[];
       for (final k in chiavi) {
         final ultima = k.split('.').last;

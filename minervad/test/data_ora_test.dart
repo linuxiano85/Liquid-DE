@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:minervad/services/data_ora_service.dart';
+import 'codice_vivo.dart';
 
 /// Un finto `timedatectl`, per non toccare l'orologio della macchina su cui
 /// girano le prove. Registra ogni chiamata in un file, così si può controllare
@@ -109,7 +110,7 @@ void main() {
       // in tutto il file pescava anche `Core.Strings.lang`, e la prova
       // falliva accusando il demone di non mandare un campo che non ha mai
       // avuto niente a che fare con l'orologio.
-      final qml = _dataOraQml().readAsStringSync();
+      final qml = _dataOraQml().codiceVivo();
       final inizio = qml.indexOf('function onDatetimeStateReceived(s)');
       expect(inizio, greaterThan(0),
           reason: 'il gestore dello stato è sparito o si chiama in un altro modo');

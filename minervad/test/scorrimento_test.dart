@@ -20,6 +20,7 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
+import 'codice_vivo.dart';
 
 /// La radice del progetto, risalendo: `dart test` gira sia da `minervad/` sia
 /// dalla radice.
@@ -43,12 +44,20 @@ String _codice(File f) => f
 void main() {
   final radice = _radice().path;
 
-  /// Le cartelle che contengono interfaccia. `theme` e `core` non ci sono:
-  /// non disegnano niente che scorra.
-  const cartelle = [
-    'ui', 'files', 'settings', 'monitor', 'editor', 'viewer', 'calcolatrice',
-    'media', 'custodia', 'search', 'help', 'spine', 'menu', 'dock', 'switcher',
-  ];
+  // TUTTI i file della shell, e non un elenco di cartelle scritto a mano: il
+  // 27 settembre 2026 l'elenco non conteneva `terminale` e `manutenzione`,
+  // nate dopo, e in `terminale/Blocchi.qml` c'era proprio la barra di serie
+  // di Qt che queste prove vietano. Una cartella nuova non deve poter restare
+  // fuori per dimenticanza. Le prove QML (`prove-*.qml`) non sono interfaccia.
+  List<File> tuttiIQml() => Directory('$radice/minerva-shell')
+      .listSync(recursive: true)
+      .whereType<File>()
+      .where((f) => f.path.endsWith('.qml'))
+      .where((f) {
+        final n = f.path.split('/').last;
+        return !n.startsWith('prove-') && !n.startsWith('prova-');
+      })
+      .toList();
 
   /// Chi scorre, in QML.
   final scorrevoli = RegExp(r'^\s*(Flickable|ListView|GridView)\s*\{',
@@ -57,6 +66,10 @@ void main() {
   /// Le eccezioni, ognuna con il suo perché. Un elenco di eccezioni senza
   /// motivo è un elenco che cresce finché la regola non vale più niente.
   const scusate = {
+    'custodia/Custodia.qml':
+        'la sua griglia è un Flickable dentro un Component caricato da un '
+        'Loader: la barra lo nomina come `corpo.item`, che una regola sul '
+        'testo non può seguire. La barra c\'è, fuori dal Loader.',
     'custodia/DentroProgetto.qml':
         'la sua radice È il Flickable, e da dentro un Flickable non si può '
         'disegnare una barra: ogni figlio si sposta insieme al contenuto. '
@@ -65,31 +78,58 @@ void main() {
   };
 
   test('nessuna superficie scorre senza la sua barra', () {
+    // Superficie per superficie, non file per file. Prima bastava che in un
+    // file comparisse `Scorrimento` una volta perché ogni elenco dello stesso
+    // file fosse assolto: un secondo ListView senza barra, accanto a uno che
+    // l'aveva, passava inosservato (provato il 27 settembre 2026 mettendone
+    // uno apposta in `files/Transfers.qml`: la prova restava verde).
+    //
+    // Adesso ogni Flickable, ListView o GridView deve avere un `id`, e nello
+    // stesso file una barra che lo nomina: `bersaglio: <id>`.
+    final superficie = RegExp(r'^([ \t]*)(Flickable|ListView|GridView)\s*\{',
+        multiLine: true);
     final nudi = <String>[];
+    var viste = 0;
 
-    for (final c in cartelle) {
-      final d = Directory('$radice/minerva-shell/$c');
-      if (!d.existsSync()) continue;
-      for (final f in d
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.qml'))) {
-        final nome = f.path.split('minerva-shell/').last;
-        if (scusate.containsKey(nome)) continue;
-        final testo = _codice(f);
-        if (!scorrevoli.hasMatch(testo)) continue;
-        if (testo.contains('Scorrimento')) continue;
-        nudi.add(nome);
+    for (final f in tuttiIQml()) {
+      final nome = f.path.split('minerva-shell/').last;
+      if (scusate.containsKey(nome)) continue;
+      final testo = _codice(f);
+      final righe = testo.split('\n');
+      for (final m in superficie.allMatches(testo)) {
+        viste++;
+        final riga = '\n'.allMatches(testo.substring(0, m.start)).length;
+        final rientro = m.group(1)!.length;
+        String? id;
+        for (final r in righe.skip(riga + 1).take(25)) {
+          final mm = RegExp(r'^([ \t]*)id:\s*(\w+)').firstMatch(r);
+          if (mm != null && mm.group(1)!.length == rientro + 4) {
+            id = mm.group(2);
+            break;
+          }
+        }
+        final coperta = id != null &&
+            RegExp('bersaglio:\\s*${RegExp.escape(id)}\\b').hasMatch(testo);
+        if (!coperta) {
+          nudi.add('$nome:${riga + 1}  ${m.group(2)}'
+              '${id == null ? " (senza id)" : " «$id»"}');
+        }
       }
     }
 
+    // E una prova che non ha visto niente non ha provato niente: se la forma
+    // dei file cambia e la regola smette di riconoscere le superfici, deve
+    // dirlo invece di passare.
+    expect(viste, greaterThan(20),
+        reason: 'la regola non riconosce più le superfici che scorrono');
     expect(nudi, isEmpty,
         reason: 'Queste superfici scorrono e non lo dicono: chi le usa non sa '
             'né dove si trova né quanto manca, e non ha niente da afferrare '
-            'per andare in fondo in un gesto. Si aggiunge `Ui.Scorrimento` '
-            'come FRATELLA (mai figlia: i figli di un Flickable si spostano '
-            'già di -contentY), oppure si aggiunge il file alle eccezioni '
-            'motivate qui sopra.\n${nudi.join('\n')}');
+            'per andare in fondo in un gesto. Si dà un `id` alla superficie e '
+            'le si mette accanto `Ui.Scorrimento { bersaglio: <id> }` come '
+            'FRATELLA (mai figlia: i figli di un Flickable si spostano già di '
+            '-contentY), oppure si aggiunge il file alle eccezioni motivate qui '
+            'sopra.\n${nudi.join('\n')}');
   });
 
   test('e nessuna usa più quella di serie di Qt', () {
@@ -97,13 +137,8 @@ void main() {
     // che non avesse il nostro aspetto: colore, spessore e forma di un'altra
     // scrivania, in mezzo alla nostra.
     final colpe = <String>[];
-    for (final c in cartelle) {
-      final d = Directory('$radice/minerva-shell/$c');
-      if (!d.existsSync()) continue;
-      for (final f in d
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.qml'))) {
+    {
+      for (final f in tuttiIQml()) {
         // Il nome secco no: `ui/Scorrimento.qml` dichiara
         // `Accessible.role: Accessible.ScrollBar`, ed è giusto che lo faccia —
         // è una barra di scorrimento, e chi legge lo schermo deve saperlo. Si
@@ -130,11 +165,12 @@ void main() {
     // rende possibile: che il componente lo dica, per esteso, a chi lo apre.
     final f = File('$radice/minerva-shell/ui/Scorrimento.qml');
     expect(f.existsSync(), isTrue);
-    final testo = f.readAsStringSync();
-    expect(testo, contains('FUORI'),
+    // Qui si cerca apposta in un COMMENTO: la regola deve essere scritta per
+    // chi apre il file. Il resto, che è codice, si cerca nel codice vivo.
+    expect(f.readAsStringSync(), contains('FUORI'),
         reason: 'chi apre questo file deve trovare subito la regola che gli '
             'evita il difetto');
-    expect(testo, contains('originY'),
+    expect(f.codiceVivo(), contains('originY'),
         reason: 'un ListView che cresce dal basso — le notifiche — non parte '
             'da zero: senza `originY` il pollice sta sempre in cima');
   });

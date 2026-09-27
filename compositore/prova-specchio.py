@@ -56,7 +56,7 @@ QUI = os.path.dirname(os.path.abspath(__file__))
 RADICE = os.path.dirname(QUI)
 SPECCHIO = os.path.join(RADICE, "scripts", "minerva-specchio")
 CATTURA = os.environ.get("MINERVA_CATTURA") or os.path.join(
-    QUI, "build", "minerva-cattura")
+    QUI, "build-native", "minerva-cattura")
 
 passate = 0
 fallite = 0

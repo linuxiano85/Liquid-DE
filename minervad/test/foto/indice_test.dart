@@ -7,6 +7,7 @@ import 'package:minervad/services/foto/indice.dart';
 import 'package:test/test.dart';
 
 import 'exif_test.dart' show costruisci;
+import '../codice_vivo.dart';
 
 void main() {
   late Directory tana;
@@ -164,7 +165,7 @@ void main() {
       foto('Foto/IMG_20260317_112727.jpg');
       cartelle.aggiungi('${casa.path}/Foto');
       await scansiona();
-      final buono = File(indice.percorsoIndice).readAsStringSync();
+      final buono = File(indice.percorsoIndice).codiceVivo();
 
       for (var i = 0; i < 100; i++) {
         foto('Foto/IMG_2026032${i % 9}_1127${i.toString().padLeft(2, '0')}.jpg');
@@ -172,7 +173,7 @@ void main() {
       await for (final p in indice.scansiona('taglio')) {
         if (p['voci'] != null) indice.ferma('taglio');
       }
-      expect(File(indice.percorsoIndice).readAsStringSync(), buono,
+      expect(File(indice.percorsoIndice).codiceVivo(), buono,
           reason: 'meglio l indice di prima che uno monco');
     });
   });
@@ -293,7 +294,7 @@ void main() {
       cartelle.aggiungi('${casa.path}/Foto');
       await scansiona();
       expect(File('${indice.percorsoIndice}.nuovo').existsSync(), isFalse);
-      final d = jsonDecode(File(indice.percorsoIndice).readAsStringSync());
+      final d = jsonDecode(File(indice.percorsoIndice).codiceVivo());
       expect(d['versione'], 1);
       expect(d['voci'], hasLength(1));
     });

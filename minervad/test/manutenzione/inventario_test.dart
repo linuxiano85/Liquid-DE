@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:minervad/services/manutenzione/inventario.dart';
+import '../codice_vivo.dart';
 
 // L'inventario di Minerva Manutenzione.
 //
@@ -428,7 +429,7 @@ void main() {
     test('ogni famiglia del demone ha un nome, una spiegazione e un colore',
         () {
       final sorgente =
-          File('lib/services/manutenzione/inventario.dart').readAsStringSync();
+          File('lib/services/manutenzione/inventario.dart').codiceVivo();
       final famiglie = RegExp(r"categoria: '([a-z]+)'")
           .allMatches(sorgente)
           .map((m) => m.group(1)!)
@@ -447,7 +448,7 @@ void main() {
               'non il codice — e una guardia che non trova niente passa sempre');
 
       final misure =
-          File('../minerva-shell/manutenzione/Misure.qml').readAsStringSync();
+          File('../minerva-shell/manutenzione/Misure.qml').codiceVivo();
       final mancanti = <String>[];
       for (final f in famiglie) {
         // DUE volte e non una: `nome()` e `spiega()` sono due switch

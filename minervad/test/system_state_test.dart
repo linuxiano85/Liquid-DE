@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:test/test.dart';
 import 'package:minervad/core/event_bus.dart';
 import 'package:minervad/services/system_state_service.dart';
+import 'codice_vivo.dart';
 
 /// Il file QML che consuma questo stato.
 File _systemStateQml() {
@@ -35,7 +36,7 @@ void main() {
       // nessun errore — si limita a tenere per sempre il valore di partenza.
       // La batteria resterebbe a «-1», cioè sparirebbe dalla barra, e nessuno
       // saprebbe perché.
-      final qml = _systemStateQml().readAsStringSync();
+      final qml = _systemStateQml().codiceVivo();
       final letti = RegExp(r's\.(\w+) !== undefined')
           .allMatches(qml)
           .map((m) => m.group(1)!)
@@ -55,7 +56,7 @@ void main() {
       // Il punto di tutto lo spostamento: se qui ricomparisse un `Process`,
       // tornerebbero tre finestre che interrogano il sistema per conto loro e
       // non si parlano — il ritardo di sei secondi sul Bluetooth.
-      final qml = _systemStateQml().readAsStringSync();
+      final qml = _systemStateQml().codiceVivo();
       final righe = qml
           .split('\n')
           .where((r) => !r.trimLeft().startsWith('//'))
@@ -187,7 +188,7 @@ void main() {
         dir = dir.parent;
       }
       expect(script, isNotNull, reason: 'non trovo scripts/minerva-demone');
-      final testo = script!.readAsStringSync();
+      final testo = script!.codiceVivo();
       expect(testo.contains('Uscita pulita: non riparte'), isFalse,
           reason: 'il guardiano si arrende di nuovo sull\'uscita pulita');
       expect(testo.contains('trap fermati TERM INT'), isTrue,

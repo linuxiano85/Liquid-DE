@@ -3,6 +3,7 @@ import 'package:test/test.dart';
 import 'package:minervad/core/minerva_paths.dart';
 import 'package:minervad/services/icon_names.dart';
 import 'package:minervad/services/icon_resolver.dart';
+import 'codice_vivo.dart';
 
 /// La tabella delle icone classiche è un ponte fra due file che non si
 /// conoscono: `icon_names.dart` qui nel demone e `minerva-shell/ui/Icon.qml`
@@ -14,7 +15,7 @@ void main() {
 
   group('nomi delle icone', () {
     test('ogni nome tradotto esiste davvero fra i tracciati della shell', () {
-      final sorgente = iconQml.readAsStringSync();
+      final sorgente = iconQml.codiceVivo();
 
       final mancanti = <String>[];
       for (final nome in minervaIconNames.keys) {
@@ -55,7 +56,7 @@ void main() {
     //
     // Da qui in poi la differenza fra le due cose va DICHIARATA in `_segni`.
     test('ogni tracciato o è tradotto o è dichiarato un segno', () {
-      final sorgente = iconQml.readAsStringSync();
+      final sorgente = iconQml.codiceVivo();
 
       final corpo = sorgente.split('readonly property var _paths: ({');
       expect(corpo.length, 2,
@@ -96,7 +97,7 @@ void main() {
     });
 
     test('i nomi «cartella-*» ricadono su «folder» invece di sparire', () {
-      final sorgente = iconQml.readAsStringSync();
+      final sorgente = iconQml.codiceVivo();
       expect(sorgente.contains('cartella-'), isTrue,
           reason: 'Icon.qml non conosce il ripiego dei nomi «cartella-*»: '
               'con le icone di Minerva accese, Documenti, Immagini, Musica e '
@@ -242,7 +243,7 @@ void main() {
   // un'altra riga, e le icone smettono di seguire il tema una alla volta.
   group('chi si tiene il disegno di Minerva ha un motivo', () {
     test('ogni alwaysDrawn è o un segno o un\'icona tinta', () {
-      final sorgente = iconQml.readAsStringSync();
+      final sorgente = iconQml.codiceVivo();
       final segni = RegExp(r'readonly property var _segni:\s*\[([^\]]*)\]')
           .firstMatch(sorgente);
       final dichiarati = RegExp('"([A-Za-z0-9_-]+)"')
