@@ -176,6 +176,21 @@ def main():
                 verifica("e ha di nuovo la misura di prima",
                          (h["larghezza"], h["altezza"])
                          == (prima["larghezza"], prima["altezza"]), (prima, h))
+
+                # 4. La stessa cosa presa dalla parte DESTRA della barra: la
+                # finestra deve restare sotto il puntatore. Giacomo, 27
+                # settembre 2026: «mi trovo con la finestra staccata dal
+                # puntatore e la muovo anche senza avere il puntatore sopra».
+                assert chiedi(canale, f"ingrandisci {f['id']} si").startswith("ok")
+                time.sleep(0.5)
+                g = dove()
+                da = (g["x"] + g["larghezza"] - 40, g["y"] + 50)
+                a = (da[0] - 30, da[1] + 200)
+                trascina(da, a)
+                h = dove()
+                verifica("presa da destra, il puntatore resta sopra la finestra",
+                         h["x"] <= a[0] <= h["x"] + h["larghezza"],
+                         (a, h["x"], h["larghezza"]))
             finally:
                 for f in reversed(figli):
                     f.terminate()

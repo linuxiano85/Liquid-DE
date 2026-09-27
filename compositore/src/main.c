@@ -5853,6 +5853,12 @@ static void presa_stacca(struct minerva *m, struct finestra *f) {
 		return;
 	const double quota = m->presa_box.width > 0
 		? (m->presa_x - m->presa_box.x) / m->presa_box.width : 0.5;
+	// La misura a cui torna, presa PRIMA di chiederla: il programma
+	// risponde a un «ridimensionati» solo al suo prossimo disegno, e fino ad
+	// allora `finestra_box` dice ancora la misura grande. Coi conti su quella
+	// la finestra restava attaccata al bordo sinistro e il puntatore, preso
+	// dalla parte destra della barra, finiva fuori (27 settembre 2026).
+	const int torna_l = f->prima.width;
 	if (f->ingrandita) {
 		finestra_ingrandisci(f, false);
 	} else {
@@ -5867,6 +5873,8 @@ static void presa_stacca(struct minerva *m, struct finestra *f) {
 	// rispetto all'angolo.
 	struct wlr_box ora;
 	finestra_box(f, &ora);
+	if (torna_l > 0)
+		ora.width = torna_l;
 	m->presa_box = ora;
 	m->presa_box.x = (int)(m->presa_x - quota * ora.width);
 	m->presa_box.y = (int)(m->presa_y - barra_alta() / 2);
