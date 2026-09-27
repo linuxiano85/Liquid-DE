@@ -310,9 +310,18 @@ Item {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            var i = elenco.menuQuale;
-                            elenco.chiudiMenu();
-                            elenco.eseguiMenu(i, String(modelData.azione));
+                            // Tutto in variabili locali PRIMA di chiudere:
+                            // `chiudiMenu()` svuota `vociMenu`, il Repeater
+                            // distrugge questa voce mentre il suo codice sta
+                            // ancora girando, e da lì `elenco` e `modelData`
+                            // non esistono più. Prima la riga dopo falliva
+                            // («elenco is not defined») e la voce scelta non
+                            // si eseguiva (27 settembre 2026).
+                            var lista = elenco;
+                            var i = lista.menuQuale;
+                            var azione = String(modelData.azione);
+                            lista.chiudiMenu();
+                            lista.eseguiMenu(i, azione);
                         }
                     }
                 }

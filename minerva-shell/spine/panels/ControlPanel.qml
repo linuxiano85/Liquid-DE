@@ -527,13 +527,18 @@ Item {
                         onClicked: {
                             if (!panel.spine)
                                 return;
-                            panel.spine.close();
-                            if (link.modelData.id === "settings")
-                                panel.spine.settingsRequested();
-                            else if (link.modelData.id === "system")
-                                panel.spine.monitorRequested();
+                            // Tutto PRIMA di chiudere: il pannello chiuso può
+                            // distruggere questa voce mentre il suo codice gira
+                            // ancora, e da lì `link` e `panel` non ci sono più.
+                            var barra = panel.spine;
+                            var quale = link.modelData.id;
+                            barra.close();
+                            if (quale === "settings")
+                                barra.settingsRequested();
+                            else if (quale === "system")
+                                barra.monitorRequested();
                             else
-                                panel.spine.cheatsheetRequested();
+                                barra.cheatsheetRequested();
                         }
                     }
                 }

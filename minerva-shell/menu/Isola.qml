@@ -650,10 +650,14 @@ PanelWindow {
                             preventStealing: true
                             cursorShape: Core.Notifications.siPuoAprire(nota.modelData) ? Qt.PointingHandCursor : Qt.ArrowCursor
                             onClicked: {
-                                if (!Core.Notifications.siPuoAprire(nota.modelData))
+                                // Il dato si prende PRIMA di chiudere: chiudendo,
+                                // questa voce può essere distrutta mentre il suo
+                                // codice gira ancora (vedi widget/Widgets.qml).
+                                var n = nota.modelData;
+                                if (!Core.Notifications.siPuoAprire(n))
                                     return;
                                 isola.chiudi();
-                                Core.Notifications.apri(nota.modelData);
+                                Core.Notifications.apri(n);
                             }
                         }
                         Rectangle {
