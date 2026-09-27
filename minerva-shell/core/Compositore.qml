@@ -1030,8 +1030,8 @@ Singleton {
 
     /// ── L'effetto sulle finestre: un corpo solo ─────────────────────────
     ///
-    /// `modo` è «nessuno», «vetro» o «blur»; `opacita` va da 0,50 a 1,00 e
-    /// conta per tutti e due gli effetti.
+    /// `modo` è «nessuno», «vetro», «blur» o «acquerello»; `opacita` va da
+    /// 0,50 a 1,00 e conta per tutti gli effetti.
     ///
     /// Col vetro il compositore mette la STESSA trasparenza su tutto l'albero
     /// della finestra — la barra che disegna lui e il contenuto del programma
@@ -1041,8 +1041,13 @@ Singleton {
     /// Col blur, in più, quello che sta DIETRO la finestra è sfocato: è un
     /// nodo che il compositore mette sotto di lei, non un ritocco alla
     /// finestra. Ha detto «non ancora» fino al 9 settembre 2026.
+    ///
+    /// L'acquerello (27 settembre 2026) è un nodo come quello del blur, ma
+    /// invece di sfocare prende il COLORE di quello che sta dietro, cella per
+    /// cella, e lo stende morbido: niente forme dietro il testo.
     function effetto(modo, opacita) {
-        var m = (modo === "vetro" || modo === "blur") ? modo : "nessuno";
+        var m = (modo === "vetro" || modo === "blur" || modo === "acquerello")
+                ? modo : "nessuno";
         var a = parseFloat(opacita);
         if (isNaN(a) || a < 0.50)
             a = 0.50;

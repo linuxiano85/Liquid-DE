@@ -147,6 +147,7 @@ struct wlr_scene_rect {
 	struct wlr_minerva_clip clipped_region;
 	bool minerva_blur;
 	float minerva_blur_radius;
+	bool minerva_acquerello; /* il materiale: colore a 1/32, non sfocatura */
 	struct wlr_scene_buffer *minerva_mask;
 	struct wl_listener minerva_mask_destroy;
 	int width, height;
@@ -797,5 +798,9 @@ void wlr_minerva_buffer_set_corners(struct wlr_scene_buffer *, struct wlr_minerv
 void wlr_minerva_rect_set_hole(struct wlr_scene_rect *, struct wlr_minerva_clip);
 struct wlr_scene_rect *wlr_minerva_blur_create(struct wlr_scene_tree *, int, int);
 void wlr_minerva_blur_set_radius(struct wlr_scene_rect *, float);
+/* Lo stesso filtro, come acquerello: legge tutto il suo rettangolo e ne
+ * stende il colore medio (a 1/32). Il danno che lo tocca rifà tutto il
+ * rettangolo: niente pezzi, quindi niente cuciture. */
+void wlr_minerva_blur_set_acquerello(struct wlr_scene_rect *, bool);
 void wlr_minerva_blur_set_mask(struct wlr_scene_rect *, struct wlr_scene_buffer *);
 #endif

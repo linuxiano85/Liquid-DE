@@ -295,6 +295,156 @@ static void render_pass_add_rect(struct wlr_render_pass *wlr_pass,
 	pop_gles2_debug(renderer);
 }
 
+/* ── L'acquerello ──────────────────────────────────────────────────────────
+ *
+ * Al posto della sfocatura, il COLORE di quello che sta dietro: il
+ * rettangolo diviso in celle da 32×32 pixel, ogni cella ridotta alla media
+ * vera dei suoi pixel (non quattro punti a caso: quelli farebbero tremolare
+ * il colore a ogni pixel che si sposta dietro), e le celle stese morbide.
+ * Niente forme dietro il testo.
+ *
+ * ── A pezzi, e uguale a com'è intero ────────────────────────────────────
+ *
+ * La prima versione catturava sempre il rettangolo intero e lo riduceva con
+ * le mipmap, e la scena lo rifaceva tutto a ogni danno: con un quadrato che
+ * salta dietro un terminale ingrandito, 100 % dello schermo a ogni
+ * fotogramma e 5,57 ms di scheda video contro i 2,27 del blur (27 settembre
+ * 2026). Ma un pixel steso dipende solo dalla sua cella e dalle otto intorno:
+ * basta rifare il ritaglio allargato di una cella. Perché i pezzi combacino
+ * al pixel, tre regole:
+ *  - la griglia delle celle parte dall'angolo del RETTANGOLO, non del pezzo;
+ *  - la media è esatta, in due passi (4×4, poi 8×8), leggendo ogni pixel nel
+ *    suo centro: le mipmap su una cattura di misura qualunque non dividono
+ *    per celle allineate;
+ *  - la stesura ha i pesi scritti nello shader, e legge le celle nel centro.
+ * Ai bordi dell'area visibile si ripete l'ultimo pixel, uguale per tutti i
+ * pezzi. La scena allarga il danno della stessa cella (wlr_scene.c). */
+enum { ACQ_CELLA = 32, ACQ_MARGINE = ACQ_CELLA + 2 };
+
+static void acquerello_texture(struct wlr_gles2_renderer *r, int k, int w, int h) {
+ glBindTexture(GL_TEXTURE_2D,r->minerva_acquerello.tex[k]);
+ if (r->minerva_acquerello.w[k]!=w || r->minerva_acquerello.h[k]!=h) {
+  glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,w,h,0,GL_RGBA,GL_UNSIGNED_BYTE,NULL);
+  r->minerva_acquerello.w[k]=w; r->minerva_acquerello.h[k]=h;
+ }
+ glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+ glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+ glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+ glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+}
+
+static int64_t acq_giu(int64_t v) { return v>=0 ? v/ACQ_CELLA : -((-v+ACQ_CELLA-1)/ACQ_CELLA); }
+static int64_t acq_su(int64_t v) { return -acq_giu(-v); }
+
+static bool minerva_acquerello_pezzo(struct wlr_gles2_render_pass *pass,
+  struct wlr_gles2_renderer *r, const struct wlr_render_rect_options *options,
+  struct wlr_texture *mask, int fw, int fh) {
+ struct wlr_box box=options->box;
+ if (box.width<=0 || box.height<=0) return true;
+ /* L'area visibile del rettangolo: da qui si legge, qui si ripete il bordo. */
+ int64_t vx0=box.x, vy0=box.y, vx1=(int64_t)box.x+box.width, vy1=(int64_t)box.y+box.height;
+ if (vx0<0) vx0=0;
+ if (vy0<0) vy0=0;
+ if (vx1>fw) vx1=fw;
+ if (vy1>fh) vy1=fh;
+ if (vx1<=vx0 || vy1<=vy0) return true;
+ /* Il pezzo da ridare, allargato di una cella: le celle che servono. */
+ int64_t ex0=vx0, ey0=vy0, ex1=vx1, ey1=vy1;
+ if (options->clip && !pixman_region32_empty(options->clip)) {
+  const pixman_box32_t *e=pixman_region32_extents(options->clip);
+  if (ex0<(int64_t)e->x1-ACQ_MARGINE) ex0=(int64_t)e->x1-ACQ_MARGINE;
+  if (ey0<(int64_t)e->y1-ACQ_MARGINE) ey0=(int64_t)e->y1-ACQ_MARGINE;
+  if (ex1>(int64_t)e->x2+ACQ_MARGINE) ex1=(int64_t)e->x2+ACQ_MARGINE;
+  if (ey1>(int64_t)e->y2+ACQ_MARGINE) ey1=(int64_t)e->y2+ACQ_MARGINE;
+  if (ex1<=ex0 || ey1<=ey0) return true;
+ }
+ int64_t gx=box.x, gy=box.y;
+ int64_t cx0=acq_giu(ex0-gx), cy0=acq_giu(ey0-gy), cx1=acq_su(ex1-gx), cy1=acq_su(ey1-gy);
+ /* La cattura: quelle celle, dentro l'area visibile. */
+ int64_t x0=gx+cx0*ACQ_CELLA, y0=gy+cy0*ACQ_CELLA, x1=gx+cx1*ACQ_CELLA, y1=gy+cy1*ACQ_CELLA;
+ if (x0<vx0) x0=vx0;
+ if (y0<vy0) y0=vy0;
+ if (x1>vx1) x1=vx1;
+ if (y1>vy1) y1=vy1;
+ int w=(int)(x1-x0), h=(int)(y1-y0), nx=(int)(cx1-cx0), ny=(int)(cy1-cy0);
+ if (w<=0 || h<=0 || nx<=0 || ny<=0) return true;
+ if ((uint64_t)w*h*6 > 128u*1024u*1024u) return false;
+
+ GLint old_fbo; glGetIntegerv(GL_FRAMEBUFFER_BINDING,&old_fbo);
+ if (!r->minerva_blur.fbo) {
+  glGenTextures(3,r->minerva_blur.tex); glGenFramebuffers(1,&r->minerva_blur.fbo);
+ }
+ if (!r->minerva_acquerello.tex[0]) glGenTextures(3,r->minerva_acquerello.tex);
+ glActiveTexture(GL_TEXTURE0);
+ acquerello_texture(r,0,w,h);
+ glCopyTexSubImage2D(GL_TEXTURE_2D,0,0,0,(int)x0,(int)y0,w,h);
+ acquerello_texture(r,1,nx*8,ny*8);
+ acquerello_texture(r,2,nx,ny);
+
+ GLuint p=r->minerva_blur.program;
+ glUseProgram(p); glUniform1i(glGetUniformLocation(p,"tex"),0);
+ GLint u_fase=glGetUniformLocation(p,"fase");
+ GLint u_base=glGetUniformLocation(p,"a_base");
+ GLint u_cattura=glGetUniformLocation(p,"a_cattura");
+ GLint pos=glGetAttribLocation(p,"pos");
+ glDisable(GL_BLEND); glDisable(GL_SCISSOR_TEST);
+ glBindFramebuffer(GL_FRAMEBUFFER,r->minerva_blur.fbo);
+ bool ok=true;
+ /* Due riduzioni: a 1/4 dalla cattura, a 1/32 da 1/4. */
+ for (int passo=0; passo<2 && ok; passo++) {
+  int dw = passo==0 ? nx*8 : nx, dh = passo==0 ? ny*8 : ny;
+  glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,
+   r->minerva_acquerello.tex[passo+1],0);
+  ok=glCheckFramebufferStatus(GL_FRAMEBUFFER)==GL_FRAMEBUFFER_COMPLETE;
+  if (!ok) break;
+  glViewport(0,0,dw,dh);
+  glUniform1f(u_fase,passo==0 ? 2 : 3);
+  if (passo==0) {
+   glUniform2f(u_base,(float)(gx+cx0*ACQ_CELLA),(float)(gy+cy0*ACQ_CELLA));
+   glUniform4f(glGetUniformLocation(p,"a_valido"),vx0,vy0,vx1-1,vy1-1);
+   glUniform4f(u_cattura,x0,y0,w,h);
+  } else {
+   glUniform4f(u_cattura,0,0,nx*8,ny*8);
+  }
+  glBindTexture(GL_TEXTURE_2D,r->minerva_acquerello.tex[passo]);
+  GLfloat projection[9]; matrix_projection(projection,dw,dh,WL_OUTPUT_TRANSFORM_FLIPPED_180);
+  struct wlr_box tutta={0,0,dw,dh};
+  set_proj_matrix(glGetUniformLocation(p,"proj"),projection,&tutta);
+  render(&tutta,NULL,pos);
+ }
+ glBindFramebuffer(GL_FRAMEBUFFER,old_fbo); glViewport(0,0,fw,fh);
+ if (ok) {
+  glUniform1f(u_fase,4);
+  glUniform2f(u_base,(float)gx,(float)gy);
+  glUniform4f(glGetUniformLocation(p,"a_celle"),
+   (float)acq_giu(vx0-gx),(float)acq_giu(vy0-gy),
+   (float)(acq_su(vx1-gx)-1),(float)(acq_su(vy1-gy)-1));
+  glUniform4f(glGetUniformLocation(p,"a_piccola"),(float)cx0,(float)cy0,nx,ny);
+  glUniform1f(glGetUniformLocation(p,"has_mask"),0);
+  if(mask && wlr_texture_is_gles2(mask)) {
+   struct wlr_gles2_texture *m=gles2_get_texture(mask);
+   if(m->target==GL_TEXTURE_2D) {
+    glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,m->tex);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
+    glUniform1i(glGetUniformLocation(p,"mask"),1);glUniform1f(glGetUniformLocation(p,"has_mask"),1);
+   }
+  }
+  glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,r->minerva_acquerello.tex[2]);
+  minerva_uniforms(p,box,options->minerva);
+  set_proj_matrix(glGetUniformLocation(p,"proj"),pass->projection_matrix,&box);
+  setup_blending(WLR_RENDER_BLEND_MODE_PREMULTIPLIED);
+  render(&box,options->clip,pos);
+ }
+ /* Il programma è condiviso col blur: si lascia com'era. */
+ glUniform1f(u_fase,0);
+ glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,0);
+ glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,0);
+ return ok;
+}
+
 static bool minerva_blur_pezzo(struct wlr_render_pass *base,
   const struct wlr_render_rect_options *options, const struct wlr_render_texture_options *mask_options) {
  struct wlr_gles2_render_pass *pass=get_render_pass(base);
@@ -318,6 +468,8 @@ static bool minerva_blur_pezzo(struct wlr_render_pass *base,
  }
  int fw=pass->buffer->buffer->width, fh=pass->buffer->buffer->height;
  struct wlr_box box=options->box;
+ if (options->minerva.acquerello)
+  return minerva_acquerello_pezzo(pass,r,options,mask,fw,fh);
  /* Capture only the affected rectangle and the filter footprint, bounded by
   * the framebuffer. The pool is shared across calls, never GPU->CPU readback. */
  /* This renderer uses FLIPPED_180 projection: buffer coordinates already
@@ -515,6 +667,8 @@ static bool minerva_blur(struct wlr_render_pass *base,
  if (radius==0) radius=3;
  if (!isfinite(radius) || radius<=0 || radius>6) return false;
  int64_t pad=(int64_t)ceilf(radius*4)+8;
+ /* L'acquerello legge una cella intorno al pezzo, più l'allineamento. */
+ if (options->minerva.acquerello) pad=ACQ_MARGINE+ACQ_CELLA;
  int64_t g[GRUPPI_MAX][4];
  int k=n;
  for (int i=0;i<n;i++) {

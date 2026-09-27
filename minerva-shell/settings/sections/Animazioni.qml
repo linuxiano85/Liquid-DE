@@ -51,10 +51,12 @@ Page {
 
     readonly property bool accese: Core.Ipc.get("desktop.animations", true)
 
-    /// Vero quando dietro le superfici della scrivania c'è il blur VERO del
-    /// compositore. Cambia cosa vogliono dire i cursori della trasparenza —
-    /// vedi la scheda «Trasparenza» qui sotto.
-    readonly property bool _colBlur: Core.Vetro.blurChiesto
+    /// Vero quando dietro le superfici della scrivania c'è un filtro VERO del
+    /// compositore, blur o acquerello. Cambia cosa vogliono dire i cursori
+    /// della trasparenza — vedi la scheda «Trasparenza» qui sotto. Deve essere
+    /// la stessa domanda che si fa `theme/LegaTema.qml`, o il cursore scrive
+    /// una chiave e la membrana ne legge un'altra: si gira e non cambia niente.
+    readonly property bool _colFiltro: Core.Vetro.filtroChiesto
 
     /// Vero quando la trasparenza delle finestre la mette il compositore.
     /// Vedi `Core.Vetro.effettoChiestoAcceso`: da lì in poi «Vetro delle finestre di
@@ -146,24 +148,25 @@ Page {
         S.SettingRow {
             width: parent.width
             label: Core.Strings.t("membraneOpacity")
-            description: page._colBlur
+            description: page._colFiltro
                 ? (page.it
-                   ? "Col blur dietro si può scendere molto di più: quello che "
-                     + "passa è una macchia morbida, non una fotografia"
-                   : "With blur behind you can go much lower: what shows "
-                     + "through is a soft wash, not a photograph")
+                   ? "Con l'acquerello o il blur dietro si può scendere molto "
+                     + "di più: quello che passa è una macchia morbida, non "
+                     + "una fotografia"
+                   : "With watercolour or blur behind you can go much lower: "
+                     + "what shows through is a soft wash, not a photograph")
                 : Core.Strings.t("membraneOpacityDesc")
             controlWidth: 220
 
             control: S.ValueSlider {
                 width: 220
-                from: page._colBlur ? 0.50 : 0.75
+                from: page._colFiltro ? 0.50 : 0.75
                 to: 1.0
-                value: page._colBlur
+                value: page._colFiltro
                        ? Core.Ipc.get("shell.membraneOpacityBlur", 0.68)
                        : Core.Ipc.get("shell.membraneOpacity", 0.93)
                 onReleased: function(v) {
-                    Core.Ipc.setSetting(page._colBlur
+                    Core.Ipc.setSetting(page._colFiltro
                                         ? "shell.membraneOpacityBlur"
                                         : "shell.membraneOpacity",
                                         Math.round(v * 100) / 100);
@@ -237,20 +240,24 @@ Page {
             label: page.it ? "Effetto delle finestre" : "Window effect"
             description: page.it
                 ? "Col vetro la finestra e la sua barra sono un corpo solo: "
-                  + "una trasparenza sola, senza stacchi in mezzo. Col blur, "
-                  + "in più, quello che sta dietro è sfocato — e così una "
-                  + "finestra sopra una fotografia si legge."
+                  + "una trasparenza sola, senza stacchi in mezzo. "
+                  + "L'acquerello prende solo il COLORE di quello che sta "
+                  + "dietro e lo stende morbido: niente forme dietro il testo. "
+                  + "Il blur lo sfoca, e si vedono ancora le forme."
                 : "With glass, a window and its title bar are one body: a "
-                  + "single transparency, with no seam between them. With "
-                  + "blur, what's behind is blurred as well — so a window "
-                  + "over a photo stays readable."
-            controlWidth: 320
+                  + "single transparency, with no seam between them. "
+                  + "Watercolour takes only the COLOUR of what's behind and "
+                  + "spreads it softly: no shapes behind the text. Blur "
+                  + "softens it, and the shapes still show."
+            searchTerms: "effetto vetro blur acquerello trasparenza materiale sfocatura"
+            controlWidth: 340
 
             control: S.ChoicePicker {
                 value: String(Core.Ipc.get("windows.effetto", "nessuno"))
                 options: [
                     { "value": "nessuno", "label": page.it ? "Nessuno" : "None" },
                     { "value": "vetro",   "label": page.it ? "Vetro"   : "Glass" },
+                    { "value": "acquerello", "label": page.it ? "Acquerello" : "Watercolour" },
                     { "value": "blur",    "label": "Blur" }
                 ]
                 onPicked: function(v) {
@@ -268,7 +275,8 @@ Page {
         // trasparenza. Zero spegne il filtro e lascia il vetro.
         S.SettingRow {
             width: parent.width
-            visible: page._colBlur
+            // Solo del blur: l'acquerello non sfoca, prende il colore.
+            visible: Core.Vetro.blurChiesto
             label: page.it ? "Intensità della sfocatura" : "Blur strength"
             description: page.it
                 ? "Quanto è morbido quello che sta dietro. A zero non sfoca, "

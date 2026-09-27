@@ -837,7 +837,7 @@ ShellRoot {
                 // dietro la dock col blur c'è una macchia morbida e senza una
                 // fotografia nitida, cioè due situazioni diverse. Vedi
                 // `theme/LegaTema.qml`.
-                opacity_:             Core.Vetro.blurVero
+                opacity_:             Core.Vetro.filtroVero
                                       ? Core.Ipc.get("dock.opacityBlur", 0.68)
                                       : Core.Ipc.get("dock.opacity", 0.90)
                 showLabels:           Core.Ipc.get("dock.showLabels", true)

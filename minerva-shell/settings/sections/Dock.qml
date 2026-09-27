@@ -282,21 +282,21 @@ Page {
         S.SettingRow {
             width: parent.width
             label: page.it ? "Trasparenza della dock" : "Dock transparency"
-            description: Core.Vetro.blurChiesto
+            description: Core.Vetro.filtroChiesto
                 ? (page.it
-                   ? "Col blur dietro si può scendere molto di più"
-                   : "With blur behind you can go much lower")
+                   ? "Con l'acquerello o il blur dietro si può scendere molto di più"
+                   : "With watercolour or blur behind you can go much lower")
                 : ""
             controlWidth: 220
             control: S.ValueSlider {
                 width: 220
                 from: 0.4
                 to: 1.0
-                value: Core.Vetro.blurChiesto
+                value: Core.Vetro.filtroChiesto
                        ? Core.Ipc.get("dock.opacityBlur", 0.68)
                        : Core.Ipc.get("dock.opacity", 0.90)
                 onReleased: function(v) {
-                    Core.Ipc.setSetting(Core.Vetro.blurChiesto
+                    Core.Ipc.setSetting(Core.Vetro.filtroChiesto
                                         ? "dock.opacityBlur" : "dock.opacity",
                                         Math.round(v * 100) / 100);
                 }

@@ -39,6 +39,8 @@ struct wlr_gles2_tex_shader {
 
 struct wlr_gles2_renderer {
 	struct { GLuint program, tex[3], fbo; int width, height; } minerva_blur;
+	/* L'acquerello: la cattura (con le mipmap) e il colore a 1/32. */
+	struct { GLuint tex[3]; int w[3], h[3]; } minerva_acquerello;
 	/* Il pezzo di fotogramma messo da parte da minerva_salva. */
 	struct { GLuint tex; int x, y, width, height, tex_width, tex_height; } minerva_salvato;
 	struct wlr_renderer wlr_renderer;

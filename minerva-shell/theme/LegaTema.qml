@@ -142,7 +142,7 @@ QtObject {
     // in leggibilità un effetto che in quel punto non esiste. È la stessa
     // riga di `Core.Vetro._chiedi`, e per la stessa ragione.
     readonly property bool _colBlur:
-        Core.Vetro.blurVero && Core.Compositore.scrivania
+        Core.Vetro.filtroVero && Core.Compositore.scrivania
 
     property Binding _membrana: Binding {
         target: Theme.Colors

@@ -68,13 +68,20 @@ QtObject {
     /// mostra le MANOPOLE deve seguire quello chiesto: durante il risparmio
     /// l'intensità del blur si regola lo stesso, e vale da quando si esce.
     readonly property bool blurChiesto: vetro.effettoChiesto === "blur"
+    /// Blur e acquerello sono tutti e due un FILTRO dietro la superficie:
+    /// per chi disegna sopra valgono uguale (niente quadro finto sotto la
+    /// tinta, membrana che si apre). Differiscono solo nella manopola
+    /// dell'intensità, che è del blur: l'acquerello prende il colore e basta.
+    readonly property bool filtroChiesto: vetro.effettoChiesto === "blur"
+                                          || vetro.effettoChiesto === "acquerello"
     readonly property bool effettoChiestoAcceso: vetro.effettoChiesto !== "nessuno"
 
     readonly property bool inRisparmio: Core.Compositore.risparmio
                                         && Core.Compositore.risparmio.attivo === true
     readonly property string effetto: vetro.inRisparmio ? "nessuno" : vetro.effettoChiesto
 
-    readonly property bool blurVero: vetro.effetto === "blur"
+    readonly property bool filtroVero: vetro.effetto === "blur"
+                                       || vetro.effetto === "acquerello"
 
     /// Vero quando la trasparenza delle finestre la mette IL COMPOSITORE.
     ///
@@ -105,7 +112,7 @@ QtObject {
     /// È una proprietà a parte e non `percorso` azzerato, perché le due cose
     /// sono diverse: `percorso` è la risposta del demone e resta vera anche
     /// col blur acceso (si torna a `vetro` senza rifare il conto).
-    readonly property string daDisegnare: vetro.blurVero ? "" : vetro.percorso
+    readonly property string daDisegnare: vetro.filtroVero ? "" : vetro.percorso
 
     /// Il percorso della copia sfocata, o "" finché non c'è.
     ///
@@ -137,7 +144,7 @@ QtObject {
             return;
         // Col blur vero non serve a nessuno: sarebbe far lavorare il demone e
         // `magick` per un'immagine che nessuno disegna.
-        if (vetro.blurVero)
+        if (vetro.filtroVero)
             return;
         var s = String(Core.Wallpaper.current || "");
         if (s === "" || s === vetro._chiesto)
@@ -158,8 +165,8 @@ QtObject {
     /// tornava indietro subito, e senza questa riga la barra resterebbe senza
     /// vetro fino al prossimo cambio di sfondo — cioè, con la rotazione
     /// spenta, per sempre.
-    onBlurVeroChanged: {
-        if (!vetro.blurVero) {
+    onFiltroVeroChanged: {
+        if (!vetro.filtroVero) {
             vetro._chiesto = "";
             vetro._chiedi();
         }

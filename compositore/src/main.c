@@ -755,7 +755,7 @@ struct minerva {
 	/// `nessuno` — mantiene l'opacità fornita dai client.
 	/// `vetro` — aggiunge trasparenza alla finestra, salvo a schermo intero.
 	/// `blur` — sfoca dietro le zone trasparenti senza sbiadire il contenuto.
-	enum { EFFETTO_NESSUNO, EFFETTO_VETRO, EFFETTO_BLUR } effetto_modo;
+	enum { EFFETTO_NESSUNO, EFFETTO_VETRO, EFFETTO_BLUR, EFFETTO_ACQUERELLO } effetto_modo;
 	/// Quanto è opaca una finestra col vetro acceso, da 0 a 1.
 	float effetto_alfa;
 
@@ -2012,7 +2012,9 @@ static void appoggiata_sfocatura(struct appoggiata *a) {
 	// dietro il vetro sì.
 	const bool piano_giusto =
 		a->ls->current.layer != ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND;
-	const bool voglio = a->m->effetto_modo == EFFETTO_BLUR && a->m->blur_intensita > 0 && piano_giusto;
+	const bool acquerello = a->m->effetto_modo == EFFETTO_ACQUERELLO;
+	const bool voglio = ((a->m->effetto_modo == EFFETTO_BLUR && a->m->blur_intensita > 0)
+		|| acquerello) && piano_giusto;
 
 	if (!voglio) {
 		if (a->sfocatura != NULL)
@@ -2043,6 +2045,7 @@ static void appoggiata_sfocatura(struct appoggiata *a) {
 	// nessuna parte.
 	wlr_scene_rect_set_size(a->sfocatura, w, h);
 	wlr_minerva_blur_set_radius(a->sfocatura, a->m->blur_intensita * 0.06);
+	wlr_minerva_blur_set_acquerello(a->sfocatura, acquerello);
 	if (c.trovato != NULL)
 		wlr_minerva_blur_set_mask(a->sfocatura, c.trovato);
 	wlr_scene_node_set_enabled(&a->sfocatura->node, true);
@@ -2736,16 +2739,24 @@ static void finestra_effetto(struct finestra *f) {
 	const float a = vetro ? f->m->effetto_alfa : 1.0f;
 	if (f->wobbly) wobbly_visita(f->wobbly, applica_alfa, (void *)&a);
 	else wlr_scene_node_for_each_buffer(&f->cornice->node, applica_alfa, (void *)&a);
-	if (f->barra != NULL && !f->schermo_intero && f->m->effetto_modo == EFFETTO_BLUR)
+	// Il blur e l'acquerello si vedono solo dove la superficie è trasparente:
+	// anche la barra del titolo prende l'opacità, o sarebbe l'unico pezzo
+	// pieno della finestra.
+	const bool filtro = f->m->effetto_modo == EFFETTO_BLUR
+		|| f->m->effetto_modo == EFFETTO_ACQUERELLO;
+	if (f->barra != NULL && !f->schermo_intero && filtro)
 		wlr_scene_buffer_set_opacity(f->barra, f->m->effetto_alfa);
 
 	// La sfocatura si accende solo col suo modo, e mai a schermo intero: lì
 	// dietro la finestra non c'è niente da sfocare, e sarebbe un passaggio di
 	// disegno pagato per niente su ogni fotogramma di un video.
 	if (f->sfocatura != NULL) {
+		const bool acquerello = f->m->effetto_modo == EFFETTO_ACQUERELLO;
 		wlr_scene_node_set_enabled(&f->sfocatura->node,
-			f->m->effetto_modo == EFFETTO_BLUR && f->m->blur_intensita > 0 && !f->schermo_intero);
+			((f->m->effetto_modo == EFFETTO_BLUR && f->m->blur_intensita > 0) || acquerello)
+			&& !f->schermo_intero);
 		wlr_minerva_blur_set_radius(f->sfocatura, f->m->blur_intensita * 0.06);
+		wlr_minerva_blur_set_acquerello(f->sfocatura, acquerello);
 	}
 }
 
@@ -6009,7 +6020,8 @@ static void molla_avvia(struct finestra *f) {
 	if (f->respiro != RESPIRO_NIENTE)
 		respiro_fine(f);
 	f->wobbly = wobbly_crea(f->cornice, m->renderer, m->allocator,
-		m->effetto_modo == EFFETTO_BLUR ? f->sfocatura : NULL);
+		(m->effetto_modo == EFFETTO_BLUR || m->effetto_modo == EFFETTO_ACQUERELLO)
+			? f->sfocatura : NULL);
 	if (!f->wobbly) { f->wobbly_fallita = true; return; }
 	m->molle_attive++;
 	f->wobbly_presa_x = m->cursore->x - f->posto_x;
@@ -7659,6 +7671,7 @@ static void comando_stato(struct minerva *m, char *risposta, size_t n) {
 	// non si distinguono. Senza questo campo la prova dovrebbe confrontare
 	// dei pixel — cioè diventare rossa il giorno che cambia lo sfondo.
 	const char *eff = m->effetto_modo == EFFETTO_BLUR ? "blur"
+		: m->effetto_modo == EFFETTO_ACQUERELLO ? "acquerello"
 		: (m->effetto_modo == EFFETTO_VETRO ? "vetro" : "nessuno");
 
 	// ── E la luce notturna, con la sua STRADA ────────────────────────
@@ -8878,8 +8891,8 @@ static void comando_effetto(struct minerva *m, char *resto,
 	char *modo_t = parola(&resto);
 	char *alfa_t = parola(&resto);
 	if (modo_t == NULL) {
-		snprintf(risposta, n, "no effetto vuole «nessuno|vetro|blur», e con "
-			"vetro o blur un'opacità fra 0.50 e 1.00");
+		snprintf(risposta, n, "no effetto vuole «nessuno|vetro|blur|acquerello», e "
+			"con un effetto acceso un'opacità fra 0.50 e 1.00");
 		return;
 	}
 
@@ -8892,6 +8905,10 @@ static void comando_effetto(struct minerva *m, char *resto,
 		// Ha rifiutato per settimane, con scritto «quando ci sarà, entrerà da
 		// qui». Ci siamo.
 		modo = EFFETTO_BLUR;
+	} else if (strcmp(modo_t, "acquerello") == 0) {
+		// Il materiale della Tappa 2: il colore di quello che sta dietro, a
+		// 1/32, invece della sua forma sfocata.
+		modo = EFFETTO_ACQUERELLO;
 	} else {
 		snprintf(risposta, n, "no «%s» non è un effetto", modo_t);
 		return;
@@ -8915,6 +8932,7 @@ static void comando_effetto(struct minerva *m, char *resto,
 
 	snprintf(risposta, n, "ok %s %.2f",
 		modo == EFFETTO_BLUR ? "blur"
+			: modo == EFFETTO_ACQUERELLO ? "acquerello"
 			: (modo == EFFETTO_VETRO ? "vetro" : "nessuno"),
 		(double)alfa);
 }

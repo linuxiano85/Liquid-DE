@@ -683,7 +683,7 @@ class SettingsApi {
           //
           // Lo spazio sopra una finestra libera lo mette `abbassa()` in
           // `spine/TitleBars.qml`, che è dove è sempre stato per davvero.
-          // ── L'effetto sulle finestre: nessuno, vetro, blur ─────────────
+          // ── L'effetto sulle finestre: nessuno, vetro, acquerello, blur ─
           //
           // Qui c'era `'blur': 2`, un numero da 0 a 3 che sceglieva quanta
           // sfocatura chiedere a Hyprland. Sotto minerva-wayland **non faceva
@@ -702,12 +702,18 @@ class SettingsApi {
           //   'vetro'    una sola trasparenza su tutta la finestra, barra
           //              compresa: il compositore la applica all'albero intero
           //              e la barra si disegna opaca per non moltiplicarla
-          //   'blur'     NON C'È ANCORA. Il compositore lo rifiuta dicendolo.
-          //              È la Tappa 10, e si misura prima di tenerlo.
+          //   'acquerello' come il vetro, e dietro il COLORE di quello che
+          //              c'è, cella per cella, steso morbido: niente forme
+          //              dietro il testo
+          //   'blur'     come il vetro, e dietro sfocato
           //
-          // Nasce 'nessuno': una scrivania che parte con le finestre
-          // trasparenti prima che qualcuno l'abbia chiesto sembra rotta.
-          'effetto': 'nessuno',
+          // Nasceva 'nessuno' («una scrivania che parte con le finestre
+          // trasparenti prima che qualcuno l'abbia chiesto sembra rotta»).
+          // Dal 27 settembre 2026 nasce 'acquerello': è il materiale di
+          // Liquid, e Giacomo, vedendolo: «Lo adotterei per tutto». Non è una
+          // trasparenza qualunque — dietro il testo non passano forme, solo
+          // colore — e costa zero a scrivania ferma.
+          'effetto': 'acquerello',
           // Quanto è opaca una finestra col vetro acceso. Stesso numero che le
           // finestre di Minerva usavano già per conto loro
           // (`shell.windowOpacity`): partire da un valore diverso vorrebbe
