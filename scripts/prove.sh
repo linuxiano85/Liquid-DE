@@ -932,12 +932,15 @@ else
     # Vista ROSSA col compositore di prima, che usciva sempre con 0.
     #
     # `prova-super.py`: Super toccato, tenuto e Super+lettera non si confondono.
+    # `prova-rilascio.py`: finito un trascinamento o un aggancio, il
+    # rilascio arriva lo stesso al programma — senza, nessun clic arrivava
+    # più a nessuno (27 settembre 2026). Vista ROSSA col compositore di prima.
     # `prova-presa.py`: col pulsante giù il puntatore resta a chi è stato
     # premuto, anche fuori dai suoi bordi. Vista ROSSA senza la presa.
     # `prova-angoli.py`: una sosta in un angolo si annuncia una volta, un
     # passaggio svelto no, e i quattro angoli hanno i loro nomi. Vista ROSSA
     # col sensore degli angoli spento.
-    for PROVA_EFF in prova-blur-contenuto.py prova-danno-blur.py prova-scanout.py prova-risparmio.py prova-greeter-avvio.py prova-angoli.py prova-super.py prova-presa.py; do
+    for PROVA_EFF in prova-blur-contenuto.py prova-danno-blur.py prova-scanout.py prova-risparmio.py prova-greeter-avvio.py prova-angoli.py prova-super.py prova-presa.py prova-rilascio.py; do
         PE="$ROOT/compositore/$PROVA_EFF"
         if [ ! -x "$PE" ]; then
             skip "$PROVA_EFF non trovata"

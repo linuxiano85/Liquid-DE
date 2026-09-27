@@ -167,6 +167,14 @@ def main():
                 chiedi(canale, f"dito {w // 2} 1")
                 verifica("ma sì dopo essere sceso davvero",
                          len(bordo.righe(1)) == 1, None)
+                # Senza Super serve una sosta: un passaggio veloce sul bordo,
+                # durante un gioco, non deve far scendere niente.
+                chiedi(canale, f"dito {w // 2} {h // 2}")
+                bordo.righe(0.3)
+                chiedi(canale, f"dito {w // 2} 0")
+                chiedi(canale, f"dito {w // 2} {h // 2}")
+                verifica("un passaggio veloce sul bordo non si annuncia",
+                         bordo.righe(0.9) == [], None)
 
                 # ── 3. Il freno dell'inattività ─────────────────────────
                 ozio = Ascolto(canale, "inattivo")

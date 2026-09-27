@@ -514,6 +514,10 @@ struct minerva {
 	/// Il puntatore è al bordo alto di uno schermo con una finestra a schermo
 	/// intero, ed è già stato detto. Vedi `bordo_alto_guarda`.
 	bool bordo_alto_detto;
+	/// La sosta sul bordo alto sopra uno schermo intero (vedi
+	/// `bordo_alto_guarda`): il timer, e lo schermo su cui è cominciata.
+	struct wl_event_source *bordo_alto_timer;
+	char bordo_alto_schermo[64];
 	/// Gli angoli attivi (vedi `angolo_guarda`): in quale angolo è il
 	/// puntatore adesso (NULL se in nessuno), su quale schermo, se è già stato
 	/// detto, e il timer della sosta.
@@ -6017,6 +6021,49 @@ static bool riva_libera(struct minerva *m, struct wlr_output *out) {
 // intero, si annuncia `bordoalto`; la shell mostra la barra solo allora.
 // Si ri-arma quando il puntatore scende oltre gli ottanta pixel, cioè
 // quando la barra non può più esserci sotto.
+/// Mezzo secondo fermi sul bordo alto, sopra uno schermo intero, senza
+/// Super: la via d'uscita per chi non conosce la scorciatoia.
+#define BORDO_ALTO_SOSTA_MS 500
+
+static void bordo_alto_annuncia(struct minerva *m, const char *schermo) {
+	m->bordo_alto_detto = true;
+	char riga[160];
+	snprintf(riga, sizeof(riga), "evento bordoalto {\"schermo\":\"%s\"}", schermo);
+	canale_annuncia(m->canale, "bordoalto", riga);
+}
+
+/// Vero se sotto il puntatore c'è una finestra a schermo intero.
+static bool sopra_schermo_intero(struct minerva *m) {
+	struct finestra *f;
+	wl_list_for_each(f, &m->finestre_elenco, link) {
+		if (!f->schermo_intero || !finestra_visibile(f))
+			continue;
+		struct wlr_box fb;
+		finestra_box(f, &fb);
+		if (wlr_box_contains_point(&fb, m->cursore->x, m->cursore->y))
+			return true;
+	}
+	return false;
+}
+
+static int bordo_alto_scade(void *dati) {
+	struct minerva *m = dati;
+	if (m->bordo_alto_detto || m->canale == NULL || m->bordo_alto_schermo[0] == '\0')
+		return 0;
+	// Il puntatore deve essere ancora lassù: un timer non sa se nel
+	// frattempo la mano è scesa.
+	struct wlr_output *out = wlr_output_layout_output_at(m->schermi,
+		m->cursore->x, m->cursore->y);
+	if (out == NULL || strcmp(out->name, m->bordo_alto_schermo) != 0)
+		return 0;
+	struct wlr_box box;
+	wlr_output_layout_get_box(m->schermi, out, &box);
+	if (m->cursore->y - box.y > 2 || !sopra_schermo_intero(m))
+		return 0;
+	bordo_alto_annuncia(m, out->name);
+	return 0;
+}
+
 static void bordo_alto_guarda(struct minerva *m) {
 	if (m->canale == NULL)
 		return;
@@ -6029,31 +6076,37 @@ static void bordo_alto_guarda(struct minerva *m) {
 	const double dentro = m->cursore->y - box.y;
 	if (dentro > 80) {
 		m->bordo_alto_detto = false;
+		m->bordo_alto_schermo[0] = '\0';
 		return;
 	}
-	if (dentro > 2 || m->bordo_alto_detto)
+	if (dentro > 2) {
+		// Sceso dal bordo prima della sosta: non si conta più.
+		m->bordo_alto_schermo[0] = '\0';
 		return;
-	// Sopra lo schermo intero la barra scende solo con Super giù.
-	if (m->riva_col_consenso && !super_giu(m))
-		return;
-	bool intero = false;
-	struct finestra *f;
-	wl_list_for_each(f, &m->finestre_elenco, link) {
-		if (!f->schermo_intero || !finestra_visibile(f))
-			continue;
-		struct wlr_box fb;
-		finestra_box(f, &fb);
-		if (wlr_box_contains_point(&fb, m->cursore->x, m->cursore->y)) {
-			intero = true;
-			break;
-		}
 	}
-	if (!intero)
+	if (m->bordo_alto_detto || !sopra_schermo_intero(m))
 		return;
-	m->bordo_alto_detto = true;
-	char riga[160];
-	snprintf(riga, sizeof(riga), "evento bordoalto {\"schermo\":\"%s\"}", out->name);
-	canale_annuncia(m->canale, "bordoalto", riga);
+	// ── La via d'uscita dallo schermo intero ─────────────────────────
+	//
+	// Con Super giù la barra scende subito. Senza, dopo mezzo secondo
+	// fermi sul bordo: un gioco o un film non la vedono scendere per un
+	// passaggio del puntatore, ma chi la cerca la trova. Qui prima c'era
+	// SOLO Super («la riva col consenso di Super», 24 settembre 2026), e
+	// una finestra mandata a schermo intero dal suo pulsante restava senza
+	// nessuna uscita visibile: la barra sparisce, e che servisse Super non
+	// lo diceva niente. Giacomo, 27 settembre: «la finestra diventa
+	// ingestibile».
+	if (!m->riva_col_consenso || super_giu(m)) {
+		bordo_alto_annuncia(m, out->name);
+		return;
+	}
+	if (m->bordo_alto_schermo[0] != '\0')
+		return;                 // la sosta è già in corso
+	snprintf(m->bordo_alto_schermo, sizeof(m->bordo_alto_schermo), "%s", out->name);
+	if (m->bordo_alto_timer == NULL)
+		m->bordo_alto_timer = wl_event_loop_add_timer(m->loop, bordo_alto_scade, m);
+	if (m->bordo_alto_timer != NULL)
+		wl_event_source_timer_update(m->bordo_alto_timer, BORDO_ALTO_SOSTA_MS);
 }
 
 // ── Gli angoli attivi ────────────────────────────────────────────────────
@@ -6526,15 +6579,8 @@ static void cursore_rilasciato(struct minerva *m,
 			pulsante_premuto(f, pulsante);
 		return;
 	}
-	if (era_presa)
-		return;
-
-	if (m->traccia_pulsanti)
-		fprintf(stderr, "minerva-wayland: pulsante CONSEGNATO %s (0x%x)\n",
-			nome_pulsante(e->button), e->button);
-	wlr_seat_pointer_notify_button(m->seat, e->time_msec, e->button,
-		e->state);
-	return;
+	// Il rilascio al programma lo consegna chi ci chiama, su OGNI strada:
+	// vedi `cursore_premuto`.
 }
 
 static void cursore_premuto(struct wl_listener *l, void *dati) {
@@ -6565,6 +6611,27 @@ static void cursore_premuto(struct wl_listener *l, void *dati) {
 
 	if (e->state == WL_POINTER_BUTTON_STATE_RELEASED) {
 		cursore_rilasciato(m, e);
+		// ── Il rilascio arriva SEMPRE ────────────────────────────────────
+		//
+		// Qui dentro c'erano tre `return` prima della consegna: dopo una
+		// presa (la barra di un'app che si disegna da sé chiede di essere
+		// spostata, Super+trascina), dopo un aggancio, dopo un pulsante della
+		// nostra barra. Il programma aveva visto la PRESSIONE e non vedeva
+		// mai il rilascio: per lui il tasto restava giù. E per wlroots
+		// peggio: il sedile contava il pulsante ancora premuto, e alla
+		// pressione dopo ne contava due e NON LA CONSEGNAVA (`n_pressed`, in
+		// `wlr_seat_pointer_notify_button`). Da lì nessun clic arrivava più a
+		// nessun programma, e restava solo la tastiera. Giacomo, 27 settembre
+		// 2026: «le finestre una volta aperte non si possono spostare o
+		// chiudere e sono obbligato a chiuderle con alt+f4».
+		//
+		// Consegnarlo sempre non costa niente: un rilascio di un pulsante
+		// che il sedile non ha visto premere, wlroots lo scarta da sé.
+		if (m->traccia_pulsanti)
+			fprintf(stderr, "minerva-wayland: rilascio CONSEGNATO %s (0x%x)\n",
+				nome_pulsante(e->button), e->button);
+		wlr_seat_pointer_notify_button(m->seat, e->time_msec, e->button,
+			e->state);
 		// Finita la presa implicita, il puntatore torna a chi gli sta sotto.
 		if (m->tenuta != NULL && m->seat->pointer_state.button_count == 0) {
 			m->tenuta = NULL;
@@ -11203,6 +11270,8 @@ int main(int argc, char *argv[]) {
 		wl_event_source_remove(m.inattivo_timer);
 	if (m.angolo_timer)
 		wl_event_source_remove(m.angolo_timer);
+	if (m.bordo_alto_timer)
+		wl_event_source_remove(m.bordo_alto_timer);
 	if (m.cartello_timer != NULL)
 		wl_event_source_remove(m.cartello_timer);
 	if (sig_chld != NULL)

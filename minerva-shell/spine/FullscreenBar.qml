@@ -392,8 +392,11 @@ PanelWindow {
             // dire «questa barra ricompare quassù», e si leggeva come il modo di
             // uscire dallo schermo intero — che invece non era scritto da
             // nessuna parte.
-            text: fs.it ? "Per uscire: il pulsante qui sopra, oppure Super+↓  ·  Questa barra torna tenendo Super e portando il puntatore in cima"
-                        : "To leave: the button above, or Super+↓  ·  This bar comes back holding Super with the pointer at the top"
+            // La scorciatoia è quella di `config/scorciatoie.minerva`
+            // («$mod F»), e la barra torna con una sosta in cima o con Super
+            // (`bordo_alto_guarda` nel compositore).
+            text: fs.it ? "Per uscire: il pulsante qui sopra, oppure Super+F  ·  Questa barra torna fermando il puntatore in cima"
+                        : "To leave: the button above, or Super+F  ·  This bar comes back when the pointer rests at the top"
             color: Theme.Colors.textFaint
             font.family: Theme.Typography.fontDisplay
             font.weight: Theme.Typography.weightRegular
