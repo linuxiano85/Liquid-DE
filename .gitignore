@@ -55,3 +55,11 @@ __pycache__/
 # ── Editor ─────────────────────────────────────────────────────────────
 .vscode/
 .idea/
+
+# ── Le prove stanno in un altro repository ─────────────────────────────
+#
+# In Liquid_test, accanto a questa cartella: il progetto contiene solo
+# quello che serve a costruirlo e installarlo. `collega.sh` di Liquid_test
+# crea qui il collegamento da cui `compositore/meson.build` costruisce le
+# prove in C; non deve mai finire nella storia.
+compositore/prove

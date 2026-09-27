@@ -22,34 +22,21 @@ Creatore: **linuxiano85**.
 Si parlano attraverso due canali dichiarati, mai per scorciatoie:
 
 - **shell ↔ demone**: un socket Unix in `$XDG_RUNTIME_DIR`, JSON, un
-  messaggio per riga. Ogni azione esistente è in [`EVENTS.md`](EVENTS.md), e
-  una prova controlla che l'elenco sia vero.
+  messaggio per riga, con una parola d'ordine che il demone scrive per sé.
 - **shell ↔ compositore**: il canale di testo del compositore, attraverso un
   modulo solo (`minerva-shell/core/Compositore.qml`).
 
-La regola dei confini è in [`MODULI.md`](MODULI.md).
-
-Il piano di lavoro è in [`PIANO.md`](PIANO.md); il disegno di riferimento
-(le simulazioni da cui nasce la scrivania) è in `disegno/`.
 
 ---
 
-## Provare senza rischiare la sessione
+## Le prove
 
-Tutto si prova **dentro una sessione annidata**, in una finestra o senza
-schermo, senza toccare quella in cui si lavora:
-
-```bash
-./compositore/prova-annidata.sh
-```
-
-Le prove:
-
-```bash
-cd compositore && meson test -C build-native   # il compositore
-cd minervad && dart test                       # il demone
-./scripts/prove.sh                             # tutto, finestre comprese
-```
+Questo repository contiene solo quello che serve a costruire e installare
+Liquid DE. Le prove — più di 1500 sul demone, le prove del compositore in C e
+nella sessione annidata, quelle della shell — stanno in un repository a
+parte, **Liquid_test**, da tenere accanto a questa cartella: il suo
+`collega.sh` gli dà la stessa forma del progetto, e il `meson.build` del
+compositore costruisce le prove in C solo se lo trova.
 
 ---
 
@@ -60,8 +47,6 @@ cd minervad && dart test                       # il demone
 ./scripts/minerva-compila          # il demone
 ./scripts/install-minerva.sh       # dipendenze, PAM, polkit, voce al login
 ```
-
-Cosa serve e perché: [`DEPENDENCIES.md`](DEPENDENCIES.md).
 
 ---
 

@@ -557,7 +557,8 @@ done
 echo
 if [[ $ALL_OK -eq 1 ]]; then
     c_ok "Installazione completata. Esci e scegli «Liquid DE» nel display manager,"
-    c_ok "oppure prova la sessione annidata con: ./compositore/prova-annidata.sh"
+    c_ok "oppure, con le prove accanto (Liquid_test), la sessione annidata:"
+    c_ok "    ../Liquid_test/compositore/prova-annidata.sh"
 else
     c_err "Installazione incompleta: alcuni componenti mancano."
     exit 1

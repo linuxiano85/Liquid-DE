@@ -158,72 +158,6 @@ executable('minerva-pty',
   dependencies: [cc.find_library('util', required: false)],
   install: true)
 
-# ── Le prove del lettore di schermi ─────────────────────────────────────
-#
-# Un eseguibile a parte, senza wlroots: `schermi.c` legge testo e riempie una
-# struttura, e quella parte si può provare senza uno schermo. È deliberato —
-# la configurazione degli schermi è l'unico pezzo del compositore in cui un
-# difetto si porta via il modo di ripararlo, quindi è anche l'unico che vale
-# la pena separare apposta per poterlo provare.
-prova_schermi = executable('prova-schermi',
-  files('src/prova-schermi.c', 'src/schermi.c'),
-  install: false)
-test('schermi', prova_schermi)
-
-# ── E le prove dell'aggancio ai bordi ───────────────────────────────────
-#
-# Stessa idea, stessa ragione: `src/aggancio.c` è conto puro — non tocca
-# wlroots — e il suo difetto si vedrebbe come una finestra nel posto sbagliato,
-# cioè tardi. Provarlo con dei numeri costa un eseguibile da niente.
-prova_aggancio = executable('prova-aggancio',
-  files('src/prova-aggancio.c', 'src/aggancio.c'),
-  install: false)
-test('aggancio', prova_aggancio)
-
-# ── E le prove del ritaglio della lente ─────────────────────────────────
-#
-# Stessa idea, con una ragione in più che vale solo qui: la lente **non si può
-# fotografare**. Agisce sullo scanout, e `grim` cattura la scena — due catture
-# con lente spenta e accesa sono identiche al pixel. Dove non si può guardare,
-# provare i numeri non è un ripiego: è l'unica strada che c'è.
-prova_lente = executable('prova-lente',
-  files('src/prova-lente.c', 'src/lente.c'),
-  dependencies: [cc.find_library('m', required: false)],
-  install: false)
-test('lente', prova_lente)
-
-# ── E le prove dell'elastico ────────────────────────────────────────────
-#
-# Con una ragione ancora diversa dalle due qui sopra: l'elastico è un
-# comportamento NEL TEMPO, e una fotografia è un istante. I due modi in cui si
-# rompe — «la finestra scatta e basta» e «la finestra ondeggia per sempre» —
-# danno la stessa fotografia di uno che funziona, se la si scatta nel momento
-# giusto. E il caso peggiore, la molla che guadagna energia con un passo
-# lungo, si vede una volta su venti: cioè mai, quando lo cerchi.
-prova_molla = executable('prova-molla',
-  files('src/prova-molla.c', 'src/molla.c'),
-  dependencies: [cc.find_library('m', required: false)],
-  install: false)
-test('molla', prova_molla)
-
-prova_ondulazione = executable('prova-ondulazione',
-  files('src/prova-ondulazione.c', 'src/ondulazione.c', 'src/molla.c'),
-  dependencies: [cc.find_library('m')], install: false)
-test('ondulazione', prova_ondulazione)
-
-prova_canale = executable('prova-canale', files('src/prova-canale.c'),
-  dependencies: [wayland_server], install: false)
-test('canale', prova_canale)
-
-prova_puntatore = executable('prova-puntatore', files('src/prova-puntatore.c'),
-  dependencies: [wlroots, wayland_server, pixman, cc.find_library('m')], install: false)
-test('puntatore', prova_puntatore)
-
-# Richiede un contesto GPU; esecuzione esplicita, non nella suite senza schermo.
-executable('prova-wobbly-gpu',
-  files('src/prova-wobbly-gpu.c', 'src/wobbly.c', 'src/ondulazione.c'),
-  dependencies: [wlroots, wayland_server, pixman, gles2, cc.find_library('m')],
-  install: false)
 
 executable('minerva-wayland',
   files('src/main.c', 'src/barra.c', 'src/anello.c', 'src/schermi.c',
@@ -236,62 +170,15 @@ executable('minerva-wayland',
     cc.find_library('m')],
   install: true)
 
-# Solo con un bus D-Bus privato; il banco rifiuta il bus di sistema reale.
-prova_sonno = executable('prova-sonno', files('src/prova-sonno.c', 'src/sonno.c'),
-  dependencies: [systemd, wayland_server, wlroots], install: false)
-prova_energia = executable('prova-energia', files('src/prova-energia.c', 'src/energia.c'),
-  dependencies: [systemd, wayland_server, wlroots, cc.find_library('m')],
-  install: false)
-
-# Le due prove del bus di sistema girano in un bus PRIVATO: `dbus-run-session`
-# ne apre uno, e la stessa strada fa da bus «di sistema». `prova-sonno`
-# c'era dal 15 settembre e non la lanciava nessun giro — scritta, verde, e
-# mai più guardata.
-dbus_run_session = find_program('dbus-run-session', required: false)
-if dbus_run_session.found()
-  foreach nome, prova : {'sonno': prova_sonno, 'energia': prova_energia}
-    test(nome, dbus_run_session,
-      args: ['--', 'sh', '-c',
-        'DBUS_SYSTEM_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" exec "$0"', prova],
-      timeout: 20)
-  endforeach
+# ── Le prove in C ────────────────────────────────────────────────────────
+#
+# Non stanno in questo progetto ma nel repository delle prove (Liquid_test),
+# che accanto a questa cartella crea il collegamento `prove`. Senza, il
+# compositore si costruisce lo stesso e `meson test` dice «No tests defined».
+fs = import('fs')
+if fs.is_dir('prove')
+  sorgenti = meson.current_source_dir() / 'src'
+  inc_sorgenti = include_directories('src')
+  inc_fork = include_directories('subprojects/wlroots/include')
+  subdir('prove')
 endif
-
-# Richieste Wayland vere contro il fork (client e server in processo, senza
-# GPU né sessione): ordine FIFO, timestamp, oggetti distrutti, figli
-# sincronizzati. Sette scenari di errore, ognuno con la sua connessione.
-timing_headers = []
-foreach name : ['fifo', 'commit-timing']
-  timing_headers += custom_target(name + '-client',
-    input: wayland_protos.get_variable('pkgdatadir') / 'staging' / name / (name + '-v1.xml'),
-    output: name + '-v1-client.h',
-    command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
-endforeach
-prova_presentazione = executable('prova-presentazione',
-  files('src/prova-presentazione.c'), timing_headers,
-  dependencies: [wlroots, wayland_client, dependency('threads')],
-  c_args: ['-Wno-unused-parameter'], install: false)
-test('presentazione', prova_presentazione, timeout: 15)
-foreach scenario : ['invalid-ns', 'duplicate-timestamp', 'duplicate-fifo',
-    'duplicate-timer', 'dead-timer', 'dead-fifo-set', 'dead-fifo-wait']
-  test('presentazione-' + scenario, prova_presentazione, args: [scenario], timeout: 15)
-endforeach
-prova_buffer_size = executable('prova-buffer-size', files('src/prova-buffer-size.c'),
-  include_directories: include_directories('subprojects/wlroots/include'), install: false)
-test('buffer-size', prova_buffer_size)
-
-# Un client che dichiara danneggiato SOLO quello che cambia: il banco di
-# `prova-danno-blur.py`. Nessun programma installato lo fa — alacritty e Qt
-# dichiarano tutta la finestra — e senza di lui il danno incrementale del
-# blur non si può distinguere da uno sbagliato.
-xdg_shell_client = custom_target('xdg-shell-client',
-  input: wayland_protos.get_variable('pkgdatadir') / 'stable/xdg-shell/xdg-shell.xml',
-  output: 'xdg-shell-client.h',
-  command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'])
-xdg_shell_codice = custom_target('xdg-shell-codice',
-  input: wayland_protos.get_variable('pkgdatadir') / 'stable/xdg-shell/xdg-shell.xml',
-  output: 'xdg-shell-codice.c',
-  command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'])
-executable('prova-danno-client',
-  files('src/prova-danno-client.c'), xdg_shell_client, xdg_shell_codice,
-  dependencies: [wayland_client], install: false)

@@ -9,6 +9,6 @@ environment:
 # Nessuna dipendenza esterna, di proposito: solo la libreria standard di
 # Dart. Vedi README.md.
 
+# Le prove stanno in Liquid_test, che ha il suo pubspec con `test`.
 dev_dependencies:
   lints: ^6.0.0
-  test: ^1.31.0
