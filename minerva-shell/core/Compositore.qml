@@ -869,27 +869,11 @@ Singleton {
     // Le manopole che sotto minerva-wayland non hanno ancora una strada
     // ══════════════════════════════════════════════════════════════════════
     //
-    // `imposta()` è `hyprctl keyword`, e fino al 27 agosto 2026 partiva SEMPRE
-    // — anche sotto il nostro compositore, dove non c'è nessun hyprctl a cui
-    // parlare. Nove funzioni ci passavano dentro, e sotto minerva-wayland
-    // finivano nel vuoto **senza una riga da nessuna parte**.
-    //
-    // E c'era di peggio del vuoto. `hyprctl` non parla col compositore che ti
-    // sta disegnando lo schermo: parla con quello che dice
-    // `HYPRLAND_INSTANCE_SIGNATURE`. In una prova annidata fatta male quella
-    // variabile è ereditata, e queste manopole andavano a cambiare la
-    // scrivania VERA di chi stava provando — è già successo una volta con i
-    // comandi delle finestre, ed è il motivo per cui `prova-annidata.sh`
-    // cancella la firma.
-    //
-    // Adesso ogni funzione che chiama `imposta()` deve dichiararsi: o ha un
-    // verbo nostro, o dice **qui** che strada non ce l'ha e perché. Lo
-    // controlla `scripts/verbi-compositore.py --sordi`, e una funzione nuova
-    // che se ne dimentica diventa una riga rossa invece di un comando che
-    // sparisce.
-    //
-    // Nessuna di queste è un difetto: è una cosa che il compositore non sa
-    // ancora fare, detta invece di taciuta.
+    // Una cosa che il compositore non sa ancora fare si dice qui, col perché,
+    // invece di sparire in silenzio: chi la chiede lo trova scritto nel
+    // registro una volta (`_senzaStrada`). Fino al 27 settembre 2026 qui
+    // passava anche `imposta()`, l'imbuto delle chiavi di Hyprland: nessuno
+    // la chiamava più, ed è stata tolta.
     readonly property var senzaDestinazione: ({
         "monitorAttivo":
             "quale schermo ha il puntatore. Il compositore lo sa (ogni schermo esce da «schermi» con «attivo»), ma saperlo di continuo vorrebbe dire chiederglielo a ogni movimento del mouse — cioè svegliare la shell per un dato che serve solo quando si preme una scorciatoia. Chi lo usa (shell.qml) ha già il ripiego «il primo schermo», che su una macchina a schermo singolo è sempre quello giusto; con due schermi una scorciatoia può colpire l'altro. Si chiude quando ci sarà un secondo schermo su cui provarlo"
@@ -908,25 +892,6 @@ Singleton {
         console.log("[MINERVA][Compositore] «" + cosa + "» non ha una strada "
                     + "sotto minerva-wayland: "
                     + (comp.senzaDestinazione[cosa] || "motivo non dichiarato"));
-    }
-
-    /// ── Non manda più niente da nessuna parte, e resta ──────────────────
-    ///
-    /// Era `hyprctl keyword`. Arrivare qui vuol dire che qualcuno ha scritto
-    /// una funzione nuova con una chiave di Hyprland in mano e si è
-    /// dimenticato di dichiararsi: non è una mancanza, è un difetto, e si dice
-    /// ogni volta invece di sparire.
-    ///
-    /// Toglierla del tutto sarebbe peggio che tenerla: chi scrive quella
-    /// funzione nuova non troverebbe l'errore QML — troverebbe il silenzio, che
-    /// è esattamente il modo in cui nove manopole sono finite nel vuoto fino
-    /// al 27 agosto 2026.
-    function imposta(chiave, valore) {
-        console.warn("[MINERVA][Compositore] «" + chiave + "» è una chiave di "
-                     + "Hyprland, e Hyprland non c'è più: questa riga non va "
-                     + "da nessuna parte. Chi la manda deve avere un verbo "
-                     + "nostro oppure dichiararsi in «senzaDestinazione». "
-                     + "(valore: " + valore + ")");
     }
 
     // ── Tradurre quello che il compositore RISPONDE ──────────────────────

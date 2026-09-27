@@ -1,4 +1,4 @@
-# zz-liquid-de.rules — priorità di scheduling per i processi di Minerva.
+# zz-liquid-de.rules — priorità di scheduling per i processi di Liquid DE.
 #
 # Va in /etc/ananicy.d/. Serve solo dove gira ananicy-cpp (CachyOS lo installa
 # di serie, e lo tiene ACCESO): altrove il file non fa niente e non dà noia.
@@ -28,7 +28,7 @@
 #
 # ── Perché al compositore diamo -12 e NON il tipo di kwin ─────────────────
 #
-# La prima versione dava a Hyprland `"type": "LowLatency_RT"`, che è quello
+# La prima versione dava al compositore `"type": "LowLatency_RT"`, che è quello
 # che le regole di serie danno a `kwin_wayland`. Provato: il compositore
 # finiva in SCHED_RR, cioè tempo reale. Il tipo dichiara solo `nice -12`, ma
 # ananicy-cpp per quel nome fa anche il cambio di politica.
@@ -41,9 +41,18 @@
 # tempo reale è quello che si sente meno di tutti.
 #
 # Chi lo vuole comunque: sostituire la riga con
-#     { "name": "Hyprland", "type": "LowLatency_RT" }
+#     { "name": "minerva-wayland", "type": "LowLatency_RT" }
+#
+# ── Il nome giusto ────────────────────────────────────────────────────────
+#
+# Fino al 27 settembre 2026 qui c'era `Hyprland`, e il nostro compositore non
+# aveva nessuna regola: nella sessione viva `minerva-wayland` stava a nice -4
+# e la shell a -6, cioè la shell passava DAVANTI al compositore che disegna
+# ogni fotogramma e riceve mouse e tastiera. La riga di Hyprland serviva a un
+# processo che in Liquid DE non gira mai (la schermata di accesso di riserva,
+# che è di Minerva, ha la sua regola in zz-minerva.rules).
 
-{ "name": "Hyprland",        "nice": -12, "ioclass": "best-effort", "ionice": 1 }
+{ "name": "minerva-wayland", "nice": -12, "ioclass": "best-effort", "ionice": 1 }
 { "name": "qs",              "nice": -6, "ioclass": "best-effort", "ionice": 2 }
 # Il demone compilato si chiama `minervad` e basta. Il nome col prefisso è
 # quello che gli dà la macchina virtuale quando gira interpretato, durante lo
