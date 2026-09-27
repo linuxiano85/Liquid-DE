@@ -217,7 +217,6 @@ static void gles2_destroy(struct wlr_renderer *wlr_renderer) {
 
 	push_gles2_debug(renderer);
 	glDeleteProgram(renderer->minerva_blur.program);
-	glDeleteTextures(3,renderer->minerva_blur.tex);
 	glDeleteTextures(3,renderer->minerva_acquerello.tex);
 	glDeleteFramebuffers(1,&renderer->minerva_blur.fbo);
 	glDeleteTextures(1,&renderer->minerva_salvato.tex);
@@ -702,7 +701,6 @@ struct wlr_renderer *wlr_gles2_renderer_create(struct wlr_egl *egl) {
 
 error:
 	glDeleteProgram(renderer->minerva_blur.program);
-	glDeleteTextures(3,renderer->minerva_blur.tex);
 	glDeleteTextures(3,renderer->minerva_acquerello.tex);
 	glDeleteFramebuffers(1,&renderer->minerva_blur.fbo);
 	glDeleteProgram(renderer->shaders.quad.program);

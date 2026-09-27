@@ -541,7 +541,6 @@ ShellRoot {
         titleHeight:    root.titleBarHeight
         effetto:        Core.Ipc.get("windows.effetto", "nessuno")
         effettoOpacita: Core.Ipc.get("windows.effettoOpacita", 0.88)
-        blurIntensita: Core.Ipc.get("windows.blurIntensita", 50)
         rigidita: Core.Ipc.get("windows.rigidita", 1)
         smorzamento: Core.Ipc.get("windows.smorzamento", 0.42)
         cornice:        Core.Ipc.get("windows.cornice", "spento")

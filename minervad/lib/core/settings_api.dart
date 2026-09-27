@@ -48,6 +48,13 @@ class SettingsApi {
       final decoded = jsonDecode(content);
       if (decoded is Map<String, dynamic>) {
         _settings = decoded;
+        // Il blur è stato tolto il 28 settembre 2026 («a questo punto il blur
+        // lo eliminerei»): chi l'aveva scelto passa al filtro che c'è. In
+        // memoria: il file si riscrive alla prossima impostazione cambiata.
+        final finestre = _settings['windows'];
+        if (finestre is Map && finestre['effetto'] == 'blur') {
+          finestre['effetto'] = 'acquerello';
+        }
         print('[MINERVA][CORE][OK] Impostazioni caricate correttamente.');
       } else {
         throw const FormatException('La radice di settings.json non è un oggetto');
@@ -210,7 +217,7 @@ class SettingsApi {
   /// e sotto di esse si scrive quel che si vuole.
   bool _applyValue(String path, dynamic value) {
     const effectRanges = <String, List<double>>{
-      'windows.blurIntensita': [0, 100], 'windows.rigidita': [0.5, 2],
+      'windows.rigidita': [0.5, 2],
       'windows.smorzamento': [0.15, 0.95], 'windows.elastico': [0, 3],
       'windows.elasticoUltimo': [0.1, 3], 'windows.effettoOpacita': [0.5, 1],
     };
@@ -474,7 +481,11 @@ class SettingsApi {
           // sceglie, e avvisano sotto 4,5 senza impedire niente.
           'scavalca': <String, dynamic>{},
           'membraneOpacity': 0.93,
-          // ── E la stessa cosa col blur vero, che è un mestiere diverso ──
+          // ── E la stessa cosa col filtro vero, che è un mestiere diverso ──
+          //
+          // (Le chiavi si chiamano ancora `…Blur`: sono nate col blur, e
+          // rinominarle farebbe perdere a chi le ha già regolate il suo
+          // numero. Oggi valgono con l'acquerello, l'unico filtro rimasto.)
           //
           // Due numeri e non uno, perché la domanda «quanto è coprente la
           // barra» ha due risposte giuste secondo cosa c'è dietro.
@@ -683,7 +694,7 @@ class SettingsApi {
           //
           // Lo spazio sopra una finestra libera lo mette `abbassa()` in
           // `spine/TitleBars.qml`, che è dove è sempre stato per davvero.
-          // ── L'effetto sulle finestre: nessuno, vetro, acquerello, blur ─
+          // ── L'effetto sulle finestre: nessuno, vetro, acquerello ───────
           //
           // Qui c'era `'blur': 2`, un numero da 0 a 3 che sceglieva quanta
           // sfocatura chiedere a Hyprland. Sotto minerva-wayland **non faceva
@@ -705,7 +716,10 @@ class SettingsApi {
           //   'acquerello' come il vetro, e dietro il COLORE di quello che
           //              c'è, cella per cella, steso morbido: niente forme
           //              dietro il testo
-          //   'blur'     come il vetro, e dietro sfocato
+          //
+          // C'era anche 'blur' (dietro sfocato): tolto il 28 settembre 2026,
+          // visto l'acquerello — «a questo punto il blur lo eliminerei». Chi
+          // l'aveva nel file passa all'acquerello al caricamento.
           //
           // Nasceva 'nessuno' («una scrivania che parte con le finestre
           // trasparenti prima che qualcuno l'abbia chiesto sembra rotta»).
@@ -778,7 +792,6 @@ class SettingsApi {
           'elasticoUltimo': 1.0,
           'rigidita': 1.0,
           'smorzamento': 0.42,
-          'blurIntensita': 50.0,
           // Che fa la barra a schermo intero: 'hover' compare avvicinandosi.
           'fullscreenBar': 'hover',
           // Le finestre sono LIBERE, sempre: non c'è più un modo affiancato.

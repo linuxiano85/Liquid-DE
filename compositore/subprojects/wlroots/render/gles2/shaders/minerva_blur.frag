@@ -2,9 +2,7 @@ precision highp float;
 varying vec2 v_texcoord;
 uniform sampler2D tex;
 uniform sampler2D mask;
-uniform vec2 step_uv;
 uniform vec4 capture;
-uniform float composite;
 uniform float has_mask;
 /* L'acquerello, vedi minerva_acquerello_pezzo in pass.c. `fase` 2 riduce
  * a 1/4, 3 da 1/4 a 1/32, 4 stende; 0 e 1 sono il blur. Tutte le coordinate
@@ -131,16 +129,13 @@ vec4 acquerello() {
  return s/6.0*a;
 }
 
+/* Due mestieri: l'acquerello (fase 2, 3, 4) e la copia di un pezzo di
+ * fotogramma messo da parte (le fasce, `minerva_ripristina` in pass.c). Il
+ * blur gaussiano che stava qui è stato tolto il 28 settembre 2026. */
 void main() {
  if (fase>1.5) { gl_FragColor=acquerello(); return; }
- if (composite>0.5) {
-  vec2 uv=(gl_FragCoord.xy-capture.xy)/capture.zw;
-  float a=minerva_coverage();
-  if(has_mask>0.5) a*=minerva_dove();
-  gl_FragColor=texture2D(tex,uv)*a;
- } else {
-  vec4 c=vec4(0.0); float total=0.0;
-  for(int i=-4;i<=4;i++) { float w=exp(-float(i*i)/8.0); c+=texture2D(tex,v_minerva+float(i)*step_uv)*w; total+=w; }
-  gl_FragColor=c/total;
- }
+ vec2 uv=(gl_FragCoord.xy-capture.xy)/capture.zw;
+ float a=minerva_coverage();
+ if(has_mask>0.5) a*=minerva_dove();
+ gl_FragColor=texture2D(tex,uv)*a;
 }

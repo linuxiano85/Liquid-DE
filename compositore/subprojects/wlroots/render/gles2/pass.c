@@ -384,9 +384,7 @@ static bool minerva_acquerello_pezzo(struct wlr_gles2_render_pass *pass,
  if ((uint64_t)w*h*6 > 128u*1024u*1024u) return false;
 
  GLint old_fbo; glGetIntegerv(GL_FRAMEBUFFER_BINDING,&old_fbo);
- if (!r->minerva_blur.fbo) {
-  glGenTextures(3,r->minerva_blur.tex); glGenFramebuffers(1,&r->minerva_blur.fbo);
- }
+ if (!r->minerva_blur.fbo) glGenFramebuffers(1,&r->minerva_blur.fbo);
  if (!r->minerva_acquerello.tex[0]) glGenTextures(3,r->minerva_acquerello.tex);
  glActiveTexture(GL_TEXTURE0);
  acquerello_texture(r,0,w,h);
@@ -480,114 +478,13 @@ static bool minerva_blur_pezzo(struct wlr_render_pass *base,
   }
  }
  int fw=pass->buffer->buffer->width, fh=pass->buffer->buffer->height;
- struct wlr_box box=options->box;
- if (options->minerva.acquerello)
-  return minerva_acquerello_pezzo(pass,r,options,mask,fw,fh);
- /* Capture only the affected rectangle and the filter footprint, bounded by
-  * the framebuffer. The pool is shared across calls, never GPU->CPU readback. */
- /* This renderer uses FLIPPED_180 projection: buffer coordinates already
-  * match GL framebuffer coordinates. Flipping y again captures the opposite
-  * edge of the output for a filter which isn't vertically centered. */
- if (box.width<=0 || box.height<=0) return true;
- float radius=options->minerva.blur_radius;
- if (radius==0) radius=3;
- if (!isfinite(radius) || radius<=0 || radius>6) return false;
- int padding=(int)ceilf(radius*4)+8;
- /* La griglia: l'origine della cattura COMPLETA, anche fuori schermo. */
- int64_t gx=(int64_t)box.x-padding, gy=(int64_t)box.y-padding;
- int64_t left=gx, bottom=gy;
- int64_t right=(int64_t)box.x+box.width+padding, top=(int64_t)box.y+box.height+padding;
- /* ── Solo il pezzo che serve ──────────────────────────────────────────
-  * Il filtro ridà pixel solo dentro il ritaglio (il danno): catturare e
-  * sfocare tutto il rettangolo — per una finestra ingrandita, quasi lo
-  * schermo — costava 4,2 ms a fotogramma per un quadrato di 70 pixel
-  * (misurato il 23 settembre 2026). Basta il ritaglio allargato del
-  * margine del filtro. */
- if (options->clip && !pixman_region32_empty(options->clip)) {
-  const pixman_box32_t *e=pixman_region32_extents(options->clip);
-  if (left<(int64_t)e->x1-padding) left=(int64_t)e->x1-padding;
-  if (bottom<(int64_t)e->y1-padding) bottom=(int64_t)e->y1-padding;
-  if (right>(int64_t)e->x2+padding) right=(int64_t)e->x2+padding;
-  if (top>(int64_t)e->y2+padding) top=(int64_t)e->y2+padding;
- }
- if (left<0) left=0;
- if (bottom<0) bottom=0;
- if (right>fw) right=fw;
- if (top>fh) top=fh;
- /* ── E sulla stessa griglia della cattura completa ────────────────────
-  * La sfocatura lavora a metà risoluzione: un texel è la media di due
-  * pixel. Se il pezzo partisse da un pixel dispari rispetto alla cattura
-  * completa, le coppie sarebbero altre e il risultato diverso di un
-  * livello qua e là: le cuciture di prima, da un'altra porta. Origine
-  * della stessa parità della griglia, e misure pari. */
- if ((left-gx)&1) left = left>0 ? left-1 : left+1;
- if ((bottom-gy)&1) bottom = bottom>0 ? bottom-1 : bottom+1;
- if ((right-left)&1) right = right<fw ? right+1 : right-1;
- if ((top-bottom)&1) top = top<fh ? top+1 : top-1;
- if (right<=left || top<=bottom) return true;
- int x=left, y=bottom, w=right-left, h=top-bottom;
- if ((uint64_t)w*h*6 > 128u*1024u*1024u) return false;
- int sw=(w+1)/2,sh=(h+1)/2;
- GLint old_fbo; glGetIntegerv(GL_FRAMEBUFFER_BINDING,&old_fbo);
- if (!r->minerva_blur.fbo) {
-  glGenTextures(3,r->minerva_blur.tex); glGenFramebuffers(1,&r->minerva_blur.fbo);
- }
- glActiveTexture(GL_TEXTURE0);
- bool resize=r->minerva_blur.width!=w||r->minerva_blur.height!=h;
- for(int i=0;i<3;i++) {
-  glBindTexture(GL_TEXTURE_2D,r->minerva_blur.tex[i]);
-  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-  if(resize) glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,i?sw:w,i?sh:h,0,GL_RGBA,GL_UNSIGNED_BYTE,NULL);
- }
- r->minerva_blur.width=w; r->minerva_blur.height=h;
- glBindTexture(GL_TEXTURE_2D,r->minerva_blur.tex[0]);
- glCopyTexSubImage2D(GL_TEXTURE_2D,0,0,0,x,y,w,h);
- GLuint p=r->minerva_blur.program;
- glUseProgram(p); glUniform1i(glGetUniformLocation(p,"tex"),0);
- glUniform1f(glGetUniformLocation(p,"composite"),0);
- glDisable(GL_BLEND); glDisable(GL_SCISSOR_TEST);
- GLfloat projection[9]; matrix_projection(projection,sw,sh,WL_OUTPUT_TRANSFORM_FLIPPED_180);
- struct wlr_box small={0,0,sw,sh};
- GLint pos=glGetAttribLocation(p,"pos");
- glBindFramebuffer(GL_FRAMEBUFFER,r->minerva_blur.fbo); glViewport(0,0,sw,sh);
- bool ok=true;
- for(int i=0;i<2;i++) {
-  glFramebufferTexture2D(GL_FRAMEBUFFER,GL_COLOR_ATTACHMENT0,GL_TEXTURE_2D,r->minerva_blur.tex[i+1],0);
-  if(glCheckFramebufferStatus(GL_FRAMEBUFFER)!=GL_FRAMEBUFFER_COMPLETE) { ok=false; break; }
-  glBindTexture(GL_TEXTURE_2D,r->minerva_blur.tex[i]);
-  glUniform2f(glGetUniformLocation(p,"step_uv"),i?0:radius/w,i?radius/h:0);
-  set_proj_matrix(glGetUniformLocation(p,"proj"),projection,&small);
-  render(&small,NULL,pos);
- }
- glBindFramebuffer(GL_FRAMEBUFFER,old_fbo); glViewport(0,0,fw,fh);
- if(ok) {
-  glUniform1f(glGetUniformLocation(p,"composite"),1);
-  glUniform4f(glGetUniformLocation(p,"capture"),x,y,w,h);
-  glUniform1f(glGetUniformLocation(p,"has_mask"),0);
-  if(mask && wlr_texture_is_gles2(mask)) {
-   struct wlr_gles2_texture *m=gles2_get_texture(mask);
-   if(m->target==GL_TEXTURE_2D) {
-    glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,m->tex);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-    glUniform1i(glGetUniformLocation(p,"mask"),1);glUniform1f(glGetUniformLocation(p,"has_mask"),1);
-   }
-  }
-  glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,r->minerva_blur.tex[2]);
-  minerva_uniforms(p,box,options->minerva);
-  set_proj_matrix(glGetUniformLocation(p,"proj"),pass->projection_matrix,&box);
-  setup_blending(WLR_RENDER_BLEND_MODE_PREMULTIPLIED);
-  render(&box,options->clip,pos);
- }
- glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,0);
- glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,0);
- return ok;
+ /* Dal 28 settembre 2026 il filtro è uno solo: l'acquerello. Il blur
+  * gaussiano (due passaggi a mezza risoluzione, le coppie di parità, il
+  * raggio) se n'è andato — Giacomo, visto l'acquerello: «a questo punto il
+  * blur lo eliminerei». */
+ return minerva_acquerello_pezzo(pass,r,options,mask,fw,fh);
 }
+
 
 /* ── Mettere da parte un pezzo di fotogramma, e rimetterlo ─────────────────
  *
@@ -643,7 +540,7 @@ static bool minerva_ripristina(struct wlr_render_pass *base, const pixman_region
  GLuint p=r->minerva_blur.program;
  glUseProgram(p);
  glUniform1i(glGetUniformLocation(p,"tex"),0);
- glUniform1f(glGetUniformLocation(p,"composite"),1);
+ glUniform1f(glGetUniformLocation(p,"fase"),0);
  glUniform1f(glGetUniformLocation(p,"has_mask"),0);
  glUniform4f(glGetUniformLocation(p,"capture"),box.x,box.y,box.width,box.height);
  minerva_uniforms(p,box,(struct wlr_minerva_style){0});
@@ -676,12 +573,8 @@ static bool minerva_blur(struct wlr_render_pass *base,
  const pixman_box32_t *r=pixman_region32_rectangles(clip,&n);
  enum { GRUPPI_MAX = 16 };
  if (n<=1 || n>GRUPPI_MAX) return minerva_blur_pezzo(base,options,mask_options);
- float radius=options->minerva.blur_radius;
- if (radius==0) radius=3;
- if (!isfinite(radius) || radius<=0 || radius>6) return false;
- int64_t pad=(int64_t)ceilf(radius*4)+8;
  /* L'acquerello legge una cella intorno al pezzo, più l'allineamento. */
- if (options->minerva.acquerello) pad=ACQ_MARGINE+ACQ_CELLA;
+ const int64_t pad=ACQ_MARGINE+ACQ_CELLA;
  int64_t g[GRUPPI_MAX][4];
  int k=n;
  for (int i=0;i<n;i++) {

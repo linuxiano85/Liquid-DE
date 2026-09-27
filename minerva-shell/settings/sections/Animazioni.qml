@@ -242,23 +242,20 @@ Page {
                 ? "Col vetro la finestra e la sua barra sono un corpo solo: "
                   + "una trasparenza sola, senza stacchi in mezzo. "
                   + "L'acquerello prende solo il COLORE di quello che sta "
-                  + "dietro e lo stende morbido: niente forme dietro il testo. "
-                  + "Il blur lo sfoca, e si vedono ancora le forme."
+                  + "dietro e lo stende morbido: niente forme dietro il testo."
                 : "With glass, a window and its title bar are one body: a "
                   + "single transparency, with no seam between them. "
                   + "Watercolour takes only the COLOUR of what's behind and "
-                  + "spreads it softly: no shapes behind the text. Blur "
-                  + "softens it, and the shapes still show."
+                  + "spreads it softly: no shapes behind the text."
             searchTerms: "effetto vetro blur acquerello trasparenza materiale sfocatura"
             controlWidth: 340
 
             control: S.ChoicePicker {
-                value: String(Core.Ipc.get("windows.effetto", "nessuno"))
+                value: Core.Vetro.effettoChiesto
                 options: [
                     { "value": "nessuno", "label": page.it ? "Nessuno" : "None" },
                     { "value": "vetro",   "label": page.it ? "Vetro"   : "Glass" },
-                    { "value": "acquerello", "label": page.it ? "Acquerello" : "Watercolour" },
-                    { "value": "blur",    "label": "Blur" }
+                    { "value": "acquerello", "label": page.it ? "Acquerello" : "Watercolour" }
                 ]
                 onPicked: function(v) {
                     Core.Ipc.setSetting("windows.effetto", v);
@@ -283,38 +280,6 @@ Page {
                 checked: Core.Ipc.get("windows.mercurio", true)
                 onToggled: function (v) {
                     Core.Ipc.setSetting("windows.mercurio", v);
-                }
-            }
-        }
-
-        // ── Quanto sfoca, che NON è quanto si vede attraverso ────────────
-        //
-        // Giacomo, 20 settembre 2026: «l'opzione quanto si vede attraverso
-        // non regola l'intensità del blur». Aveva ragione: erano due cose in
-        // una riga sola. Questa è la forza della sfocatura (il raggio del
-        // filtro, nel compositore `blur_intensita * 0.06`); quella sotto è la
-        // trasparenza. Zero spegne il filtro e lascia il vetro.
-        S.SettingRow {
-            width: parent.width
-            // Solo del blur: l'acquerello non sfoca, prende il colore.
-            visible: Core.Vetro.blurChiesto
-            label: page.it ? "Intensità della sfocatura" : "Blur strength"
-            description: page.it
-                ? "Quanto è morbido quello che sta dietro. A zero non sfoca, "
-                  + "resta solo la trasparenza"
-                : "How soft what's behind becomes. At zero nothing is blurred, "
-                  + "only the transparency remains"
-            searchTerms: "blur sfocatura intensità forza raggio"
-            controlWidth: 220
-            control: S.ValueSlider {
-                width: 220
-                from: 0
-                to: 100
-                unit: "intero"
-                suffix: "%"
-                value: Core.Ipc.get("windows.blurIntensita", 50)
-                onReleased: function(v) {
-                    Core.Ipc.setSetting("windows.blurIntensita", Math.round(v));
                 }
             }
         }

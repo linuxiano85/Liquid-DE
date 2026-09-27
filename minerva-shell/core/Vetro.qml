@@ -52,11 +52,18 @@ QtObject {
     /// perso: «il vetro vero mostra le finestre che ci passano sotto, questo
     /// mostra lo sfondo». Adesso ci passano sotto, e si vedono.
     /// Che effetto il compositore mette sulle finestre: «nessuno», «vetro» o
-    /// «blur». Si legge QUI e in un posto solo: tre file che chiedono la
+    /// «acquerello». Si legge QUI e in un posto solo: tre file che chiedono la
     /// stessa chiave con tre ripieghi diversi sono tre risposte diverse il
     /// giorno che il ripiego conta.
-    readonly property string effettoChiesto:
-        String(Core.Ipc.get("windows.effetto", "nessuno"))
+    ///
+    /// «blur» è la parola di prima: il blur è stato tolto il 28 settembre
+    /// 2026 e chi la trova ancora nelle impostazioni ha l'acquerello — qui,
+    /// in un posto solo, così la pagina, la membrana e il compositore dicono
+    /// la stessa cosa.
+    readonly property string effettoChiesto: {
+        var e = String(Core.Ipc.get("windows.effetto", "nessuno"));
+        return e === "blur" ? "acquerello" : e;
+    }
 
     /// ── Chiesto e disegnato ─────────────────────────────────────────────
     ///
@@ -66,22 +73,18 @@ QtObject {
     /// deve seguire quello disegnato: una barra a 0,68 pensata per stare
     /// sopra un fondo sfocato, senza sfocatura sotto, non si legge. Chi
     /// mostra le MANOPOLE deve seguire quello chiesto: durante il risparmio
-    /// l'intensità del blur si regola lo stesso, e vale da quando si esce.
-    readonly property bool blurChiesto: vetro.effettoChiesto === "blur"
-    /// Blur e acquerello sono tutti e due un FILTRO dietro la superficie:
-    /// per chi disegna sopra valgono uguale (niente quadro finto sotto la
-    /// tinta, membrana che si apre). Differiscono solo nella manopola
-    /// dell'intensità, che è del blur: l'acquerello prende il colore e basta.
-    readonly property bool filtroChiesto: vetro.effettoChiesto === "blur"
-                                          || vetro.effettoChiesto === "acquerello"
+    /// le trasparenze si regolano lo stesso, e valgono da quando si esce.
+    ///
+    /// L'acquerello è un FILTRO dietro la superficie: per chi disegna sopra
+    /// vuol dire niente quadro finto sotto la tinta, e membrana che si apre.
+    readonly property bool filtroChiesto: vetro.effettoChiesto === "acquerello"
     readonly property bool effettoChiestoAcceso: vetro.effettoChiesto !== "nessuno"
 
     readonly property bool inRisparmio: Core.Compositore.risparmio
                                         && Core.Compositore.risparmio.attivo === true
     readonly property string effetto: vetro.inRisparmio ? "nessuno" : vetro.effettoChiesto
 
-    readonly property bool filtroVero: vetro.effetto === "blur"
-                                       || vetro.effetto === "acquerello"
+    readonly property bool filtroVero: vetro.effetto === "acquerello"
 
     /// Vero quando la trasparenza delle finestre la mette IL COMPOSITORE.
     ///

@@ -17,10 +17,6 @@ struct wlr_minerva_mercurio {
 	struct wlr_fbox forme[WLR_MINERVA_MERCURIO_MAX];
 };
 struct wlr_minerva_style {
-	float blur_radius; /* Physical sampling step; zero preserves legacy default. */
-	/* Acquerello: behind the surface only the COLOUR of what's there, the
-	 * whole rectangle averaged down to 1/32 and spread back softly. */
-	bool acquerello;
 	struct wlr_minerva_radii corners;
 	struct wlr_minerva_clip hole;
 	struct wlr_minerva_mercurio mercurio;

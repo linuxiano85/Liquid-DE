@@ -180,7 +180,6 @@ QtObject {
     property bool mercurio: true
     property real rigidita: 1
     property real smorzamento: 0.42
-    property real blurIntensita: 50
 
     /// Margine fra le finestre, ai lati e in basso.
     // `gap` e `gapOut` restano come NUMERI e non come manopola: li legge
@@ -253,7 +252,6 @@ QtObject {
     onMercurioChanged: applySoon.restart()
     onRigiditaChanged: applySoon.restart()
     onSmorzamentoChanged: applySoon.restart()
-    onBlurIntensitaChanged: applySoon.restart()
     onEffettoOpacitaChanged: applySoon.restart()
     onBorderActiveChanged: applySoon.restart()
     // Anche quella spenta, e non è pignoleria: passando da un tema scuro a
@@ -467,6 +465,6 @@ QtObject {
         Compositore.elastico(rules.elastico);
         Compositore.respiro(rules.respiro);
         Compositore.mercurio(rules.mercurio);
-        Compositore.parametriEffetti(rules.blurIntensita, rules.rigidita, rules.smorzamento);
+        Compositore.parametriEffetti(rules.rigidita, rules.smorzamento);
     }
 }

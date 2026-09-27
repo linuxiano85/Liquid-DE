@@ -1030,8 +1030,8 @@ Singleton {
 
     /// ── L'effetto sulle finestre: un corpo solo ─────────────────────────
     ///
-    /// `modo` è «nessuno», «vetro», «blur» o «acquerello»; `opacita` va da
-    /// 0,50 a 1,00 e conta per tutti gli effetti.
+    /// `modo` è «nessuno», «vetro» o «acquerello»; `opacita` va da 0,50 a
+    /// 1,00 e conta per tutti gli effetti.
     ///
     /// Col vetro il compositore mette la STESSA trasparenza su tutto l'albero
     /// della finestra — la barra che disegna lui e il contenuto del programma
@@ -1046,8 +1046,10 @@ Singleton {
     /// invece di sfocare prende il COLORE di quello che sta dietro, cella per
     /// cella, e lo stende morbido: niente forme dietro il testo.
     function effetto(modo, opacita) {
-        var m = (modo === "vetro" || modo === "blur" || modo === "acquerello")
-                ? modo : "nessuno";
+        // «blur» è la parola di prima (il blur è stato tolto il 28 settembre
+        // 2026): chi la trova ancora nelle impostazioni ha l'acquerello.
+        var m = modo === "blur" ? "acquerello"
+                : (modo === "vetro" || modo === "acquerello") ? modo : "nessuno";
         var a = parseFloat(opacita);
         if (isNaN(a) || a < 0.50)
             a = 0.50;
@@ -1126,10 +1128,8 @@ Singleton {
     /// Il compositore applica una deformazione alla superficie durante il
     /// trascinamento e la lascia assestare al rilascio. Il rendering è in
     /// `compositore/src/wobbly.c`; qui passa solo il parametro, non i frame.
-    function parametriEffetti(blur, rigidita, smorzamento) {
+    function parametriEffetti(rigidita, smorzamento) {
         if (!comp.nostro) return;
-        if (isFinite(blur) && blur >= 0 && blur <= 100)
-            comp._nostro("sfocatura", [Number(blur).toFixed(2)]);
         if (isFinite(rigidita) && rigidita >= 0.5 && rigidita <= 2 &&
                 isFinite(smorzamento) && smorzamento >= 0.15 && smorzamento <= 0.95)
             comp._nostro("molla", [Number(rigidita).toFixed(2), Number(smorzamento).toFixed(2)]);

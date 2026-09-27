@@ -145,9 +145,7 @@ struct wlr_scene_rect {
 	struct wlr_scene_node node;
 	struct wlr_minerva_radii corners;
 	struct wlr_minerva_clip clipped_region;
-	bool minerva_blur;
-	float minerva_blur_radius;
-	bool minerva_acquerello; /* il materiale: colore a 1/32, non sfocatura */
+	bool minerva_blur; /* il filtro dietro la superficie: l'acquerello (il blur gaussiano non c'è più) */
 	struct wlr_minerva_mercurio minerva_mercurio; /* le forme che si fondono */
 	struct wlr_scene_buffer *minerva_mask;
 	struct wl_listener minerva_mask_destroy;
@@ -798,11 +796,9 @@ void wlr_minerva_rect_set_corners(struct wlr_scene_rect *, struct wlr_minerva_ra
 void wlr_minerva_buffer_set_corners(struct wlr_scene_buffer *, struct wlr_minerva_radii);
 void wlr_minerva_rect_set_hole(struct wlr_scene_rect *, struct wlr_minerva_clip);
 struct wlr_scene_rect *wlr_minerva_blur_create(struct wlr_scene_tree *, int, int);
-void wlr_minerva_blur_set_radius(struct wlr_scene_rect *, float);
 /* Lo stesso filtro, come acquerello: legge tutto il suo rettangolo e ne
  * stende il colore medio (a 1/32). Il danno che lo tocca rifà tutto il
  * rettangolo: niente pezzi, quindi niente cuciture. */
-void wlr_minerva_blur_set_acquerello(struct wlr_scene_rect *, bool);
 /* Il rettangolo si disegna solo dove l'unione morbida delle forme esce da
  * loro (coordinate logiche, relative al rettangolo). NULL o zero forme: il
  * rettangolo torna normale. */

@@ -1630,8 +1630,6 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
 			}
 		}
 		if (scene_rect->minerva_blur) {
-			style.blur_radius = scene_rect->minerva_blur_radius;
-			style.acquerello = scene_rect->minerva_acquerello;
 			struct wlr_scene_buffer *mask_buffer = scene_rect->minerva_mask;
 			struct wlr_render_texture_options mask = {0};
 			if (mask_buffer) {
@@ -2189,15 +2187,10 @@ static bool minerva_backdrop_bounds(struct wlr_scene_node *node,
 	if (node->type != WLR_SCENE_NODE_RECT || !wlr_scene_rect_from_node(node)->minerva_blur) return false;
 	int width, height;
 	scene_node_get_size(node, &width, &height);
-	/* Match the GLES capture footprint (20 physical pixels), including
-	 * rounding at fractional scales. Collect hidden filters too, as their
-	 * output may be sampled by another filter drawn above them. */
-	float radius = wlr_scene_rect_from_node(node)->minerva_blur_radius;
-	int pad = (int)ceil((ceil(radius * 4) + 8) / data->scale) + 2;
-	/* L'acquerello legge solo il proprio rettangolo (ai bordi ripete il
-	 * colore): niente margine, oltre l'arrotondamento. */
-	if (wlr_scene_rect_from_node(node)->minerva_acquerello)
-		pad = 2;
+	/* Collect hidden filters too, as their output may be sampled by another
+	 * filter drawn above them. L'acquerello legge solo il proprio rettangolo
+	 * (ai bordi ripete il colore): niente margine, oltre l'arrotondamento. */
+	const int pad = 2;
 	int64_t left = (int64_t)lx - pad, top = (int64_t)ly - pad;
 	int64_t right = (int64_t)lx + width + pad, bottom = (int64_t)ly + height + pad;
 	if (left < data->logical.x) left = data->logical.x;
@@ -2654,18 +2647,12 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 		render_data.minerva_blur = true;
 		int fw, fh;
 		scene_node_get_size(n, &fw, &fh);
-		float raggio = wlr_scene_rect_from_node(n)->minerva_blur_radius;
-		int pad_fisico = (int)ceil(raggio * 4) + 8;
-		int pad = (int)ceil(pad_fisico / render_data.scale) + 2;
 		// L'acquerello legge solo il proprio rettangolo (pad 0: il danno
 		// fuori non lo tocca), e un pixel cambiato sposta il colore della
 		// sua cella, che si stende sulle due vicine: tre celle da 32, cioè
 		// al più 64 pixel da lui, più l'arrotondamento. Vedi
 		// minerva_acquerello_pezzo in render/gles2/pass.c.
-		if (wlr_scene_rect_from_node(n)->minerva_acquerello) {
-			pad = 0;
-			pad_fisico = 66;
-		}
+		const int pad = 0, pad_fisico = 66;
 		if (n_filtri < (int)(sizeof(filtri)/sizeof(filtri[0]))) {
 			filtri[n_filtri++] = (struct minerva_filtro){
 				list_data[i].x, list_data[i].y, fw, fh, pad, pad_fisico, i, false};
@@ -3020,18 +3007,11 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 			logical_to_buffer_coords(&tocca, &render_data, true);
 			pixman_region32_intersect(&tocca, &tocca, &minerva_regioni[k]);
 			if (!pixman_region32_empty(&tocca)) {
-				// Lo stesso margine che la cattura in render/gles2/pass.c.
-				float raggio = wlr_scene_rect_from_node(n)->minerva_blur_radius;
-				if (raggio == 0)
-					raggio = 3;
-				if (wlr_scene_rect_from_node(n)->minerva_acquerello) {
-					// Le celle intorno al pezzo, allineate alla griglia del
-					// rettangolo: una cella più l'allineamento (32 + 34),
-					// e due pixel per l'arrotondamento a scala frazionaria.
-					wlr_region_expand(&tocca, &tocca, 68);
-				} else {
-					wlr_region_expand(&tocca, &tocca, (int)ceilf(raggio * 4) + 8);
-				}
+				// Lo stesso margine che la cattura in render/gles2/pass.c:
+				// le celle intorno al pezzo, allineate alla griglia del
+				// rettangolo — una cella più l'allineamento (32 + 34) — e
+				// due pixel per l'arrotondamento a scala frazionaria.
+				wlr_region_expand(&tocca, &tocca, 68);
 				pixman_region32_union(&minerva_regioni[k + 1], &minerva_regioni[k + 1], &tocca);
 				pixman_region32_intersect_rect(&minerva_regioni[k + 1], &minerva_regioni[k + 1],
 					0, 0, buffer->width, buffer->height);
@@ -3335,18 +3315,9 @@ void wlr_minerva_blur_set_mask(struct wlr_scene_rect *r, struct wlr_scene_buffer
  if (b) { r->minerva_mask_destroy.notify=minerva_mask_destroy; wl_signal_add(&b->node.events.destroy,&r->minerva_mask_destroy); }
  scene_node_update(&r->node,NULL);
 }
-void wlr_minerva_blur_set_acquerello(struct wlr_scene_rect *r, bool si) {
- if (!r || r->minerva_acquerello == si) return;
- r->minerva_acquerello = si; scene_node_update(&r->node, NULL);
-}
-
-void wlr_minerva_blur_set_radius(struct wlr_scene_rect *r, float radius) {
- if (!isfinite(radius) || radius <= 0 || radius > 6 || r->minerva_blur_radius == radius) return;
- r->minerva_blur_radius = radius; scene_node_update(&r->node, NULL);
-}
 struct wlr_scene_rect *wlr_minerva_blur_create(struct wlr_scene_tree *parent,int width,int height) {
  struct wlr_scene_rect *r=wlr_scene_rect_create(parent,width,height,(float[4]){0,0,0,0});
- if (r) { r->minerva_blur=true; r->minerva_blur_radius=3; scene_node_update(&r->node,NULL); }
+ if (r) { r->minerva_blur=true; scene_node_update(&r->node,NULL); }
  return r;
 }
 
