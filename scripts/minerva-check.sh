@@ -59,8 +59,8 @@ case "$COMPOSITORE" in
                 ok "i portali useranno il backend di wlroots" ;;
             *)
                 bad "manca «LiquidDE» in testa a XDG_CURRENT_DESKTOP:"
-                bad "i portali cercherebbero quello di Hyprland, che qui dentro"
-                bad "non risponde — e non lo direbbe" ;;
+                bad "i portali non saprebbero quale backend usare: la richiesta"
+                bad "resterebbe senza risposta — e nessuno lo direbbe" ;;
         esac
         if [ -r "$HOME/.config/xdg-desktop-portal/liquidde-portals.conf" ]; then
             ok "liquidde-portals.conf al suo posto"

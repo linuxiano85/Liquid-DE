@@ -21,8 +21,15 @@
 # difetto che solo il ferro fa vedere), greetd rilancerebbe questo comando
 # all'infinito e il computer resterebbe senza schermata di accesso. Quindi:
 # se il nostro compositore esce con un errore nei primi secondi, si scrive
-# perché nel registro e si passa a Hyprland, con «start-hyprland» — lanciato
-# nudo, Hyprland mette un avviso rosso davanti a chi entra.
+# perché nel registro e si passa all'accesso a riga di comando di greetd
+# (`agreety`): nome utente e password sulla stessa console, e dentro si entra
+# in Liquid DE come sempre.
+#
+# Fino al 28 settembre 2026 la riserva era Hyprland. Giacomo ha chiesto di
+# togliere dal computer tutto quello che non è Liquid, e una riserva che
+# dipende da un altro desktop è proprio la cosa che impedisce di toglierlo:
+# `agreety` arriva col pacchetto di greetd, cioè con la schermata stessa, e
+# non ha bisogno né di una scheda video che funzioni né di un compositore.
 #
 # Uscita 0 vuol dire «si è entrati»: la schermata ha finito, greetd avvia la
 # sessione. È il nostro compositore a passare l'esito della schermata
@@ -38,31 +45,42 @@ CONF="${MINERVA_GREETER_CONF:-/etc/greetd}"
 REGISTRI="${MINERVA_GREETER_REGISTRI:-/var/log/minerva-greeter}"
 REGISTRO="$REGISTRI/compositore.log"
 
-# I valori scelti all'installazione: LAYOUT, e FORZA_HYPRLAND=1 per chi ha
-# chiesto la schermata su Hyprland. Un file che manca vuol dire i predefiniti.
+# I valori scelti all'installazione: LAYOUT, e la sessione in cui fa entrare
+# la riserva. Un file che manca vuol dire i predefiniti. FORZA_HYPRLAND, che
+# un'installazione vecchia può ancora scriverci, non conta più: Hyprland non
+# è più una scelta.
 LAYOUT=us
-FORZA_HYPRLAND=0
+SESSIONE_RISERVA=/usr/local/bin/liquid-de-sessione
 [ -r "$CONF/minerva-greeter.env" ] && . "$CONF/minerva-greeter.env"
 
 scrivi() {
     printf '[%s] minerva-greeter-avvio: %s\n' "$(date '+%F %T')" "$1" >> "$REGISTRO" 2>/dev/null
 }
 
-hyprland() {
-    # La prova non lancia un Hyprland vero: sostituisce la riserva.
-    if [ -n "${MINERVA_GREETER_PROVA_RISERVA:-}" ]; then
-        exec sh -c "$MINERVA_GREETER_PROVA_RISERVA"
+# La riserva: l'accesso a riga di comando, che fa entrare nella sessione di
+# Liquid passando dallo stesso avviatore della schermata vera (il registro di
+# com'è andata la sessione resta uguale). La prova gli sostituisce un
+# `agreety` finto che scrive con che cosa è stato chiamato.
+riserva() {
+    AGREETY="${MINERVA_GREETER_AGREETY:-agreety}"
+    if ! command -v "$AGREETY" >/dev/null 2>&1; then
+        scrivi "NESSUNA RISERVA: agreety non c'è (pacchetto greetd-agreety)"
+        exit 1
     fi
-    if command -v start-hyprland >/dev/null 2>&1; then
-        exec start-hyprland -- -c "$CONF/minerva-greeter.conf" >> "$REGISTRO" 2>&1
+    if [ -x "$SESSIONE_RISERVA" ]; then
+        COMANDO="$SESSIONE_RISERVA"
+        [ -x "$LIB/minerva-avvia-sessione" ] && COMANDO="$LIB/minerva-avvia-sessione $SESSIONE_RISERVA"
+    else
+        # Senza nemmeno la sessione di Liquid: una shell, da cui si ripara.
+        COMANDO="sh -l"
     fi
-    exec Hyprland -c "$CONF/minerva-greeter.conf" >> "$REGISTRO" 2>&1
+    scrivi "riserva: accesso a riga di comando, poi «$COMANDO»"
+    exec "$AGREETY" --cmd "$COMANDO"
 }
 
-if [ "$FORZA_HYPRLAND" = 1 ] || [ ! -x "$LIB/minerva-wayland" ] \
-   || [ ! -x "$LIB/minerva-greeter-sessione" ]; then
-    scrivi "schermata su Hyprland (scelta, o il nostro compositore non è installato)"
-    hyprland
+if [ ! -x "$LIB/minerva-wayland" ] || [ ! -x "$LIB/minerva-greeter-sessione" ]; then
+    scrivi "il nostro compositore non è installato: accesso a riga di comando"
+    riserva
 fi
 
 INIZIO=$(date +%s)
@@ -81,6 +99,6 @@ if [ "$DURATA" -ge 15 ]; then
     exit "$ESITO"
 fi
 
-# Caduto subito: non è partito. Hyprland, e il perché resta scritto.
-scrivi "il nostro compositore NON è partito (esito $ESITO in ${DURATA}s): ripiego su Hyprland"
-hyprland
+# Caduto subito: non è partito. La riga di comando, e il perché resta scritto.
+scrivi "il nostro compositore NON è partito (esito $ESITO in ${DURATA}s): ripiego sull'accesso a riga di comando"
+riserva

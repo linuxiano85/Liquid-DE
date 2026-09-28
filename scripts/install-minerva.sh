@@ -367,6 +367,21 @@ c_head "Applicazioni di Minerva"
 APPLICAZIONI="$PREFISSO/share/applications"
 mkdir -p "$CARTELLA_BIN" "$APPLICAZIONI"
 
+# ── Le app che nessuno apre, nascoste ─────────────────────────────────────
+#
+# Giacomo, 28 settembre 2026: le app di Avahi «non servono e non le ho mai
+# aperte». Non si possono disinstallare: stanno nel pacchetto del servizio
+# Avahi, che serve a stampa, audio, posizione e al nostro demone per trovare
+# televisori e schermi. Si NASCONDONO con la regola freedesktop: un .desktop
+# con lo stesso nome e NoDisplay=true, in una cartella che viene prima di
+# quella di sistema (il nostro prefisso sta in testa a XDG_DATA_DIRS, e il
+# demone tiene la prima versione che trova).
+for NASCOSTA in avahi-discover bssh bvnc; do
+    [ -e "/usr/share/applications/$NASCOSTA.desktop" ] || continue
+    printf '[Desktop Entry]\nType=Application\nName=%s\nNoDisplay=true\n' \
+        "$NASCOSTA" > "$APPLICAZIONI/$NASCOSTA.desktop"
+done
+
 # Le icone stanno in `hicolor`, che per specifica è il tema dove ogni programma
 # installa le PROPRIE: chi cambia tema di icone non deve perderle, e nessun
 # tema di terze parti ne contiene una per noi.

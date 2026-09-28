@@ -208,9 +208,9 @@ installa_file() {
 
     # ── Il comando fisso che greetd lancia ────────────────────────────────
     #
-    # Sempre, anche senza il nostro compositore: è lui che sceglie a ogni
-    # schermata, e che ripiega su Hyprland se il nostro non parte. Vedi in
-    # cima a scripts/minerva-greeter-avvio.
+    # È lui che sceglie a ogni schermata, e che ripiega sull'accesso a riga
+    # di comando (agreety) se il nostro compositore non parte. Vedi in cima a
+    # scripts/minerva-greeter-avvio.
     install -m755 "$ROOT/scripts/minerva-greeter-avvio" \
         /usr/local/lib/minerva/minerva-greeter-avvio
 
@@ -223,18 +223,17 @@ installa_file() {
     # di questa funzione. È statico — il fork di wlroots è dentro — quindi
     # non si porta dietro librerie da installare a parte.
     #
-    # Se non c'è (mai compilato), si resta su Hyprland: vedi
-    # `COMANDO_GREETER` in `scrivi_config`. Una schermata di accesso che non
-    # parte è il guasto peggiore che questo file possa fare.
+    # Se non c'è (mai compilato) NON si installa: fino al 28 settembre 2026
+    # si restava su Hyprland, che adesso si toglie dal computer. La riserva
+    # del lanciatore (l'accesso a riga di comando) resta per un guasto, non
+    # per un'installazione fatta a metà.
     COMPOSITORE="$ROOT/compositore/build-native/minerva-wayland"
     if [ -x "$COMPOSITORE" ]; then
         install -m755 "$COMPOSITORE" /usr/local/lib/minerva/minerva-wayland
         install -m755 "$ROOT/scripts/minerva-greeter-sessione" \
             /usr/local/lib/minerva/minerva-greeter-sessione
     else
-        rm -f /usr/local/lib/minerva/minerva-wayland \
-              /usr/local/lib/minerva/minerva-greeter-sessione
-        grigio "compositore non compilato: la schermata resta su Hyprland"
+        muori "Il compositore non è compilato ($COMPOSITORE): prima compositore/costruisci.sh --build-only"
     fi
 
     # ── E QUESTO STESSO FILE ──────────────────────────────────────────────
@@ -502,115 +501,12 @@ except Exception: pass' "$STATO/settings.json" 2>/dev/null)
     LAYOUT=$(printf '%s' "$LAYOUT" | tr -cd 'a-z')
     [ -n "$LAYOUT" ] || LAYOUT=us
 
-    # La sessione del greeter: un Hyprland minimo che avvia il demone e la
-    # schermata, e si chiude quando la schermata finisce.
-    #
-    # ── ATTENZIONE: qui dentro NON si scrivono backtick ────────────────────
-    #
-    # Il delimitatore è `EOF` senza virgolette, e deve restarlo: dentro ci sono
-    # `$DEST`, `$STATO`, `$LAYOUT`, `$SOCKET_GREETER` e `$REGISTRI`, che vanno
-    # sostituiti mentre si scrive il file.
-    #
-    # Ma «senza virgolette» vale anche per i BACKTICK, e un documento-qui non
-    # ha commenti: le righe che cominciano con `#` sono testo per il file che
-    # si sta scrivendo, non per la shell. Un backtick in una di quelle righe è
-    # una sostituzione di comando, **eseguita da root** durante l'installazione.
-    #
-    # Il 23 agosto 2026 è successo davvero: quattro nomi citati fra backtick in
-    # commenti miei — `XDG_SESSION_ID`, il nome di uno script, `greeter`,
-    # `//.cache` — sono stati eseguiti come comandi, e il loro posto nel file
-    # scritto è rimasto vuoto. Ha stampato quattro «comando non trovato» in
-    # mezzo a un'installazione riuscita.
-    #
-    # Nelle citazioni dentro il documento-qui si usano le virgolette basse.
-    # Una guardia in `scripts/prove.sh` lo controlla.
-    cat > "$CONF/minerva-greeter.conf" <<EOF
-# Scritto da minerva-greetd. Le modifiche a mano vengono sovrascritte.
-#
-# È un Hyprland ridotto all'osso: serve solo a dare una superficie su cui
-# disegnare alla schermata di accesso. Niente scorciatoie, niente regole,
-# niente animazioni — è aperto per pochi secondi.
-
-monitor = , preferred, auto, 1
-
-env = MINERVA_ROOT,$DEST
-env = MINERVA_CONFIG_DIR,$STATO
-# Il nome di questa «sessione». Il greeter non è una sessione di logind come le
-# altre — «XDG_SESSION_ID» lì può non esserci — e senza un nome ricadrebbe su
-# «unica», cioè sullo stesso posto in cui scrive la sessione dell'utente. Con
-# un nome suo, demone e schermata del greeter si trovano fra loro e nessun
-# altro. Vedi «scripts/minerva-posti.sh».
-env = MINERVA_SESSIONE,greeter
-env = MINERVA_IPC_SOCKET,$SOCKET_GREETER
-env = XDG_CURRENT_DESKTOP,Minerva:Hyprland
-# ── Dove Qt tiene gli shader già compilati ─────────────────────────────────
-#
-# L'utente «greeter» non ha una casa, quindi Qt provava a scrivere in «//.cache»
-# e si arrendeva: «Failed to create //.cache for shader cache (Permesso negato)
-# ---disabling». Senza quella cache lo shader dell'aurora si ricompila a OGNI
-# accesso, e la schermata resta scura qualche decimo di secondo in più proprio
-# nell'istante in cui la si guarda per la prima volta.
-env = XDG_CACHE_HOME,$STATO/cache
-# Qui più che altrove: un riquadro «Quickshell: Config reloaded» sulla
-# schermata di accesso è il nome di un'altra cosa davanti a chi entra, e non
-# si può nemmeno chiudere senza un mouse che ancora non serve a niente.
-env = QS_NO_RELOAD_POPUP,1
-
-# ── I cartelli di Hyprland non stanno su una schermata di accesso ──────────
-#
-# Hyprland mostra dei riquadri d'avviso sopra ogni cosa: le novità della
-# versione, l'invito a donare, il controllo sulle variabili XDG. Nella sessione
-# li avevamo già spenti; qui no, e comparivano sulla PRIMA cosa che si vede di
-# questo computer — sopra un campo password, in inglese, senza modo di
-# chiuderli perché il mouse ancora non serve a niente.
-ecosystem {
-    no_update_news = true
-    no_donation_nag = true
-}
-
-misc {
-    disable_hyprland_logo = true
-    disable_splash_rendering = true
-    force_default_wallpaper = 0
-
-    # «XDG_CURRENT_DESKTOP sembra gestito esternamente»: lo impostiamo noi,
-    # qui sotto, ed è giusto. Hyprland non sa distinguere «scritto da chi sa
-    # cosa fa» da «avanzo di un'altra sessione».
-    disable_xdg_env_checks = true
-
-    # «Hyprland is being launched without start-hyprland»: una riga ROSSA in
-    # cima alla schermata di accesso. Lanciato da greetd col comando di una
-    # volta non passa da start-hyprland, e questo file si rilegge a ogni
-    # schermata — a differenza del comando, che greetd legge solo all'avvio
-    # del computer. Visto da Giacomo il 23 settembre 2026.
-    disable_watchdog_warning = true
-}
-
-animations { enabled = false }
-decoration { blur { enabled = false } }
-
-# Il touchpad deve rispondere anche al tocco: su molti portatili la pressione
-# fisica del tasto è dura, e una schermata che sembra ignorare il dito sembra
-# rotta anche quando non lo è.
-input {
-    follow_mouse = 1
-    kb_layout = $LAYOUT
-    touchpad {
-        natural_scroll = true
-        tap-to-click = true
-    }
-}
-
-# Il demone per primo: la schermata gli chiede chi può entrare e in cosa.
-# L'uscita finisce in un file: vedi $REGISTRI. Senza, un accesso che non
-# funziona non lascia una riga da leggere da nessuna parte.
-exec-once = sh -c '/usr/local/lib/minerva/minervad >> $REGISTRI/demone.log 2>&1'
-
-# E poi la schermata. Quando finisce — cioè quando greetd ha detto di sì —
-# si chiude anche il compositore: la sessione vera parte SOLO dopo che tutto
-# il greeter è terminato.
-exec-once = sh -c 'qs -p $DEST/minerva-shell/greeter.qml >> $REGISTRI/schermata.log 2>&1; hyprctl dispatch exit'
-EOF
+    # Qui si scriveva «minerva-greeter.conf», un Hyprland ridotto all'osso
+    # che avviava il demone e la schermata. Dal 23 settembre la schermata
+    # gira sul nostro compositore (minerva-greeter-sessione), e dal 28
+    # Hyprland non è più nemmeno la riserva: il file non serve a nessuno, e
+    # uno vecchio lasciato lì si toglie.
+    rm -f "$CONF/minerva-greeter.conf"
 
     # La configurazione di greetd. `vt` si passa da fuori perché `prova` usa
     # una console diversa da quella vera.
@@ -731,16 +627,12 @@ FINE_PYTHON
         # Hyprland per tre accessi dopo l'installazione che la spostava.
         # Adesso il comando è sempre lo stesso, e quello che cambia sta in
         # minerva-greeter.env, che il lanciatore rilegge ogni volta. Il
-        # lanciatore prova il nostro compositore e, se non parte, ripiega su
-        # Hyprland scrivendo perché (scripts/minerva-greeter-avvio).
+        # lanciatore prova il nostro compositore e, se non parte, ripiega
+        # sull'accesso a riga di comando scrivendo perché
+        # (scripts/minerva-greeter-avvio).
         {
             printf '# Scritto da minerva-greetd. Lo rilegge minerva-greeter-avvio a ogni schermata.\n'
             printf 'LAYOUT=%s\n' "$LAYOUT"
-            if [ "${MINERVA_GREETER_HYPRLAND:-0}" = 1 ]; then
-                printf 'FORZA_HYPRLAND=1\n'
-            else
-                printf 'FORZA_HYPRLAND=0\n'
-            fi
         } > "$CONF/minerva-greeter.env"
         chmod 644 "$CONF/minerva-greeter.env"
         COMANDO_GREETER="/usr/local/lib/minerva/minerva-greeter-avvio"
@@ -756,7 +648,7 @@ FINE_PYTHON
         fi
     } > "$CONF/config.toml"
 
-    chmod 644 "$CONF/config.toml" "$CONF/minerva-greeter.conf"
+    chmod 644 "$CONF/config.toml"
     verde "configurazione scritta in $CONF (console $VT)"
     [ -n "$AUTOLOGIN" ] && grigio "accesso automatico ACCESO per $(printf '%s' "$AUTOLOGIN" | cut -f1)"
     return 0
@@ -789,7 +681,7 @@ case "$AZIONE" in
 
     prova)
         command -v greetd >/dev/null 2>&1 || muori "greetd non è installato."
-        [ -r "$CONF/minerva-greeter.conf" ] || muori \
+        [ -x /usr/local/lib/minerva/minerva-greeter-avvio ] || muori \
             "Non ancora installata. Prima: minerva-greetd installa"
         prepara_pam
 
@@ -956,7 +848,7 @@ case "$AZIONE" in
             grigio "Ultimi messaggi di greetd:"
             journalctl -u greetd --since "2 min ago" --no-pager 2>&1 | tail -15 \
                 | sed 's/^/    /'
-            grigio "Se Hyprland è partito ma senza input, le ragioni sono in:"
+            grigio "Se il compositore è partito ma senza input, le ragioni sono in:"
             grigio "  $REGISTRI/compositore.log"
             muori "Prova NON riuscita: indaga prima di guardare la console $PROVA."
         fi
@@ -971,7 +863,7 @@ case "$AZIONE" in
 
     attiva)
         command -v greetd >/dev/null 2>&1 || muori "greetd non è installato."
-        [ -r "$CONF/minerva-greeter.conf" ] || muori \
+        [ -x /usr/local/lib/minerva/minerva-greeter-avvio ] || muori \
             "Non ancora installata. Prima: minerva-greetd installa"
 
         c_e_una_via_di_ritorno || muori \
@@ -1027,7 +919,7 @@ case "$AZIONE" in
         # Accenderlo senza sarebbe una schermata che non parte, cioè
         # esattamente il guaio da cui questa azione dovrebbe salvare.
         if [ "$VOLUTO" = "greetd.service" ]; then
-            [ -r "$CONF/minerva-greeter.conf" ] || muori \
+            [ -x /usr/local/lib/minerva/minerva-greeter-avvio ] || muori \
                 "Minerva non è ancora installata. Prima: minerva-greetd installa"
             scrivi_config 2
         fi
