@@ -306,6 +306,22 @@ Item {
     property int _targaQuante: 0
     property bool _preparando: false
 
+    /// Per le prove: il centro dell'icona di `nome`, in coordinate della
+    /// finestra, o null se non si vede. Chi prova un trascinamento deve
+    /// sapere DOVE prendere e dove lasciare, e la griglia lo sa solo qui.
+    function centroDi(nome) {
+        var lista = pane.shown || [];
+        for (var i = 0; i < lista.length; i++) {
+            if (lista[i].name !== nome)
+                continue;
+            var cella = view.itemAtIndex(i);
+            if (!cella)
+                return null;
+            return cella.mapToItem(null, cella.width / 2, cella.height / 2);
+        }
+        return null;
+    }
+
     function iniziaTrascinamento(percorsi, dove, cella, presa) {
 
         if (percorsi.length === 0 || pane._preparando)

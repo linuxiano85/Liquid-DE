@@ -2699,6 +2699,24 @@ FloatingWindow {
     property var _dndSorgenti: []
     property string _dndDestinazione: ""
 
+    /// Per le prove: il menù «Copia in / Sposta in» aperto da un rilascio.
+    /// Senza azione dice che cosa offre (e dove porterebbe); con «copia» o
+    /// «sposta» sceglie come farebbe il clic.
+    function menuRilascio(azione) {
+        if (manager._dndSorgenti.length === 0)
+            return "nessun rilascio in attesa";
+        if (azione === "") {
+            var voci = [];
+            for (var i = 0; i < dropMenu.items.length; i++)
+                if (dropMenu.items[i].label)
+                    voci.push(dropMenu.items[i].label);
+            return voci.join(" | ") + " → " + manager._dndDestinazione;
+        }
+        dropMenu.close();
+        dropMenu.triggered(azione);
+        return "ok";
+    }
+
     function chiediCopiaOSposta(sorgenti, destinazione) {
         if (!sorgenti || sorgenti.length === 0 || destinazione === "")
             return;

@@ -189,5 +189,17 @@ ShellRoot {
         function ping(): string {
             return "ok";
         }
+
+        /// Per le prove: dove sta l'icona di un file nella finestra («x y»).
+        function posto(nome: string): string {
+            var p = manager.current ? manager.current.centroDi(nome) : null;
+            return p ? Math.round(p.x) + " " + Math.round(p.y) : "non si vede";
+        }
+
+        /// Per le prove: il menù dopo un rilascio — vuoto per leggerlo,
+        /// «copia» o «sposta» per sceglierlo.
+        function rilascio(azione: string): string {
+            return manager.menuRilascio(azione);
+        }
     }
 }
