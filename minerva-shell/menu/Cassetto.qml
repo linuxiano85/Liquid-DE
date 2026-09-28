@@ -34,6 +34,18 @@ PanelWindow {
     /// Trascinato verso l'altro bordo: chi ascolta scambia i bordi.
     signal scambioChiesto()
 
+    /// Vera mentre la carta è in mano: la molla si spegne e la carta sta
+    /// sotto la mano. Lasciata per lo scambio, resta dov'è finché il lato
+    /// nuovo non arriva (o un secondo e mezzo, se il demone tace). È la
+    /// stessa regola delle Stanze: il perché per esteso sta lì.
+    property bool _tiene: false
+    onASinistraChanged: presa.scarto = 0
+    Timer {
+        id: scambioRiserva
+        interval: 1500
+        onTriggered: if (!cassetto._tiene) presa.scarto = 0
+    }
+
     /// Le voci, dalla più recente: `{ id, testo, immagine }`. `immagine` è
     /// il percorso della copia decodificata, o "".
     property var voci: []
@@ -130,7 +142,8 @@ PanelWindow {
         // Da che parte e dove: «aperto» con la carta fuori schermo è il
         // difetto che da `aperto` non si vede.
         r.push("lato: " + (cassetto.aSinistra ? "sinistra" : "destra")
-               + " · x " + Math.round(pannello.x) + " su " + Math.round(cassetto.width));
+               + " · x " + Math.round(pannello.x) + " su " + Math.round(cassetto.width)
+               + " · y " + Math.round(pannello.y) + "-" + Math.round(pannello.y + pannello.height));
         r.push("voci: " + cassetto.filtrate.length + "/" + cassetto.voci.length
                + (cassetto.cerca !== "" ? " · cerca «" + cassetto.cerca + "»" : ""));
         for (var i = 0; i < Math.min(8, cassetto.filtrate.length); i++) {
@@ -241,7 +254,7 @@ PanelWindow {
             return (cassetto.aperto && cassetto._entra ? dentro : fuori) + presa.scarto;
         }
         Behavior on x {
-            enabled: Theme.Motion.liquido && pronto.visto
+            enabled: Theme.Motion.liquido && pronto.visto && !cassetto._tiene
             SpringAnimation { spring: Theme.Motion.molla * 0.6; damping: 0.42 }
         }
         radius: Theme.Effects.radiusLG
@@ -266,14 +279,30 @@ PanelWindow {
             cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
             property real inizio: 0
             property real scarto: 0
-            onPressed: function(m) { presa.inizio = mapToItem(null, m.x, 0).x; presa.scarto = 0; }
-            onPositionChanged: function(m) { presa.scarto = mapToItem(null, m.x, 0).x - presa.inizio; }
-            onReleased: {
-                var soglia = cassetto.width / 3;
-                var verso = cassetto.aSinistra ? presa.scarto : -presa.scarto;
+            onPressed: function(m) {
+                presa.inizio = mapToItem(null, m.x, 0).x;
                 presa.scarto = 0;
-                if (verso > soglia)
+                cassetto._tiene = true;
+            }
+            onPositionChanged: function(m) {
+                if (cassetto._tiene)
+                    presa.scarto = mapToItem(null, m.x, 0).x - presa.inizio;
+            }
+            onReleased: presa.lascia(false)
+            onCanceled: presa.lascia(true)
+            // `_tiene` si spegne PRIMA di toccare lo scarto, o la molla si
+            // riaccende quando la posizione è già saltata.
+            function lascia(annullato) {
+                if (!cassetto._tiene)
+                    return;
+                cassetto._tiene = false;
+                var verso = cassetto.aSinistra ? presa.scarto : -presa.scarto;
+                if (!annullato && verso > cassetto.width / 3) {
+                    scambioRiserva.restart();
                     cassetto.scambioChiesto();
+                } else {
+                    presa.scarto = 0;
+                }
             }
         }
 

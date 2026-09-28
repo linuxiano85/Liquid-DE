@@ -33,6 +33,57 @@ PanelWindow {
     /// Trascinate verso l'altro bordo: chi ascolta scambia i bordi.
     signal scambioChiesto()
 
+    // ── Sotto la mano ────────────────────────────────────────────────────
+    //
+    // Giacomo, 27 settembre 2026: «vorrei averli sotto il mouse quando li
+    // trascino e rilascio». La colonna aveva la molla sulla posizione anche
+    // mentre la si teneva: inseguiva la mano e restava indietro (51 pixel
+    // misurati a mano ferma, `prova-riva-scambio.py`). E al rilascio lo
+    // scarto tornava a zero SUBITO, mentre il lato nuovo arriva dal demone un
+    // giro dopo: la colonna tornava al posto di partenza e solo dopo volava
+    // dall'altra parte.
+    //
+    // Adesso mentre la si tiene la molla è spenta (la colonna è dove è la
+    // mano, come `ui/Slider.qml`), e lasciata per lo scambio resta dov'è
+    // finché il lato nuovo non arriva: da lì la molla la porta al suo posto.
+
+    /// Vera mentre la colonna è in mano.
+    property bool _tiene: false
+    /// Lo scarto si azzera quando arriva il lato nuovo — o dopo un secondo e
+    /// mezzo, se il demone non risponde: la colonna non resta appesa.
+    onADestraChanged: presaStanze.scarto = 0
+    Timer {
+        id: scambioRiserva
+        interval: 1500
+        onTriggered: if (!stanze._tiene) presaStanze.scarto = 0
+    }
+
+    function _prendi(xSchermo) {
+        presaStanze.inizio = xSchermo;
+        presaStanze.scarto = 0;
+        stanze._tiene = true;
+    }
+    function _porta(xSchermo) {
+        if (stanze._tiene)
+            presaStanze.scarto = xSchermo - presaStanze.inizio;
+    }
+    /// Lasciata: oltre un terzo dello schermo verso l'altro bordo si
+    /// scambia. `_tiene` si spegne PRIMA di toccare lo scarto: i legami si
+    /// rifanno subito, e la molla deve essere già accesa quando la posizione
+    /// cambia, o la colonna salta invece di scivolare.
+    function _lascia(annullato) {
+        if (!stanze._tiene)
+            return;
+        stanze._tiene = false;
+        var verso = stanze.aDestra ? -presaStanze.scarto : presaStanze.scarto;
+        if (!annullato && verso > stanze.width / 3) {
+            scambioRiserva.restart();
+            stanze.scambioChiesto();
+        } else {
+            presaStanze.scarto = 0;
+        }
+    }
+
     readonly property int attiva: Core.Compositore.scrivaniaAttiva
 
     /// Le stanze da mostrare: almeno quattro, fino all'ultima occupata o
@@ -177,7 +228,7 @@ PanelWindow {
             return ((stanze.aperto || stanze.sbirciata) && stanze._entra ? dentro : fuori) + presaStanze.scarto;
         }
         Behavior on x {
-            enabled: Theme.Motion.liquido && pronto.visto
+            enabled: Theme.Motion.liquido && pronto.visto && !stanze._tiene
             SpringAnimation { spring: Theme.Motion.molla * 0.6; damping: 0.42 }
         }
         radius: Theme.Effects.radiusLG
@@ -197,14 +248,10 @@ PanelWindow {
             preventStealing: true
             property real inizio: 0
             property real scarto: 0
-            onPressed: function(m) { presaStanze.inizio = mapToItem(null, m.x, 0).x; presaStanze.scarto = 0; }
-            onPositionChanged: function(m) { presaStanze.scarto = mapToItem(null, m.x, 0).x - presaStanze.inizio; }
-            onReleased: {
-                var verso = stanze.aDestra ? -presaStanze.scarto : presaStanze.scarto;
-                presaStanze.scarto = 0;
-                if (verso > stanze.width / 3)
-                    stanze.scambioChiesto();
-            }
+            onPressed: function(m) { stanze._prendi(mapToItem(null, m.x, 0).x); }
+            onPositionChanged: function(m) { stanze._porta(mapToItem(null, m.x, 0).x); }
+            onReleased: stanze._lascia(false)
+            onCanceled: stanze._lascia(true)
         }
 
         Ui.Goccia {
@@ -240,19 +287,28 @@ PanelWindow {
                         preventStealing: true
                         cursorShape: Qt.PointingHandCursor
                         onContainsMouseChanged: goccia.punta(stanza, containsMouse)
-                        onClicked: stanze.vai(stanza.modelData.numero)
+                        // Un trascinamento non è un clic. Precauzione, non un
+                        // difetto visto: la `MouseArea` dà `clicked` a ogni
+                        // rilascio sopra di sé, e lasciando la colonna sopra
+                        // la stanza da cui la si era presa si andrebbe a
+                        // quella scrivania chiudendo le Stanze a metà dello
+                        // scambio. In prova non è successo, e lo si dice.
+                        property bool _mosso: false
+                        onClicked: if (!stanzaMouse._mosso) stanze.vai(stanza.modelData.numero)
                         // Anche da una stanza si trascina la colonna intera.
-                        property real _inizio: 0
-                        onPressed: function(m) { stanzaMouse._inizio = mapToItem(null, m.x, 0).x; }
+                        onPressed: function(m) {
+                            stanzaMouse._mosso = false;
+                            stanze._prendi(mapToItem(null, m.x, 0).x);
+                        }
                         onPositionChanged: function(m) {
-                            if (pressed) presaStanze.scarto = mapToItem(null, m.x, 0).x - stanzaMouse._inizio;
+                            if (!pressed)
+                                return;
+                            stanze._porta(mapToItem(null, m.x, 0).x);
+                            if (Math.abs(presaStanze.scarto) > 8)
+                                stanzaMouse._mosso = true;
                         }
-                        onReleased: {
-                            var verso = stanze.aDestra ? -presaStanze.scarto : presaStanze.scarto;
-                            presaStanze.scarto = 0;
-                            if (verso > stanze.width / 3)
-                                stanze.scambioChiesto();
-                        }
+                        onReleased: stanze._lascia(false)
+                        onCanceled: stanze._lascia(true)
                     }
 
                     // Il numero, sempre.
