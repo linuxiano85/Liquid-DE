@@ -92,3 +92,35 @@ else
     QT_QUICK_BACKEND=software
     export QT_QUICK_BACKEND
 fi
+
+# ── Ogni app nel suo cgroup ──────────────────────────────────────────────
+#
+# La memoria che respira (28 settembre 2026): un'app che non si guarda da un
+# po' si comprime in zram — misurata, la Calcolatrice nascosta passa da
+# 32 MB veri a 8 (1,4 in RAM e 6,9 compressi 5:1) e risponde in 38 ms. Per
+# farlo il demone scrive `memory.reclaim` nel cgroup DELL'APP, e un cgroup
+# per app c'è solo se l'app nasce in uno scope suo: `systemd-run --user
+# --scope` lo crea nel ramo delegato all'utente, scrivibile senza root.
+# Costa 14-21 ms all'avvio (misurati).
+#
+# Il nome dice di chi è: `liquid-<app>-<pid>`. Il demone tocca SOLO i cgroup
+# che si chiamano così — mai lo scope della sessione, mai quelli degli altri.
+#
+# Senza il gestore utente di systemd (una sessione di recupero, un sistema
+# senza systemd) l'app parte come prima: respirare è un di più, non una
+# condizione per aprirsi.
+minerva_avvia_app() {
+    nome="$1"; shift
+    if command -v systemd-run >/dev/null 2>&1 \
+       && [ -S "${XDG_RUNTIME_DIR:-/nonc_e}/systemd/private" ]; then
+        # In una sessione di PROVA il nome lo dice: il demone di prova
+        # tocca solo i suoi, quello vero solo i veri. Stanno nello stesso
+        # ramo dell'utente, e senza questa differenza la prova comprimerebbe
+        # le app della sessione in cui si lavora.
+        prefisso=liquid
+        [ -n "${MINERVA_PROVA:-}" ] && prefisso=liquid-prova
+        exec systemd-run --user --scope --quiet --collect \
+             --unit="$prefisso-$nome-$$" -- "$@"
+    fi
+    exec "$@"
+}

@@ -1237,6 +1237,12 @@ class SettingsApi {
           'risparmioEffetti': 'auto',
           'risparmioSoglia': 20,
         },
+        // La memoria che respira: le nostre app fuori vista da un minuto si
+        // comprimono in zram («delicata»), o niente («spenta»). Vedi
+        // `services/respiro_service.dart`.
+        'memoria': {
+          'respiro': 'delicata',
+        },
         'notifications': {
           'doNotDisturb': false,
           // Cosa si vede sulla schermata di blocco: «numero» (per programma,

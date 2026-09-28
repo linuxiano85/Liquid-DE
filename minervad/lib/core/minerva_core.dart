@@ -15,6 +15,7 @@ import '../services/keybind_service.dart';
 import '../services/file_service.dart';
 import '../services/system_state_service.dart';
 import '../services/finestre_service.dart';
+import '../services/respiro_service.dart';
 import 'ambiente.dart';
 
 /// Coordinatore centrale del backend di Minerva Desktop.
@@ -39,6 +40,9 @@ class MinervaCore {
   /// Dove sono le finestre e quanto spazio c'è, letto una volta e mandato a
   /// tutti. Vedi `services/finestre_service.dart`.
   late final FinestreService finestre;
+  /// Le app che non si guardano si comprimono in zram: vedi
+  /// `services/respiro_service.dart`.
+  late final RespiroService respiro;
 
   StreamSubscription? _compositorEventSubscription;
   StreamSubscription? _keybindSubscription;
@@ -69,6 +73,7 @@ class MinervaCore {
     // scrivania vuota.
     compositorProvider = MinervaProvider();
     finestre = FinestreService(compositorProvider);
+    respiro = RespiroService(compositorProvider, settingsApi);
 
     webSocketServer = WebSocketServer(
       eventBus,
@@ -130,6 +135,8 @@ class MinervaCore {
     // WebSocket, perché deve già essere in ascolto quando il primo processo di
     // Minerva si collega: chi si collega riceve lo stato all'istante.
     finestre.avvia();
+    // Nella schermata di accesso non ci sono app nostre da far respirare.
+    if (!Ambiente.eGreeter) respiro.avvia();
 
     // ── Quale scrivania è attiva, e nient'altro ──────────────────────────
     //
@@ -194,6 +201,7 @@ class MinervaCore {
     await systemState.dispose();
     processi.dispose();
     await finestre.ferma();
+    await respiro.ferma();
     await keybindService.dispose();
     fileService.dispose();
 

@@ -393,6 +393,34 @@ Page {
         onTriggered: Core.Compositore.chiediRisparmio()
     }
 
+    // ── La memoria che respira ──────────────────────────────────────────
+    //
+    // Le nostre app fuori vista da un minuto si comprimono in zram: misurata
+    // la Calcolatrice nascosta, da 32 MB veri a 8, e risponde in 38 ms. Il
+    // lavoro lo fa il demone (`minervad/lib/services/respiro_service.dart`).
+    Card {
+        heading: page.it ? "Memoria" : "Memory"
+
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "La memoria che respira" : "Breathing memory"
+            description: page.it
+                ? "Le app di Liquid che non guardi da un minuto si comprimono: occupano circa un quarto, e tornano appena le riprendi"
+                : "Liquid apps you have not looked at for a minute are compressed to about a quarter, and come back as soon as you use them"
+            searchTerms: "memoria ram zram comprimi respira leggero app"
+            controlWidth: 260
+
+            control: S.ChoicePicker {
+                value: String(Core.Ipc.get("memoria.respiro", "delicata"))
+                options: [
+                    { "value": "delicata", "label": page.it ? "Accesa" : "On" },
+                    { "value": "spenta",   "label": page.it ? "Spenta" : "Off" }
+                ]
+                onPicked: function(v) { Core.Ipc.setSetting("memoria.respiro", v); }
+            }
+        }
+    }
+
     Card {
         heading: page.it ? "Effetti e batteria" : "Effects and battery"
         visible: Core.Compositore.nostro

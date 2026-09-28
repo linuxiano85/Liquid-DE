@@ -85,4 +85,4 @@ export MINERVA_VIEWER_PATHS MINERVA_VIEWER_DIR
 # in `scripts/minerva-ambiente-app`.
 . "$ROOT/scripts/minerva-ambiente-app"
 
-exec qs -d -n -p "$CONFIG"
+minerva_avvia_app anteprima qs -d -n -p "$CONFIG"

@@ -65,4 +65,4 @@ export MINERVA_FILES_PATH
 # in `scripts/minerva-ambiente-app`.
 . "$ROOT/scripts/minerva-ambiente-app"
 
-exec qs -d -n -p "$CONFIG"
+minerva_avvia_app file qs -d -n -p "$CONFIG"
