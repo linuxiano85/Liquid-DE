@@ -175,8 +175,10 @@ Page {
     /// aperti insieme fanno una pagina alta il doppio dello schermo, e si
     /// perde di vista quello che si sta cambiando.
     property string coloreAperto: ""
+    /// «Colori a mano» aperti: acceso se qualche colore è già stato scelto.
+    property bool _coloriAMano: Object.keys(page.scavalca || {}).length > 0
     Card {
-        heading: page.it ? "Scegli uno stile" : "Pick a style"
+        heading: page.it ? "Stile della scrivania" : "Desktop style"
         note: page.it
               ? "Scegliendo uno stile, la scrivania che hai adesso viene messa da parte: «Libero» la riprende."
               : "Picking a style puts your current desktop aside: “Free” brings it back."
@@ -184,9 +186,29 @@ Page {
         S.SettingRow {
             width: parent.width
             label: page.it ? "Stile" : "Style"
-            description: page.it
-                ? "Cambia dove stanno barra, dock e comandi delle finestre"
-                : "Changes where the bar, dock and window controls sit"
+            // Cosa cambia lo stile SCELTO, e non tutti e cinque sempre in
+            // vista: c'era una scheda intera, «Che cosa cambia», con le
+            // cinque spiegazioni aperte (28 settembre 2026).
+            description: {
+                var d = {
+                    "liquid": page.it
+                        ? "Al posto della barra l'Isola: una capsula che galleggia in mezzo con l'ora, il tempo, i segni di stato e le notifiche. Si trascina in alto o in basso."
+                        : "Instead of the bar, the Island: a capsule floating in the middle with the time, the weather, the status and the notifications. Drag it up or down.",
+                    "minerva": page.it
+                        ? "Barra in alto, dock in fondo sempre visibile, comandi delle finestre a destra."
+                        : "Bar on top, dock always visible at the bottom, window controls on the right.",
+                    "mac": page.it
+                        ? "Come Minerva, ma la dock ingrandisce di più e si toglie di mezzo quando una finestra le arriva addosso, e i comandi delle finestre stanno a sinistra."
+                        : "Like Minerva, but the dock magnifies more and gets out of the way, and the window controls sit on the left.",
+                    "windows": page.it
+                        ? "Una barra sola in fondo, con dentro le finestre aperte. Niente dock."
+                        : "A single bar at the bottom holding the open windows. No dock.",
+                    "libero": page.it
+                        ? "Quello che avevi messo tu, ripreso com'era."
+                        : "Whatever you had set up, brought back as it was."
+                };
+                return d[page.attuale] || "";
+            }
             controlWidth: 460
             control: S.ChoicePicker {
                 value: page.attuale
@@ -198,61 +220,6 @@ Page {
                     { "value": "libero",  "label": page.it ? "Libero" : "Free" }
                 ]
                 onPicked: function (v) { page.applica(v); }
-            }
-        }
-    }
-    Card {
-        heading: page.it ? "Che cosa cambia" : "What changes"
-
-        Column {
-            width: parent.width
-            spacing: Theme.Effects.space3
-
-            Repeater {
-                model: [
-                    { "n": "Liquid",
-                      "d": page.it
-                           ? "Al posto della barra l'Isola: una capsula che galleggia in mezzo con l'ora, il tempo, i segni di stato e le notifiche. Si trascina in alto o in basso."
-                           : "Instead of the bar, the Island: a capsule floating in the middle with the time, the weather, the status and the notifications. Drag it up or down." },
-                    { "n": "Minerva",
-                      "d": page.it
-                           ? "Barra in alto, dock in fondo sempre visibile, comandi delle finestre a destra."
-                           : "Bar on top, dock always visible at the bottom, window controls on the right." },
-                    { "n": "Mac",
-                      "d": page.it
-                           ? "Come Minerva, ma la dock ingrandisce di più e si toglie di mezzo quando una finestra le arriva addosso — e i comandi delle finestre stanno a SINISTRA."
-                           : "Like Minerva, but the dock magnifies more and gets out of the way — and the window controls sit on the LEFT." },
-                    { "n": "Windows",
-                      "d": page.it
-                           ? "Una barra sola in fondo, con dentro le finestre aperte. Niente dock: sarebbe la stessa cosa detta due volte."
-                           : "A single bar at the bottom holding the open windows. No dock: it would say the same thing twice." },
-                    { "n": page.it ? "Libero" : "Free",
-                      "d": page.it
-                           ? "Quello che avevi messo tu, ripreso com'era."
-                           : "Whatever you had set up, brought back as it was." }
-                ]
-
-                delegate: Column {
-                    required property var modelData
-                    width: parent.width
-                    spacing: 2
-
-                    Text {
-                        text: modelData.n
-                        color: Theme.Colors.text
-                        font { family: Theme.Typography.fontDisplay
-                               ; pixelSize: Theme.Typography.sizeMD
-                               ; weight: Theme.Typography.weightMedium }
-                    }
-                    Text {
-                        width: parent.width
-                        text: modelData.d
-                        wrapMode: Text.WordWrap
-                        color: Theme.Colors.textMuted
-                        font { family: Theme.Typography.fontDisplay
-                               ; pixelSize: Theme.Typography.sizeSM }
-                    }
-                }
             }
         }
     }
@@ -632,6 +599,22 @@ Page {
                 + "you get the resulting contrast, and a warning when it drops "
                 + "below what small text needs."
 
+        // Sette colori da esperti sempre aperti erano la metà di questa
+        // pagina. Dal 28 settembre 2026 stanno dietro un interruttore, che
+        // parte acceso solo se qualcuno ne è già stato scelto a mano.
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "Scegli i colori a mano" : "Pick the colours by hand"
+            description: page.it ? "Il fondo, i caratteri, i contorni e i colori degli avvisi"
+                                 : "The background, the text, the outlines and the alert colours"
+            searchTerms: "colori a mano fondo caratteri contorni barra pannelli va bene attenzione pericolo"
+            controlWidth: 60
+            control: S.ToggleSwitch {
+                checked: page._coloriAMano
+                onToggled: function (v) { page._coloriAMano = v; }
+            }
+        }
+
         Repeater {
             model: [
                 { "nome": "base",     "it": "Il fondo",
@@ -667,6 +650,7 @@ Page {
             delegate: Column {
                 id: riga
                 required property var modelData
+                visible: page._coloriAMano
 
                 width: parent.width
                 spacing: Theme.Effects.space2
