@@ -50,9 +50,13 @@ Item {
         }
     }
 
+    // Accostata a DESTRA, come ogni controllo delle Impostazioni: la sua
+    // larghezza la decide ChoicePicker (quanto servono le voci, al massimo
+    // tutto il riquadro), e `width: misura.width` la stirava a 320 con le
+    // voci a sinistra — 40 pixel prima del bordo delle levette sopra.
     S.ChoicePicker {
         id: picker
-        width: misura.width
+        anchors.right: parent.right
         value: String(misura.valore)
         options: [
             { "value": "24", "label": misura.it ? "Normale" : "Normal" },

@@ -366,6 +366,7 @@ Page {
                 visible: page.aggiungo === ""
 
                 Ui.SpineButton {
+                    solido: true
                     height: 38
                     horizontalPadding: Theme.Effects.space4
                     onClicked: { page.aggiungo = "kdrive"; page.avviso = ""; }
@@ -388,6 +389,7 @@ Page {
                 }
 
                 Ui.SpineButton {
+                    solido: true
                     height: 38
                     horizontalPadding: Theme.Effects.space4
                     onClicked: { page.aggiungo = "google"; page.avviso = ""; }
@@ -410,6 +412,7 @@ Page {
                 }
 
                 Ui.SpineButton {
+                    solido: true
                     height: 38
                     horizontalPadding: Theme.Effects.space4
                     onClicked: { page.aggiungo = "webdav"; page.avviso = ""; }
@@ -900,22 +903,22 @@ Page {
     // costringe a scoprirlo per tentativi.
 
     Card {
-        heading: page.it ? "Quello che ancora non c'è" : "Not available yet"
+        heading: page.it ? "Da sapere" : "Good to know"
 
+        // Erano tre paragrafi, uno da sei righe: la pagina più corta delle
+        // Impostazioni finiva con un muro di testo. Una riga per cosa.
         Column {
             width: parent.width
-            spacing: Theme.Effects.space3
+            spacing: Theme.Effects.space2
 
             Text {
                 width: parent.width
                 wrapMode: Text.WordWrap
                 text: page.puo.montare === true
-                      ? (page.it
-                         ? "La cartella nella home si può fare: rclone è installato. Non è ancora collegata qui — arriva col prossimo pezzo."
-                         : "A folder in your home is possible: rclone is installed.")
-                      : (page.it
-                         ? "Una cartella dell'account dentro la tua Home non si può ancora avere: serve «rclone», che su questa macchina non è installato. Per adesso l'account serve a mandare i backup dalla Custodia, e per quello non serve montare niente."
-                         : "A folder in your home needs «rclone», which is not installed here.")
+                      ? (page.it ? "L'account come cartella nella tua Home: si può (rclone è installato), arriva col prossimo pezzo."
+                                 : "The account as a folder in your Home: possible (rclone is installed), coming next.")
+                      : (page.it ? "L'account come cartella nella tua Home: serve «rclone», che qui non è installato. Ai backup della Custodia non serve."
+                                 : "The account as a folder in your Home needs «rclone», not installed here. Custodia backups do not need it.")
                 color: Theme.Colors.textMuted
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeSM
@@ -925,12 +928,10 @@ Page {
                 width: parent.width
                 wrapMode: Text.WordWrap
                 text: page.puo.google === true
-                      ? (page.it
-                         ? "Google Drive è collegabile: la chiave dell'applicazione c'è. Minerva vede soltanto i file che crea lei — il resto del tuo Drive, per questo programma, non esiste."
-                         : "Google Drive is ready: the application key is saved.")
-                      : (page.it
-                         ? "Google Drive si può collegare, ma vuole una chiave che devi creare tu sulla console di Google: Minerva non può portarsene dentro una propria, perché un progetto pubblico che spedisce la sua chiave la regala a chiunque e Google la spegne. Si fa una volta sola, dal pulsante «Google Drive» qui sopra."
-                         : "Google Drive needs an application key you create yourself, once.")
+                      ? (page.it ? "Google Drive: la chiave c'è. Minerva vede solo i file che crea lei."
+                                 : "Google Drive: the key is saved. Minerva only sees the files it creates.")
+                      : (page.it ? "Google Drive, la prima volta, chiede una chiave tua da creare su Google: una volta sola."
+                                 : "Google Drive asks, the first time, for a key you create on Google: once.")
                 color: Theme.Colors.textMuted
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeSM
@@ -939,9 +940,8 @@ Page {
             Text {
                 width: parent.width
                 wrapMode: Text.WordWrap
-                text: page.it
-                      ? "E una cosa che non si potrà fare mai, perché non esiste il modo: usare le password salvate nel tuo account Google per entrare in altri servizi. Quelle stanno dentro Google e nessun programma può leggerle da fuori. «Accedi con Google» è un'altra cosa — è un permesso, non una password — ed è quella che trovi qui sopra."
-                      : "And one thing that will never be possible: reading the passwords saved in your Google account."
+                text: page.it ? "Le password salvate nel tuo account Google non le può leggere nessun programma."
+                              : "No program can read the passwords saved in your Google account."
                 color: Theme.Colors.textFaint
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeSM

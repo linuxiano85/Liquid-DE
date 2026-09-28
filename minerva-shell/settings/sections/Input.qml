@@ -239,11 +239,20 @@ Page {
             Text {
                 anchors.right: parent.right
                 anchors.verticalCenter: sensLabel.verticalCenter
-                // Hyprland va da -1 a 1 con 0 al centro: mostrarlo così com'è
-                // farebbe pensare che «0» significhi fermo.
-                text: (page.sensitivity === 0
-                       ? (page.it ? "normale" : "normal")
-                       : (page.sensitivity > 0 ? "+" : "") + page.sensitivity.toFixed(2))
+                // La scala va da -1 a 1 con 0 al centro: «+0.45» non diceva
+                // niente a chi lo leggeva. Una parola dice quanto, e il
+                // numero fra parentesi resta per chi vuole il valore esatto.
+                text: {
+                    var v = page.sensitivity;
+                    var it = page.it;
+                    var parola = Math.abs(v) < 0.05 ? (it ? "normale" : "normal")
+                               : v >= 0.6 ? (it ? "molto veloce" : "very fast")
+                               : v > 0 ? (it ? "più veloce" : "faster")
+                               : v <= -0.6 ? (it ? "molto lento" : "very slow")
+                               : (it ? "più lento" : "slower");
+                    return Math.abs(v) < 0.05 ? parola
+                         : parola + "  (" + (v > 0 ? "+" : "") + v.toFixed(2) + ")";
+                }
                 color: Theme.Colors.accent
                 font.family: Theme.Typography.fontMono
                 font.pixelSize: Theme.Typography.sizeSM

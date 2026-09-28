@@ -17,6 +17,12 @@ Item {
 
     property alias content: holder.data
     property bool active: false
+    /// Un fondo anche a riposo. Sulla barra i pulsanti sono trasparenti
+    /// finché non ci si passa sopra, e va bene: la barra è il loro fondo.
+    /// Dentro una pagina invece un pulsante trasparente è testo qualunque —
+    /// «kDrive» e «Google Drive» nella pagina Account non sembravano
+    /// cliccabili (visto il 28 settembre 2026).
+    property bool solido: false
     property bool showGlow: true
     property color accent: Theme.Colors.accent
     property real horizontalPadding: Theme.Effects.space3
@@ -62,10 +68,11 @@ Item {
         color: button.active ? Qt.alpha(button.accent, 0.18)
                              : button.pressed ? Theme.Colors.pressed
                              : button.hovered ? Theme.Colors.hover
+                             : button.solido ? Theme.Colors.raised
                              : "transparent"
 
-        border.width: button.active ? 1 : 0
-        border.color: Qt.alpha(button.accent, 0.45)
+        border.width: button.active ? 1 : (button.solido ? Theme.Effects.hairline : 0)
+        border.color: button.active ? Qt.alpha(button.accent, 0.45) : Theme.Colors.edge
 
         Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
