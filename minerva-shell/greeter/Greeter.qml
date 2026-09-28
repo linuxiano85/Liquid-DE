@@ -3,6 +3,7 @@ import QtQuick.Effects
 import Quickshell
 
 import "../theme" as Theme
+import "../core/sessioni.js" as Sessioni
 import "../core" as Core
 import "../ui" as Ui
 import "aurora"
@@ -433,44 +434,11 @@ Item {
     /// dipendere da come è configurato IL COMPUTER su cui girano le prove —
     /// che è un modo classico di scrivere una prova che non prova niente.
     function qualeSessione(elenco, voluta) {
-        if (!elenco || elenco.length === 0)
-            return 0;
-
-        function trova(id) {
-            for (var i = 0; i < elenco.length; i++)
-                if (elenco[i].id === id) return i;
-            return -1;
-        }
-
-        function diScorta(id) {
-            // Il recupero e la riga di comando sono vie di scorta: si
-            // scelgono, non si ereditano.
-            return id === "minerva-recupero";
-        }
-
-        var i = trova(voluta !== undefined
-                      ? voluta
-                      : Core.Ipc.get("greeter.session", "minerva-wayland"));
-        if (i >= 0 && elenco[i].tipo !== "tty") return i;
-
-        // I due nomi di Minerva, nell'ordine in cui vanno provati.
-        var nostri = ["minerva-wayland", "minerva"];
-        for (var k = 0; k < nostri.length; k++) {
-            i = trova(nostri[k]);
-            if (i >= 0) return i;
-        }
-
-        for (var j = 0; j < elenco.length; j++) {
-            if (elenco[j].tipo !== "tty" && !diScorta(elenco[j].id))
-                return j;
-        }
-
-        // Non è rimasto che il recupero o una riga di comando: si prende
-        // quello che c'è, ed è esattamente il guaio per cui esistono.
-        for (var m = 0; m < elenco.length; m++)
-            if (elenco[m].tipo !== "tty") return m;
-
-        return 0;
+        // La regola sta in `core/sessioni.js`: la usa anche la pagina
+        // Accesso delle Impostazioni, che deve mostrare accesa la STESSA
+        // sessione in cui si entrerà premendo Invio.
+        return Sessioni.scegli(elenco, voluta !== undefined
+                                       ? voluta : Core.Ipc.get("greeter.session", ""));
     }
 
     /// Si segna dove si è appena entrati, così la volta dopo è già scelto.

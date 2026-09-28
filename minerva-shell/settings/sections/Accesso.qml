@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "../../theme" as Theme
+import "../../core/sessioni.js" as Sessioni
 import "../../core" as Core
 import ".." as S
 
@@ -95,6 +96,29 @@ Page {
     /// sceglierla QUI vorrebbe dire dire al computer «da domani entra in un
     /// terminale». La schermata di accesso ce la mostra, e da lì la si prende
     /// quando serve; una preferenza permanente, no.
+    /// L'ora, per l'esempio dell'orario: si rinfresca ogni mezzo minuto.
+    QtObject {
+        id: orologio
+        property date adesso: new Date()
+    }
+    Timer {
+        interval: 30000
+        running: true
+        repeat: true
+        onTriggered: orologio.adesso = new Date()
+    }
+
+    /// La sessione in cui si entra premendo Invio, scelta con la STESSA
+    /// regola della schermata di accesso (`core/sessioni.js`). Col ripiego
+    /// scritto qui («minerva», che non esiste più) nessuna scelta era accesa.
+    readonly property string sessioneDiPartenza: {
+        var elenco = page.sessioni || [];
+        if (elenco.length === 0)
+            return "";
+        var i = Sessioni.scegli(elenco, Core.Ipc.get("greeter.session", ""));
+        return elenco[i] ? elenco[i].id : "";
+    }
+
     function opzioniSessioni() {
         var o = [];
         for (var i = 0; i < page.sessioni.length; i++) {
@@ -462,7 +486,11 @@ Page {
             width: parent.width
             visible: Core.Ipc.get("greeter.showClock", true)
             label: page.it ? "Orario di 24 ore" : "24-hour clock"
-            description: page.it ? "Spento: 7:40 PM" : "Off: 7:40 PM"
+            // Diceva «Spento: 7:40 PM» anche con la levetta accesa, e si
+            // leggeva come «è spento». Ora mostra l'ora com'è adesso.
+            description: (page.it ? "Adesso: " : "Now: ")
+                         + Qt.formatTime(orologio.adesso,
+                                         Core.Ipc.get("greeter.clock24", true) ? "HH:mm" : "h:mm AP")
             controlWidth: 60
 
             control: S.ToggleSwitch {
@@ -564,7 +592,7 @@ Page {
             controlWidth: 260
 
             control: S.ChoicePicker {
-                value: Core.Ipc.get("greeter.session", "minerva")
+                value: page.sessioneDiPartenza
                 options: page.opzioniSessioni()
                 onPicked: function(v) { Core.Ipc.setSetting("greeter.session", v); }
             }
