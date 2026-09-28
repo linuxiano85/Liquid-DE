@@ -2110,14 +2110,16 @@ static void puntatore_ricalcola(struct minerva *m) {
 // namespace. Spenta costa un confronto per aggiornamento.
 #define COMMIT_TRACCIATI 48
 static struct { char nome[64]; unsigned n; } commit_contati[COMMIT_TRACCIATI];
+/// -1 = non ancora deciso (si legge MINERVA_TRACCIA_COMMIT); il verbo
+/// «traccia commit si|no» la cambia a sessione accesa.
+static int commit_traccia = -1;
+static struct timespec ultima;
 static void traccia_commit(const char *nome) {
-	static int accesa = -1;
-	static struct timespec ultima;
-	if (accesa < 0) {
-		accesa = getenv("MINERVA_TRACCIA_COMMIT") != NULL;
+	if (commit_traccia < 0) {
+		commit_traccia = getenv("MINERVA_TRACCIA_COMMIT") != NULL;
 		clock_gettime(CLOCK_MONOTONIC, &ultima);
 	}
-	if (!accesa)
+	if (!commit_traccia)
 		return;
 	if (nome == NULL || nome[0] == '\0')
 		nome = "(senza nome)";
@@ -10420,6 +10422,23 @@ void minerva_comando(struct minerva *m, const char *riga,
 		};
 		wlr_keyboard_notify_key(&finta, &e);
 		snprintf(risposta, n, "ok %u", codice);
+		return;
+	}
+
+	// «traccia commit si|no»: chi manda aggiornamenti, scritto sul registro
+	// ogni cinque secondi (vedi `traccia_commit`). Si accende a sessione
+	// viva: il difetto da cercare è quasi sempre nella sessione vera.
+	if (strcmp(verbo, "traccia") == 0) {
+		char *che = parola(&resto);
+		char *v = parola(&resto);
+		if (che == NULL || strcmp(che, "commit") != 0 || v == NULL) {
+			snprintf(risposta, n, "no traccia vuole «commit si|no»");
+			return;
+		}
+		commit_traccia = parola_vera(v);
+		memset(commit_contati, 0, sizeof(commit_contati));
+		clock_gettime(CLOCK_MONOTONIC, &ultima);
+		snprintf(risposta, n, "ok");
 		return;
 	}
 
