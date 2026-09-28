@@ -59,7 +59,10 @@ Item {
     Accessible.description: Math.round(slider.value) + " " + slider.unit
 
     readonly property string readoutText: {
-        var tail = slider.suffix !== "" ? " " + slider.suffix : "";
+        // Un suffisso che comincia coi due punti è un orario: «21:00», non
+        // «21 :00» (visto nella luce notturna, 28 settembre 2026).
+        var tail = slider.suffix === "" ? ""
+                 : (slider.suffix.charAt(0) === ":" ? slider.suffix : " " + slider.suffix);
         switch (slider.unit) {
         case "niente": return "";
         case "pixel":  return Math.round(slider.value) + " px";

@@ -180,6 +180,14 @@ Page {
     }
 
     readonly property bool it: Core.Strings.lang === "it"
+    /// L'ora di adesso, per dire se la luce notturna è accesa dall'orario.
+    property int oraAdesso: new Date().getHours()
+    Timer {
+        interval: 60000
+        running: true
+        repeat: true
+        onTriggered: page.oraAdesso = new Date().getHours()
+    }
 
     S.ChangeGuard {
         id: guard
@@ -769,7 +777,29 @@ Page {
         S.SettingRow {
             width: parent.width
             label: page.it ? "Luce notturna" : "Night light"
-            description: page.it ? "Accesa adesso" : "On now"
+            // Diceva sempre «Accesa adesso» — voleva dire «accendila adesso» —
+            // anche con l'interruttore spento e la luce accesa dall'orario:
+            // si leggeva come un errore (28 settembre 2026). Adesso dice lo
+            // stato. Non si chiede a `Core.LuceNotturna`: qui siamo nel
+            // processo delle Impostazioni, e una sua seconda copia manderebbe
+            // tinte al compositore.
+            description: {
+                var manuale = Core.Ipc.get("display.nightLight", false);
+                var auto = Core.Ipc.get("display.nightLightAuto", false);
+                var da = Number(Core.Ipc.get("display.nightLightFrom", 21));
+                var a = Number(Core.Ipc.get("display.nightLightTo", 7));
+                var h = page.oraAdesso;
+                var dentro = da <= a ? (h >= da && h < a) : (h >= da || h < a);
+                if (manuale)
+                    return page.it ? "Accesa" : "On";
+                if (auto && dentro)
+                    return page.it ? "Accesa dall'orario, fino alle " + a + ":00"
+                                   : "On from the schedule, until " + a + ":00";
+                if (auto)
+                    return page.it ? "Si accende da sola alle " + da + ":00"
+                                   : "Turns on by itself at " + da + ":00";
+                return page.it ? "Spenta" : "Off";
+            }
             control: S.ToggleSwitch {
                 checked: Core.Ipc.get("display.nightLight", false)
                 onToggled: function(v) {
