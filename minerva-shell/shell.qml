@@ -1408,8 +1408,11 @@ ShellRoot {
                 // barra e la dock, e la griglia comincia sotto la barra
                 // invece che dietro.
                 monitor: modelData ? modelData.name : ""
+                // Qui, e solo qui, il punto è una posizione della griglia:
+                // quello che arriva dall'altro schermo lo sa DesktopLayer, che
+                // la griglia non ce l'ha.
                 onRicevuti: function(urls, x, y) {
-                    root.desktopRiceve(urls, x, y);
+                    root.desktopRiceve(urls, x, y, true);
                 }
                 onMenuSu: function(nome, dove) {
                     root.menuIconaScrivania(nome, dove);
@@ -1491,7 +1494,7 @@ ShellRoot {
     /// Il trascinamento arrivato sulla scrivania: gli indirizzi e il punto
     /// in cui si è lasciato. La decisione «copiare o spostare» si chiede
     /// come nel gestore file — il gesto è lo stesso, gli esiti no.
-    function desktopRiceve(urls, x, y) {
+    function desktopRiceve(urls, x, y, sullaGriglia) {
         var sorgenti = [];
         for (var i = 0; i < urls.length; i++) {
             var u = String(urls[i]);
@@ -1516,6 +1519,7 @@ ShellRoot {
         if (utili.length === 0)
             return;
         desktopDrop.arrivo = utili;
+        desktopDrop.punto = sullaGriglia === true ? Qt.point(x, y) : null;
         var it = Core.Strings.lang === "it";
         var dove = desktopDrop.arrivo.length > 1
                     ? (it ? "la Scrivania" : "the Desktop")
@@ -1533,7 +1537,7 @@ ShellRoot {
 
     /// Quello che sta per arrivare sulla scrivania, in attesa della risposta
     /// sui conflitti.
-    property var desktopDrop: ({ "arrivo": [] })
+    property var desktopDrop: ({ "arrivo": [], "punto": null })
     property var _desktopInAttesa: null
 
     function trasferisciSullaScrivania(sorgenti, sposta) {
@@ -1576,9 +1580,20 @@ ShellRoot {
         id: desktopDropMenu
         onTriggered: function(azione) {
             var arrivo = root.desktopDrop.arrivo;
+            var punto = root.desktopDrop.punto;
             root.desktopDrop.arrivo = [];
+            root.desktopDrop.punto = null;
             if (azione !== "copia" && azione !== "sposta")
                 return;
+            // Il posto si prepara adesso, prima che il file esista: quando
+            // compare trova la sua cella dove lo si è lasciato, invece della
+            // prima libera in alto a sinistra. Vedi `accogli`.
+            if (punto && root.icone) {
+                var nomi = arrivo.map(function (s) {
+                    return s.substring(s.lastIndexOf("/") + 1);
+                });
+                root.icone.accogli(nomi, punto.x, punto.y);
+            }
             root.trasferisciSullaScrivania(arrivo, azione === "sposta");
         }
     }

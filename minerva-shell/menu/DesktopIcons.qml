@@ -385,6 +385,48 @@ Item {
         icons._scrivi(m);
     }
 
+    /// Prepara il posto a file che STANNO PER arrivare, lasciati nel punto
+    /// (px, py) del puntatore.
+    ///
+    /// Giacomo, 28 settembre 2026: le icone portate dal gestore file «hanno
+    /// qualche problemino di spostamento». Il punto del rilascio serviva solo
+    /// ad aprire il menù «Copia / Sposta»: il file nuovo, senza un posto
+    /// ricordato, finiva nella prima cella libera in alto a sinistra — lontano
+    /// da dove lo si era lasciato, come se la scrivania lo avesse spostato da
+    /// sola.
+    ///
+    /// Il posto si scrive PRIMA che il file esista: `disposizione` guarda solo
+    /// i file presenti, e il deposito tiene anche i nomi che non ci sono
+    /// ancora (vedi `ricorda`). Il primo va nella cella del rilascio, gli
+    /// altri nelle libere più vicine; nessuna icona già sulla scrivania si
+    /// muove.
+    function accogli(nomi, px, py) {
+        if (!nomi || nomi.length === 0 || icons.autoDisponi)
+            return;
+        var d = icons.disposizione;
+        var m = {};
+        var occupate = {};
+        for (var altro in d) {
+            if (nomi.indexOf(altro) !== -1)
+                continue;
+            m[altro] = [Math.round(d[altro].x), Math.round(d[altro].y)];
+            var c = icons.cellaDiPunto(d[altro].x, d[altro].y);
+            occupate[c.x + "," + c.y] = true;
+        }
+        var prima = icons.posizioni || ({});
+        for (var k in prima)
+            if (m[k] === undefined && nomi.indexOf(k) === -1)
+                m[k] = prima[k];
+        var x = px - icons.cellaW / 2, y = py - icons.riquadro / 2;
+        for (var i = 0; i < nomi.length; i++) {
+            var libera = icons.cellaLibera(x, y, occupate);
+            occupate[libera.x + "," + libera.y] = true;
+            var punto = icons.puntoDiCella(libera.x, libera.y);
+            m[nomi[i]] = [punto.x, punto.y];
+        }
+        icons._scrivi(m);
+    }
+
     /// Scrive nel deposito le posizioni che le icone hanno ADESSO.
     ///
     /// Serve a non perdere la disposizione quando si spegne l'automatismo: chi
