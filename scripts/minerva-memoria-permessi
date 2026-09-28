@@ -1,0 +1,62 @@
+#!/bin/sh
+# minerva-memoria-permessi — Chi regola la memoria del kernel, senza root.
+#
+#   sudo minerva-memoria-permessi            installa (vale a ogni avvio)
+#   sudo minerva-memoria-permessi rimuovi    toglie, e al riavvio tutto torna di root
+#
+# ── Perché ────────────────────────────────────────────────────────────────
+#
+# La memoria che respira (piano del 28 settembre 2026) usa due leve del
+# kernel che stanno in /sys e sono di root: KSM (fonde le pagine uguali fra
+# i nostri processi) e DAMON_RECLAIM (manda in zram la memoria fredda). Il
+# demone di Liquid gira come l'utente: per accenderle «a raffica», nel
+# momento in cui servono, deve poter scrivere quei valori.
+#
+# Darglieli a mano con chgrp/chmod dura fino al riavvio: /sys si rifà ogni
+# volta. systemd-tmpfiles invece rimette permessi e gruppo a ogni avvio,
+# da un file in /etc/tmpfiles.d — ed è quello che questo script scrive.
+#
+# ── Cosa dà, e cosa no ────────────────────────────────────────────────────
+#
+# Il permesso di SCRIVERE quei valori al gruppo di chi lancia lo script.
+# Non accende niente: KSM resta spento (run=0) e fonde comunque solo i
+# processi che lo chiedono (PR_SET_MEMORY_MERGE); DAMON_RECLAIM resta spento
+# finché il demone non lo accende. Nessun altro file di /sys cambia.
+set -eu
+
+FILE=/etc/tmpfiles.d/liquid-memoria.conf
+AZIONE="${1:-installa}"
+
+[ "$(id -u)" -eq 0 ] || { echo "Va lanciato con sudo." >&2; exit 1; }
+
+if [ "$AZIONE" = rimuovi ]; then
+    rm -f "$FILE"
+    echo "Tolto $FILE: dal prossimo avvio quei valori tornano solo di root."
+    exit 0
+fi
+
+# Il gruppo di chi ha chiesto (sudo lo dice in SUDO_USER), non root.
+UTENTE="${SUDO_USER:-}"
+[ -n "$UTENTE" ] && [ "$UTENTE" != root ] || {
+    echo "Lancialo con sudo dal tuo utente: serve sapere a chi dare il permesso." >&2
+    exit 1
+}
+GRUPPO=$(id -gn "$UTENTE")
+
+{
+    echo "# Scritto da minerva-memoria-permessi. Vedi lo script per il perché."
+    echo "# Il gruppo $GRUPPO può regolare KSM e DAMON_RECLAIM; nessuno li accende."
+    for f in run pages_to_scan sleep_millisecs use_zero_pages smart_scan; do
+        echo "z /sys/kernel/mm/ksm/$f 0664 root $GRUPPO -"
+    done
+    for f in enabled min_age quota_ms quota_sz quota_mem_pressure_us \
+             wmarks_high wmarks_mid wmarks_low commit_inputs; do
+        echo "z /sys/module/damon_reclaim/parameters/$f 0660 root $GRUPPO -"
+    done
+} > "$FILE"
+chmod 644 "$FILE"
+
+# E subito, senza aspettare il riavvio.
+systemd-tmpfiles --create "$FILE"
+echo "Fatto: il gruppo «$GRUPPO» può regolare KSM e DAMON_RECLAIM, anche dopo ogni riavvio."
+echo "Per toglierlo: sudo $0 rimuovi"

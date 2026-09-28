@@ -25,12 +25,32 @@ done
 
 # Richiedere i backend evita una build che riesce ma non gestisce DRM/input.
 # Un profilo GLES soltanto deve essere scelto esplicitamente.
+#
+# ── Compilato per QUESTO processore ───────────────────────────────────────
+#
+# Fino al 29 settembre 2026 il compositore — fork di wlroots compreso — era
+# compilato in DEBUG, cioè senza nessuna ottimizzazione (-O0): l'unico pezzo
+# del sistema non ottimizzato, mentre Qt e il resto arrivano già dai
+# repository cachyos-v4. Misurato trascinando una finestra (600 spostamenti,
+# acquerello acceso): 1,45 → 1,38 ms di CPU per fotogramma, binario 3,75 →
+# 1,6 MB. Poco, perché il profilo è piatto — metà del tempo è Mesa, un
+# quinto pixman — ma gratis.
+#
+# `debugoptimized` e non `release`: tiene accesi gli assert di wlroots, che
+# fermano un difetto dove nasce invece di lasciarlo correre (quello della
+# barra del titolo nativa era uno di questi). LTO e `-march=native`: il
+# compositore si compila sulla macchina dove girerà (install-minerva.sh).
+# Per un binario da portare altrove: MINERVA_MARCH=x86-64-v3.
+MARCH="${MINERVA_MARCH:-native}"
+OTTIMIZZA="-Dbuildtype=debugoptimized -Db_lto=true -Dc_args=-march=$MARCH -Dc_link_args=-march=$MARCH"
 if [ -f "$BUILD/meson-private/coredata.dat" ]; then
-    meson setup --reconfigure "$BUILD" "$QUI" --wrap-mode=nofallback \
+    # shellcheck disable=SC2086
+    meson setup --reconfigure "$BUILD" "$QUI" --wrap-mode=nofallback $OTTIMIZZA \
         -Dwlroots:renderers="$RENDERERS" -Dwlroots:backends=drm,libinput,x11 \
         -Dwlroots:session=enabled -Dwlroots:xwayland=enabled
 else
-    meson setup "$BUILD" "$QUI" --wrap-mode=nofallback \
+    # shellcheck disable=SC2086
+    meson setup "$BUILD" "$QUI" --wrap-mode=nofallback $OTTIMIZZA \
         -Dwlroots:renderers="$RENDERERS" -Dwlroots:backends=drm,libinput,x11 \
         -Dwlroots:session=enabled -Dwlroots:xwayland=enabled
 fi
