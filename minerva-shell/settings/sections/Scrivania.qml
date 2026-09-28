@@ -1262,20 +1262,6 @@ Page {
             }
         }
     }
-    Card {
-        heading: page.it ? "Scrivania" : "Desktop"
-
-        S.SettingRow {
-            width: parent.width
-            label: Core.Strings.t("rightClickMenu")
-            description: Core.Strings.t("rightClickMenuDesc")
-            controlWidth: 60
-            control: S.ToggleSwitch {
-                checked: Core.Ipc.get("desktop.rightClickMenu", true)
-                onToggled: function(v) { Core.Ipc.setSetting("desktop.rightClickMenu", v); }
-            }
-        }
-    }
     // ── Il blocco ────────────────────────────────────────────────────────
 
     Card {
@@ -1502,18 +1488,56 @@ Page {
                 + "always there, so a value here keeps the sampling on for the "
                 + "whole session."
 
-        Repeater {
-            model: page.perLaBarra
+        // Erano undici righe con undici interruttori. Dal 28 settembre 2026
+        // una riga di pastiglie: accesa, il valore sta nella barra.
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "Valori nella barra" : "Values in the bar"
+            description: page.it ? "Accesi stanno accanto al meteo, spenti no"
+                                 : "Lit ones sit next to the weather"
+            searchTerms: "barra processore memoria gpu temperatura rete disco batteria carico"
+            controlWidth: 420
 
-            delegate: S.SettingRow {
-                required property var modelData
-                width: parent.width
-                label: page.nomeDi(String(modelData))
-                controlWidth: 60
-                control: S.ToggleSwitch {
-                    checked: page.nellaBarra.indexOf(String(modelData)) !== -1
-                    onToggled: function (v) {
-                        page.barra(String(modelData), v);
+            control: Flow {
+                width: parent ? parent.width : implicitWidth
+                spacing: 6
+
+                Repeater {
+                    model: page.perLaBarra
+
+                    delegate: Rectangle {
+                        id: pastiglia
+                        required property var modelData
+                        readonly property bool accesa: page.nellaBarra.indexOf(String(modelData)) !== -1
+
+                        implicitWidth: nomeValore.implicitWidth + 24
+                        width: implicitWidth
+                        height: 30
+                        radius: Theme.Effects.radiusSM
+                        color: accesa ? Qt.alpha(Theme.Colors.accent, 0.18)
+                                      : (tocco.containsMouse ? Theme.Colors.hover : Theme.Colors.raised)
+                        border.width: 1
+                        border.color: accesa ? Theme.Colors.accent : Theme.Colors.edge
+                        Accessible.role: Accessible.CheckBox
+                        Accessible.name: nomeValore.text
+                        Accessible.checked: accesa
+
+                        Text {
+                            id: nomeValore
+                            anchors.centerIn: parent
+                            text: page.nomeDi(String(pastiglia.modelData))
+                            color: pastiglia.accesa ? Theme.Colors.accent : Theme.Colors.textMuted
+                            font.family: Theme.Typography.fontDisplay
+                            font.pixelSize: Theme.Typography.sizeSM
+                        }
+
+                        MouseArea {
+                            id: tocco
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: page.barra(String(pastiglia.modelData), !pastiglia.accesa)
+                        }
                     }
                 }
             }
