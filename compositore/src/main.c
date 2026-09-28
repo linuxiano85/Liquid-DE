@@ -47,6 +47,7 @@
 
 #include <linux/input-event-codes.h>
 #include <time.h>
+#include <sys/prctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -11023,7 +11024,41 @@ static int esci_pulito(int segnale, void *dati) {
 	return 0;
 }
 
+/// ── Le pagine enormi, spente per tutta la sessione ────────────────────────
+///
+/// Giacomo, 28 settembre 2026: «esiste un modo per comprimere quei 69 MB
+/// fissi ad app? […] andiamo alla radice del problema». La radice non era
+/// Quickshell né Qt: era il kernel. Su CachyOS le pagine enormi trasparenti
+/// stanno su `always`, e allora ogni area di memoria di ogni thread — il
+/// malloc del filo di Wayland, quello di D-Bus, quello dei registri — prende
+/// pagine da 2 MB appena ci si scrive un byte. Letto dentro una finestra
+/// Quickshell vuota: quattro blocchi da 4 e 8 MB, zeri al 100 %, 1988 pagine
+/// da 4 KB vuote su 2048, e tutte contate come occupate.
+///
+/// Misurato nella sessione di prova, con e senza:
+///
+///     finestra Quickshell vuota     46,3 → 23,8 MB
+///     la shell                     144,9 → 99,6 MB
+///     compositore + shell + demone 203,6 → 155,3 MB
+///
+/// `PR_SET_THP_DISABLE` vale per questo processo e per TUTTI quelli che
+/// nascono da lui: la shell, il demone, le app, e i programmi che si aprono
+/// dalla sessione. È per questo che sta qui, prima di lanciare chiunque. Chi
+/// vuole le pagine enormi (un gioco che ne guadagna, da misurare) avvia la
+/// sessione con MINERVA_PAGINE_ENORMI=1.
+static void pagine_enormi_spente(void) {
+	const char *detto = getenv("MINERVA_PAGINE_ENORMI");
+	if (detto != NULL && strcmp(detto, "1") == 0) {
+		fprintf(stderr, "minerva-wayland: pagine enormi LASCIATE ACCESE (MINERVA_PAGINE_ENORMI=1)\n");
+		return;
+	}
+	if (prctl(PR_SET_THP_DISABLE, 1, 0, 0, 0) != 0)
+		fprintf(stderr, "minerva-wayland: non riesco a spegnere le pagine enormi: %s\n",
+			strerror(errno));
+}
+
 int main(int argc, char *argv[]) {
+	pagine_enormi_spente();
 	wlr_log_init(WLR_INFO, NULL);
 
 	struct minerva m = {0};
