@@ -983,42 +983,64 @@ Page {
 
         // ── Quali categorie si vedono ────────────────────────────────────
         //
-        // Il Repeater sta dentro una Column sua: il contenuto della scheda è
-        // un alias verso i `data` della sua colonna interna, e un Repeater
-        // messo lì dentro ci finisce come oggetto senza che le righe generate
-        // entrino nella colonna. Si vedeva come una scheda alta la metà, con
-        // le otto voci semplicemente assenti.
-        Column {
+        // Erano otto righe con otto interruttori — «Mostra Internet»,
+        // «Mostra Sviluppo»… — cioè mezza pagina per una domanda sola. Dal
+        // 28 settembre 2026 è una riga con otto pastiglie: accesa, la
+        // categoria si vede; un tocco la spegne. Giacomo: «servirebbe
+        // riorganizzare tutto in maniera più semplice e compatta».
+        S.SettingRow {
             width: parent.width
-            spacing: Theme.Effects.space3
+            label: page.it ? "Categorie nella colonna" : "Categories in the column"
+            description: page.it
+                ? "Accese si vedono, spente spariscono. «Preferiti» e «Tutte» restano sempre."
+                : "Lit ones show, unlit ones disappear. “Favourites” and “All” always stay."
+            searchTerms: "categorie menu mostra nascondi internet sviluppo ufficio grafica multimedia giochi sistema utility"
+            controlWidth: 380
 
-            Repeater {
-                model: page.categorieMenu
+            control: Flow {
+                width: parent ? parent.width : implicitWidth
+                spacing: 6
 
-                delegate: S.SettingRow {
-                    required property var modelData
-                    required property int index
+                Repeater {
+                    model: page.categorieMenu
 
-                    width: parent.width
-                    label: (page.it ? "Mostra «" : "Show “")
-                           + (page.it ? modelData.it : modelData.en)
-                           + (page.it ? "»" : "”")
-                    // Solo la prima porta la spiegazione: otto righe che
-                    // dicono la stessa cosa sono otto righe da saltare.
-                    description: index === 0
-                        ? (page.it
-                           ? "Le categorie che non usi spariscono dalla colonna. «Preferiti» e «Tutte» restano sempre."
-                           : "Categories you don't use disappear from the column. “Favourites” and “All” always stay.")
-                        : ""
-                    controlWidth: 60
-                    control: S.ToggleSwitch {
-                        checked: page.categoriaVisibile(modelData.id)
-                        onToggled: function(v) {
-                            page.mostraCategoria(modelData.id, v);
+                    delegate: Rectangle {
+                        id: pastiglia
+                        required property var modelData
+                        readonly property bool accesa: page.categoriaVisibile(modelData.id)
+
+                        implicitWidth: nomeCat.implicitWidth + 24
+                        width: implicitWidth
+                        height: 30
+                        radius: Theme.Effects.radiusSM
+                        color: accesa ? Qt.alpha(Theme.Colors.accent, 0.18)
+                                      : (tocco.containsMouse ? Theme.Colors.hover : Theme.Colors.raised)
+                        border.width: 1
+                        border.color: accesa ? Theme.Colors.accent : Theme.Colors.edge
+                        Accessible.role: Accessible.CheckBox
+                        Accessible.name: nomeCat.text
+                        Accessible.checked: accesa
+
+                        Text {
+                            id: nomeCat
+                            anchors.centerIn: parent
+                            text: page.it ? pastiglia.modelData.it : pastiglia.modelData.en
+                            color: pastiglia.accesa ? Theme.Colors.accent : Theme.Colors.textMuted
+                            font.family: Theme.Typography.fontDisplay
+                            font.pixelSize: Theme.Typography.sizeSM
+                        }
+
+                        MouseArea {
+                            id: tocco
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: page.mostraCategoria(pastiglia.modelData.id, !pastiglia.accesa)
                         }
                     }
                 }
             }
         }
+
     }
 }
