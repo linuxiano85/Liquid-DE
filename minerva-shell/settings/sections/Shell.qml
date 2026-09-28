@@ -65,6 +65,31 @@ Page {
                 }
             }
         }
+
+
+        // ── Le spiegazioni sotto ogni interruttore ───────────────────
+        //
+        // `general.beginnerMode` la leggono `ui/ToggleTile.qml` (le piastrelle
+        // della tendina) e `menu/DesktopLayer.qml` (il suggerimento sulla
+        // scrivania). Era accesa di fabbrica e non si poteva spegnere da
+        // nessuna parte: chi Minerva la conosce si teneva le spiegazioni per
+        // sempre.
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "Spiega le cose sotto ogni interruttore"
+                           : "Explain each switch underneath"
+            description: page.it
+                ? "Le righe di spiegazione nella tendina e il suggerimento "
+                  + "sulla scrivania. Chi Minerva la conosce può spegnerle."
+                : "The explanation lines in the panel and the desktop hint."
+            controlWidth: 60
+            control: S.ToggleSwitch {
+                checked: Core.Ipc.get("general.beginnerMode", true)
+                onToggled: function(v) {
+                    Core.Ipc.setSetting("general.beginnerMode", v);
+                }
+            }
+        }
     }
     // ── Ripristino ───────────────────────────────────────────────────────
 

@@ -18,6 +18,9 @@ Page {
               : "The bar, the dock, the screen corners and edges, the application menu"
 
     readonly property bool it: Core.Strings.lang === "it"
+    /// Vero con l'acquerello dietro barra e pannelli: la trasparenza della
+    /// barra ha allora una memoria sua (vedi `theme/LegaTema.qml`).
+    readonly property bool _colFiltro: Core.Vetro.filtroChiesto
     /// Il modo in vigore, leggendo anche il valore vecchio.
     ///
     /// Chi aveva già Minerva installata ha `dock.autoHide` e non ha mai
@@ -254,6 +257,88 @@ Page {
                 }
             }
         }
+
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "Pulsanti della finestra nella barra" : "Window buttons in the bar"
+            description: Core.Strings.t("windowControlsDesc")
+            controlWidth: 60
+            control: S.ToggleSwitch {
+                checked: Core.Ipc.get("windowControls.enabled", true)
+                onToggled: function(v) { Core.Ipc.setSetting("windowControls.enabled", v); }
+            }
+        }
+
+        // ── Un attrezzo da officina, e si può riporre ────────────────────
+        //
+        // Giacomo, 2 settembre 2026: «mettiamo un tasto disattivabile accanto
+        // al meteo dove posso riavviare la shell».
+        //
+        // Sta fra le voci della barra e non fra quelle degli sviluppatori
+        // perché è una cosa che si VEDE: chi lo spegne lo spegne perché non
+        // vuole quel simbolo lì, non perché ha smesso di sviluppare.
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "Tasto «ricarica» nella barra"
+                           : "«Reload» button in the bar"
+            description: page.it
+                ? "Accanto al meteo. Rilegge la scrivania restando viva: la barra non sparisce"
+                : "Next to the weather. Re-reads the desktop while staying alive: the bar never disappears"
+            control: S.ToggleSwitch {
+                checked: Core.Ipc.get("shell.tastoRiavvio", true)
+                onToggled: function(v) { Core.Ipc.setSetting("shell.tastoRiavvio", v); }
+            }
+        }
+
+        // ── UN cursore, DUE memorie ──────────────────────────────────────
+        //
+        // La stessa riga scrive due chiavi diverse secondo cosa c'è dietro la
+        // barra, e cambia anche gli estremi. Non è una raffinatezza: col blur
+        // acceso il cursore andava da 0,75 a 1,00 e **non faceva niente**,
+        // perché la shell teneva comunque il valore sotto 0,75. Misurato il
+        // 9 settembre 2026 muovendolo da un capo all'altro: 0,0 % di pixel
+        // diversi nella fascia della barra. Un cursore che si gira e non
+        // cambia niente è il difetto che questo progetto si è messo per
+        // iscritto di non commettere.
+        //
+        // Senza blur dietro c'è una fotografia nitida e sotto 0,75 il testo si
+        // perde (il conto sta in `theme/Colors.qml`). Col blur dietro c'è una
+        // macchia morbida e scurita, e si può scendere molto di più: misurato
+        // il 9 settembre 2026 sulla scrivania di Giacomo, a 0,50 il testo
+        // della barra sta a **10,2:1**, cioè più del doppio della soglia di
+        // 4,5:1. Sotto quel valore non si scende, ed è prudenza dichiarata:
+        // il contrasto dipende dalla FOTOGRAFIA, e la sfocatura appiattisce i
+        // dettagli ma non schiarisce né scurisce la media. Su uno sfondo
+        // molto chiaro lo stesso 0,50 sarebbe stretto — come del resto lo è
+        // già il 0,75 di adesso, che nessuno ha mai misurato su un muro
+        // bianco.
+        S.SettingRow {
+            width: parent.width
+            label: Core.Strings.t("membraneOpacity")
+            description: page._colFiltro
+                ? (page.it
+                   ? "Con l'acquerello dietro si può scendere molto di più: "
+                     + "quello che passa è una macchia morbida, non una fotografia"
+                   : "With watercolour behind you can go much lower: what "
+                     + "shows through is a soft wash, not a photograph")
+                : Core.Strings.t("membraneOpacityDesc")
+            controlWidth: 220
+
+            control: S.ValueSlider {
+                width: 220
+                from: page._colFiltro ? 0.50 : 0.75
+                to: 1.0
+                value: page._colFiltro
+                       ? Core.Ipc.get("shell.membraneOpacityBlur", 0.68)
+                       : Core.Ipc.get("shell.membraneOpacity", 0.93)
+                onReleased: function(v) {
+                    Core.Ipc.setSetting(page._colFiltro
+                                        ? "shell.membraneOpacityBlur"
+                                        : "shell.membraneOpacity",
+                                        Math.round(v * 100) / 100);
+                }
+            }
+        }
     }
     Card {
         heading: page.it ? "Aspetto" : "Look"
@@ -323,8 +408,8 @@ Page {
             label: page.it ? "Trasparenza della dock" : "Dock transparency"
             description: Core.Vetro.filtroChiesto
                 ? (page.it
-                   ? "Con l'acquerello o il blur dietro si può scendere molto di più"
-                   : "With watercolour or blur behind you can go much lower")
+                   ? "Con l'acquerello dietro si può scendere molto di più"
+                   : "With watercolour behind you can go much lower")
                 : ""
             controlWidth: 220
             control: S.ValueSlider {

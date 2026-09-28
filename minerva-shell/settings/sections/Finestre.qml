@@ -16,6 +16,25 @@ Page {
     subtitle: Core.Strings.lang === "it"
               ? "La barra del titolo, il materiale, la cornice e l'elasticità"
               : "The title bar, the material, the frame and the elasticity"
+    /// Vero quando la trasparenza delle finestre la mette il compositore.
+    /// Vedi `Core.Vetro.effettoChiestoAcceso`: da lì in poi «Vetro delle finestre di
+    /// Minerva» non ha più niente da regolare.
+    readonly property bool _effettoAcceso: Core.Vetro.effettoChiestoAcceso
+    // ── Qui c'era la dock, e adesso ha una pagina sua ────────────────────
+    //
+    // Sette voci — mostra, si nasconde, dimensione, ingrandimento, estensione,
+    // trasparenza, nome al passaggio — dentro una pagina da milleseicento
+    // righe. C'erano tutte, e Giacomo dopo settimane d'uso ha scritto: «la
+    // dock ancora non si nasconde da sola e non ci sono impostazioni per
+    // essa». Nel suo file `dock.autoHide` era `false`: era spenta, non rotta.
+    //
+    // Un'opzione che non si trova è un'opzione che non esiste, e questo non è
+    // un difetto di chi guarda. Le voci si sono spostate in
+    // `sections/Dock.qml`, che nell'elenco di sinistra ha il suo nome.
+    //
+    // NON si lascia una copia qui: due posti per la stessa impostazione sono
+    // due posti che divergono, ed è un difetto che questo progetto ha già
+    // pagato più di una volta.
 
     readonly property bool it: Core.Strings.lang === "it"
     /// Vero quando la cornice si muove: «gira» o «striscia». Le due manopole
@@ -74,32 +93,6 @@ Page {
         l.push(v);
         Core.Ipc.setSetting("windows.csdApps", l);
     }
-    /// Vero quando dietro le superfici della scrivania c'è un filtro VERO del
-    /// compositore, blur o acquerello. Cambia cosa vogliono dire i cursori
-    /// della trasparenza — vedi la scheda «Trasparenza» qui sotto. Deve essere
-    /// la stessa domanda che si fa `theme/LegaTema.qml`, o il cursore scrive
-    /// una chiave e la membrana ne legge un'altra: si gira e non cambia niente.
-    readonly property bool _colFiltro: Core.Vetro.filtroChiesto
-    /// Vero quando la trasparenza delle finestre la mette il compositore.
-    /// Vedi `Core.Vetro.effettoChiestoAcceso`: da lì in poi «Vetro delle finestre di
-    /// Minerva» non ha più niente da regolare.
-    readonly property bool _effettoAcceso: Core.Vetro.effettoChiestoAcceso
-    // ── Qui c'era la dock, e adesso ha una pagina sua ────────────────────
-    //
-    // Sette voci — mostra, si nasconde, dimensione, ingrandimento, estensione,
-    // trasparenza, nome al passaggio — dentro una pagina da milleseicento
-    // righe. C'erano tutte, e Giacomo dopo settimane d'uso ha scritto: «la
-    // dock ancora non si nasconde da sola e non ci sono impostazioni per
-    // essa». Nel suo file `dock.autoHide` era `false`: era spenta, non rotta.
-    //
-    // Un'opzione che non si trova è un'opzione che non esiste, e questo non è
-    // un difetto di chi guarda. Le voci si sono spostate in
-    // `sections/Dock.qml`, che nell'elenco di sinistra ha il suo nome.
-    //
-    // NON si lascia una copia qui: due posti per la stessa impostazione sono
-    // due posti che divergono, ed è un difetto che questo progetto ha già
-    // pagato più di una volta.
-
     Card {
         heading: page.it ? "Finestre" : "Windows"
 
@@ -145,8 +138,12 @@ Page {
                     delegate: Rectangle {
                         required property var modelData
                         height: 28
-                        width: nome.implicitWidth + croce.width
-                               + Theme.Effects.space4
+                        // Margine sinistro, nome, stacco, croce, margine destro:
+                        // con «+ space4» soltanto la croce finiva sopra la
+                        // fine del nome («firefox×», 28 settembre 2026).
+                        width: Theme.Effects.space3 + nome.implicitWidth
+                               + Theme.Effects.space2 + croce.implicitWidth
+                               + Theme.Effects.space3
                         radius: Theme.Effects.radiusFull
                         color: Theme.Colors.raised
                         border.width: 1
@@ -410,26 +407,6 @@ Page {
             }
         }
 
-        // ── Un attrezzo da officina, e si può riporre ────────────────────
-        //
-        // Giacomo, 2 settembre 2026: «mettiamo un tasto disattivabile accanto
-        // al meteo dove posso riavviare la shell».
-        //
-        // Sta fra le voci della barra e non fra quelle degli sviluppatori
-        // perché è una cosa che si VEDE: chi lo spegne lo spegne perché non
-        // vuole quel simbolo lì, non perché ha smesso di sviluppare.
-        S.SettingRow {
-            width: parent.width
-            label: page.it ? "Tasto «ricarica» nella barra"
-                           : "«Reload» button in the bar"
-            description: page.it
-                ? "Accanto al meteo. Rilegge la scrivania restando viva: la barra non sparisce"
-                : "Next to the weather. Re-reads the desktop while staying alive: the bar never disappears"
-            control: S.ToggleSwitch {
-                checked: Core.Ipc.get("shell.tastoRiavvio", true)
-                onToggled: function(v) { Core.Ipc.setSetting("shell.tastoRiavvio", v); }
-            }
-        }
 
         S.SettingRow {
             width: parent.width
@@ -519,112 +496,11 @@ Page {
     // Lingua e regione»; questa pagina parla del comportamento della barra,
     // dei pannelli e degli avvisi, e la sua sottotitolo lo dice.
 
-    Card {
-        heading: page.it ? "Finestre" : "Windows"
-
-        S.SettingRow {
-            width: parent.width
-            label: Core.Strings.t("windowControls")
-            description: Core.Strings.t("windowControlsDesc")
-            controlWidth: 60
-            control: S.ToggleSwitch {
-                checked: Core.Ipc.get("windowControls.enabled", true)
-                onToggled: function(v) { Core.Ipc.setSetting("windowControls.enabled", v); }
-            }
-        }
-
-        // ── Le spiegazioni sotto ogni interruttore ───────────────────
-        //
-        // `general.beginnerMode` la leggono `ui/ToggleTile.qml` (le piastrelle
-        // della tendina) e `menu/DesktopLayer.qml` (il suggerimento sulla
-        // scrivania). Era accesa di fabbrica e non si poteva spegnere da
-        // nessuna parte: chi Minerva la conosce si teneva le spiegazioni per
-        // sempre.
-        S.SettingRow {
-            width: parent.width
-            label: page.it ? "Spiega le cose sotto ogni interruttore"
-                           : "Explain each switch underneath"
-            description: page.it
-                ? "Le righe di spiegazione nella tendina e il suggerimento "
-                  + "sulla scrivania. Chi Minerva la conosce può spegnerle."
-                : "The explanation lines in the panel and the desktop hint."
-            controlWidth: 60
-            control: S.ToggleSwitch {
-                checked: Core.Ipc.get("general.beginnerMode", true)
-                onToggled: function(v) {
-                    Core.Ipc.setSetting("general.beginnerMode", v);
-                }
-            }
-        }
-
-        S.SettingRow {
-            width: parent.width
-            label: Core.Strings.t("animations")
-            description: Core.Strings.t("animationsDesc")
-            controlWidth: 60
-            control: S.ToggleSwitch {
-                checked: Core.Ipc.get("desktop.animations", true)
-                onToggled: function(v) {
-                    Core.Ipc.setSetting("desktop.animations", v);
-                }
-            }
-        }
-    }
     // ── Trasparenza ──────────────────────────────────────────────────────
 
     Card {
-        heading: page.it ? "Trasparenza" : "Transparency"
+        heading: page.it ? "Materiale" : "Material"
 
-        // ── UN cursore, DUE memorie ──────────────────────────────────────
-        //
-        // La stessa riga scrive due chiavi diverse secondo cosa c'è dietro la
-        // barra, e cambia anche gli estremi. Non è una raffinatezza: col blur
-        // acceso il cursore andava da 0,75 a 1,00 e **non faceva niente**,
-        // perché la shell teneva comunque il valore sotto 0,75. Misurato il
-        // 9 settembre 2026 muovendolo da un capo all'altro: 0,0 % di pixel
-        // diversi nella fascia della barra. Un cursore che si gira e non
-        // cambia niente è il difetto che questo progetto si è messo per
-        // iscritto di non commettere.
-        //
-        // Senza blur dietro c'è una fotografia nitida e sotto 0,75 il testo si
-        // perde (il conto sta in `theme/Colors.qml`). Col blur dietro c'è una
-        // macchia morbida e scurita, e si può scendere molto di più: misurato
-        // il 9 settembre 2026 sulla scrivania di Giacomo, a 0,50 il testo
-        // della barra sta a **10,2:1**, cioè più del doppio della soglia di
-        // 4,5:1. Sotto quel valore non si scende, ed è prudenza dichiarata:
-        // il contrasto dipende dalla FOTOGRAFIA, e la sfocatura appiattisce i
-        // dettagli ma non schiarisce né scurisce la media. Su uno sfondo
-        // molto chiaro lo stesso 0,50 sarebbe stretto — come del resto lo è
-        // già il 0,75 di adesso, che nessuno ha mai misurato su un muro
-        // bianco.
-        S.SettingRow {
-            width: parent.width
-            label: Core.Strings.t("membraneOpacity")
-            description: page._colFiltro
-                ? (page.it
-                   ? "Con l'acquerello o il blur dietro si può scendere molto "
-                     + "di più: quello che passa è una macchia morbida, non "
-                     + "una fotografia"
-                   : "With watercolour or blur behind you can go much lower: "
-                     + "what shows through is a soft wash, not a photograph")
-                : Core.Strings.t("membraneOpacityDesc")
-            controlWidth: 220
-
-            control: S.ValueSlider {
-                width: 220
-                from: page._colFiltro ? 0.50 : 0.75
-                to: 1.0
-                value: page._colFiltro
-                       ? Core.Ipc.get("shell.membraneOpacityBlur", 0.68)
-                       : Core.Ipc.get("shell.membraneOpacity", 0.93)
-                onReleased: function(v) {
-                    Core.Ipc.setSetting(page._colFiltro
-                                        ? "shell.membraneOpacityBlur"
-                                        : "shell.membraneOpacity",
-                                        Math.round(v * 100) / 100);
-                }
-            }
-        }
 
         // Le finestre sono un problema diverso dalla barra, e per mesi hanno
         // avuto un'impostazione che nessuno poteva toccare: `shell.windowOpacity`

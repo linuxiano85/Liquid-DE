@@ -84,7 +84,21 @@ Column {
         label: controls.it ? "Comportamento" : "Behavior"
         controlWidth: 300
         control: ChoicePicker {
-            value: ""
+            // Quello che è acceso adesso, ricavato dai numeri: fino al 28
+            // settembre 2026 era sempre vuoto, e non si capiva quale dei tre
+            // fosse in uso. Se i numeri non sono di nessuno dei tre (li hai
+            // toccati nelle opzioni avanzate) non se ne accende nessuno.
+            value: {
+                var f = controls.forza;
+                var s = Number(Core.Ipc.get("windows.smorzamento", 0.42));
+                var r = Number(Core.Ipc.get("windows.rigidita", 1));
+                function vicino(a, b) { return Math.abs(a - b) < 0.01; }
+                if (!vicino(r, 1)) return "";
+                if (vicino(f, 0.6) && vicino(s, 0.65)) return "gentle";
+                if (vicino(f, 1) && vicino(s, 0.42)) return "normal";
+                if (vicino(f, 2) && vicino(s, 0.25)) return "elastic";
+                return "";
+            }
             options: [{value: "gentle", label: controls.it ? "Delicato" : "Gentle"},
                       {value: "normal", label: controls.it ? "Normale" : "Normal"},
                       {value: "elastic", label: controls.it ? "Elastico" : "Elastic"}]
