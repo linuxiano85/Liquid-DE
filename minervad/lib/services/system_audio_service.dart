@@ -76,6 +76,18 @@ class SystemAudioService {
             : related is Map
             ? related.keys.toSet()
             : <dynamic>{};
+        // ── Una porta, una voce ─────────────────────────────────────────
+        //
+        // Qui si aggiungeva una voce per ogni profilo della porta — stereo,
+        // 5.1, 7.1, e le loro combinazioni col microfono — e il nome del
+        // profilo arrivava spesso vuoto: la pagina Audio mostrava una
+        // ventina di «HDMI / DisplayPort — (null)» prima ancora del volume
+        // (28 settembre 2026). Chi collega un monitor sceglie il MONITOR:
+        // del profilo si prende il migliore — disponibile prima, poi con la
+        // priorità più alta.
+        Map<String, dynamic>? migliore;
+        var migliorDisponibile = false;
+        num migliorPriorita = -1;
         for (final profile in profiles) {
           if (!names.contains(profile['name']) ||
               ((profile['sinks'] ?? profile['n_sinks']) as num? ?? 0) < 1) {
@@ -87,15 +99,28 @@ class SystemAudioService {
               profile['available'] != false &&
               profile['available'] != 'no' &&
               profile['available'] != 'not available';
-          result.add({
-            'card': card['name'],
-            'profile': profile['name'],
-            'port': port['name'],
-            'label':
-                '${port['description'] ?? port['name']} — ${profile['description'] ?? profile['name']}',
-            'available': available,
-          });
+          final priorita = (profile['priority'] as num?) ?? 0;
+          final meglio = migliore == null ||
+              (available && !migliorDisponibile) ||
+              (available == migliorDisponibile && priorita > migliorPriorita);
+          if (!meglio) continue;
+          migliore = profile;
+          migliorDisponibile = available;
+          migliorPriorita = priorita;
         }
+        if (migliore == null) continue;
+        final descrizione = port['description'];
+        result.add({
+          'card': card['name'],
+          'profile': migliore['name'],
+          'port': port['name'],
+          'label': (descrizione is String &&
+                  descrizione.isNotEmpty &&
+                  descrizione != '(null)')
+              ? descrizione
+              : '${port['name']}',
+          'available': migliorDisponibile,
+        });
       }
     }
     return result;

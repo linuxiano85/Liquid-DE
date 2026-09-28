@@ -26,6 +26,7 @@ Page {
     property string defaultSource: ""
 
     property var hdmi: []
+    readonly property var hdmiCollegati: page.hdmi.filter(function (h) { return h.available; })
     property string audioError: ""
     property bool selecting: false
     // Si chiede lo stato E ci si iscrive ai cambiamenti: quello che PipeWire
@@ -83,28 +84,7 @@ Page {
         heading: page.it ? "Stato audio" : "Audio status"
         note: page.audioError
     }
-    Card {
-        visible: page.hdmi.length > 0
-        heading: "HDMI / DisplayPort"
-        note: page.it ? "Scegli l’uscita del monitor. Il profilo audio viene attivato se necessario."
-                      : "Choose the monitor output. Its audio profile is activated if needed."
-        Repeater {
-            model: page.hdmi
-            delegate: S.SettingRow {
-                required property var modelData
-                width: parent.width
-                label: modelData.label
-                description: modelData.available ? "" : (page.it ? "Non collegato" : "Disconnected")
-                control: Ui.SpineButton {
-                    tooltip: page.it ? "Usa questa uscita" : "Use this output"
-                    content: Text { text: page.it ? "Seleziona" : "Select"; color: Theme.Colors.text }
-                    enabled: modelData.available && !page.selecting
-                    onClicked: page.selectAudio({kind: "sink", card: modelData.card,
-                        profile: modelData.profile, port: modelData.port})
-                }
-            }
-        }
-    }
+
 
     // ── Volume ───────────────────────────────────────────────────────────
 
@@ -211,6 +191,30 @@ Page {
             font.family: Theme.Typography.fontDisplay
             font.weight: Theme.Typography.weightRegular
             font.pixelSize: Theme.Typography.sizeSM
+        }
+    }
+    Card {
+        // Solo i monitor collegati: quelli staccati erano righe «Non
+        // collegato» da saltare, prima ancora del volume (28 settembre 2026).
+        visible: page.hdmiCollegati.length > 0
+        heading: "HDMI / DisplayPort"
+        note: page.it ? "Scegli l’uscita del monitor. Il profilo audio viene attivato se necessario."
+                      : "Choose the monitor output. Its audio profile is activated if needed."
+        Repeater {
+            model: page.hdmiCollegati
+            delegate: S.SettingRow {
+                required property var modelData
+                width: parent.width
+                label: modelData.label
+                description: modelData.available ? "" : (page.it ? "Non collegato" : "Disconnected")
+                control: Ui.SpineButton {
+                    tooltip: page.it ? "Usa questa uscita" : "Use this output"
+                    content: Text { text: page.it ? "Seleziona" : "Select"; color: Theme.Colors.text }
+                    enabled: modelData.available && !page.selecting
+                    onClicked: page.selectAudio({kind: "sink", card: modelData.card,
+                        profile: modelData.profile, port: modelData.port})
+                }
+            }
         }
     }
 
