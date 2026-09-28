@@ -2096,9 +2096,58 @@ static void puntatore_ricalcola(struct minerva *m) {
 	wlr_seat_pointer_notify_frame(m->seat);
 }
 
+// ── Chi tiene sveglio lo schermo ──────────────────────────────────────────
+//
+// Giacomo, 29 settembre 2026: «la CPU a riposo è sempre sul 4 %». Il
+// compositore presentava 11 fotogrammi al secondo con nessuno che toccava
+// niente, e non c'era modo di sapere CHI li chiedeva: ogni fotogramma nasce
+// da una superficie che manda un aggiornamento, ma il nome di quella
+// superficie non lo scriveva nessuno.
+//
+// Con MINERVA_TRACCIA_COMMIT=1, ogni cinque secondi (e solo se qualcuno ha
+// mandato qualcosa) una riga sul registro: quanti aggiornamenti per
+// superficie, le finestre col nome dell'app, i pannelli della shell col loro
+// namespace. Spenta costa un confronto per aggiornamento.
+#define COMMIT_TRACCIATI 48
+static struct { char nome[64]; unsigned n; } commit_contati[COMMIT_TRACCIATI];
+static void traccia_commit(const char *nome) {
+	static int accesa = -1;
+	static struct timespec ultima;
+	if (accesa < 0) {
+		accesa = getenv("MINERVA_TRACCIA_COMMIT") != NULL;
+		clock_gettime(CLOCK_MONOTONIC, &ultima);
+	}
+	if (!accesa)
+		return;
+	if (nome == NULL || nome[0] == '\0')
+		nome = "(senza nome)";
+	int i = 0;
+	for (; i < COMMIT_TRACCIATI && commit_contati[i].nome[0] != '\0'; i++)
+		if (strcmp(commit_contati[i].nome, nome) == 0)
+			break;
+	if (i == COMMIT_TRACCIATI)
+		i = COMMIT_TRACCIATI - 1;   // pieno: finisce nell'ultimo, e lo si vede
+	if (commit_contati[i].nome[0] == '\0')
+		snprintf(commit_contati[i].nome, sizeof(commit_contati[i].nome), "%s", nome);
+	commit_contati[i].n++;
+
+	struct timespec ora;
+	clock_gettime(CLOCK_MONOTONIC, &ora);
+	if (ora.tv_sec - ultima.tv_sec < 5)
+		return;
+	fprintf(stderr, "minerva-wayland: aggiornamenti in %lds:", (long)(ora.tv_sec - ultima.tv_sec));
+	for (int j = 0; j < COMMIT_TRACCIATI && commit_contati[j].nome[0] != '\0'; j++) {
+		fprintf(stderr, " %s=%u", commit_contati[j].nome, commit_contati[j].n);
+		commit_contati[j].n = 0;
+	}
+	fprintf(stderr, "\n");
+	ultima = ora;
+}
+
 static void appoggiata_commit(struct wl_listener *l, void *dati) {
 	(void)dati;
 	struct appoggiata *a = wl_container_of(l, a, commit);
+	traccia_commit(a->ls->namespace);
 
 	// Stessa regola delle finestre: alla PRIMA commit il compositore deve
 	// rispondere, o il programma resta ad aspettare in silenzio. Qui è
@@ -3361,6 +3410,7 @@ static void decorazione_applica(struct finestra *f) {
 static void finestra_commit(struct wl_listener *l, void *dati) {
 	(void)dati;
 	struct finestra *f = wl_container_of(l, f, commit);
+	traccia_commit(finestra_classe(f));
 	if (f->toplevel->base->initial_commit) {
 		// Misura `0, 0` vuol dire «scegli tu»: la correzione vera arriva alla
 		// mappatura, quando la misura scelta si può finalmente leggere.
@@ -11049,7 +11099,12 @@ static int esci_pulito(int segnale, void *dati) {
 static void pagine_enormi_spente(void) {
 	const char *detto = getenv("MINERVA_PAGINE_ENORMI");
 	if (detto != NULL && strcmp(detto, "1") == 0) {
-		fprintf(stderr, "minerva-wayland: pagine enormi LASCIATE ACCESE (MINERVA_PAGINE_ENORMI=1)\n");
+		// RIACCESE, non solo «lasciate»: il divieto si eredita, e un
+		// compositore nato dentro una sessione di Liquid (una prova annidata,
+		// un terminale) le troverebbe già spente dal genitore. Il 29
+		// settembre 2026 la prova lo ha preso proprio così.
+		prctl(PR_SET_THP_DISABLE, 0, 0, 0, 0);
+		fprintf(stderr, "minerva-wayland: pagine enormi ACCESE (MINERVA_PAGINE_ENORMI=1)\n");
 		return;
 	}
 	if (prctl(PR_SET_THP_DISABLE, 1, 0, 0, 0) != 0)
