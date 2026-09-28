@@ -62,9 +62,11 @@ Item {
 
     Connections {
         target: Core.Ipc
-        function onProcessesReceived(dati) {
-            dati.macchina = dati.macchina || ({});
-            dati.processi = dati.processi || [];
+        // Il parametro NON si chiama `dati`: nasconderebbe questo oggetto, e
+        // `dati.aggiungiStorie` cercherebbe la funzione nel messaggio.
+        function onProcessesReceived(arrivati) {
+            dati.macchina = arrivati.macchina || ({});
+            dati.processi = arrivati.processi || [];
             dati.aggiungiStorie();
         }
         function onProcessKilled(pid, ok, force) {

@@ -307,6 +307,20 @@ ShellRoot {
             return "ok";
         }
 
+        /// Attività nella shell: «apri», «chiudi», «pausa», «processi», «app»
+        /// o niente. Risponde con quello che mostra.
+        function attivita(testo: string): string {
+            var s = root.scrivaniaAttiva();
+            if (!s || !s.attivita)
+                return "nessuna attività";
+            if (testo === "apri") s.attivita.apri();
+            else if (testo === "chiudi") s.attivita.chiudi();
+            else if (testo === "pausa") s.attivita.pausa();
+            else if (testo === "processi") s.attivita.vista("tutti");
+            else if (testo === "app") s.attivita.vista("app");
+            return s.attivita.riassunto();
+        }
+
         /// Le Stanze: «apri», «chiudi», o niente. Risponde con quello che mostrano.
         function stanze(testo: string): string {
             var s = root.scrivaniaAttiva();
@@ -573,13 +587,14 @@ ShellRoot {
 
     property var scrivanie: ({})
 
-    function iscriviScrivania(nome, barra, dock, sottomarino, centro, cassetto, isola, isolaBarra, stanze) {
+    function iscriviScrivania(nome, barra, dock, sottomarino, centro, cassetto, isola, isolaBarra, stanze,
+                              attivita) {
         if (!nome)
             return;
         var m = root.scrivanie;
         m[nome] = { "barra": barra, "dock": dock, "sottomarino": sottomarino,
                     "centro": centro, "cassetto": cassetto, "isola": isola,
-                    "isolaBarra": isolaBarra, "stanze": stanze };
+                    "isolaBarra": isolaBarra, "stanze": stanze, "attivita": attivita };
         root.scrivanie = m;
         root.scrivanieCambiate();
     }
@@ -702,6 +717,17 @@ ShellRoot {
 
     /// Il Cassetto degli appunti dello schermo attivo; senza, il pannello di
     /// prima.
+    /// Ctrl+Maiusc+Esc: Attività nella shell, sullo schermo attivo. Senza
+    /// uno schermo registrato (fra lo stacco di un monitor e l'altro) si
+    /// apre la finestra: il gestore dei processi non deve mai mancare.
+    function apriAttivita() {
+        var s = root.scrivaniaAttiva();
+        if (s && s.attivita)
+            s.attivita.commuta();
+        else
+            root.openMonitor();
+    }
+
     function apriCassetto() {
         var s = root.scrivaniaAttiva();
         if (s && s.cassetto)
@@ -1016,6 +1042,20 @@ ShellRoot {
                               : 0
             }
 
+            // ── Attività: i processi, dentro la shell ────────────────────
+            //
+            // Ctrl+Maiusc+Esc. Pannello e non finestra: scelta di Giacomo
+            // del 28 settembre 2026 — il perché sta in `menu/Attivita.qml`.
+            Attivita {
+                id: attivitaPannello
+                screen: scrivania.modelData
+                margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
+                margineBasso: dock.screenRect.height > 0 && !root.dockInAlto && scrivania.modelData
+                              ? Math.max(0, scrivania.modelData.height - dock.screenRect.y)
+                              : (root.barraInBasso ? Theme.Effects.barHeight : 0)
+                onFinestraChiesta: root.openMonitor()
+            }
+
             // ── Uno alla volta ────────────────────────────────────────────
             //
             // Menù, Centro, Cassetto e Isola escono tutti dalla riva: aprirne
@@ -1035,7 +1075,8 @@ ShellRoot {
             }
 
             function soloLui(chi) {
-                var tutti = [sottomarino, centroControllo, cassettoAppunti, isolaGiorno, stanzeLato];
+                var tutti = [sottomarino, centroControllo, cassettoAppunti, isolaGiorno, stanzeLato,
+                             attivitaPannello];
                 for (var i = 0; i < tutti.length; i++)
                     if (tutti[i] !== chi && tutti[i].aperto)
                         tutti[i].chiudi();
@@ -1062,6 +1103,10 @@ ShellRoot {
                 target: stanzeLato
                 function onApertoChanged() { if (stanzeLato.aperto) scrivania.soloLui(stanzeLato); }
             }
+            Connections {
+                target: attivitaPannello
+                function onApertoChanged() { if (attivitaPannello.aperto) scrivania.soloLui(attivitaPannello); }
+            }
             // E al contrario: un pannello della barra (le notifiche, Super+N)
             // chiude quelli della riva.
             Connections {
@@ -1069,7 +1114,8 @@ ShellRoot {
                 function onActivePanelChanged() {
                     if (spine.activePanel === "")
                         return;
-                    var tutti = [sottomarino, centroControllo, cassettoAppunti, isolaGiorno, stanzeLato];
+                    var tutti = [sottomarino, centroControllo, cassettoAppunti, isolaGiorno, stanzeLato,
+                                 attivitaPannello];
                     for (var i = 0; i < tutti.length; i++)
                         if (tutti[i].aperto)
                             tutti[i].chiudi();
@@ -1113,7 +1159,8 @@ ShellRoot {
 
             Component.onCompleted: root.iscriviScrivania(
                 scrivania.modelData ? scrivania.modelData.name : "", spine, dock, sottomarino,
-                centroControllo, cassettoAppunti, isolaGiorno, isolaBarra, stanzeLato)
+                centroControllo, cassettoAppunti, isolaGiorno, isolaBarra, stanzeLato,
+                attivitaPannello)
             Component.onDestruction: root.cancellaScrivania(
                 scrivania.modelData ? scrivania.modelData.name : "")
         }
@@ -2800,6 +2847,6 @@ ShellRoot {
 
     Core.Scorciatoia {
         name: "monitor"
-        onPressed: root.openMonitor()
+        onPressed: root.apriAttivita()
     }
 }
