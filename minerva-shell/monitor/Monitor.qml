@@ -163,6 +163,88 @@ FloatingWindow {
         return s;
     }
 
+    // ── Una lista che si aggiorna SUL POSTO ──────────────────────────────
+    //
+    // Giacomo, 28 settembre 2026: «se voglio scrollare tutti i processi non
+    // si può fermare l'aggiornarsi della lista […] tornando sempre in cima».
+    // La lista riceveva `righe`, un elenco JavaScript nuovo ogni due secondi:
+    // per Qt è un modello diverso, e un modello diverso vuol dire buttare
+    // tutti i delegati, ricostruirli da capo e ripartire da contentY = 0.
+    // Duecento righe rifatte ogni due secondi, e la lettura interrotta.
+    //
+    // Adesso le righe stanno in un `ListModel` che si CORREGGE: una riga che
+    // c'era si aggiorna, una che ha cambiato posto si sposta, una nuova si
+    // infila, una sparita si toglie. I delegati restano, e resta dove si era.
+    //
+    // E l'ordine si FERMA mentre lo si guarda: col puntatore sopra l'elenco,
+    // o mentre scorre, i numeri cambiano ma le righe no — ordinare per CPU
+    // vuol dire righe che si scambiano di posto a ogni giro, e una riga che
+    // scappa mentre la si legge è lo stesso difetto. «Pausa» ferma tutto.
+
+    /// Per le prove (`prove-attivita.qml`): la lista, per leggerne la
+    /// posizione e il modello.
+    property alias elencoVista: elenco
+    readonly property alias modelloRighe: modello
+
+    /// Ferma tutto, numeri compresi, finché non si riprende.
+    property bool inPausa: false
+    /// Vero mentre l'elenco si guarda: l'ordine resta com'è.
+    readonly property bool ordineFermo: elenco.moving || sopraElenco.hovered
+
+    ListModel {
+        id: modello
+        dynamicRoles: true
+    }
+
+    onRigheChanged: monitor.sincronizza()
+    onInPausaChanged: if (!monitor.inPausa) monitor.sincronizza()
+    onOrdineFermoChanged: if (!monitor.ordineFermo) monitor.sincronizza()
+
+    function sincronizza() {
+        if (monitor.inPausa)
+            return;
+        var nuove = monitor.righe;
+        if (monitor.ordineFermo) {
+            // L'ordine di adesso, con le righe che ci sono ancora; le nuove
+            // in fondo.
+            var perChiave = {};
+            for (var a = 0; a < nuove.length; a++)
+                perChiave[nuove[a].chiave] = nuove[a];
+            var tenute = [];
+            var viste = {};
+            for (var b = 0; b < modello.count; b++) {
+                var k = modello.get(b).chiave;
+                if (perChiave[k] !== undefined) {
+                    tenute.push(perChiave[k]);
+                    viste[k] = true;
+                }
+            }
+            for (var c = 0; c < nuove.length; c++)
+                if (!viste[nuove[c].chiave])
+                    tenute.push(nuove[c]);
+            nuove = tenute;
+        }
+        for (var i = 0; i < nuove.length; i++) {
+            var chiave = nuove[i].chiave;
+            var j = -1;
+            for (var q = i; q < modello.count; q++) {
+                if (modello.get(q).chiave === chiave) {
+                    j = q;
+                    break;
+                }
+            }
+            if (j === -1) {
+                modello.insert(i, { "chiave": chiave, "riga": nuove[i] });
+                continue;
+            }
+            if (j !== i)
+                modello.move(j, i, 1);
+            modello.setProperty(i, "riga", nuove[i]);
+        }
+        if (modello.count > nuove.length)
+            modello.remove(nuove.length, modello.count - nuove.length);
+    }
+
     /// Le righe da mostrare, filtrate e ordinate.
     ///
     /// I processi di uno stesso programma si SOMMANO in una riga sola: un
@@ -345,7 +427,15 @@ FloatingWindow {
         anchors.rightMargin: Theme.Effects.space4
         anchors.topMargin: Theme.Effects.space3
         elide: Text.ElideRight
-        text: monitor.macchina.comeSta || ""
+        // Da quanto è acceso sta QUI, accanto a come sta: stava sotto la
+        // temperatura, dove si leggeva «47 °C — acceso da 17m» come se le due
+        // cose avessero a che fare l'una con l'altra.
+        text: String(monitor.macchina.comeSta || "").replace(/\.$/, "")
+              + (monitor.macchina.acceso
+                 ? (monitor.macchina.comeSta ? "  ·  " : "")
+                   + (monitor.it ? "acceso da " : "up ")
+                   + monitor.durata(monitor.macchina.acceso)
+                 : "")
         visible: text !== ""
         color: monitor.allarmato ? Theme.Colors.warning : Theme.Colors.textMuted
         font.family: Theme.Typography.fontDisplay
@@ -448,8 +538,14 @@ FloatingWindow {
             valore: monitor.macchina.temperatura !== undefined
                     ? Math.round(monitor.macchina.temperatura) : "—"
             unita: "°C"
-            sotto: monitor.it ? "acceso da " + monitor.durata(monitor.macchina.acceso)
-                              : "up " + monitor.durata(monitor.macchina.acceso)
+            // Una parola che dice se preoccuparsi: il numero da solo lo
+            // capisce chi sa quanto scalda questo processore.
+            sotto: {
+                var t = monitor.macchina.temperatura || 0;
+                if (t > 80) return monitor.it ? "calda: guarda chi usa il processore" : "hot";
+                if (t > 65) return monitor.it ? "tiepida" : "warm";
+                return monitor.it ? "fresca" : "cool";
+            }
             punti: monitor.storiaTemp
             massimo: 100
             allarme: (monitor.macchina.temperatura || 0) > 80
@@ -619,6 +715,44 @@ FloatingWindow {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 2
 
+            // «Pausa»: ferma la lista, numeri compresi, per leggerla con
+            // calma. Acceso si vede — una lista ferma che sembra viva è un
+            // modo di mentire.
+            Rectangle {
+                width: pausaTesto.implicitWidth + Theme.Effects.space4
+                height: 34
+                radius: Theme.Effects.radiusSM
+                color: monitor.inPausa ? Qt.alpha(Theme.Colors.warning, 0.20)
+                     : pausaMouse.containsMouse ? Theme.Colors.hover : "transparent"
+                Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
+
+                Text {
+                    id: pausaTesto
+                    anchors.centerIn: parent
+                    text: monitor.inPausa ? (monitor.it ? "Riprendi" : "Resume")
+                                          : (monitor.it ? "Pausa" : "Pause")
+                    color: monitor.inPausa ? Theme.Colors.text : Theme.Colors.textFaint
+                    font.family: Theme.Typography.fontDisplay
+                    font.weight: Theme.Typography.weightRegular
+                    font.pixelSize: Theme.Typography.sizeSM
+                }
+
+                MouseArea {
+                    id: pausaMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: monitor.inPausa = !monitor.inPausa
+                }
+            }
+
+            Rectangle {
+                width: Theme.Effects.hairline
+                height: 20
+                anchors.verticalCenter: parent.verticalCenter
+                color: Theme.Colors.edge
+            }
+
             Repeater {
                 model: [
                     { "id": "cpu",     "it": "CPU",     "en": "CPU" },
@@ -697,9 +831,31 @@ FloatingWindow {
                 font.letterSpacing: Theme.Typography.trackingLabel
             }
 
+            // I bordi destri delle colonne, contati da destra come li mette
+            // `ProcessRow` (margine, pulsanti, e le tre colonne coi loro
+            // spazi). Erano due numeri scritti a mano, e la colonna del PID
+            // non aveva titolo: un numero senza nome in fondo a ogni riga.
+            // Stesse misure di `ProcessRow` (pulsanti 96, PID 60, memoria 90):
+            // se cambiano là, vanno cambiate qui.
+            readonly property int bordoPid: Theme.Effects.space4 + 96 + Theme.Effects.space3
+            readonly property int bordoMem: bordoPid + 60 + Theme.Effects.space3
+            readonly property int bordoCpu: bordoMem + 90 + Theme.Effects.space3
+
             Text {
                 anchors.right: parent.right
-                anchors.rightMargin: 300
+                anchors.rightMargin: intestazione.bordoPid
+                anchors.verticalCenter: parent.verticalCenter
+                text: "PID"
+                color: Theme.Colors.textFaint
+                font.family: Theme.Typography.fontDisplay
+                font.weight: Theme.Typography.weightRegular
+                font.pixelSize: Theme.Typography.sizeXS
+                font.letterSpacing: Theme.Typography.trackingLabel
+            }
+
+            Text {
+                anchors.right: parent.right
+                anchors.rightMargin: intestazione.bordoCpu
                 anchors.verticalCenter: parent.verticalCenter
                 text: "CPU"
                 color: Theme.Colors.textFaint
@@ -711,7 +867,7 @@ FloatingWindow {
 
             Text {
                 anchors.right: parent.right
-                anchors.rightMargin: 190
+                anchors.rightMargin: intestazione.bordoMem
                 anchors.verticalCenter: parent.verticalCenter
                 text: monitor.it ? "MEMORIA" : "MEMORY"
                 color: Theme.Colors.textFaint
@@ -747,15 +903,17 @@ FloatingWindow {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             clip: true
-            model: monitor.righe
+            model: modello
             boundsBehavior: Flickable.StopAtBounds
             cacheBuffer: 400
 
+            HoverHandler { id: sopraElenco }
+
             delegate: ProcessRow {
-                required property var modelData
+                required property var model
                 width: ListView.view.width
-                riga: modelData
-                ostinato: monitor.pidOstinato === modelData.pid
+                riga: model.riga
+                ostinato: monitor.pidOstinato === model.riga.pid
                 onChiudi: function(pid, forza) {
                     Core.Ipc.killProcess(pid, forza);
                 }
@@ -793,11 +951,15 @@ FloatingWindow {
             text: {
                 var n = monitor.righe.length;
                 var t = monitor.processi.length;
+                var fermo = monitor.inPausa ? (monitor.it ? "  ·  in pausa" : "  ·  paused") : "";
                 if (monitor.vista === "app")
-                    return monitor.it
-                        ? n + " applicazioni · " + t + " processi in tutto"
-                        : n + " applications · " + t + " processes in total";
-                return monitor.it ? n + " processi" : n + " processes";
+                    return (monitor.it
+                        ? n + (n === 1 ? " applicazione · " : " applicazioni · ")
+                          + t + " processi in tutto"
+                        : n + (n === 1 ? " application · " : " applications · ")
+                          + t + " processes in total") + fermo;
+                return (monitor.it ? n + (n === 1 ? " processo" : " processi")
+                                   : n + (n === 1 ? " process" : " processes")) + fermo;
             }
             color: Theme.Colors.textFaint
             font.family: Theme.Typography.fontDisplay

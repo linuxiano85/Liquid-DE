@@ -1,6 +1,7 @@
 import QtQuick
 import "../theme" as Theme
 import "../core" as Core
+import "../ui" as Ui
 
 // ProcessRow — Una riga dell'elenco: chi è, quanto costa, e come mandarlo via.
 Rectangle {
@@ -46,7 +47,10 @@ Rectangle {
         anchors.leftMargin: Theme.Effects.space4
         anchors.verticalCenter: parent.verticalCenter
         width: 22; height: 22
-        visible: source !== ""
+        // Visibile quando l'immagine c'è DAVVERO: con un percorso che non si
+        // carica restava «visibile» e vuota, e il punto che doveva prenderne
+        // il posto non compariva — un buco nella colonna delle icone.
+        visible: status === Image.Ready
         source: {
             if (!row.riga.finestra) return "";
             var p = Core.Apps.iconForClass(row.riga.classe || "");
@@ -59,13 +63,26 @@ Rectangle {
         sourceSize.height: 44
     }
 
+    // Un programma con una finestra ma senza un'icona trovata: il segno
+    // della finestra, che dice «è un programma» senza inventarne una.
+    Ui.Icon {
+        anchors.left: parent.left
+        anchors.leftMargin: Theme.Effects.space4 + 2
+        anchors.verticalCenter: parent.verticalCenter
+        width: 18; height: 18
+        visible: !icona.visible && !!row.riga.finestra
+        name: "window"
+        color: Theme.Colors.textMuted
+        alwaysDrawn: true
+    }
+
     // Chi non ha finestra non ha icona: al suo posto un punto, che tiene la
     // colonna allineata senza fingere di essere un programma.
     Rectangle {
         anchors.left: parent.left
         anchors.leftMargin: Theme.Effects.space4 + 8
         anchors.verticalCenter: parent.verticalCenter
-        visible: !icona.visible
+        visible: !icona.visible && !row.riga.finestra
         width: 6; height: 6; radius: 3
         color: Theme.Colors.textFaint
     }
