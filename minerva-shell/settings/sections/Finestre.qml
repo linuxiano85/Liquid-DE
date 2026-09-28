@@ -94,7 +94,7 @@ Page {
         Core.Ipc.setSetting("windows.csdApps", l);
     }
     Card {
-        heading: page.it ? "Finestre" : "Windows"
+        heading: page.it ? "Barra del titolo" : "Title bar"
 
         // ── I programmi che si disegnano la barra da soli ─────────────────
         //
@@ -470,7 +470,7 @@ Page {
             description: page.it
                 ? "A schermo intero il compositore copre tutto: questa barra è l'unico modo di tornare indietro col mouse"
                 : "In fullscreen the compositor covers everything: this bar is the only way back with the mouse"
-            controlWidth: 320
+            controlWidth: 380
             control: S.ChoicePicker {
                 value: Core.Ipc.get("windows.fullscreenBar", "hover")
                 options: [

@@ -39,7 +39,20 @@ Flow {
     // Il `Flow` ha bisogno di sapere dove finisce la riga. Il genitore è
     // `controlHolder` di `SettingRow`, largo `controlWidth`: è lì che si va a
     // capo. Senza genitore — se qualcuno lo usa da solo — resta una fila.
-    width: parent ? parent.width : implicitWidth
+    // Largo quanto le sue pastiglie, e al più quanto lo spazio che ha
+    // (oltre va a capo). Era sempre largo quanto lo spazio, con le pastiglie
+    // addossate a sinistra: in una riga delle Impostazioni finiva a metà,
+    // mentre gli interruttori stanno sul bordo destro (28 settembre 2026).
+    readonly property real naturale: {
+        var w = 0;
+        for (var i = 0; i < picker.children.length; i++) {
+            var c = picker.children[i];
+            if (c.implicitWidth > 0)
+                w += c.implicitWidth + picker.spacing;
+        }
+        return Math.max(0, w - picker.spacing);
+    }
+    width: parent ? Math.min(parent.width, Math.ceil(naturale)) : naturale
 
     spacing: 6
 
