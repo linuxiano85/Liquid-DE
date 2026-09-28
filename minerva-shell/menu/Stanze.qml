@@ -81,6 +81,11 @@ PanelWindow {
     function riassunto() {
         var r = ["stanze: " + (stanze.aperto ? "aperte" : stanze.sbirciata ? "di sbieco" : "chiuse")
                  + " · attiva " + stanze.attiva];
+        // Da che parte e dove: «aperte» con la colonna fuori schermo è il
+        // difetto che da `aperto` non si vede.
+        r.push("lato: " + (stanze.aDestra ? "destra" : "sinistra")
+               + " · x " + Math.round(colonna.x) + " su " + Math.round(stanze.width)
+               + " · y " + Math.round(colonna.y) + "-" + Math.round(colonna.y + colonna.height));
         for (var i = 0; i < stanze.elenco.length; i++) {
             var s = stanze.elenco[i];
             r.push(s.numero + ": " + s.finestre.map(function(w) { return w.appClass; }).join(", "));

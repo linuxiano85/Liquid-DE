@@ -127,6 +127,10 @@ PanelWindow {
     function riassunto() {
         var r = [];
         r.push("aperto: " + cassetto.aperto);
+        // Da che parte e dove: «aperto» con la carta fuori schermo è il
+        // difetto che da `aperto` non si vede.
+        r.push("lato: " + (cassetto.aSinistra ? "sinistra" : "destra")
+               + " · x " + Math.round(pannello.x) + " su " + Math.round(cassetto.width));
         r.push("voci: " + cassetto.filtrate.length + "/" + cassetto.voci.length
                + (cassetto.cerca !== "" ? " · cerca «" + cassetto.cerca + "»" : ""));
         for (var i = 0; i < Math.min(8, cassetto.filtrate.length); i++) {
