@@ -415,9 +415,9 @@ Page {
             width: parent.width
             label: page.it ? "Riduci gli effetti" : "Reduce effects"
             description: page.it
-                ? "Niente sfocatura né trasparenza, cornice ferma, finestre senza elastico"
-                : "No blur or transparency, still border, no wobbly windows"
-            searchTerms: "risparmio batteria effetti blur sfocatura energia"
+                ? "Niente acquerello né trasparenza, cornice ferma, finestre senza elastico"
+                : "No watercolour or transparency, still border, no wobbly windows"
+            searchTerms: "risparmio batteria effetti acquerello trasparenza energia"
             controlWidth: 330
 
             control: S.ChoicePicker {
@@ -556,7 +556,7 @@ Page {
         S.SettingRow {
             width: parent.width
             label: page.it ? "Alla chiusura del coperchio" : "When the lid closes"
-            controlWidth: 300
+            controlWidth: 420
 
             control: S.ChoicePicker {
                 value: Core.Ipc.get("power.lidAction", "suspend")
