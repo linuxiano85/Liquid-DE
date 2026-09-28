@@ -364,17 +364,24 @@ Page {
                 }
             }
 
+            // Togliere cancella il file della voce, e il comando scritto a
+            // mano con le sue opzioni se ne va con lui. Un clic solo su una
+            // × da 28 pixel era troppo poco: il primo chiede «Tolgo?», il
+            // secondo entro quattro secondi toglie.
             Rectangle {
+                id: togli
+                property bool chiede: false
                 anchors.verticalCenter: parent.verticalCenter
                 visible: riga.puoTogliere
-                width: 28
+                width: togli.chiede ? togliTesto.implicitWidth + Theme.Effects.space4 : 28
                 height: 28
                 radius: Theme.Effects.radiusFull
-                color: togliMouse.containsMouse
+                color: togli.chiede || togliMouse.containsMouse
                        ? Qt.alpha(Theme.Colors.danger, 0.18) : "transparent"
 
                 Ui.Icon {
                     anchors.centerIn: parent
+                    visible: !togli.chiede
                     width: 14; height: 14
                     name: "close"
                     color: togliMouse.containsMouse ? Theme.Colors.danger
@@ -382,12 +389,36 @@ Page {
                     alwaysDrawn: true
                 }
 
+                Text {
+                    id: togliTesto
+                    anchors.centerIn: parent
+                    visible: togli.chiede
+                    text: page.it ? "Tolgo?" : "Remove?"
+                    color: Theme.Colors.danger
+                    font.family: Theme.Typography.fontDisplay
+                    font.weight: Theme.Typography.weightRegular
+                    font.pixelSize: Theme.Typography.sizeXS
+                }
+
+                Timer {
+                    interval: 4000
+                    running: togli.chiede
+                    onTriggered: togli.chiede = false
+                }
+
                 MouseArea {
                     id: togliMouse
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: Core.Ipc.autostartRemove(riga.voce.file)
+                    onClicked: {
+                        if (!togli.chiede) {
+                            togli.chiede = true;
+                            return;
+                        }
+                        togli.chiede = false;
+                        Core.Ipc.autostartRemove(riga.voce.file);
+                    }
                 }
             }
         }

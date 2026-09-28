@@ -334,6 +334,7 @@ Page {
 
                                         // ── La riga del gruppo ───────────
                                         Item {
+                                            id: rigaGruppo
                                             width: parent.width
                                             height: 40
 
@@ -394,8 +395,20 @@ Page {
                                                     visible: status === Image.Ready
                                                 }
 
+                                                // Un tetto alla larghezza: senza,
+                                                // «GNU Image Manipulation Program»
+                                                // si allungava verso sinistra fino
+                                                // a scriversi SOPRA il nome del
+                                                // gruppo. La metà della riga, meno
+                                                // quello che serve al nome.
                                                 Text {
                                                     anchors.verticalCenter: parent.verticalCenter
+                                                    width: Math.min(implicitWidth,
+                                                                    Math.max(60, rigaGruppo.width
+                                                                             - groupName.x
+                                                                             - groupName.implicitWidth
+                                                                             - 170))
+                                                    elide: Text.ElideRight
                                                     text: {
                                                         if (group.empty)
                                                             return page.it ? "niente di installato"

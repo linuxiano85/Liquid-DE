@@ -106,17 +106,25 @@ Page {
         }
     }
 
-    function refresh() {
+    /// `soloLettura`: legge l'elenco che NetworkManager ha già, senza fargli
+    /// rifare la scansione. `nmcli device wifi list` di suo riscansiona se
+    /// l'ultima ha più di trenta secondi, e il giro ogni quindici secondi
+    /// qui sotto teneva così la radio a cercare per tutto il tempo che la
+    /// pagina restava aperta: la scansione continua è quella che costava
+    /// batteria e svegliava tutti (`minerva-prestazioni-svegliarsi`).
+    function refresh(soloLettura) {
         // Anche il PRIMO giro sta cercando. Senza questa riga, aprendo la
         // pagina si leggeva «0 reti trovate» per i secondi buoni della
         // scansione: una risposta, e sbagliata, al posto di un'attesa.
-        page.scanning = true;
+        if (!soloLettura)
+            page.scanning = true;
         query.sh(
             "export LC_ALL=C; " +
             "printf 'WIFI\\t%s\\n' \"$(nmcli radio wifi 2>/dev/null)\"; " +
             "printf 'WIRED\\t%s\\n' \"$(nmcli -t -f TYPE,STATE,CONNECTION device status 2>/dev/null " +
             "| awk -F: '$1==\"ethernet\" && $2==\"connected\" {print $3}')\"; " +
-            "nmcli -t -f SSID,SIGNAL,SECURITY,IN-USE device wifi list 2>/dev/null " +
+            "nmcli -t -f SSID,SIGNAL,SECURITY,IN-USE device wifi list" +
+            (soloLettura ? " --rescan no" : "") + " 2>/dev/null " +
             "| awk -F: 'NF>=3 {print \"NET\\t\" $1 \"\\t\" $2 \"\\t\" $3 \"\\t\" ($4==\"*\" ? \"yes\" : \"\")}'");
     }
 
@@ -136,36 +144,95 @@ Page {
         interval: 15000
         running: true
         repeat: true
-        onTriggered: if (!connectDialog.visible) page.refresh()
+        onTriggered: if (!connectDialog.visible && page.collegando === "") page.refresh(true)
     }
 
     // ── Connessione ──────────────────────────────────────────────────────
+    //
+    // Il commento qui prometteva «se la rete non risulta attiva, si dice che
+    // è andata male», e il codice non lo diceva: `page.error` si scriveva e
+    // nessuno lo leggeva. Una password sbagliata non dava nessun segno — la
+    // finestrella si chiudeva e la rete restava lì, non connessa, come prima
+    // del clic.
+    //
+    // E l'intestazione della pagina prometteva «se la rete è già nota,
+    // connettersi è un clic solo», mentre ogni rete protetta apriva la
+    // richiesta della password, anche quella di casa. Adesso si prova prima
+    // SENZA: NetworkManager la password di una rete nota ce l'ha. Solo se
+    // risponde che manca, si chiede.
+
+    /// La rete a cui ci si sta collegando, per dirlo sulla sua riga.
+    property string collegando: ""
+    /// Vero se il tentativo in corso è quello senza password su una rete
+    /// protetta: se fallisce perché la password manca, la si chiede allora.
+    property bool _provaSenzaPassword: false
 
     Core.Exec {
         id: connector
-        onDone: function(out) {
-            // nmcli scrive l'errore su stderr, che qui non arriva: se dopo il
-            // tentativo la rete non risulta attiva, si dice che è andata male
-            // invece di far finta di niente.
-            page.refresh();
+        // `nmcli --wait 45` più il tempo di partire: il tetto di serie
+        // (30 s) lo avrebbe ucciso a metà di un collegamento lento.
+        timeoutMs: 60000
+        onCompleted: function(codice, uscita, errore) {
+            var ssid = page.collegando;
+            var senza = page._provaSenzaPassword;
+            page.collegando = "";
+            page._provaSenzaPassword = false;
+            page.refresh(true);
+            if (codice === 0)
+                return;
+            var testo = uscita + "\n" + errore;
+            if (senza && page.mancaLaPassword(testo)) {
+                connectDialog.open(ssid);
+                return;
+            }
+            page.error = page.spiegaErrore(testo);
         }
     }
 
-    function connect(ssid, password) {
+    function mancaLaPassword(testo) {
+        return /secrets were required|no secrets|password/i.test(testo);
+    }
+
+    /// L'errore di nmcli in parole che servono a decidere cosa fare.
+    function spiegaErrore(testo) {
+        var t = String(testo || "");
+        if (page.mancaLaPassword(t))
+            return page.it ? "La password non è giusta." : "The password is not right.";
+        if (/no network with ssid/i.test(t))
+            return page.it ? "La rete non si vede più: forse è troppo lontana."
+                           : "The network is no longer visible: it may be too far.";
+        if (/timeout|timed out/i.test(t))
+            return page.it ? "La rete non ha risposto in tempo." : "The network did not answer in time.";
+        var righe = t.split("\n").filter(function(r) { return r.trim() !== ""; });
+        var ultima = righe.length ? righe[righe.length - 1].replace(/^Error:\s*/, "") : "";
+        return (page.it ? "Non si è collegato" : "Could not connect")
+               + (ultima !== "" ? ": " + ultima : ".");
+    }
+
+    /// Senza shell: l'SSID lo sceglie chi ha messo su la rete, e non va mai
+    /// dentro una riga di `sh` (la regola è scritta in `core/Exec.qml`).
+    /// `env LC_ALL=C` perché gli errori vanno riconosciuti in inglese: in
+    /// italiano nmcli li traduce, e `mancaLaPassword` non li troverebbe.
+    function connect(ssid, password, protetta) {
         page.error = "";
-        var q = "'" + ssid.replace(/'/g, "'\\''") + "'";
-        if (password && password !== "") {
-            var p = "'" + password.replace(/'/g, "'\\''") + "'";
-            connector.sh("nmcli device wifi connect " + q + " password " + p + " 2>&1");
-        } else {
-            connector.sh("nmcli connection up " + q + " 2>&1 || nmcli device wifi connect "
-                         + q + " 2>&1");
-        }
+        page.collegando = ssid;
+        page._provaSenzaPassword = (!password || password === "") && protetta === true;
+        var argv = ["env", "LC_ALL=C", "nmcli", "--wait", "45",
+                    "device", "wifi", "connect", ssid];
+        if (password && password !== "")
+            argv = argv.concat(["password", password]);
+        connector.start(argv);
     }
 
-    function disconnect(ssid) {
-        var q = "'" + ssid.replace(/'/g, "'\\''") + "'";
-        action.fireSh("nmcli connection down " + q + " >/dev/null 2>&1");
+    /// Si stacca la SCHEDA, non la connessione per nome: il nome della
+    /// connessione non è per forza l'SSID («Casa 1», dopo un secondo
+    /// collegamento), e `connection down <ssid>` falliva in silenzio.
+    function disconnect() {
+        page.error = "";
+        action.fireSh(
+            "d=$(nmcli -t -f DEVICE,TYPE device status 2>/dev/null " +
+            "| awk -F: '$2==\"wifi\" {print $1; exit}'); " +
+            "[ -n \"$d\" ] && nmcli device disconnect \"$d\" >/dev/null 2>&1");
         rescanTimer.restart();
     }
 
@@ -289,6 +356,17 @@ Page {
             }
         }
 
+        Text {
+            width: parent.width
+            visible: page.error !== ""
+            wrapMode: Text.WordWrap
+            text: page.error
+            color: Theme.Colors.danger
+            font.family: Theme.Typography.fontDisplay
+            font.weight: Theme.Typography.weightRegular
+            font.pixelSize: Theme.Typography.sizeSM
+        }
+
         Repeater {
             model: page.wifiOn ? page.networks : []
 
@@ -338,7 +416,10 @@ Page {
                     anchors.verticalCenter: parent.verticalCenter
                     elide: Text.ElideRight
                     text: net.modelData.ssid
-                          + (net.modelData.active ? (page.it ? "  ·  connesso" : "  ·  connected") : "")
+                          + (page.collegando === net.modelData.ssid
+                             ? (page.it ? "  ·  mi collego…" : "  ·  connecting…")
+                             : net.modelData.active ? (page.it ? "  ·  connesso" : "  ·  connected")
+                             : "")
                     color: net.modelData.active ? Theme.Colors.text : Theme.Colors.textMuted
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeSM
@@ -348,7 +429,7 @@ Page {
 
                 Ui.Icon {
                     id: netLock
-                    anchors.right: parent.right
+                    anchors.right: stacca.visible ? stacca.left : parent.right
                     anchors.rightMargin: Theme.Effects.space3
                     anchors.verticalCenter: parent.verticalCenter
                     width: 14; height: 14
@@ -358,19 +439,51 @@ Page {
                     alwaysDrawn: true
                 }
 
+                // Un clic sulla riga della rete connessa la STACCAVA. È la
+                // riga più grande e più colorata della pagina, quella su cui
+                // si clicca per vedere com'è messa: la rete se ne andava per
+                // un clic dato per guardare. Staccarsi adesso è un pulsante a
+                // sé, che dice quello che fa.
                 MouseArea {
                     id: netMouse
                     anchors.fill: parent
                     hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
+                    enabled: page.collegando === ""
+                    cursorShape: net.modelData.active ? Qt.ArrowCursor : Qt.PointingHandCursor
                     onClicked: {
-                        if (net.modelData.active) {
-                            page.disconnect(net.modelData.ssid);
-                        } else if (net.modelData.secure) {
-                            connectDialog.open(net.modelData.ssid);
-                        } else {
-                            page.connect(net.modelData.ssid, "");
-                        }
+                        if (net.modelData.active)
+                            return;
+                        page.connect(net.modelData.ssid, "", net.modelData.secure);
+                    }
+                }
+
+                Rectangle {
+                    id: stacca
+                    visible: net.modelData.active
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.Effects.space3
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: staccaTesto.implicitWidth + Theme.Effects.space4
+                    height: 26
+                    radius: Theme.Effects.radiusXS
+                    color: staccaMouse.containsMouse ? Theme.Colors.hover : Theme.Colors.raisedHigh
+
+                    Text {
+                        id: staccaTesto
+                        anchors.centerIn: parent
+                        text: page.it ? "Disconnetti" : "Disconnect"
+                        color: staccaMouse.containsMouse ? Theme.Colors.text : Theme.Colors.textMuted
+                        font.family: Theme.Typography.fontDisplay
+                        font.weight: Theme.Typography.weightRegular
+                        font.pixelSize: Theme.Typography.sizeXS
+                    }
+
+                    MouseArea {
+                        id: staccaMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: page.disconnect()
                     }
                 }
             }
@@ -380,8 +493,9 @@ Page {
     // ── Richiesta della password ─────────────────────────────────────────
     //
     // Vive dentro la pagina e non in una finestra a parte: una finestra nuova
-    // per tre campi verrebbe affiancata dal tiling e coprirebbe l'elenco delle
-    // reti proprio mentre si sta scegliendo.
+    // per tre campi nascerebbe altrove, e chi la chiude per sbaglio non sa più
+    // da dove tornare. Si apre solo quando NetworkManager ha detto che la
+    // password gli manca (vedi `connect`).
 
     Rectangle {
         id: connectDialog

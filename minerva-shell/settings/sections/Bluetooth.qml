@@ -146,11 +146,15 @@ Page {
         // quattro di attesa più un paio che ci mette `bluetoothctl` a fare
         // davvero la cosa.
         //
-        // Questo è un CEROTTO, e va detto: la cura vera è che lo stato di
-        // sistema lo tenga il demone e lo annunci a tutti, come già fa con le
-        // impostazioni. Finché non è così, si legge più spesso — e solo
-        // mentre questa pagina è aperta, perché la pagina esiste solo allora.
-        interval: 1200
+        // Questo era un CEROTTO, e la cura vera è arrivata: acceso e spento
+        // adesso li tiene il demone e li annuncia a tutti
+        // (`Core.SystemState.bluetoothOn`), quindi l'interruttore non
+        // aspetta più questo giro. Qui resta solo l'elenco dei dispositivi —
+        // e ogni giro lancia un `bluetoothctl info` PER dispositivo: con
+        // tre dispositivi erano diciassette processi ogni 1,2 secondi, su un
+        // portatile che scalda. Tre secondi bastano per vedere comparire le
+        // cuffie appena accese.
+        interval: 3000
         // Fermo mentre si sta accoppiando: quella sessione di `bluetoothctl`
         // sta parlando con l'adattatore, e mettersi a interrogarlo ogni
         // quattro secondi nel frattempo è il modo di far fallire proprio la
@@ -459,7 +463,12 @@ Page {
         height: page.notice !== "" ? noticeText.implicitHeight + Theme.Effects.space4 : 0
         visible: height > 0
         radius: Theme.Effects.radiusSM
-        color: page.noticeBad ? Qt.rgba(0.22, 0.06, 0.10, 0.85)
+        // Il rosso era scritto a mano, un vinaccia scuro all'85 %: col tema
+        // chiaro il testo — scuro, perché segue il tema — ci finiva sopra
+        // quasi nero su quasi nero, proprio nel messaggio che dice che
+        // qualcosa è andato storto. Adesso è un velo del colore del
+        // pericolo, come quello verde dell'esito buono.
+        color: page.noticeBad ? Qt.alpha(Theme.Colors.danger, 0.14)
                               : Qt.alpha(Theme.Colors.positive, 0.14)
         border.width: 1
         border.color: page.noticeBad ? Qt.alpha(Theme.Colors.danger, 0.5)
@@ -598,7 +607,10 @@ Page {
                 anchors.verticalCenter: parent.verticalCenter
                 text: page.scanning
                       ? (page.it ? "Cerco dispositivi…" : "Scanning…")
-                      : page.devices.length + (page.it ? " conosciuti" : " known")
+                      // «conosciuti» contava anche quelli appena visti in una
+                      // ricerca e mai accoppiati: si contano solo i nostri.
+                      : page.devices.filter(function(d) { return d.paired; }).length
+                        + (page.it ? " accoppiati" : " paired")
                 color: page.scanning ? Theme.Colors.accent : Theme.Colors.textFaint
                 font.family: Theme.Typography.fontDisplay
                 font.weight: Theme.Typography.weightRegular
@@ -779,19 +791,48 @@ Page {
 
                     // «Dimentica» solo per i già accoppiati: su uno mai visto
                     // non c'è niente da dimenticare.
+                    //
+                    // E si chiede conferma: una × da 28 pixel accanto a
+                    // «Connetti», premuta per sbaglio, toglieva l'accoppiamento
+                    // — e rifarlo vuol dire rimettere il telefono o le cuffie
+                    // in modalità accoppiamento e confrontare di nuovo il
+                    // codice. Il primo clic chiede «Dimentico?», il secondo
+                    // entro quattro secondi dimentica.
                     Rectangle {
-                        width: 28; height: 28
+                        id: dimentica
+                        property bool chiede: false
+                        width: chiede ? chiedeTesto.implicitWidth + Theme.Effects.space4 : 28
+                        height: 28
                         radius: 14
                         visible: dev.modelData.paired
-                        color: forgetMouse.containsMouse
-                               ? Qt.alpha(Theme.Colors.danger, 0.20) : "transparent"
+                        color: dimentica.chiede ? Qt.alpha(Theme.Colors.danger, 0.20)
+                             : forgetMouse.containsMouse ? Qt.alpha(Theme.Colors.danger, 0.20)
+                             : "transparent"
 
                         Ui.Icon {
                             anchors.centerIn: parent
+                            visible: !dimentica.chiede
                             width: 14; height: 14
                             name: "close"
                             color: forgetMouse.containsMouse ? Theme.Colors.danger
                                                              : Theme.Colors.textFaint
+                        }
+
+                        Text {
+                            id: chiedeTesto
+                            anchors.centerIn: parent
+                            visible: dimentica.chiede
+                            text: page.it ? "Dimentico?" : "Forget?"
+                            color: Theme.Colors.danger
+                            font.family: Theme.Typography.fontDisplay
+                            font.weight: Theme.Typography.weightRegular
+                            font.pixelSize: Theme.Typography.sizeXS
+                        }
+
+                        Timer {
+                            interval: 4000
+                            running: dimentica.chiede
+                            onTriggered: dimentica.chiede = false
                         }
 
                         MouseArea {
@@ -800,7 +841,14 @@ Page {
                             hoverEnabled: true
                             enabled: page.busyMac === ""
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: page.forget(dev.modelData.mac)
+                            onClicked: {
+                                if (!dimentica.chiede) {
+                                    dimentica.chiede = true;
+                                    return;
+                                }
+                                dimentica.chiede = false;
+                                page.forget(dev.modelData.mac);
+                            }
                         }
                     }
                 }
