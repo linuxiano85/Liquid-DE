@@ -72,7 +72,7 @@ $mod A -> minerva: control
 @ Aprire un posto | Notifiche
 $mod N -> minerva: notifications
 
-@ Aprire un posto | Il Cassetto: gli appunti, dal bordo destro
+@ Aprire un posto | Il Cassetto: gli appunti (o spingi sul suo bordo)
 $mod C -> minerva: clipboard
 
 @ Aprire un posto | Appunti
@@ -140,7 +140,7 @@ Alt_L [al-rilascio] -> minerva: switchercommit
 @ Muoversi | Annulla il passaggio fra finestre
 ALT Escape -> minerva: switchercancel
 
-@ Muoversi | Le stanze e le finestre che ci stanno (o spingi sul bordo sinistro)
+@ Muoversi | Le stanze e le finestre che ci stanno (o spingi sul loro bordo)
 $mod Tab -> minerva: stanze
 
 @ Muoversi | Scrivania libera, e ritorno
