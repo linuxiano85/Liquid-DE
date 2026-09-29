@@ -169,9 +169,18 @@ PanelWindow {
         height: Math.min(pila.implicitHeight + 2 * Theme.Effects.space3,
                          stanze.height - stanze.margineAlto - stanze.margineBasso - 2 * margine)
         y: stanze.margineAlto + (stanze.height - stanze.margineAlto - stanze.margineBasso - height) / 2
+        // ── A destra, dalla larghezza d'ARRIVO ───────────────────────────
+        //
+        // Qui c'era `width`, che durante l'apertura è la larghezza animata
+        // (64 → 260 con la sua molla): la molla della `x` inseguiva un
+        // bersaglio che si spostava a ogni fotogramma, e a destra la colonna
+        // restava fuori dallo schermo per un secondo buono prima di entrare
+        // (PC di prova, 29 settembre 2026). A sinistra non succedeva perché
+        // lì la `x` non dipende dalla larghezza. Con `larga` il bersaglio sta
+        // fermo e le due molle non si rincorrono più.
         x: {
-            var dentro = stanze.aDestra ? stanze.width - margine - width : margine;
-            var fuori = stanze.aDestra ? stanze.width + 30 : -width - 30;
+            var dentro = stanze.aDestra ? stanze.width - margine - colonna.larga : margine;
+            var fuori = stanze.aDestra ? stanze.width + 30 : -colonna.larga - 30;
             return ((stanze.aperto || stanze.sbirciata) && stanze._entra ? dentro : fuori) + presaStanze.scarto;
         }
         Behavior on x {
