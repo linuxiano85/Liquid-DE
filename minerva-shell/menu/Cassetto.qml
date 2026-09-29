@@ -409,7 +409,7 @@ PanelWindow {
                 boundsBehavior: Flickable.StopAtBounds
 
                 Ui.Goccia {
-                    id: goccia
+                    id: gocciaVoci
                     radius: Theme.Effects.radiusMD
                     attiva: ripetitore.count > cassetto.scelta ? ripetitore.itemAt(cassetto.scelta) : null
                 }
@@ -440,7 +440,11 @@ PanelWindow {
                         model: cassetto.filtrate
                         delegate: Voce {
                             width: colonna.width
-                            goccia: goccia
+                            // Un nome diverso dalla proprietà: in un delegato
+                            // `goccia: goccia` trova la proprietà di sé stesso
+                            // (binding loop a ogni voce) e la goccia non si
+                            // muoveva mai.
+                            goccia: gocciaVoci
                             padrone: cassetto
                         }
                     }
