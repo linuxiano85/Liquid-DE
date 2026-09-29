@@ -103,6 +103,20 @@ ShellRoot {
     // Ed è l'unica accesa di fabbrica, per la stessa ragione di allora:
     // l'attesa la paga ogni volta chi usa il computer, la memoria la paga solo
     // chi ne ha poca — e quello la spegne nelle Impostazioni.
+    // ── La seconda finestra ─────────────────────────────────────────────
+    //
+    // «Nuova finestra» avvia un secondo processo su questo stesso file (vedi
+    // `scripts/minerva-files`, `--nuova-finestra`). Quello non si tiene
+    // pronto: chiuso, esce. Tenerlo addormentato vorrebbe dire una finestra
+    // in più in memoria per ogni «Nuova finestra» mai chiesta di nuovo.
+    readonly property bool seconda: {
+        try {
+            return String(Quickshell.env("MINERVA_FILES_SECONDA") || "") === "1";
+        } catch (e) {
+            return false;
+        }
+    }
+
     Core.TenutaPronta {
         id: pronta
         nome: "file"
@@ -154,7 +168,7 @@ ShellRoot {
         // tenerlo pronto. In quel caso la finestra si toglie di mezzo e il
         // programma resta — e si vede in `Minerva Attività`, che è il posto
         // dove si va a cercare chi occupa la memoria.
-        onRequestClose: pronta.chiudi()
+        onRequestClose: app.seconda ? Qt.quit() : pronta.chiudi()
     }
 
     /// Porta la finestra davanti. Il come — e il perché una volta sola non

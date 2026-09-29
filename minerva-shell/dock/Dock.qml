@@ -1526,6 +1526,27 @@ PanelWindow {
         onTriggered: dock._avviando = ""
     }
 
+    // ── «Apri una nuova finestra» ───────────────────────────────────────
+    //
+    // Per quasi tutti i programmi è il loro comando e basta. Il gestore file
+    // no: il suo comando, se è già aperto, lo porta davanti — e la voce della
+    // dock «non faceva nulla» (PC di prova, 29 settembre 2026). Per chi ha un
+    // modo suo di aprire una finestra in più, qui c'è il comando giusto.
+    readonly property var comandiNuovaFinestra: ({
+        "minerva-files.desktop": "minerva-files --nuova-finestra"
+    })
+
+    function nuovaFinestra(item) {
+        var apposito = dock.comandiNuovaFinestra[item.appId];
+        if (apposito && item.addresses && item.addresses.length > 0) {
+            dock._avviando = item.key;
+            fineAvvio.restart();
+            Core.Ipc.launchApp(apposito, item.appId);
+            return;
+        }
+        dock.launch(item);
+    }
+
     function launch(item) {
         if (item.exec && item.exec !== "") {
             dock._avviando = item.key;
@@ -1649,7 +1670,7 @@ PanelWindow {
         }
         switch (action) {
         case "launch":
-            dock.launch(item);
+            dock.nuovaFinestra(item);
             break;
         case "minimize":
             for (i = 0; i < item.addresses.length; i++)

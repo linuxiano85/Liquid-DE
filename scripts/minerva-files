@@ -34,6 +34,13 @@ fi
 # arriva come percorso normale quando lo si scrive a mano in un terminale.
 # Vanno accettati tutti e due: chi digita `minerva-files ~/Immagini` ha ragione
 # tanto quanto la specifica.
+# `--nuova-finestra` davanti alla cartella: una finestra VERA in più, non una
+# scheda. Vedi il punto 3.
+NUOVA=0
+if [ "${1:-}" = "--nuova-finestra" ]; then
+    NUOVA=1
+    shift
+fi
 TARGET=${1:-}
 case "$TARGET" in
     file://*)
@@ -48,8 +55,30 @@ esac
 # `ping` risponde solo se c'è un gestore file vivo su QUESTA configurazione.
 # Chiedere a lui invece di avviarne un altro è tutta la differenza fra venti
 # schede in una finestra e venti finestre.
-if qs ipc -p "$CONFIG" call files ping >/dev/null 2>&1; then
+if [ "$NUOVA" = 0 ] && qs ipc -p "$CONFIG" call files ping >/dev/null 2>&1; then
     exec qs ipc -p "$CONFIG" call files open "$TARGET" >/dev/null
+fi
+
+# ── 3-bis. Una finestra in più, davvero ─────────────────────────────────────
+#
+# «Nuova finestra» (Ctrl+Maiusc+N, la dock) passava di qui come tutti gli
+# altri e diventava una scheda nella finestra che c'era: «Nuova scheda» e
+# «Nuova finestra» facevano la stessa cosa, e dalla dock — senza cartella —
+# non succedeva niente (PC di prova, 29 settembre 2026). Adesso è un secondo
+# processo sulla stessa configurazione, senza `-n`: una finestra a sé, che si
+# chiude davvero quando la si chiude (`MINERVA_FILES_SECONDA`, vedi
+# `filemanager.qml`). Le richieste da fuori continuano ad andare alla prima,
+# perché `qs ipc -p` sceglie l'istanza più vecchia.
+#
+# Il dormiente NON si eredita: chi chiede una finestra la vuole vedere, e il
+# gestore file che la chiede è proprio quello partito dormiente all'accesso.
+if [ "$NUOVA" = 1 ]; then
+    unset MINERVA_FILES_DORMIENTE
+    MINERVA_FILES_PATH="$TARGET"
+    MINERVA_FILES_SECONDA=1
+    export MINERVA_FILES_PATH MINERVA_FILES_SECONDA
+    . "$ROOT/scripts/minerva-ambiente-app"
+    exec qs -d -p "$CONFIG"
 fi
 
 # ── 4. Altrimenti si parte ──────────────────────────────────────────────────
@@ -58,6 +87,7 @@ fi
 # non deve restare appeso ad aspettare che la finestra si chiuda.
 # `-n` è la rete contro due lanci nello stesso istante: il secondo si accorge
 # del primo ed esce invece di aprire una finestra gemella.
+unset MINERVA_FILES_SECONDA
 MINERVA_FILES_PATH="$TARGET"
 export MINERVA_FILES_PATH
 # L'ambiente comune delle nostre app: disegnano col processore invece che
