@@ -101,7 +101,7 @@ Item {
         // volte. La accende lo stile «Windows».
         ListaFinestre {
             anchors.verticalCenter: parent.verticalCenter
-            visible: Core.Ipc.get("bar.listaFinestre", false) === true
+            accesa: Core.Ipc.get("bar.listaFinestre", false) === true
             // Lo spazio che può prendersi: da dove finisce quello che sta
             // alla sua sinistra fino a metà barra, che è dove comincia
             // l'orologio. Non oltre: il centro è dove si LEGGE, e una fila di

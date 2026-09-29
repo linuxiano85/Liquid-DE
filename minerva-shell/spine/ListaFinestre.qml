@@ -48,7 +48,14 @@ Row {
     // arriva va in fondo, chi se ne va lascia il posto agli altri.
     property var _ordine: []
 
+    /// Spenta (è di serie: la accende lo stile «Windows») non guarda le
+    /// finestre per niente. `visible: false` da fuori non bastava: i legami
+    /// qui sotto lavoravano lo stesso a ogni aggiornamento dell'elenco.
+    property bool accesa: true
+
     readonly property var finestre: {
+        if (!lista.accesa)
+            return [];
         var tutte = Core.Windows.all || [];
         var perIndirizzo = ({});
         var i;
@@ -76,16 +83,61 @@ Row {
     // L'ordine si aggiorna DOPO aver disegnato, non dentro il calcolo: un
     // legame che scrive la cosa da cui dipende è un anello, e in QML un anello
     // non è un errore — è un valore che smette di aggiornarsi quando gli pare.
-    onFinestreChanged: Qt.callLater(function () {
-        var nuovo = [];
-        for (var i = 0; i < lista.finestre.length; i++)
-            nuovo.push(lista.finestre[i].address);
-        if (nuovo.join("|") !== lista._ordine.join("|"))
-            lista._ordine = nuovo;
-    })
+    onFinestreChanged: {
+        lista.sincronizza();
+        Qt.callLater(function () {
+            var nuovo = [];
+            for (var i = 0; i < lista.finestre.length; i++)
+                nuovo.push(lista.finestre[i].address);
+            if (nuovo.join("|") !== lista._ordine.join("|"))
+                lista._ordine = nuovo;
+        });
+    }
+
+    // ── Le voci si aggiornano SUL POSTO ──────────────────────────────────
+    //
+    // Era `model: lista.finestre`: un array nuovo a ogni aggiornamento, e il
+    // Repeater distruggeva e rifaceva tutte le voci — anche solo perché un
+    // titolo era cambiato. Misurato il 29 settembre 2026 con un terminale
+    // che cambia titolo cinque volte al secondo: 126 ricostruzioni in 25
+    // secondi. È la stessa lezione della dock (`dock/Dock.qml`, «Il modello
+    // del Repeater si aggiorna SUL POSTO»): le righe restano finché la
+    // finestra esiste, cambia solo il valore.
+    ListModel {
+        id: modello
+        dynamicRoles: true
+    }
+
+    /// Quante voci sono nate: per le prove.
+    property int vociNate: 0
+
+    function sincronizza() {
+        var volute = lista.finestre;
+        var i, j;
+        for (i = modello.count - 1; i >= 0; i--) {
+            var viva = false;
+            for (j = 0; j < volute.length; j++)
+                if (volute[j].address === modello.get(i).chiave) { viva = true; break; }
+            if (!viva)
+                modello.remove(i);
+        }
+        for (i = 0; i < volute.length; i++) {
+            var w = volute[i];
+            var dove = -1;
+            for (j = i; j < modello.count; j++)
+                if (modello.get(j).chiave === w.address) { dove = j; break; }
+            if (dove === -1) {
+                modello.insert(i, { "chiave": w.address, "w": w });
+                continue;
+            }
+            if (dove !== i)
+                modello.move(dove, i, 1);
+            modello.setProperty(i, "w", w);
+        }
+    }
 
     spacing: Theme.Effects.space1
-    visible: lista.finestre.length > 0
+    visible: lista.accesa && lista.finestre.length > 0
 
     /// Quanto è larga una voce: si dividono lo spazio, con un minimo e un
     /// massimo. Il minimo è quello sotto cui resta solo l'icona — e allora
@@ -100,11 +152,16 @@ Row {
     readonly property bool soloIcone: lista.larghezzaVoce < 90
 
     Repeater {
-        model: lista.finestre
+        id: voci
+        model: modello
 
         delegate: Rectangle {
             id: voce
-            required property var modelData
+            required property var w
+            // Il resto della voce parla di `modelData`, com'era quando il
+            // modello era l'array: un nome solo, senza riscrivere tutto.
+            readonly property var modelData: w
+            Component.onCompleted: lista.vociNate++
 
             readonly property bool attiva:
                 modelData.address === Core.Windows.activeAddress
