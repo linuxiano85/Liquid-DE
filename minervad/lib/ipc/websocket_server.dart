@@ -621,6 +621,8 @@ class WebSocketServer {
             'appId': app.id,
             'name': app.name,
             'exec': app.exec,
+            // «Apri una nuova finestra» della dock (azione `new-window`).
+            'nuovaFinestra': app.nuovaFinestra,
             'icon': _iconResolver.resolve(app.icon),
             'categories': app.categories,
             'isNew': _appScanner.novita.nuove.contains(app.id),

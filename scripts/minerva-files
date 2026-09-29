@@ -34,6 +34,14 @@ fi
 # arriva come percorso normale quando lo si scrive a mano in un terminale.
 # Vanno accettati tutti e due: chi digita `minerva-files ~/Immagini` ha ragione
 # tanto quanto la specifica.
+# `--nuova-finestra`: l'azione `new-window` del .desktop, cioè «Apri una
+# nuova finestra» della dock. Senza, un gestore file già aperto apre una
+# scheda; con, una finestra in più.
+NUOVA=""
+if [ "${1:-}" = "--nuova-finestra" ]; then
+    NUOVA=si
+    shift
+fi
 TARGET=${1:-}
 case "$TARGET" in
     file://*)
@@ -49,6 +57,7 @@ esac
 # Chiedere a lui invece di avviarne un altro è tutta la differenza fra venti
 # schede in una finestra e venti finestre.
 if qs ipc -p "$CONFIG" call files ping >/dev/null 2>&1; then
+    [ -n "$NUOVA" ] && exec qs ipc -p "$CONFIG" call files finestra "$TARGET" >/dev/null
     exec qs ipc -p "$CONFIG" call files open "$TARGET" >/dev/null
 fi
 

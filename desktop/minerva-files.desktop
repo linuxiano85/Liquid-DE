@@ -20,3 +20,11 @@ Categories=System;Utility;FileTools;FileManager;
 # Minerva resta Dolphin.
 MimeType=inode/directory;
 Keywords=file;cartelle;cartella;folders;explorer;gestore;
+# «Apri una nuova finestra» della dock: il comando principale, col gestore
+# file già aperto, apre una scheda; questa azione apre una finestra in più.
+Actions=new-window;
+
+[Desktop Action new-window]
+Name=Nuova finestra
+Name[en]=New window
+Exec=minerva-files --nuova-finestra

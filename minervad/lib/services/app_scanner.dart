@@ -38,6 +38,13 @@ class DesktopApp {
   /// chi scrive «navigatore» e chi scrive «browser» cercano la stessa cosa.
   final List<String> parole;
 
+  /// Il comando per una finestra IN PIÙ: l'azione `new-window` del .desktop
+  /// (`[Desktop Action new-window]`), la stessa che dichiarano Chrome e
+  /// Firefox. Vuoto se il programma non la dichiara. Serve a «Apri una nuova
+  /// finestra» della dock: il comando principale di un programma a istanza
+  /// unica (il nostro gestore file) riporta davanti quella che c'è.
+  final String nuovaFinestra;
+
   DesktopApp({
     required this.id,
     required this.name,
@@ -51,6 +58,7 @@ class DesktopApp {
     this.generico = '',
     this.descrizione = '',
     this.parole = const [],
+    this.nuovaFinestra = '',
   });
 
   Map<String, dynamic> toJson() => {
@@ -66,6 +74,7 @@ class DesktopApp {
         'generico': generico,
         'descrizione': descrizione,
         'parole': parole,
+        'nuovaFinestra': nuovaFinestra,
       };
 
   @override
@@ -79,8 +88,10 @@ class AppScanner {
   /// programmi installati per un solo utente e qualunque percorso che la
   /// distribuzione decida di usare — e un programma che non compare nel menu
   /// è, per chi lo cerca, un programma non installato.
-  List<String> get _scanDirectories {
-    final env = Platform.environment;
+  List<String> get _scanDirectories => cartelleDa(Platform.environment);
+
+  /// Le cartelle dei `.desktop`, in ordine di precedenza, da un ambiente.
+  static List<String> cartelleDa(Map<String, String> env) {
     final home = env['HOME'] ?? '';
     final dataHome = env['XDG_DATA_HOME']?.isNotEmpty == true
         ? env['XDG_DATA_HOME']!
@@ -90,6 +101,18 @@ class AppScanner {
         : '/usr/local/share:/usr/share';
 
     final dirs = <String>{};
+    // ── Le nostre app le descrive Liquid ────────────────────────────────
+    //
+    // Per XDG la cartella dell'utente viene prima di tutte. Ma in
+    // `~/.local/share/applications` ci sono i `.desktop` che vi scrive
+    // l'installazione di Minerva Shell, con gli stessi nomi dei nostri
+    // (`minerva-files.desktop`…): vincevano quelli, e ogni cosa nuova nei
+    // nostri — l'azione «nuova finestra» del 29 settembre 2026 — spariva
+    // senza un errore. La cartella d'installazione di Liquid va per prima;
+    // un programma che Liquid non installa si comporta come prima.
+    for (final d in dataDirs.split(':')) {
+      if (d.trim().endsWith('/liquid-de/share')) dirs.add('${d.trim()}/applications');
+    }
     if (dataHome.isNotEmpty) dirs.add('$dataHome/applications');
     for (final d in dataDirs.split(':')) {
       if (d.trim().isEmpty) continue;
@@ -294,6 +317,8 @@ class AppScanner {
       // il computer: `Chiave[it_IT]` batte `Chiave[it]`, che batte `Chiave`.
       final localizzate = <String, Map<int, String>>{};
       bool isDesktopEntry = false;
+      bool inNuovaFinestra = false;
+      String nuovaFinestra = '';
 
       for (var line in lines) {
         line = line.trim();
@@ -301,6 +326,13 @@ class AppScanner {
 
         if (line.startsWith('[') && line.endsWith(']')) {
           isDesktopEntry = (line == '[Desktop Entry]');
+          inNuovaFinestra = (line == '[Desktop Action new-window]');
+          continue;
+        }
+
+        if (inNuovaFinestra && line.startsWith('Exec=')) {
+          nuovaFinestra = line.substring(5)
+              .replaceAll(RegExp(r'%[fFuUnNdDksiv]'), '').trim();
           continue;
         }
 
@@ -368,6 +400,7 @@ class AppScanner {
         wmClass: wmClass,
         mimeTypes: mimeTypes,
         needsTerminal: needsTerminal,
+        nuovaFinestra: nuovaFinestra,
       );
     } catch (_) {
       // Ignora errori di parsing su singoli file malformati

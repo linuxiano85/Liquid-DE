@@ -365,6 +365,7 @@ PanelWindow {
             out.push({
                 "key": key, "appId": app.appId, "name": app.name,
                 "icon": app.icon || "", "exec": app.exec,
+                "nuovaFinestra": app.nuovaFinestra || "",
                 "pinned": true, "addresses": [], "active": false
             });
         }
@@ -383,6 +384,7 @@ PanelWindow {
                     "name": wapp ? wapp.name : (w.appClass || w.title),
                     "icon": wapp ? (wapp.icon || "") : "",
                     "exec": wapp ? wapp.exec : "",
+                    "nuovaFinestra": wapp ? (wapp.nuovaFinestra || "") : "",
                     "pinned": false, "addresses": [], "active": false
                 });
             }
@@ -1586,7 +1588,7 @@ PanelWindow {
         var out = [];
         if (item.exec !== "")
             out.push({ "label": dock.it ? "Apri una nuova finestra" : "Open a new window",
-                       "icon": "plus", "action": "launch" });
+                       "icon": "plus", "action": "nuova" });
 
         // ── Le finestre, una per una ────────────────────────────────────
         //
@@ -1650,6 +1652,23 @@ PanelWindow {
         switch (action) {
         case "launch":
             dock.launch(item);
+            break;
+        // ── Una finestra IN PIÙ ─────────────────────────────────────────
+        //
+        // Era `launch`, cioè il comando principale: per un programma a
+        // istanza unica — il nostro gestore file — riportava davanti la
+        // finestra che c'era già («chiude e riapre la stessa finestra»,
+        // Giacomo, 29 settembre 2026). Il comando giusto lo dichiara il
+        // programma nell'azione `new-window` del suo .desktop; chi non la
+        // dichiara riparte col comando principale, come prima.
+        case "nuova":
+            if (item.nuovaFinestra && item.nuovaFinestra !== "") {
+                dock._avviando = item.key;
+                fineAvvio.restart();
+                Core.Ipc.launchApp(item.nuovaFinestra, item.appId);
+            } else {
+                dock.launch(item);
+            }
             break;
         case "minimize":
             for (i = 0; i < item.addresses.length; i++)

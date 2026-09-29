@@ -157,6 +157,41 @@ ShellRoot {
         onRequestClose: pronta.chiudi()
     }
 
+    // ── Una finestra IN PIÙ, nello stesso processo ──────────────────────
+    //
+    // «Apri una nuova finestra» dalla dock riportava davanti quella che
+    // c'era (Giacomo, 29 settembre 2026): questo processo apre schede, non
+    // finestre. Ne nasce una qui dentro e non un secondo processo: le
+    // strutture di Qt, il tema e il canale col demone ci sono già, e una
+    // finestra in più costa pochi megabyte invece di un'app intera.
+    //
+    // Le finestre in più non si tengono pronte: chiuse, spariscono. Quella
+    // che resta pronta è sempre e solo la prima.
+    Component {
+        id: altraFinestra
+        FileManager {
+            onRequestClose: destroy()
+        }
+    }
+
+    /// Quante finestre in più sono aperte adesso: per le prove.
+    property int altre: 0
+
+    function nuovaFinestra(path) {
+        // La prima dorme (tenuta pronta): per chi guarda non c'è nessuna
+        // finestra, quindi la «nuova» è lei.
+        if (manager.dormiente || !manager.visible) {
+            manager.risveglia(path || "");
+            pronta.risveglia();
+            return;
+        }
+        var w = altraFinestra.createObject(app, { "initialPath": path || "" });
+        if (!w)
+            return;
+        app.altre++;
+        w.Component.destruction.connect(function () { app.altre--; });
+    }
+
     /// Porta la finestra davanti. Il come — e il perché una volta sola non
     /// basta — stanno in `core/TenutaPronta.qml`.
     function raise() {
@@ -182,6 +217,12 @@ ShellRoot {
                 manager.addTab(path);
             pronta.risveglia();
             return "ok";
+        }
+
+        /// Una finestra in più (non una scheda): «Apri una nuova finestra».
+        function finestra(path: string): string {
+            app.nuovaFinestra(path);
+            return "finestre in più: " + app.altre;
         }
 
         /// Serve a chi ci lancia per sapere che siamo vivi senza aprire
