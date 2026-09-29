@@ -3476,6 +3476,42 @@ static void finestra_appare(struct finestra *f) {
 	if (x < utile.x) x = utile.x;
 	if (y < utile.y) y = utile.y;
 
+	// ── A cascata, se il posto è già preso ───────────────────────────────
+	//
+	// Due finestre della stessa misura nascevano nello stesso punto, una
+	// esattamente sopra l'altra: «Nuova finestra» nel gestore file sembrava
+	// non aver fatto niente (29 settembre 2026). Se al centro c'è già una
+	// finestra visibile di questa stanza, la nuova scende di 32 pixel in
+	// basso a destra, finché trova un posto libero dentro lo spazio utile.
+	if (prima_volta) {
+		for (int giro = 0; giro < 8; giro++) {
+			bool preso = false;
+			struct finestra *altra;
+			wl_list_for_each(altra, &f->m->finestre_elenco, link) {
+				if (altra == f || !altra->comparsa || altra->ridotta
+				    || altra->scrivania != f->scrivania
+				    || !finestra_visibile(altra))
+					continue;
+				struct wlr_box b;
+				finestra_box(altra, &b);
+				if (abs(b.x - x) < 8 && abs(b.y - y) < 8) {
+					preso = true;
+					break;
+				}
+			}
+			if (!preso)
+				break;
+			// Dove non c'è spazio si scende solo di lato (o solo in basso):
+			// meglio uno scarto a metà che due finestre una sull'altra.
+			const int dx = x + 32 + w <= utile.x + utile.width ? 32 : 0;
+			const int dy = y + 32 + h + alta <= utile.y + utile.height ? 32 : 0;
+			if (dx == 0 && dy == 0)
+				break;
+			x += dx;
+			y += dy;
+		}
+	}
+
 	finestra_posiziona(f, x, y, w, h + alta);
 	barra_aggiorna(f);
 
