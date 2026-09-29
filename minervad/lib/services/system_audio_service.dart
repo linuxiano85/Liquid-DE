@@ -89,6 +89,17 @@ class SystemAudioService {
         var migliorDisponibile = false;
         num migliorPriorita = -1;
         for (final profile in profiles) {
+          // ── Mai «Audio professionale» ─────────────────────────────────
+          //
+          // `pro-audio` contiene TUTTE le porte della scheda ed è sempre
+          // «disponibile», quindi con il monitor spento vinceva sui profili
+          // HDMI veri. Porta la scheda su canali AUX senza route, dove il
+          // volume della shell non ha effetto: è così che il 29 settembre
+          // 2026, tornando dal DisplayPort all'aux, il volume non si
+          // regolava più. Chi sceglie un monitor vuole la sua uscita stereo.
+          if (profile['name'] == 'pro-audio' || profile['name'] == 'off') {
+            continue;
+          }
           if (!names.contains(profile['name']) ||
               ((profile['sinks'] ?? profile['n_sinks']) as num? ?? 0) < 1) {
             continue;
