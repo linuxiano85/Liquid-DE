@@ -890,9 +890,20 @@ QtObject {
     // prima restano dov'erano: non le ha messe via questo comando e non le
     // deve tirare fuori.
     property var _giuPerScrivania: []
+    /// La stanza in cui è stato fatto il gesto.
+    property int _giuNellaStanza: 0
 
+    // ── E solo nella stanza che si guarda ────────────────────────────────
+    //
+    // Qui si riducevano TUTTE le finestre, anche quelle delle altre stanze,
+    // e al secondo tocco rimetterle su dava il fuoco all'ultima — cioè si
+    // finiva in un'altra stanza (PC di prova, 29 settembre 2026). La
+    // scrivania che si vuole libera è quella davanti: le altre stanze non si
+    // toccano. Se nel frattempo si è cambiata stanza, il gesto ricomincia
+    // qui invece di tirare su finestre di là.
     function mostraScrivania() {
-        if (windows._giuPerScrivania.length > 0) {
+        const qui = Compositore.scrivaniaAttiva;
+        if (windows._giuPerScrivania.length > 0 && windows._giuNellaStanza === qui) {
             var da = windows._giuPerScrivania.slice();
             windows._giuPerScrivania = [];
             for (var i = 0; i < da.length; i++)
@@ -904,12 +915,13 @@ QtObject {
         var messe = [];
         for (var k = 0; k < tutte.length; k++) {
             var w = tutte[k];
-            if (!w.address || w.address === "" || w.minimized)
+            if (!w.address || w.address === "" || w.minimized || w.workspace !== qui)
                 continue;
             messe.push(w.address);
             windows.minimize(w.address);
         }
         windows._giuPerScrivania = messe;
+        windows._giuNellaStanza = qui;
     }
 
     function minimize(address) {
