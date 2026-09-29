@@ -16,6 +16,35 @@ Rectangle {
     readonly property bool it: Core.Strings.lang === "it"
     readonly property real cpu: riga.cpu === null || riga.cpu === undefined ? -1 : riga.cpu
 
+    // ── Il respiro delle nostre app ──────────────────────────────────────
+    //
+    // Le app di Liquid fuori vista da un minuto finiscono in zram, compresse
+    // (vedi RespiroService nel demone). Senza dirlo qui, la memoria vista
+    // nel gestore attività sarebbe un mistero: la Calcolatrice che ieri
+    // occupava 32 MB oggi ne mostra 8, e nessuno sa perché.
+    readonly property var respiro: riga.respiro || null
+    readonly property string statoRespiro: respiro && respiro.stato ? respiro.stato : ""
+
+    function misura(v) {
+        if (!v || v <= 0) return "0";
+        var u = ["B", "KB", "MB", "GB"];
+        var i = 0;
+        while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+        return (v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)) + " " + u[i];
+    }
+
+    /// «1,4 MB in RAM · 28 MB compressi in 6,9 MB di zram», o vuoto se
+    /// l'app non ha niente di compresso (allora resta la descrizione).
+    readonly property string memoriaRespiro: {
+        if (!respiro || !(respiro.inSwap > 0)) return "";
+        var ram = misura(respiro.inRam) + " in RAM";
+        var z = respiro.inZram !== null && respiro.inZram !== undefined
+                ? (it ? misura(respiro.inSwap) + " compressi in " + misura(respiro.inZram) + " di zram"
+                      : misura(respiro.inSwap) + " compressed into " + misura(respiro.inZram) + " of zram")
+                : misura(respiro.inSwap) + " in zram";
+        return ram + " · " + z;
+    }
+
     height: 46
     color: mouse.containsMouse ? Theme.Colors.hover : "transparent"
     Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
@@ -131,6 +160,33 @@ Rectangle {
                 font.pixelSize: Theme.Typography.sizeXS
                 anchors.verticalCenter: parent.verticalCenter
             }
+
+            // Lo stato del respiro, come una pastiglia: si legge senza
+            // leggere. «Compressa» con l'accento, perché è la notizia.
+            Rectangle {
+                id: pastigliaRespiro
+                visible: row.statoRespiro !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                height: testoRespiro.implicitHeight + 4
+                width: testoRespiro.implicitWidth + Theme.Effects.space3
+                radius: height / 2
+                color: row.statoRespiro === "compressa"
+                       ? Qt.alpha(Theme.Colors.accent, 0.18)
+                       : Qt.alpha(Theme.Colors.text, 0.07)
+
+                Text {
+                    id: testoRespiro
+                    anchors.centerIn: parent
+                    text: row.statoRespiro === "compressa" ? (row.it ? "compressa" : "compressed")
+                        : row.statoRespiro === "fuori" ? (row.it ? "fuori vista" : "out of view")
+                        : (row.it ? "in vista" : "in view")
+                    color: row.statoRespiro === "compressa" ? Theme.Colors.accent
+                                                             : Theme.Colors.textMuted
+                    font.family: Theme.Typography.fontDisplay
+                    font.pixelSize: Theme.Typography.sizeXS
+                    font.weight: Theme.Typography.weightMedium
+                }
+            }
         }
 
         // ── Che cos'è, non come si chiama il binario ─────────────────────
@@ -151,10 +207,11 @@ Rectangle {
         Text {
             width: parent.width
             elide: Text.ElideRight
-            text: row.riga.descrizione || row.riga.comando || ""
+            text: row.memoriaRespiro !== "" ? row.memoriaRespiro
+                  : (row.riga.descrizione || row.riga.comando || "")
             color: Theme.Colors.textFaint
-            font.family: row.riga.descrizione ? Theme.Typography.fontDisplay
-                                              : Theme.Typography.fontMono
+            font.family: row.memoriaRespiro !== "" || row.riga.descrizione
+                         ? Theme.Typography.fontDisplay : Theme.Typography.fontMono
             font.pixelSize: Theme.Typography.sizeXS
         }
     }
@@ -183,14 +240,7 @@ Rectangle {
             width: 90
             horizontalAlignment: Text.AlignRight
             anchors.verticalCenter: parent.verticalCenter
-            text: {
-                var v = row.riga.memoria || 0;
-                if (v <= 0) return "—";
-                var u = ["B", "KB", "MB", "GB"];
-                var i = 0;
-                while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
-                return (v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)) + " " + u[i];
-            }
+            text: (row.riga.memoria || 0) > 0 ? row.misura(row.riga.memoria) : "—"
             color: Theme.Colors.textMuted
             font.family: Theme.Typography.fontMono
             font.pixelSize: Theme.Typography.sizeSM

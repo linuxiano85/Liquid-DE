@@ -74,6 +74,7 @@ class MinervaCore {
     compositorProvider = MinervaProvider();
     finestre = FinestreService(compositorProvider);
     respiro = RespiroService(compositorProvider, settingsApi);
+    processi.respiro = respiro.perPid;
 
     webSocketServer = WebSocketServer(
       eventBus,

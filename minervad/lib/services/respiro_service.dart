@@ -126,6 +126,39 @@ class RespiroService {
     }
   }
 
+  /// Per Attività: di ogni processo che sta in uno scope delle nostre app,
+  /// l'app, lo stato del respiro e dove sta la sua memoria. Letto a ogni
+  /// giro dell'elenco dei processi (pochi scope, tre file piccoli l'uno).
+  Map<int, Map<String, dynamic>> perPid() {
+    final fuori = <int, Map<String, dynamic>>{};
+    var mm = '';
+    try {
+      mm = File('/sys/block/zram0/mm_stat').readAsStringSync();
+    } catch (_) {}
+    for (final s in _scopeDelleApp()) {
+      final nome = s.split('/').last;
+      int leggi(String f) {
+        try {
+          return int.tryParse(File('$s/$f').readAsStringSync().trim()) ?? 0;
+        } catch (_) {
+          return 0;
+        }
+      }
+      final swap = leggi('memory.swap.current');
+      final info = <String, dynamic>{
+        'app': Respiro.nomeApp(nome),
+        'stato': livello == 'spenta' ? null : _regola.stato(s),
+        'inRam': leggi('memory.current'),
+        'inSwap': swap,
+        'inZram': Respiro.inZram(swap, mm),
+      };
+      for (final pid in _processi(s)) {
+        fuori[pid] = info;
+      }
+    }
+    return fuori;
+  }
+
   List<String> _scopeDelleApp() {
     final d = Directory(_radice);
     if (!d.existsSync()) return const [];
@@ -196,10 +229,16 @@ class Respiro {
   /// Già compressi in questo periodo fuori vista.
   final Set<String> compressi = {};
 
+  /// Com'era ogni scope all'ultimo giro: serve a Attività per dirlo.
+  final Map<String, bool> _visibili = {};
+
   /// Gli scope da comprimere adesso. Aggiorna lo stato.
   List<String> daComprimere(Map<String, bool> visibili, DateTime adesso) {
     ultimaVista.removeWhere((s, _) => !visibili.containsKey(s));
     compressi.removeWhere((s) => !visibili.containsKey(s));
+    _visibili
+      ..clear()
+      ..addAll(visibili);
     final fuori = <String>[];
     visibili.forEach((s, vista) {
       if (vista) {
@@ -214,6 +253,38 @@ class Respiro {
       }
     });
     return fuori;
+  }
+
+  /// `vista`, `fuori` (fuori vista, non ancora compressa) o `compressa`;
+  /// null per uno scope che l'ultimo giro non ha visto.
+  String? stato(String scope) {
+    final v = _visibili[scope];
+    if (v == null) return null;
+    if (v) return 'vista';
+    return compressi.contains(scope) ? 'compressa' : 'fuori';
+  }
+
+  /// `liquid-calcolatrice-4242.scope` → `calcolatrice` (anche `liquid-prova-…`).
+  static String? nomeApp(String scope) {
+    final m = RegExp(r'^liquid-(?:prova-)?([a-z0-9]+)-[0-9]+\.scope$')
+        .firstMatch(scope);
+    return m?.group(1);
+  }
+
+  /// Quanto occupano DAVVERO in zram i byte che un cgroup ha nello swap.
+  ///
+  /// `memory.swap.current` conta le pagine com'erano (28 MB per la
+  /// Calcolatrice), non quanto pesano compresse: zram non tiene il conto per
+  /// cgroup. Si usa il rapporto di tutto zram (`mm_stat`: originali, poi
+  /// compressi), che per le nostre app è quello (misurato ~5:1). Con zram
+  /// vuoto il rapporto non esiste: null, non un numero inventato.
+  static int? inZram(int swap, String mmStat) {
+    final c = mmStat.trim().split(RegExp(r'\s+'));
+    if (c.length < 2) return null;
+    final orig = int.tryParse(c[0]) ?? 0;
+    final compr = int.tryParse(c[1]) ?? 0;
+    if (orig <= 0) return null;
+    return (swap * compr / orig).round();
   }
 
   /// Dal JSON delle finestre di minerva-wayland (`finestre`): i pid delle

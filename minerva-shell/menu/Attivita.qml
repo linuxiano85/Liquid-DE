@@ -216,7 +216,13 @@ PanelWindow {
                             valore: dati.macchina.memoriaTotale > 0
                                     ? Math.round(dati.macchina.memoriaUsata / dati.macchina.memoriaTotale * 100) : "—"
                             unita: "%"
-                            sotto: dati.byte(dati.macchina.memoriaUsata) + " / " + dati.byte(dati.macchina.memoriaTotale)
+                            // Con qualcosa di compresso, il conto del respiro al
+                            // posto di «usata / totale» (che resta nella percentuale).
+                            sotto: dati.risparmio.pagine > 0
+                                   ? (attivita.it ? "respiro: " : "breathing: ")
+                                     + dati.byte(dati.risparmio.pagine - dati.risparmio.occupa)
+                                     + (attivita.it ? " risparmiati" : " saved")
+                                   : dati.byte(dati.macchina.memoriaUsata) + " / " + dati.byte(dati.macchina.memoriaTotale)
                             punti: dati.storiaMem
                             massimo: 100
                             colore: Theme.Colors.accentAlt !== undefined ? Theme.Colors.accentAlt : Theme.Colors.accent

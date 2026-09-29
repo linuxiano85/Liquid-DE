@@ -445,9 +445,17 @@ class ProcessService {
   /// ciclo.
   static const int _respiroOgni = 8;
 
+  /// Chi sa del respiro delle app (RespiroService.perPid): lo aggancia il
+  /// nucleo. Nella schermata di accesso non c'è, e le righe restano senza.
+  Map<int, Map<String, dynamic>> Function()? respiro;
+
   Future<List<Map<String, dynamic>>> _leggiProcessi() async {
     final fuori = <Map<String, dynamic>>[];
     final vivi = <int>{};
+    var respiri = const <int, Map<String, dynamic>>{};
+    try {
+      respiri = respiro?.call() ?? respiri;
+    } catch (_) {}
 
     final proc = Directory('/proc');
     if (!proc.existsSync()) return fuori;
@@ -597,6 +605,9 @@ class ProcessService {
           'memoria': rss,
           'memoriaCondivisa': condivisa,
           'memoriaEqua': pss,
+          // Le nostre app nel loro scope: in vista, fuori vista o compressa,
+          // e quanto tengono in RAM e in zram. Vedi RespiroService.
+          if (respiri[pid] != null) 'respiro': respiri[pid],
         });
       } catch (_) {
         // Un processo può morire fra il `listSync` e la lettura: è normale, e

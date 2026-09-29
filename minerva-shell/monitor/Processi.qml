@@ -273,7 +273,12 @@ Item {
                     "equa": equa,
                     "quanti": 1,
                     "finestra": haFinestra,
-                    "classe": classe
+                    "classe": classe,
+                    // Le nostre app nel loro scope: lo stato del respiro e
+                    // dove sta la memoria (RespiroService nel demone). È
+                    // dello SCOPE, uguale per tutti i suoi processi: si
+                    // prende una volta, non si somma.
+                    "respiro": p.respiro || null
                 };
             } else {
                 g.cpu = (g.cpu === null || g.cpu === undefined)
@@ -291,6 +296,8 @@ Item {
                 g.condivisa = Math.max(g.condivisa, p.memoriaCondivisa || 0);
                 g.equa += equa;
                 g.quanti++;
+                if (!g.respiro && p.respiro)
+                    g.respiro = p.respiro;
                 if (haFinestra && !g.finestra) {
                     g.finestra = true;
                     g.pid = p.pid;
@@ -316,6 +323,26 @@ Item {
             return (b.cpu || 0) - (a.cpu || 0);
         });
         return dentro;
+    }
+
+    /// Quanto la memoria che respira sta tenendo compresso adesso: le pagine
+    /// delle nostre app in zram (`pagine`) e quanto pesano davvero
+    /// (`occupa`). Una volta per scope: i suoi processi portano la stessa
+    /// voce. Zero quando niente è compresso.
+    readonly property var risparmio: {
+        var visti = {};
+        var pagine = 0, occupa = 0, compresse = 0;
+        for (var i = 0; i < dati.processi.length; i++) {
+            var r = dati.processi[i].respiro;
+            if (!r || !(r.inSwap > 0)) continue;
+            var k = (r.app || "") + ":" + r.inSwap + ":" + r.inRam;
+            if (visti[k]) continue;
+            visti[k] = true;
+            pagine += r.inSwap;
+            occupa += (r.inZram !== null && r.inZram !== undefined) ? r.inZram : r.inSwap;
+            if (r.stato === "compressa") compresse++;
+        }
+        return { "pagine": pagine, "occupa": occupa, "app": compresse };
     }
 
     // ── Formattazione ────────────────────────────────────────────────────

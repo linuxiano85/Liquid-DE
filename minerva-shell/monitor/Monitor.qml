@@ -95,6 +95,7 @@ FloatingWindow {
     readonly property alias storiaMem: dati.storiaMem
     readonly property alias storiaRete: dati.storiaRete
     readonly property alias storiaTemp: dati.storiaTemp
+    readonly property alias risparmio: dati.risparmio
     property alias filtro: dati.filtro
     property alias vista: dati.vista
     property alias conSistema: dati.conSistema
@@ -209,8 +210,12 @@ FloatingWindow {
             sotto: monitor.byte(monitor.macchina.memoriaUsata) + " / "
                    + monitor.byte(monitor.macchina.memoriaTotale)
                    + (monitor.macchina.memoriaCache
-                      ? (monitor.it ? " · cache " : " · cache ")
-                        + monitor.byte(monitor.macchina.memoriaCache) : "")
+                      ? " · cache " + monitor.byte(monitor.macchina.memoriaCache) : "")
+                   // Il respiro, quando c'è qualcosa di compresso: vedi
+                   // Processi.risparmio.
+                   + (dati.risparmio.pagine > 0
+                      ? (monitor.it ? " · respiro −" : " · breathing −")
+                        + monitor.byte(dati.risparmio.pagine - dati.risparmio.occupa) : "")
             punti: monitor.storiaMem
             massimo: 100
             colore: Theme.Colors.accentAlt !== undefined
