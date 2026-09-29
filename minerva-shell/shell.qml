@@ -964,8 +964,17 @@ ShellRoot {
                 riservata: root.rivaRiservata
                 consenso: root.consenso
                 tenuta: isolaGiorno.aperto
+                // Ogni voce apre la sua faccia; toccata di nuovo, richiude.
+                // Aperta sull'altra faccia, la gira invece di chiudersi.
                 onGiornataChiesta: function(dove) {
-                    if (isolaGiorno.aperto) isolaGiorno.chiudi(); else isolaGiorno.apriDa(dove);
+                    if (isolaGiorno.aperto && isolaGiorno.faccia === "giorno") isolaGiorno.chiudi();
+                    else if (isolaGiorno.aperto) isolaGiorno.giraSu("giorno");
+                    else isolaGiorno.apriDa(dove);
+                }
+                onCalendarioChiesto: function(dove) {
+                    if (isolaGiorno.aperto && isolaGiorno.faccia === "mese") isolaGiorno.chiudi();
+                    else if (isolaGiorno.aperto) isolaGiorno.giraSu("mese");
+                    else isolaGiorno.apriCalendario(dove);
                 }
                 onNotificheChieste: function(dove) {
                     if (isolaGiorno.aperto && isolaGiorno.faccia === "notifiche") isolaGiorno.chiudi();

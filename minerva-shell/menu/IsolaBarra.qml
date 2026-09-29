@@ -32,6 +32,8 @@ PanelWindow {
     /// Toccata l'ora: l'Isola cresce da qui (rettangolo in coordinate dello
     /// schermo).
     signal giornataChiesta(rect dove)
+    /// L'ora o la data toccate: il calendario.
+    signal calendarioChiesto(rect dove)
     signal notificheChieste(rect dove)
     signal centroChiesto()
     /// Trascinata dall'altra parte dello schermo.
@@ -233,40 +235,49 @@ PanelWindow {
                 }
             }
 
-            // ── L'ora, la data, il tempo ──
+            // ── L'ora e la data: il calendario ──
+            //
+            // Erano una voce sola con il tempo, e toccare l'ora apriva il
+            // meteo: il calendario si raggiungeva solo col pulsante dentro la
+            // carta. Tutti si aspettano il contrario — l'ora porta al
+            // calendario, il sole al meteo (29 settembre 2026) — e adesso
+            // sono due voci, ognuna con la sua faccia della stessa carta.
             Voce {
                 id: giornata
                 onTrascinata: function(dy) { isolaBarra.trascinata(dy); }
                 visible: !avviso.visible
+                onScelta: isolaBarra.calendarioChiesto(isolaBarra._rettangolo(capsula))
+                Spine.ClockCluster {
+                    anchors.verticalCenter: parent.verticalCenter
+                    dimmed: false
+                    // Senza la data, se la si è tolta (Impostazioni › La Riva).
+                    compatto: !Core.Riva.isolaData
+                }
+            }
+
+            // ── Il tempo: il meteo ──
+            Voce {
+                id: tempo
+                onTrascinata: function(dy) { isolaBarra.trascinata(dy); }
+                visible: !avviso.visible && Core.Riva.isolaMeteo && Core.Meteo.attivo && Core.Meteo.pronto
                 onScelta: isolaBarra.giornataChiesta(isolaBarra._rettangolo(capsula))
                 Row {
-                    spacing: Theme.Effects.space2
                     anchors.verticalCenter: parent.verticalCenter
-                    Spine.ClockCluster {
+                    spacing: Theme.Effects.space1
+                    Ui.Icon {
                         anchors.verticalCenter: parent.verticalCenter
-                        dimmed: false
-                        // Senza la data, se la si è tolta (Impostazioni › La Riva).
-                        compatto: !Core.Riva.isolaData
+                        width: 18; height: 18
+                        name: Core.Meteo.pronto
+                              ? Core.Meteo.icona(Core.Meteo.adesso.codice, Core.Meteo.adesso.giorno)
+                              : "nuvole"
+                        color: Theme.Colors.textMuted
                     }
-                    Row {
+                    Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        visible: Core.Riva.isolaMeteo && Core.Meteo.attivo && Core.Meteo.pronto
-                        spacing: Theme.Effects.space1
-                        Ui.Icon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 18; height: 18
-                            name: Core.Meteo.pronto
-                                  ? Core.Meteo.icona(Core.Meteo.adesso.codice, Core.Meteo.adesso.giorno)
-                                  : "nuvole"
-                            color: Theme.Colors.textMuted
-                        }
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: Core.Meteo.pronto ? Core.Meteo.gradi(Core.Meteo.adesso.temperatura) : ""
-                            color: Theme.Colors.text
-                            font.family: Theme.Typography.fontMono
-                            font.pixelSize: Theme.Typography.sizeSM
-                        }
+                        text: Core.Meteo.pronto ? Core.Meteo.gradi(Core.Meteo.adesso.temperatura) : ""
+                        color: Theme.Colors.text
+                        font.family: Theme.Typography.fontMono
+                        font.pixelSize: Theme.Typography.sizeSM
                     }
                 }
             }
