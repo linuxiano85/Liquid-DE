@@ -88,7 +88,19 @@ PanelWindow {
 
     /// Le stanze da mostrare: almeno quattro, fino all'ultima occupata o
     /// attiva, più una vuota in fondo (per andarci si tocca quella).
-    readonly property var elenco: {
+    // ── L'elenco cambia solo quando cambia quello che si vede ───────────
+    //
+    // Era un legame diretto su Core.Windows.all: un array NUOVO a ogni
+    // aggiornamento delle finestre, compreso un TITOLO che cambia — e c'è
+    // chi lo cambia di continuo (Claude fa girare ◐◑ nel titolo del
+    // terminale, un browser il contatore dei messaggi). Il Repeater, con un
+    // array nuovo, rifà da capo tutte le stanze e le loro icone: una volta al
+    // secondo, su ogni schermo, anche a Stanze chiuse. Misurato il 29
+    // settembre 2026: metà del lavoro della shell a scrivania ferma.
+    //
+    // Il disegno usa il numero, quante finestre e la loro classe: la firma è
+    // quella, e l'elenco si sostituisce solo quando la firma cambia.
+    readonly property var _calcolato: {
         Core.Compositore.scrivanie;
         var tutte = Core.Windows.all || [];
         var massima = Math.max(3, stanze.attiva);
@@ -107,6 +119,22 @@ PanelWindow {
         }
         return fuori;
     }
+    property var elenco: []
+    property string _firma: ""
+    /// Quante volte l'elenco è stato rifatto: per le prove.
+    property int rifatte: 0
+    function _aggiornaElenco() {
+        var c = stanze._calcolato;
+        var f = c.map(function(s) {
+            return s.numero + ":" + s.finestre.map(function(w) { return w.appClass; }).join(",");
+        }).join("|");
+        if (f === stanze._firma) return;
+        stanze._firma = f;
+        stanze.elenco = c;
+        stanze.rifatte++;
+    }
+    on_CalcolatoChanged: _aggiornaElenco()
+    Component.onCompleted: _aggiornaElenco()
 
     function apri() {
         if (stanze.aperto) return;
@@ -141,6 +169,7 @@ PanelWindow {
             var s = stanze.elenco[i];
             r.push(s.numero + ": " + s.finestre.map(function(w) { return w.appClass; }).join(", "));
         }
+        r.push("rifatte: " + stanze.rifatte);
         return r.join("\n");
     }
 
