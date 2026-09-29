@@ -332,9 +332,11 @@ Page {
             visible: page._corniceGira
             label: page.it ? "I colori che si alternano"
                            : "The colours that take turns"
-            description: page.it
-                ? "Nessuno scelto: l'arcobaleno intero"
-                : "None chosen: the whole spectrum"
+            description: Core.Ipc.get("windows.corniceTinte", []).length === 0
+                ? (page.it ? "Nessuno scelto: l'arcobaleno intero"
+                           : "None chosen: the whole spectrum")
+                : (page.it ? "Tocca un colore scelto per toglierlo"
+                           : "Tap a chosen colour to remove it")
             controlWidth: 0
         }
 
@@ -351,11 +353,15 @@ Page {
                 Repeater {
                     model: Core.Ipc.get("windows.corniceTinte", [])
                     delegate: Rectangle {
+                        id: tinta
                         required property var modelData
                         width: 54
                         height: 28
                         radius: Theme.Effects.radiusFull
-                        color: String(parent.modelData)
+                        // Il colore dal delegato per nome: `parent` qui è il
+                        // Flow, che `modelData` non ce l'ha, e ogni tinta
+                        // scelta si vedeva nera (29 settembre 2026).
+                        color: String(tinta.modelData)
                         border.width: 1
                         border.color: Theme.Colors.edge
 
@@ -375,7 +381,7 @@ Page {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: page.tintaTogli(String(parent.modelData))
+                            onClicked: page.tintaTogli(String(tinta.modelData))
                         }
                     }
                 }
