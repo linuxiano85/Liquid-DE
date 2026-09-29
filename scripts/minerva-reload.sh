@@ -3,6 +3,7 @@
 #
 #   minerva-reload.sh            ricarica la shell grafica
 #   minerva-reload.sh tutto      ricarica la shell e riavvia il demone
+#   minerva-reload.sh ambiente   dice con che ambiente ripartirebbero, e basta
 #
 # Il modo `hypr` — «ricarica la configurazione di Hyprland» — se n'è andato col
 # distacco del 2 settembre 2026. Non era pericoloso, era peggio: rispondeva
@@ -24,6 +25,55 @@ say() { printf '\033[36m·\033[0m %s\n' "$1"; }
 ok()  { printf '\033[32m✓\033[0m %s\n' "$1"; }
 bad() { printf '\033[31m✗\033[0m %s\n' "$1"; }
 
+# ── Le prove non si toccano ────────────────────────────────────────────────
+#
+# Una sessione di prova ha la stessa riga di comando di quella vera: la
+# differenza sta solo nel suo ambiente (vedi la regola «mai pkill»).
+di_prova() { tr '\0' '\n' < "/proc/$1/environ" 2>/dev/null | grep -qx 'MINERVA_PROVA=1'; }
+
+# ── L'ambiente della SESSIONE, non quello di chi lancia ────────────────────
+#
+# Questo script si lancia da un terminale, e demone e shell ripartivano con
+# l'ambiente del terminale. Il 29 settembre 2026 il suo PATH aveva davanti
+# ~/.local/bin, dove `minerva-files` porta ancora a Minerva Shell: il demone
+# riavviato apriva il gestore file dell'ALTRO progetto, che cercava un altro
+# demone e restava vuoto. La sessione mette davanti la cartella di Liquid.
+#
+# Il modello è il compositore della sessione: lo lancia sempre il lanciatore
+# della sessione, ed è il padre di tutto. A lui mancano solo le variabili
+# che dà ai suoi figli — lo schermo, X, il suo canale — e si prendono da qui.
+compositore_della_sessione() {
+    for c in $(pgrep -x minerva-wayland); do
+        di_prova "$c" && continue
+        # Da un terminale che non sa la sua sessione: il primo vero.
+        [ -z "${MINERVA_SESSIONE:-}" ] && { echo "$c"; return; }
+        tr '\0' '\n' < "/proc/$c/environ" 2>/dev/null \
+            | grep -qx "MINERVA_SESSIONE=${MINERVA_SESSIONE:-}" && { echo "$c"; return; }
+    done
+}
+AMBIENTE=()
+MODELLO=$(compositore_della_sessione)
+if [ -n "$MODELLO" ]; then
+    mapfile -d '' AMBIENTE < "/proc/$MODELLO/environ"
+    for v in WAYLAND_DISPLAY DISPLAY MINERVA_CANALE WLR_RENDERER; do
+        [ -n "${!v:-}" ] && AMBIENTE+=("$v=${!v}")
+    done
+fi
+come_la_sessione() {
+    if [ ${#AMBIENTE[@]} -gt 0 ]; then
+        env -i "${AMBIENTE[@]}" "$@"
+    else
+        "$@"
+    fi
+}
+
+if [ "$MODE" = "ambiente" ]; then
+    [ -n "$MODELLO" ] && ok "ambiente dal compositore $MODELLO" \
+                      || bad "nessun compositore della sessione ${MINERVA_SESSIONE:-?}: resta quello di qui"
+    come_la_sessione sh -c 'echo "gestore file: $(command -v minerva-files)"'
+    exit 0
+fi
+
 # ── Shell grafica ──────────────────────────────────────────────────────────
 #
 # Si sceglie l'istanza per PID e non con `qs ipc -p <percorso>`. Non è
@@ -37,8 +87,11 @@ bad() { printf '\033[31m✗\033[0m %s\n' "$1"; }
 # E si cerca `shell.qml`, non un `qs` qualunque: da quando il gestore file è un
 # processo suo ci sono DUE quickshell in esecuzione, e ricaricare (o peggio,
 # uccidere) quello sbagliato chiuderebbe la finestra di chi sta copiando file.
-LIVE_PID=$(ps -eo pid,stat,cmd --no-headers \
-           | awk '$2 !~ /Z/ && /[q]s -p/ && /shell\.qml/ {print $1; exit}')
+LIVE_PID=""
+for p in $(ps -eo pid,stat,cmd --no-headers \
+           | awk '$2 !~ /Z/ && /[q]s -p/ && /shell\.qml/ {print $1}'); do
+    di_prova "$p" || { LIVE_PID=$p; break; }
+done
 
 # Prima si prova per le buone, con l'IPC: la shell si ricarica restando viva e
 # barra e pannelli non spariscono mai. Solo se non risponde — perché è in
@@ -88,11 +141,11 @@ if [ -n "$LIVE_PID" ] && kill -0 "$LIVE_PID" 2>/dev/null; then
 else
     say "non risponde, la riavvio"
     for p in $(ps -eo pid,stat,cmd --no-headers | awk '$2 !~ /Z/ && /[q]s -p/ && /shell\.qml/ {print $1}'); do
-        kill "$p" 2>/dev/null
+        di_prova "$p" || kill "$p" 2>/dev/null
     done
     sleep 1
     LOG="$STATO/shell.log"
-    nohup qs -p "$SHELL_QML" >>"$LOG" 2>&1 &
+    come_la_sessione nohup qs -p "$SHELL_QML" >>"$LOG" 2>&1 &
     sleep 3
     if ps -eo pid,stat,cmd --no-headers | awk '$2 !~ /Z/ && /[q]s -p/ && /shell\.qml/' | grep -q .; then
         ok "shell riavviata"
@@ -113,14 +166,14 @@ if [ "$MODE" = "tutto" ]; then
     # tornare mentre se ne avvia un altro — due demoni per lo stesso socket.
     # Fermando il guardiano scende anche il figlio (`trap` in minerva-demone).
     for p in $(ps -eo pid,cmd | awk '/minerva-demone/ && !/awk/ {print $1}'); do
-        kill "$p" 2>/dev/null
+        di_prova "$p" || kill "$p" 2>/dev/null
     done
     # E poi ciò che fosse rimasto orfano, in tutte e due le forme che il
     # demone può avere: interpretato (`dart:minervad…`) e compilato
     # (`minervad`).
     for p in $(ps -eo pid,comm --no-headers \
                | awk '$2 ~ /^dart:minervad/ || $2 == "minervad" {print $1}'); do
-        kill "$p" 2>/dev/null
+        di_prova "$p" || kill "$p" 2>/dev/null
     done
     sleep 2
 
@@ -138,7 +191,7 @@ if [ "$MODE" = "tutto" ]; then
     # resta senza guardiano per il resto della sessione, cioè senza la rete
     # che esiste apposta. È anche il guardiano a scegliere fra il compilato e
     # `dart run` (vedi `scripts/minerva-demone`).
-    nohup "$MINERVA_DIR/scripts/minerva-demone" >/dev/null 2>&1 &
+    come_la_sessione nohup "$MINERVA_DIR/scripts/minerva-demone" >/dev/null 2>&1 &
     say "compilazione in corso, ~10 secondi"
     # Il socket lo scrive il demone stesso nel file del canale, e ci scrive
     # DOPO averlo preso: se la riga c'e', dall'altra parte c'e' qualcuno.
