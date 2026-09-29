@@ -536,6 +536,24 @@ class GitMotore {
     );
   }
 
+  /// Scrive la firma nella configurazione DI QUESTO PROGETTO (`git config`
+  /// senza `--global`): chi firma un progetto con l'indirizzo di GitHub non
+  /// deve trovarselo anche in tutti gli altri, e la configurazione globale
+  /// dell'utente non è roba nostra.
+  Future<EsitoGit> impostaFirma(String cartella, String nome, String email) async {
+    final n = nome.trim();
+    final e = email.trim();
+    if (n.isEmpty) return EsitoGit.no('Manca il nome.');
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(e)) {
+      return EsitoGit.no('«$e» non sembra un indirizzo email.');
+    }
+    final a = await _git(cartella, ['config', 'user.name', n]);
+    if (a.exitCode != 0) return EsitoGit.no(erroreLeggibile('${a.stderr}'));
+    final b = await _git(cartella, ['config', 'user.email', e]);
+    if (b.exitCode != 0) return EsitoGit.no(erroreLeggibile('${b.stderr}'));
+    return EsitoGit.si('I salvataggi di questo progetto sono firmati «$n».');
+  }
+
   // ── Gli errori, in italiano ────────────────────────────────────────────
 
   static String erroreLeggibile(String grezzo) {

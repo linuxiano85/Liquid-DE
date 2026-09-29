@@ -391,6 +391,44 @@ class GitHubMotore {
     return Esito.no(erroreRete(r));
   }
 
+  /// Nome e indirizzo con cui firmare i salvataggi, presi dall'account.
+  ///
+  /// L'indirizzo è quello «noreply» che GitHub dà a ogni account
+  /// (`id+login@users.noreply.github.com`): lega i salvataggi al profilo
+  /// senza mettere l'email vera in una storia che magari un giorno sarà
+  /// pubblica. È anche quello che GitHub stesso usa quando si modifica un
+  /// file dal sito con l'email nascosta.
+  Future<Esito> identita() async {
+    final r = await chiSei();
+    if (!r.riuscito) return r;
+    final c = r.dati ?? const <String, dynamic>{};
+    final login = '${c['login'] ?? ''}'.trim();
+    final id = c['id'];
+    if (login.isEmpty || id == null) {
+      return Esito.no('GitHub non mi ha detto chi sei.');
+    }
+    final nome = '${c['name'] ?? ''}'.trim();
+    return Esito.si(login, dati: {
+      'nome': nome.isNotEmpty ? nome : login,
+      'email': '$id+$login@users.noreply.github.com',
+      'login': login,
+    });
+  }
+
+  /// Un archivio che c'è già, se è di chi è collegato.
+  Future<Esito> archivioEsistente(String nome) async {
+    final g = await leggiGettone();
+    if (g == null) return Esito.no('Non ho ancora un gettone di GitHub.');
+    final io = await chiSei();
+    if (!io.riuscito) return io;
+    final login = io.messaggio ?? '';
+    final r = await chiedi('GET', '/repos/$login/$nome', g, null);
+    if (r.codice == 200) {
+      return Esito.si('${r.corpo?['clone_url'] ?? ''}', dati: r.corpo);
+    }
+    return Esito.no(erroreRete(r));
+  }
+
   // ── L'archivio ─────────────────────────────────────────────────────────
 
   /// Crea l'archivio su GitHub. `già esiste` non è un guasto: si riusa.
@@ -507,6 +545,16 @@ class GitHubMotore {
     final r = await esegui(
       'git',
       [
+        // ── Solo il nostro gettone ─────────────────────────────────────
+        //
+        // I gestori di credenziali si sommano: quelli di sistema e di
+        // `~/.gitconfig` (qui `libsecret`) venivano interpellati PRIMA del
+        // nostro. Una credenziale vecchia nel portachiavi faceva fallire
+        // l'invio, e noi — credendo morto il gettone — lo cancellavamo:
+        // «mi chiede di nuovo l'accesso» (PC di prova, 29 settembre 2026).
+        // Un valore vuoto azzera l'elenco, e resta solo quello qui sotto.
+        '-c',
+        'credential.helper=',
         '-c',
         'credential.helper=!f() { echo username=x; '
             'echo "password=\$MINERVA_GETTONE_GITHUB"; }; f',

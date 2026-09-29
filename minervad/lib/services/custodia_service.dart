@@ -145,11 +145,43 @@ class CustodiaService {
     return j;
   }
 
+  // ── La firma: da GitHub, se ci si è già fatti riconoscere ──────────────
+  //
+  // Un salvataggio vuole un nome e un'email. Su un computer appena
+  // installato git non ne ha, e la Custodia si fermava su «Prima dimmi come
+  // firmare i salvataggi» senza nessun campo dove dirlo — anche a chi era
+  // appena entrato in GitHub, che quel nome e quell'indirizzo li sa già (PC
+  // di prova, 29 settembre 2026). Se il progetto non ha una firma e GitHub
+  // è collegato, la si prende da lì; se non lo è, la finestra chiede nome ed
+  // email con due campi (`firmaAMano`).
+  Future<void> _assicuraFirma(Progetto p) async {
+    if (p.motore != 'git' || !await git.eRepo(p.percorso)) return;
+    final f = await git.firma(p.percorso);
+    if (f.completa && f.credibile) return;
+    final chi = await github.identita();
+    if (!chi.riuscito || chi.dati == null) return;
+    await git.impostaFirma(
+        p.percorso, '${chi.dati!['nome']}', '${chi.dati!['email']}');
+  }
+
+  /// Nome ed email scritti a mano, per chi non usa GitHub.
+  Future<Map<String, dynamic>> firmaAMano(
+      String percorso, String nome, String email) async {
+    await init();
+    final p = registro.cerca(percorso);
+    if (p == null) return _no('Quel progetto non è nell\'elenco.');
+    if (p.motore != 'git') {
+      return _no('Questo progetto non tiene una storia: non c\'è niente da firmare.');
+    }
+    return (await git.impostaFirma(p.percorso, nome, email)).toJson();
+  }
+
   /// Il dettaglio di un progetto: le modifiche raggruppate, la storia, i punti.
   Future<Map<String, dynamic>> dettaglio(String percorso) async {
     await init();
     final p = registro.cerca(percorso);
     if (p == null) return _no('Quel progetto non è nell\'elenco.');
+    await _assicuraFirma(p);
     return {
       'ok': true,
       ...(await _riquadro(p)),
@@ -159,7 +191,12 @@ class CustodiaService {
       'elencoPunti': [
         for (final q in await punti.elenca(p.chiave)) q.toJson(),
       ],
-      'firma': (await git.firma(p.percorso)).toJson(),
+      // Senza storia non c'è ancora niente da firmare: al primo salvataggio
+      // la firma si prende da GitHub o si chiede lì. Dirlo prima era un
+      // allarme per una cosa che si sistema da sola.
+      'firma': await git.eRepo(p.percorso)
+          ? (await git.firma(p.percorso)).toJson()
+          : {'completa': true, 'credibile': true},
       'copiaGratuita': await punti.copiaGratuita(p.percorso),
     };
   }
@@ -200,6 +237,9 @@ class CustodiaService {
           return _no('Questo progetto non tiene una storia salvata: usa i '
               'punti di ritorno.');
         }
+        final storia = await _assicuraStoria(p);
+        if (storia != null) return storia;
+        await _assicuraFirma(p);
         final f = await git.firma(p.percorso);
         if (!f.completa) {
           return _no('Prima dimmi come firmare i salvataggi: manca il tuo '
@@ -229,6 +269,24 @@ class CustodiaService {
       await registro.salva();
     }
     return e.toJson();
+  }
+
+  // ── «git» nel registro non vuol dire che la storia ci sia ─────────────
+  //
+  // Aggiungendo un progetto, per le cartelle di codice il registro scrive
+  // `motore: git` come CONSIGLIO — ma la storia non la comincia. Il resto
+  // del programma ci credeva: offriva GitHub, creava l'archivio là, e il
+  // collegamento falliva perché la cartella non era un repository. Sul PC di
+  // prova, il 29 settembre 2026: tre archivi privati vuoti su GitHub e tre
+  // progetti mai partiti. Adesso, prima di ogni cosa che ha bisogno della
+  // storia, se manca la si comincia qui (col suo punto di ritorno, come
+  // `iniziaStoria`). Torna null se va tutto bene, o l'errore da mostrare.
+  Future<Map<String, dynamic>?> _assicuraStoria(Progetto p) async {
+    if (p.motore != 'git' || await git.eRepo(p.percorso)) return null;
+    final rete = await _rete(p, 'prima-di-cominciare-la-storia');
+    if (rete != null) return rete;
+    final e = await git.inizia(p.percorso);
+    return e.riuscito ? null : e.toJson();
   }
 
   /// Torna a un salvataggio.
@@ -320,6 +378,8 @@ class CustodiaService {
       // Il collegamento si fa adesso e non al primo invio: se l'indirizzo è
       // sbagliato si scopre mentre lo si sta scegliendo, che è l'unico momento
       // in cui uno ce l'ha ancora davanti.
+      final storia = await _assicuraStoria(p);
+      if (storia != null) return storia;
       final c = await github.collega(p.percorso, dove);
       if (!c.riuscito) return _no(c.errore!);
     } else {
@@ -496,7 +556,28 @@ class CustodiaService {
     await init();
     final p = registro.cerca(percorso);
     if (p == null) return _no('Quel progetto non è nell\'elenco.');
-    final e = await github.creaArchivio(nome, privato: privato);
+    // Prima la storia qui, POI l'archivio là: al contrario, un errore qui
+    // lasciava su GitHub un archivio vuoto e scollegato.
+    final storia = await _assicuraStoria(p);
+    if (storia != null) return storia;
+    var e = await github.creaArchivio(nome, privato: privato);
+    // ── C'era già: si collega quello ─────────────────────────────────────
+    //
+    // Prima qui ci si fermava con «oppure collega quello che c'è già», e
+    // nella finestra non c'era nessun modo di farlo: chi aveva già il
+    // progetto su GitHub restava bloccato. Se l'archivio è dell'account
+    // collegato, lo si collega; l'invio poi non forza mai niente, quindi una
+    // storia diversa da quella di là viene rifiutata, non sovrascritta.
+    var cEraGia = false;
+    var pubblico = false;
+    if (!e.riuscito && (e.errore ?? '').contains('c\'è già un archivio')) {
+      final esistente = await github.archivioEsistente(nome);
+      if (esistente.riuscito) {
+        e = esistente;
+        cEraGia = true;
+        pubblico = esistente.dati?['private'] == false;
+      }
+    }
     if (!e.riuscito) return _no(e.errore!);
     final url = e.messaggio!;
     final agg = await aggiungiDestinazione(percorso, 'github', nome, url);
@@ -504,7 +585,18 @@ class CustodiaService {
       return _no('L\'archivio su GitHub c\'è, ma non sono riuscito a '
           'collegarlo: ${agg['errore']}');
     }
-    return {'ok': true, 'dove': url, 'progetto': (agg['progetto'])};
+    await _assicuraFirma(p);
+    return {
+      'ok': true,
+      'dove': url,
+      'progetto': (agg['progetto']),
+      if (cEraGia)
+        'messaggio': pubblico && privato
+            ? 'Su GitHub «$nome» c\'era già, ed è VISIBILE A TUTTI: l\'ho '
+                'collegato così com\'è. Se lo vuoi solo tuo, rendilo privato '
+                'dalle impostazioni dell\'archivio su GitHub.'
+            : 'Su GitHub «$nome» c\'era già: l\'ho collegato.',
+    };
   }
 
   // ── Il registro ────────────────────────────────────────────────────────

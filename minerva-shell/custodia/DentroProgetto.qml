@@ -251,6 +251,94 @@ Flickable {
                     font.pixelSize: Theme.Typography.sizeSM
                 }
 
+                // ── E dove dirlo ─────────────────────────────────────────
+                //
+                // Il messaggio qui sopra c'era, il posto dove rispondere no:
+                // si poteva solo aprire un terminale e scrivere `git config`
+                // (PC di prova, 29 settembre 2026). Chi è entrato in GitHub
+                // non arriva quasi mai qui — la firma la prende il demone dal
+                // suo account; questi due campi sono per chi GitHub non lo usa.
+                Column {
+                    id: firmaAMano
+                    width: parent.width
+                    spacing: Theme.Effects.space2
+                    visible: pagina.firma.completa === false
+                             || pagina.firma.credibile === false
+
+                    Text {
+                        width: parent.width
+                        wrapMode: Text.WordWrap
+                        text: pagina.it
+                              ? "Scrivili qui, oppure entra in GitHub da «Dove va al sicuro»: li prendo dal tuo account, senza la tua email vera."
+                              : "Type them here, or sign in to GitHub below: I'll take them from your account."
+                        color: Theme.Colors.textMuted
+                        font.family: Theme.Typography.fontDisplay
+                        font.pixelSize: Theme.Typography.sizeXS
+                    }
+
+                    Row {
+                        width: parent.width
+                        spacing: Theme.Effects.space2
+
+                        TextField {
+                            id: firmaNome
+                            width: (parent.width - firmaVai.width - 2 * parent.spacing) / 2
+                            text: pagina.firma.nome || ""
+                            placeholderText: pagina.it ? "Il tuo nome" : "Your name"
+                            color: Theme.Colors.text
+                            placeholderTextColor: Theme.Colors.textFaint
+                            font.family: Theme.Typography.fontDisplay
+                            font.pixelSize: Theme.Typography.sizeSM
+                            background: Rectangle {
+                                radius: Theme.Effects.radiusMD
+                                color: Theme.Colors.sunken
+                                border.width: 1
+                                border.color: firmaNome.activeFocus ? Theme.Colors.edgeAccent
+                                                                    : Theme.Colors.edge
+                            }
+                        }
+                        TextField {
+                            id: firmaEmail
+                            width: firmaNome.width
+                            text: pagina.firma.email || ""
+                            placeholderText: pagina.it ? "La tua email" : "Your email"
+                            color: Theme.Colors.text
+                            placeholderTextColor: Theme.Colors.textFaint
+                            font.family: Theme.Typography.fontDisplay
+                            font.pixelSize: Theme.Typography.sizeSM
+                            background: Rectangle {
+                                radius: Theme.Effects.radiusMD
+                                color: Theme.Colors.sunken
+                                border.width: 1
+                                border.color: firmaEmail.activeFocus ? Theme.Colors.edgeAccent
+                                                                     : Theme.Colors.edge
+                            }
+                            onAccepted: firmaVai.clicked()
+                        }
+                        Ui.SpineButton {
+                            id: firmaVai
+                            height: 34
+                            horizontalPadding: Theme.Effects.space3
+                            enabled: firmaNome.text.trim() !== ""
+                                     && firmaEmail.text.indexOf("@") > 0
+                            opacity: enabled ? 1 : 0.45
+                            onClicked: {
+                                if (!enabled) return;
+                                Core.Ipc.custodiaFirma(pagina.percorso,
+                                                       firmaNome.text.trim(),
+                                                       firmaEmail.text.trim());
+                            }
+                            content: Text {
+                                text: pagina.it ? "Firma così" : "Sign like this"
+                                color: Theme.Colors.text
+                                font.family: Theme.Typography.fontDisplay
+                                font.pixelSize: Theme.Typography.sizeSM
+                                font.weight: Theme.Typography.weightSemiBold
+                            }
+                        }
+                    }
+                }
+
                 TextField {
                     id: cosaHaiFatto
                     width: parent.width
