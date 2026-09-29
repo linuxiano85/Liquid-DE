@@ -30,11 +30,22 @@ MINERVA_DIR="${MINERVA_ROOT:?minerva-dentro-wayland: manca MINERVA_ROOT}"
 #
 # `HYPRLAND_INSTANCE_SIGNATURE` qui non c'è e non si nomina: al suo posto va
 # `MINERVA_CANALE`, che è come si trova il NOSTRO compositore.
-dbus-update-activation-environment --systemd \
-    WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE \
-    MINERVA_CANALE MINERVA_COMPOSITORE MINERVA_IPC_SOCKET \
-    XDG_DATA_DIRS XDG_DATA_HOME XDG_CONFIG_HOME \
-    >/dev/null 2>&1
+#
+# ── Ma NON dentro una prova ──────────────────────────────────────────────
+#
+# Una prova annidata gira sullo stesso bus della sessione vera: scrivere qui
+# il suo `WAYLAND_DISPLAY` vuol dire che i portali, l'agente delle password e
+# tutto ciò che D-Bus avvia DOPO partono sul display di prova — la sessione
+# vera li perde senza un messaggio. Il controllo di `MINERVA_PROVA` stava più
+# sotto, dopo questa riga (trovato il 29 settembre 2026 preparando il giro di
+# prove sul PC di prova).
+if [ "${MINERVA_PROVA:-}" != "1" ]; then
+    dbus-update-activation-environment --systemd \
+        WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE \
+        MINERVA_CANALE MINERVA_COMPOSITORE MINERVA_IPC_SOCKET \
+        XDG_DATA_DIRS XDG_DATA_HOME XDG_CONFIG_HOME \
+        >/dev/null 2>&1
+fi
 # Anche l'ambiente di questo processo deve averli: i figli (demone, shell)
 # li ereditano da qui, non solo da D-Bus.
 export MINERVA_CANALE MINERVA_COMPOSITORE 2>/dev/null || true
