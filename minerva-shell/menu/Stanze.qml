@@ -49,7 +49,10 @@ PanelWindow {
             var dentro = [];
             for (var j = 0; j < tutte.length; j++) {
                 var w = tutte[j];
-                if (w.workspace === n && !w.own)
+                // Le finestre della shell no, le APP di Minerva sì: prima
+                // `!w.own` toglieva anche Impostazioni, File e Terminale, e
+                // una stanza con dentro solo loro si diceva «vuota».
+                if (w.workspace === n && (!w.own || Core.Apps.forWindow(w)))
                     dentro.push(w);
             }
             fuori.push({ "numero": n, "finestre": dentro });
@@ -281,14 +284,45 @@ PanelWindow {
                         Behavior on opacity { NumberAnimation { duration: Theme.Motion.quick } }
                         Repeater {
                             model: stanza.modelData.finestre.slice(0, 5)
-                            delegate: Image {
+                            delegate: Item {
+                                id: finestraIcona
                                 required property var modelData
                                 width: 26; height: 26
-                                sourceSize.width: 52; sourceSize.height: 52
-                                asynchronous: true
-                                source: {
-                                    var i = Core.Apps.iconForClass(modelData.appClass);
-                                    return i ? "file://" + i : "";
+                                // `forWindow` e non la classe: le app di
+                                // Minerva che vivono in un processo solo si
+                                // chiamano tutte `minerva-app`, e le
+                                // distingue il titolo.
+                                readonly property var app: Core.Apps.forWindow(finestraIcona.modelData)
+                                readonly property string icona: finestraIcona.app && finestraIcona.app.icon
+                                                                ? finestraIcona.app.icon : ""
+                                Image {
+                                    anchors.fill: parent
+                                    visible: finestraIcona.icona !== ""
+                                    sourceSize.width: 52; sourceSize.height: 52
+                                    asynchronous: true
+                                    source: finestraIcona.icona !== "" ? "file://" + finestraIcona.icona : ""
+                                }
+                                // Senza icona, l'iniziale — come nella dock.
+                                // Prima la riga restava vuota: una stanza con
+                                // dentro una finestra che non si vedeva.
+                                Rectangle {
+                                    anchors.fill: parent
+                                    visible: finestraIcona.icona === ""
+                                    radius: Theme.Effects.radiusSM
+                                    color: Qt.alpha(Theme.Colors.accent, 0.18)
+                                    border.width: Theme.Effects.hairline
+                                    border.color: Qt.alpha(Theme.Colors.accent, 0.5)
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: String(finestraIcona.app && finestraIcona.app.name
+                                                     ? finestraIcona.app.name
+                                                     : (finestraIcona.modelData.appClass || finestraIcona.modelData.title || "?"))
+                                              .charAt(0).toUpperCase()
+                                        color: Theme.Colors.accent
+                                        font.family: Theme.Typography.fontDisplay
+                                        font.pixelSize: Theme.Typography.sizeSM
+                                        font.weight: Theme.Typography.weightMedium
+                                    }
                                 }
                             }
                         }
