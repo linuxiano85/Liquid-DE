@@ -496,16 +496,39 @@ struct wlr_buffer *barra_disegna(const struct barra_stato *stato) {
 	if (stato->titolo != NULL && stato->titolo[0] != '\0') {
 		struct wlr_box primo;
 		barra_box_pulsante(0, l, &primo);
-		const int margine = l - primo.x + 8;
-		const int massimo = l - 2 * margine;
+		int margine = aspetto.pulsanti_a_destra
+			? l - primo.x + 8
+			: primo.x + primo.width + 8;
+		int massimo = l - 2 * margine;
 
-		if (massimo > 40) {
-			PangoLayout *testo = pango_cairo_create_layout(cr);
-			pango_layout_set_font_description(testo, carattere());
-			pango_layout_set_text(testo, stato->titolo, -1);
-			// Una riga sola, e i tre puntini se non ci sta: un titolo che va
-			// a capo dentro una barra alta 42 pixel esce dalla barra.
-			pango_layout_set_single_paragraph_mode(testo, TRUE);
+		PangoLayout *testo = pango_cairo_create_layout(cr);
+		pango_layout_set_font_description(testo, carattere());
+		pango_layout_set_text(testo, stato->titolo, -1);
+		// Una riga sola, e i tre puntini se non ci sta: un titolo che va
+		// a capo dentro una barra alta 42 pixel esce dalla barra.
+		pango_layout_set_single_paragraph_mode(testo, TRUE);
+
+		// ── Le finestre strette ──────────────────────────────────────
+		//
+		// Lo spazio simmetrico lascia ai lati del titolo quanto occupano i
+		// quattro pulsanti: sotto i 250 pixel circa non resta niente, e il
+		// titolo spariva del tutto (un kdialog da 204 pixel, 29 settembre
+		// 2026) o si riduceva a «Informa…». Se il titolo intero non ci sta
+		// al centro, prende tutto lo spazio dal bordo ai pulsanti.
+		int naturale, alto_n;
+		pango_layout_get_pixel_size(testo, &naturale, &alto_n);
+		(void)alto_n;
+		if (naturale > massimo) {
+			const int libero = aspetto.pulsanti_a_destra
+				? primo.x - 8 - 12
+				: l - 12 - margine;
+			if (libero > massimo) {
+				margine = aspetto.pulsanti_a_destra ? 12 : margine;
+				massimo = libero;
+			}
+		}
+
+		if (massimo > 24) {
 			pango_layout_set_width(testo, massimo * PANGO_SCALE);
 			pango_layout_set_ellipsize(testo, PANGO_ELLIPSIZE_END);
 			pango_layout_set_alignment(testo, PANGO_ALIGN_CENTER);
@@ -532,8 +555,8 @@ struct wlr_buffer *barra_disegna(const struct barra_stato *stato) {
 			cairo_set_source_rgba(cr, aspetto.testo_r, aspetto.testo_g,
 			aspetto.testo_b, alfa_testo);
 			pango_cairo_show_layout(cr, testo);
-			g_object_unref(testo);
 		}
+		g_object_unref(testo);
 	}
 
 	cairo_destroy(cr);
