@@ -1111,6 +1111,12 @@ ShellRoot {
                             isolaBarra.svela();
                         return;
                     }
+                    // Mentre si trascina Stanze o Cassetto verso l'altro
+                    // bordo, la spinta contro quel bordo è il gesto stesso,
+                    // non una richiesta: aprire l'altro pannello chiudeva
+                    // quello in mano e interrompeva lo scambio.
+                    if (stanzeLato.inTrascinamento || cassettoAppunti.inTrascinamento)
+                        return;
                     // Chi esce da quale bordo lo decide `riva.cassetto`.
                     var cassettoQui = (quale === "sinistra") === root.cassettoASinistra;
                     if (quale !== "destra" && quale !== "sinistra")

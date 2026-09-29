@@ -68,8 +68,26 @@ PanelWindow {
         spegni.stop();
     }
     property real _chiuseAlle: 0
+    // ── Il trascinamento finisce SEMPRE (vedi lo stesso in Cassetto.qml) ──
+    //
+    // Annullato a metà — l'altro bordo che apre il Cassetto, la colonna che
+    // si chiude — lo `scarto` restava appiccicato e le Stanze restavano
+    // incastrate oltre il bordo. E un trascinamento partito da una stanza
+    // non vale anche come tocco su quella stanza (prima si finiva lì dentro).
+    readonly property bool inTrascinamento: presaStanze.pressed || presaStanze.scarto !== 0
+    property bool _appenaTrascinate: false
+    function _fineTrascinamento() {
+        var verso = stanze.aDestra ? -presaStanze.scarto : presaStanze.scarto;
+        stanze._appenaTrascinate = Math.abs(presaStanze.scarto) > 8;
+        presaStanze.scarto = 0;
+        if (verso > stanze.width / 3)
+            stanze.scambioChiesto();
+    }
+
     function chiudi() {
         if (!stanze.aperto) return;
+        if (presaStanze.scarto !== 0)
+            stanze._fineTrascinamento();
         stanze._chiuseAlle = Date.now();
         stanze.aperto = false;
         spegni.restart();
@@ -206,12 +224,8 @@ PanelWindow {
             property real scarto: 0
             onPressed: function(m) { presaStanze.inizio = mapToItem(null, m.x, 0).x; presaStanze.scarto = 0; }
             onPositionChanged: function(m) { presaStanze.scarto = mapToItem(null, m.x, 0).x - presaStanze.inizio; }
-            onReleased: {
-                var verso = stanze.aDestra ? -presaStanze.scarto : presaStanze.scarto;
-                presaStanze.scarto = 0;
-                if (verso > stanze.width / 3)
-                    stanze.scambioChiesto();
-            }
+            onReleased: stanze._fineTrascinamento()
+            onCanceled: stanze._fineTrascinamento()
         }
 
         Ui.Goccia {
@@ -247,19 +261,24 @@ PanelWindow {
                         preventStealing: true
                         cursorShape: Qt.PointingHandCursor
                         onContainsMouseChanged: goccia.punta(stanza, containsMouse)
-                        onClicked: stanze.vai(stanza.modelData.numero)
+                        onClicked: {
+                            if (stanze._appenaTrascinate) {
+                                stanze._appenaTrascinate = false;
+                                return;
+                            }
+                            stanze.vai(stanza.modelData.numero);
+                        }
                         // Anche da una stanza si trascina la colonna intera.
                         property real _inizio: 0
-                        onPressed: function(m) { stanzaMouse._inizio = mapToItem(null, m.x, 0).x; }
+                        onPressed: function(m) {
+                            stanzaMouse._inizio = mapToItem(null, m.x, 0).x;
+                            stanze._appenaTrascinate = false;
+                        }
                         onPositionChanged: function(m) {
                             if (pressed) presaStanze.scarto = mapToItem(null, m.x, 0).x - stanzaMouse._inizio;
                         }
-                        onReleased: {
-                            var verso = stanze.aDestra ? -presaStanze.scarto : presaStanze.scarto;
-                            presaStanze.scarto = 0;
-                            if (verso > stanze.width / 3)
-                                stanze.scambioChiesto();
-                        }
+                        onReleased: stanze._fineTrascinamento()
+                        onCanceled: stanze._fineTrascinamento()
                     }
 
                     // Il numero, sempre.

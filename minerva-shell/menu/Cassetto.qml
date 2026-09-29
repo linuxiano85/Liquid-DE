@@ -82,8 +82,29 @@ PanelWindow {
         spegni.stop();
         cassetto.carica();
     }
+    // ── Il trascinamento finisce SEMPRE, anche se viene interrotto ────────
+    //
+    // Trascinando il Cassetto fino all'altro bordo, il puntatore spingeva
+    // contro quel bordo e il compositore apriva le Stanze: il Cassetto si
+    // chiudeva a metà gesto, la MouseArea riceveva «annullato» e non
+    // «rilasciato», e lo `scarto` restava appiccicato. Il Cassetto rimaneva
+    // disegnato dall'altra parte con l'impostazione ancora com'era: gli
+    // appunti a sinistra, ma per aprirli bisognava spingere a destra (PC di
+    // prova, 29 settembre 2026). Qualunque sia il modo in cui il gesto
+    // finisce — rilascio, annullamento, chiusura — si passa da qui.
+    readonly property bool inTrascinamento: presa.pressed || presa.scarto !== 0
+    function _fineTrascinamento() {
+        var soglia = cassetto.width / 3;
+        var verso = cassetto.aSinistra ? presa.scarto : -presa.scarto;
+        presa.scarto = 0;
+        if (verso > soglia)
+            cassetto.scambioChiesto();
+    }
+
     function chiudi() {
         if (!cassetto.aperto) return;
+        if (presa.scarto !== 0)
+            cassetto._fineTrascinamento();
         cassetto.aperto = false;
         cassetto.armato = false;
         spegni.restart();
@@ -264,13 +285,8 @@ PanelWindow {
             property real scarto: 0
             onPressed: function(m) { presa.inizio = mapToItem(null, m.x, 0).x; presa.scarto = 0; }
             onPositionChanged: function(m) { presa.scarto = mapToItem(null, m.x, 0).x - presa.inizio; }
-            onReleased: {
-                var soglia = cassetto.width / 3;
-                var verso = cassetto.aSinistra ? presa.scarto : -presa.scarto;
-                presa.scarto = 0;
-                if (verso > soglia)
-                    cassetto.scambioChiesto();
-            }
+            onReleased: cassetto._fineTrascinamento()
+            onCanceled: cassetto._fineTrascinamento()
         }
 
         Item {
