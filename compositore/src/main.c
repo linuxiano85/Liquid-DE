@@ -3145,11 +3145,15 @@ static void finestra_riduci(struct finestra *f, bool si) {
 
 /// Quante finestre ha quella scrivania. Serve a saltare le vuote col gesto
 /// della rotellina, che è quello che fa `workspace e+1` in Hyprland.
+// Si contano solo le finestre COMPARSE, come fa `comando_finestre`: un
+// programma X11 tiene finestre che non si mostrano mai (kdialog, Steam,
+// Wine), e contarle faceva sembrare occupata una stanza vuota — ai pallini
+// della barra e a «salta le stanze vuote» (PC di prova, 29 settembre 2026).
 static int scrivania_quante(struct minerva *m, int quale) {
 	int quante = 0;
 	struct finestra *f;
 	wl_list_for_each(f, &m->finestre_elenco, link) {
-		if (f->scrivania == quale && !f->ridotta)
+		if (f->scrivania == quale && !f->ridotta && f->comparsa)
 			quante++;
 	}
 	return quante;
