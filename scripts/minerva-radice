@@ -243,8 +243,12 @@ voce_avvio() {
 
 togli_voce_avvio() {
     rm -f -- "/boot/loader/entries/fucina-$1.conf"
+    # Un GRUB che non si rigenera tiene nel menu una voce verso un kernel che
+    # non c'è più: si dice, e non si risponde «fatto». (Trovato da una
+    # revisione automatica della PR: prima l'errore si ingoiava.)
     if [ -f /boot/grub/grub.cfg ] && command -v grub-mkconfig >/dev/null 2>&1; then
-        grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 || true
+        grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 \
+            || muori "«$1» è tolto, ma grub-mkconfig non è riuscito: il menu di GRUB ha ancora la sua voce. Rilancia «sudo grub-mkconfig -o /boot/grub/grub.cfg»."
     fi
 }
 
@@ -720,53 +724,95 @@ case "$AZIONE" in
         # Tua, e di nessun altro: pkexec ci dice per conto di chi lavoriamo.
         [ "$(stat -c %u -- "$USCITA")" = "$PKEXEC_UID" ] \
             || muori "la cartella d'uscita non è di chi ha chiesto."
-        IMG="$USCITA/boot/vmlinuz-$REL"
-        MOD="$USCITA/lib/modules/$REL"
-        if [ ! -f "$IMG" ] || [ -L "$IMG" ]; then muori "manca l'immagine del kernel."; fi
-        if [ ! -d "$MOD" ] || [ -L "$MOD" ]; then muori "mancano i moduli."; fi
-        # Niente collegamenti e niente file speciali: un collegamento dentro
-        # i moduli copiato da root diventa un collegamento di root verso
-        # dove vuole chi l'ha scritto.
-        STRANI=$(find "$USCITA" \( -type l -o -type p -o -type s -o -type b \
-                 -o -type c \) -print 2>/dev/null | head -n 1)
-        [ -z "$STRANI" ] || muori "nella cartella d'uscita c'è un file che non va: $STRANI"
         [ "$REL" != "$(uname -r)" ] \
             || muori "«$REL» è il kernel in uso: riavvia su un altro per reinstallarlo."
 
         annota "fucina-installa $REL da $USCITA"
 
-        # I moduli: prima in una cartella a parte, poi al loro posto. Una
-        # copia interrotta a metà lascia la cartella a parte, non un kernel
-        # con metà dei moduli.
-        NUOVI="/usr/lib/modules/.fucina-$REL.nuovo"
-        rm -rf -- "$NUOVI"
-        cp -r -- "$MOD" "$NUOVI" || muori "non riesco a copiare i moduli."
-        chown -R root:root -- "$NUOVI"
+        # ── Una copia nostra, prima di guardare e prima di usare ─────────
+        #
+        # La cartella d'uscita è tua: fra il momento in cui la si controlla e
+        # quello in cui root la legge, chi gira come te può sostituire un
+        # file con un collegamento a qualcosa che solo root può leggere, e
+        # root lo copierebbe in /boot leggibile da tutti. Quindi la si copia
+        # UNA volta, senza seguire i collegamenti, in una cartella di root;
+        # i controlli si fanno sulla copia, e da lì in poi la cartella tua non
+        # si rilegge più. (Trovato da una revisione automatica della PR.)
+        #
+        # E si prepara tutto lì dentro — depmod, initramfs — PRIMA di toccare
+        # il sistema: se un passo fallisce, il sistema è com'era, compreso
+        # un kernel con lo stesso nome installato prima.
+        SCATOLA=$(mktemp -d /usr/lib/modules/.fucina-XXXXXX) \
+            || muori "non riesco a preparare una cartella di lavoro."
+        # shellcheck disable=SC2064
+        trap "rm -rf -- '$SCATOLA'" EXIT
+        chmod 700 "$SCATOLA"
+        cp -rP -- "$USCITA/boot" "$USCITA/lib" "$SCATOLA/" 2>/dev/null \
+            || muori "non riesco a copiare la cartella d'uscita."
+        # Niente collegamenti e niente file speciali: un collegamento dentro
+        # i moduli copiato da root diventa un collegamento di root verso
+        # dove vuole chi l'ha scritto.
+        STRANI=$(find "$SCATOLA" \( -type l -o -type p -o -type s -o -type b \
+                 -o -type c \) -print 2>/dev/null | head -n 1)
+        [ -z "$STRANI" ] || muori "nella cartella d'uscita c'è un file che non va: ${STRANI#"$SCATOLA"/}"
+        IMG="$SCATOLA/boot/vmlinuz-$REL"
+        MOD="$SCATOLA/lib/modules/$REL"
+        if [ ! -f "$IMG" ]; then muori "manca l'immagine del kernel."; fi
+        if [ ! -d "$MOD" ]; then muori "mancano i moduli."; fi
+        chown -R root:root -- "$SCATOLA"
         # I permessi si RIFANNO, non si copiano: niente bit setuid, niente
         # scrivibile da altri, qualunque cosa ci fosse nella cartella tua.
-        chmod -R u=rwX,go=rX -- "$NUOVI"
-        if [ -e "/usr/lib/modules/$REL" ]; then
-            [ ! -L "/usr/lib/modules/$REL" ] || muori "/usr/lib/modules/$REL è un collegamento."
-            rm -rf -- "/usr/lib/modules/$REL"
-        fi
-        mv -- "$NUOVI" "/usr/lib/modules/$REL"
-        depmod "$REL" || muori "depmod non è riuscito."
+        chmod -R u=rwX,go=rX -- "$SCATOLA/boot" "$SCATOLA/lib"
 
-        install -m 644 -o root -g root -- "$IMG" "/boot/vmlinuz-$REL"
-        if [ -f "$USCITA/boot/config-$REL" ] && [ ! -L "$USCITA/boot/config-$REL" ]; then
-            install -m 644 -o root -g root -- "$USCITA/boot/config-$REL" "/boot/config-$REL"
-        fi
+        depmod -b "$SCATOLA" "$REL" >/dev/null 2>&1 \
+            || muori "depmod non è riuscito: il sistema non è stato toccato."
 
-        # L'initramfs, con lo strumento che la distribuzione usa già: le sue
-        # regole (/etc/mkinitcpio.conf, dracut.conf) valgono anche per noi.
+        # L'initramfs, con lo strumento che la distribuzione usa già — le sue
+        # regole (/etc/mkinitcpio.conf, dracut.conf) valgono anche per noi —
+        # ma sui moduli della copia. `mkinitcpio -r` cerca in <radice>/lib e
+        # su certe versioni in <radice>/usr/lib: ci sono tutte e due.
+        mkdir -p "$SCATOLA/usr/lib"
+        ln -s ../../lib/modules "$SCATOLA/usr/lib/modules"
         if command -v mkinitcpio >/dev/null 2>&1; then
-            mkinitcpio -k "$REL" -g "/boot/initramfs-$REL.img" >/dev/null 2>&1 \
-                || muori "mkinitcpio non è riuscito a fare l'initramfs."
+            mkinitcpio -r "$SCATOLA" -k "$REL" -g "$SCATOLA/initramfs.img" >/dev/null 2>&1 \
+                || muori "mkinitcpio non è riuscito a fare l'initramfs: il sistema non è stato toccato."
         elif command -v dracut >/dev/null 2>&1; then
-            dracut --force "/boot/initramfs-$REL.img" "$REL" >/dev/null 2>&1 \
-                || muori "dracut non è riuscito a fare l'initramfs."
+            dracut --force --kmoddir "$MOD" "$SCATOLA/initramfs.img" "$REL" >/dev/null 2>&1 \
+                || muori "dracut non è riuscito a fare l'initramfs: il sistema non è stato toccato."
         else
             muori "non so fare l'initramfs: non trovo né mkinitcpio né dracut."
+        fi
+        [ -s "$SCATOLA/initramfs.img" ] || muori "l'initramfs è vuoto: il sistema non è stato toccato."
+
+        # ── Pubblicare: solo adesso si tocca il sistema ─────────────────
+        #
+        # I moduli con un `mv` (stessa partizione: istantaneo), il kernel
+        # vecchio con lo stesso nome messo da parte e rimesso al suo posto se
+        # qualcosa va storto. I file di /boot con un nome provvisorio e poi
+        # un `mv`: in /boot non c'è mai un'immagine a metà.
+        VECCHI=""
+        if [ -e "/usr/lib/modules/$REL" ]; then
+            [ ! -L "/usr/lib/modules/$REL" ] || muori "/usr/lib/modules/$REL è un collegamento."
+            VECCHI="$SCATOLA/vecchi"
+            mv -- "/usr/lib/modules/$REL" "$VECCHI"
+        fi
+        rimetti() {
+            rm -rf -- "/usr/lib/modules/$REL"
+            if [ -n "$VECCHI" ]; then mv -- "$VECCHI" "/usr/lib/modules/$REL"; fi
+            rm -f -- "/boot/.vmlinuz-$REL.nuovo" "/boot/.initramfs-$REL.img.nuovo"
+            muori "$1"
+        }
+        mv -- "$MOD" "/usr/lib/modules/$REL" || rimetti "non riesco a mettere al loro posto i moduli."
+        install -m 644 -o root -g root -- "$IMG" "/boot/.vmlinuz-$REL.nuovo" \
+            || rimetti "non riesco a scrivere in /boot."
+        install -m 644 -o root -g root -- "$SCATOLA/initramfs.img" "/boot/.initramfs-$REL.img.nuovo" \
+            || rimetti "non riesco a scrivere in /boot."
+        mv -f -- "/boot/.vmlinuz-$REL.nuovo" "/boot/vmlinuz-$REL" \
+            || rimetti "non riesco a scrivere in /boot."
+        mv -f -- "/boot/.initramfs-$REL.img.nuovo" "/boot/initramfs-$REL.img" \
+            || rimetti "non riesco a scrivere in /boot."
+        if [ -f "$SCATOLA/boot/config-$REL" ]; then
+            install -m 644 -o root -g root -- "$SCATOLA/boot/config-$REL" "/boot/config-$REL" || :
         fi
 
         voce_avvio "$REL"

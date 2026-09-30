@@ -475,6 +475,12 @@ FloatingWindow {
                 finestra.compilando = true;
                 finestra.secondi = Number(s.secondi) || 0;
                 finestra.passoAttuale = String(s.passo || "");
+                // I passi già fatti restano fatti, e la barra riparte da dov'è.
+                finestra.passi = s.passi || ({});
+                var a = s.avanzamento || ({});
+                finestra.fase = String(a.fase || "");
+                finestra.fatti = Number(a.fatti) || 0;
+                finestra.attesi = Number(a.attesi) || 0;
                 paginaCompila.diario.pulisci();
                 paginaCompila.diario.scriviMolte(s.righe || []);
                 finestra.pagina = "compila";

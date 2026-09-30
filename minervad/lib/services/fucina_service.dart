@@ -167,6 +167,13 @@ class FucinaService {
     if (officina.inCorso) {
       return {'ok': false, 'errore': 'C\'è già una compilazione in corso.'};
     }
+    if (_installando) {
+      return {
+        'ok': false,
+        'errore': 'Aspetta che finisca l\'installazione in corso: compilare '
+            'adesso riscriverebbe i file che si stanno installando.',
+      };
+    }
     final c = await _calcola(scelte);
     if (c.errore != null) return {'ok': false, 'errore': c.errore};
     return officina.avvia(c.ricetta!, c.rilievo!);
@@ -185,6 +192,12 @@ class FucinaService {
 
   Future<Map<String, dynamic>> verifica() => scaffale.verifica();
 
+  /// Vero mentre l'aiutante di root sta installando. Si alza PRIMA del primo
+  /// `await`: fra un `await` e l'altro il demone serve altri messaggi, e un
+  /// «compila» arrivato in quel mezzo cancellerebbe la cartella d'uscita
+  /// mentre root la sta leggendo. (Trovato da una revisione automatica.)
+  bool _installando = false;
+
   /// Installa un kernel pronto. Arriva un NOME, mai un percorso: la cartella
   /// la ricava il demone, e l'aiutante di root la ricontrolla.
   Future<Map<String, dynamic>> installa(Object? rilascio) async {
@@ -198,12 +211,20 @@ class FucinaService {
         'errore': 'Aspetta che finisca la compilazione in corso.',
       };
     }
-    final elenco = (await scaffale.elenco())['kernel'] as List;
-    final voce = elenco.cast<Map>().where((k) => k['rilascio'] == rel);
-    if (voce.isEmpty || voce.first['pronto'] != true) {
-      return {'ok': false, 'errore': '«$rel» non è pronto da installare.'};
+    if (_installando) {
+      return {'ok': false, 'errore': 'C\'è già un\'installazione in corso.'};
     }
-    return _conRadice('fucina-installa', ['$lavoro/uscita/$rel', rel]);
+    _installando = true;
+    try {
+      final elenco = (await scaffale.elenco())['kernel'] as List;
+      final voce = elenco.cast<Map>().where((k) => k['rilascio'] == rel);
+      if (voce.isEmpty || voce.first['pronto'] != true) {
+        return {'ok': false, 'errore': '«$rel» non è pronto da installare.'};
+      }
+      return await _conRadice('fucina-installa', ['$lavoro/uscita/$rel', rel]);
+    } finally {
+      _installando = false;
+    }
   }
 
   Future<Map<String, dynamic>> togli(Object? rilascio) async {

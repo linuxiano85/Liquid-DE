@@ -58,6 +58,11 @@ class Officina {
       {void Function(int, int)? progresso,
       bool Function()? annullato}) scarica;
 
+  /// Verifica la firma dello sviluppatore su un archivio. Restituisce `null`
+  /// se la firma è buona e di uno dei firmatari noti, o la frase da dire. Si
+  /// sostituisce nelle prove: quella vera va in rete e chiede gpg.
+  final Future<String?> Function(String versione, File archivio)? verificaFirma;
+
   Officina({
     required this.lavoro,
     required this.statoDir,
@@ -69,6 +74,7 @@ class Officina {
     Future<String?> Function(Uri, File,
             {void Function(int, int)? progresso, bool Function()? annullato})?
         scarica,
+    this.verificaFirma,
   })  : sorgenti = sorgenti ?? Sorgenti(),
         lancia = lancia ?? _lanciaVero,
         scarica = scarica ?? scaricaFile;
@@ -118,10 +124,19 @@ class Officina {
 
   void smetti(Object chi) => _ascoltatori.remove(chi);
 
+  /// Lo stato di ogni passo, e la fase con i suoi conti: servono a chi
+  /// riapre la finestra a metà, per vedere i passi già fatti come fatti e la
+  /// barra dov'è. (Trovato da una revisione automatica della PR.)
+  final Map<String, String> _statiPassi = {};
+  String _titoloPasso = '';
+  Map<String, dynamic> _avanzamento = const {};
+
   Map<String, dynamic> stato() => {
         'inCorso': _inCorso,
         'rilascio': _rilascio,
-        'passo': _passo,
+        'passo': _titoloPasso,
+        'passi': Map<String, String>.from(_statiPassi),
+        'avanzamento': _avanzamento,
         'secondi': _inizio == null
             ? 0
             : DateTime.now().difference(_inizio!).inSeconds,
@@ -133,6 +148,12 @@ class Officina {
   /// ascoltatore che si toglie mentre si manda cambierebbe l'elenco sotto i
   /// piedi.
   void _manda(String tipo, Map<String, dynamic> dati) {
+    if (tipo == 'passo') {
+      _statiPassi['${dati['id']}'] = '${dati['stato']}';
+      if (dati['stato'] == 'via') _titoloPasso = '${dati['titolo']}';
+    } else if (tipo == 'avanzamento') {
+      _avanzamento = dati;
+    }
     for (final f in List.of(_ascoltatori.values)) {
       try {
         f(tipo, dati);
@@ -198,6 +219,9 @@ class Officina {
     _coda.clear();
     _oggetti = 0;
     _ultimoEsito = null;
+    _statiPassi.clear();
+    _titoloPasso = '';
+    _avanzamento = const {};
     // ── Un errore qui non deve arrivare alla zona del demone ─────────────
     //
     // `_esegui` gira senza che nessuno la aspetti: un'eccezione che ne
@@ -405,6 +429,10 @@ class Officina {
     final archivi = '$lavoro/archivi';
     final nome = 'linux-$versione.tar.xz';
     final file = File('$archivi/$nome');
+    // Il segno che QUESTO archivio (con questa somma) ha già una firma
+    // verificata: la verifica decomprime tutto l'archivio, e rifarla a ogni
+    // compilazione costerebbe mezzo minuto per niente.
+    final verificato = File('$archivi/$nome.firma-verificata');
 
     _riga('Leggo la somma di controllo da kernel.org.');
     final somme = await sorgenti.testo(Sorgenti.somme(versione));
@@ -420,7 +448,7 @@ class Officina {
     if (await file.exists()) {
       if (await _somma(file.path) == attesa) {
         _riga('Già scaricato, e la somma torna.');
-        return null;
+        return _firma(versione, file, verificato, attesa);
       }
       _riga('L\'archivio che c\'era non torna con la somma: lo riscarico.');
       await file.delete();
@@ -441,8 +469,42 @@ class Officina {
           'rete che stai usando.';
     }
     _riga('La somma SHA-256 torna.');
+    return _firma(versione, file, verificato, attesa);
+  }
+
+  /// La firma dello sviluppatore, una volta per archivio. Una firma che non
+  /// torna butta via l'archivio: non si compila un kernel che nessuno dei
+  /// firmatari di kernel.org ha firmato.
+  Future<String?> _firma(
+      String versione, File archivio, File verificato, String somma) async {
+    try {
+      if (await verificato.exists() &&
+          (await verificato.readAsString()).trim() == somma) {
+        _riga('La firma di questo archivio è già stata verificata.');
+        return null;
+      }
+    } catch (_) {}
+    _riga('Verifico la firma dello sviluppatore (gpg).');
+    final e = await (verificaFirma ?? _verificaFirmaVera)(versione, archivio);
+    if (e != null) {
+      try {
+        await archivio.delete();
+      } catch (_) {}
+      return e;
+    }
+    await verificato.writeAsString('$somma\n');
     return null;
   }
+
+  Future<String?> _verificaFirmaVera(String versione, File archivio) =>
+      verificaArchivio(
+        versione: versione,
+        archivio: archivio,
+        portachiavi: '$lavoro/gnupg',
+        sorgenti: sorgenti,
+        scarica: (u, f) => scarica(u, f, annullato: () => _annullato),
+        racconta: _riga,
+      );
 
   /// La somma con `sha256sum` e non in Dart: centocinquanta megabyte sul
   /// filo unico del demone fermerebbero tutte le finestre per secondi.
@@ -510,8 +572,24 @@ class Officina {
       }
       final e2 = await _lancia(['patch', '-Np1', '-i', f.path], albero);
       if (e2 != null) return e2;
+      // Le patch di CachyOS non sono firmate: se ne scrive la somma, che
+      // resta nel kernel pronto (`fucina.json`) e dice ESATTAMENTE che cosa
+      // c'è dentro.
+      final somma = await _somma(f.path) ?? '?';
+      _riga('Applicata ${u.pathSegments.last} (SHA-256 $somma).');
+      await _segnaPatch(albero, u.pathSegments.last, somma);
     }
     return null;
+  }
+
+  Future<void> _segnaPatch(String albero, String nome, String somma) async {
+    final f = File('$albero/.fucina-patch.json');
+    var elenco = <dynamic>[];
+    try {
+      elenco = jsonDecode(await f.readAsString()) as List;
+    } catch (_) {}
+    elenco.add({'nome': nome, 'sha256': somma});
+    await f.writeAsString(jsonEncode(elenco));
   }
 
   Future<String?> _base(String partenza, String albero) async {
@@ -546,11 +624,17 @@ class Officina {
     await immagine.copy('${boot.path}/vmlinuz-$rel');
     await File('${c.albero}/.config').copy('${boot.path}/config-$rel');
 
+    List<dynamic> patch = const [];
+    try {
+      patch = jsonDecode(
+          await File('${c.albero}/.fucina-patch.json').readAsString()) as List;
+    } catch (_) {}
     await File('${c.uscita}/fucina.json').writeAsString(
         const JsonEncoder.withIndent('  ').convert({
       'rilascio': rel,
       'scelte': r.scelte.toJson(),
       'moduli': r.moduli.length,
+      'patch': patch,
       'quando': DateTime.now().toIso8601String(),
     }));
 
@@ -599,6 +683,11 @@ class Officina {
           'installato?';
     }
     _processo = p;
+    // «Ferma» può arrivare mentre il processo sta ancora nascendo: `ferma()`
+    // non trova niente da fermare, e un `make` che parte dopo lavorerebbe per
+    // un'ora con la compilazione già «fermata». Trovato da una prova che
+    // premeva «ferma» un istante dopo l'avvio del passo.
+    if (_annullato) unawaited(_segnale(p.pid, 'TERM'));
     final ultime = <String>[];
     void ascolta(String r, bool err) {
       _riga(r);

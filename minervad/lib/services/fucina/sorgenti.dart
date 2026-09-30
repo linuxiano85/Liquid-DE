@@ -16,14 +16,25 @@ import 'ricetta.dart';
 /// (fino alla 6.17). Una sola strada da scaricare, controllare e
 /// ricompilare.
 ///
-/// ── Che cosa garantisce la somma di controllo, e che cosa no ────────────
+/// ── Due controlli, e che cosa garantisce ognuno ─────────────────────────
 ///
-/// L'archivio si confronta con la somma SHA-256 che kernel.org pubblica
-/// accanto (`sha256sums.asc`), scaricata anche lei in HTTPS. Protegge da un
-/// download troncato o rovinato, che è il caso vero di tutti i giorni. NON
-/// protegge da un kernel.org compromesso: per quello servirebbe verificare
-/// la firma PGP del file delle somme, e oggi non lo facciamo. È scritto qui
-/// perché nessuno creda il contrario.
+/// 1. **La somma SHA-256** di `sha256sums.asc`: protegge da un download
+///    troncato o rovinato, che è il caso vero di tutti i giorni. Viene dallo
+///    stesso posto dell'archivio, quindi da sola non protegge da un
+///    kernel.org compromesso.
+/// 2. **La firma dello sviluppatore** (`linux-X.Y.Z.tar.sign`), verificata
+///    con gpg contro le impronte scritte QUI SOTTO, copiate dalla pagina
+///    ufficiale https://www.kernel.org/signature.html il 30 settembre 2026.
+///    Le chiavi si scaricano dal repository `pgpkeys` di kernel.org, ma si
+///    accettano solo se la loro impronta primaria è una di queste quattro:
+///    chi sostituisse la chiave sul server non otterrebbe la stessa impronta.
+///
+/// Le patch di CachyOS NON sono firmate: si prendono dal loro repository così
+/// come sono, e nel kernel pronto resta scritta la somma di ognuna. Chi sceglie
+/// CachyOS si fida di CachyOS, esattamente come chi installa il loro kernel.
+///
+/// (Trovato da una revisione automatica della PR il 30 settembre: la prima
+/// versione si fermava alla somma, e lo diceva, ma non bastava.)
 class Sorgenti {
   /// Scarica un testo. Si sostituisce nelle prove: una prova che va in rete
   /// misura la rete di chi la lancia.
@@ -43,6 +54,43 @@ class Sorgenti {
   static Uri archivio(String versione) => Uri.parse(
       'https://cdn.kernel.org/pub/linux/kernel/v${versione.split('.').first}.x/'
       'linux-$versione.tar.xz');
+
+  /// La firma dello sviluppatore: è sull'archivio `.tar`, non sul `.xz`,
+  /// quindi si verifica decomprimendo.
+  static Uri firma(String versione) => Uri.parse(
+      'https://cdn.kernel.org/pub/linux/kernel/v${versione.split('.').first}.x/'
+      'linux-$versione.tar.sign');
+
+  /// Chi firma i rilasci del kernel, per impronta primaria. Dalla pagina
+  /// https://www.kernel.org/signature.html, sezione «Important fingerprints».
+  static const Map<String, String> firmatari = {
+    'ABAF11C65A2970B130ABE3C479BE3E4300411886': 'Linus Torvalds',
+    '647F28654894E3BD457199BE38DBBDC86092693E': 'Greg Kroah-Hartman',
+    'E27E5D8A3403A2EF66873BBCDEA66FF797772CDC': 'Sasha Levin',
+    'AC2B29BD34A6AFDDB3F68F35E7BFC8EC95861109': 'Ben Hutchings',
+  };
+
+  /// La chiave pubblica di un firmatario, dal repository `pgpkeys` di
+  /// kernel.org. Il nome del file sono gli ultimi sedici caratteri
+  /// dell'impronta.
+  static Uri chiave(String impronta) => Uri.parse(
+      'https://git.kernel.org/pub/scm/docs/kernel/pgpkeys.git/plain/keys/'
+      '${impronta.substring(impronta.length - 16)}.asc');
+
+  /// Dall'uscita `--status-fd` di gpg: l'impronta primaria di una firma
+  /// valida, o `null`. La riga è `[GNUPG:] VALIDSIG` seguita
+  /// dall'impronta della sottochiave, da altri campi e, in fondo,
+  /// dall'impronta primaria: conta l'ultima.
+  static String? firmataDa(String stato) {
+    if (RegExp(r'^\[GNUPG:\] (BADSIG|ERRSIG|EXPKEYSIG|REVKEYSIG) ', multiLine: true)
+        .hasMatch(stato)) {
+      return null;
+    }
+    final m = RegExp(r'^\[GNUPG:\] VALIDSIG (.+)$', multiLine: true)
+        .firstMatch(stato);
+    if (m == null) return null;
+    return m.group(1)!.trim().split(RegExp(r'\s+')).last.toUpperCase();
+  }
 
   static Uri somme(String versione) => Uri.parse(
       'https://cdn.kernel.org/pub/linux/kernel/v${versione.split('.').first}.x/'
@@ -237,4 +285,80 @@ Future<void> _togli(File f) async {
   try {
     if (await f.exists()) await f.delete();
   } catch (_) {}
+}
+
+/// La verifica vera: la firma da cdn.kernel.org, le chiavi dal repository
+/// `pgpkeys` di kernel.org in un portachiavi tutto nostro (non quello di
+/// chi usa il computer), e gpg sull'archivio decompresso. Si accetta solo
+/// una firma valida la cui impronta primaria è fra `Sorgenti.firmatari`.
+Future<String?> verificaArchivio({
+required String versione,
+required File archivio,
+required String portachiavi,
+required Sorgenti sorgenti,
+required Future<String?> Function(Uri, File) scarica,
+void Function(String)? racconta,
+}) async {
+  final firma = File('${archivio.path.replaceAll('.tar.xz', '')}.tar.sign');
+  final e = await scarica(Sorgenti.firma(versione), firma);
+  if (e != null) return 'Non riesco a scaricare la firma: $e';
+
+  final casa = Directory(portachiavi);
+  await casa.create(recursive: true);
+  try {
+    await Process.run('chmod', ['700', casa.path]);
+  } catch (_) {}
+  for (final impronta in Sorgenti.firmatari.keys) {
+    final chiave = await sorgenti.testo(Sorgenti.chiave(impronta));
+    if (chiave == null) continue;
+    try {
+      final p = await Process.start(
+          'gpg', ['--homedir', casa.path, '--batch', '--quiet', '--import']);
+      p.stdin.write(chiave);
+      await p.stdin.close();
+      await p.stdout.drain<void>();
+      await p.stderr.drain<void>();
+      await p.exitCode;
+    } on ProcessException {
+      return 'Manca gpg (pacchetto gnupg): senza, la firma del kernel non si '
+          'può verificare, e non compilo un archivio non verificato.';
+    }
+  }
+
+  final Process xz;
+  final Process gpg;
+  try {
+    xz = await Process.start('xz', ['-dc', archivio.path]);
+    gpg = await Process.start('gpg', [
+      '--homedir', casa.path, '--batch', '--status-fd', '1',
+      '--verify', firma.path, '-',
+    ]);
+  } on ProcessException catch (e) {
+    return 'Non riesco ad avviare «${e.executable}»: serve per verificare '
+        'la firma.';
+  }
+  final stato = StringBuffer();
+  final letto = gpg.stdout.transform(utf8.decoder).listen(stato.write)
+      .asFuture<void>();
+  final errori = gpg.stderr.drain<void>();
+  try {
+    await xz.stdout.pipe(gpg.stdin);
+  } catch (_) {
+    // gpg può chiudere l'ingresso prima della fine (una firma rotta): il
+    // verdetto lo dice lui, qui sotto.
+  }
+  await xz.stderr.drain<void>();
+  await xz.exitCode;
+  await gpg.exitCode;
+  await letto;
+  await errori;
+
+  final chi = Sorgenti.firmataDa(stato.toString());
+  if (chi == null || !Sorgenti.firmatari.containsKey(chi)) {
+    return 'La firma di linux-$versione non torna, o non è di uno dei '
+        'firmatari di kernel.org: ho cancellato l\'archivio. Se succede '
+        'ancora, non fidarti della rete che stai usando.';
+  }
+  racconta?.call('Firmato da ${Sorgenti.firmatari[chi]} ($chi): la firma torna.');
+  return null;
 }

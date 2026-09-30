@@ -344,6 +344,12 @@ Ricetta calcola(Rilievo r, Scelte s, Cartelle c,
     avvisi.add('Prova veloce: senza simboli di debug non c\'è BTF, e senza '
         'BTF gli scheduler sched_ext (scx_*) non partono.');
   }
+  if (s.sorgente == TipoSorgente.cachyos) {
+    avvisi.add('Le patch di CachyOS non sono firmate: si prendono dal loro '
+        'repository così come sono, e la somma di ognuna resta scritta nel '
+        'kernel pronto. Il kernel ufficiale invece si verifica con la firma '
+        'dello sviluppatore.');
+  }
   if (s.nativo) {
     avvisi.add('Ottimizzato per questo processore: se sposti il disco su un '
         'computer con un processore più vecchio, questo kernel non parte. '

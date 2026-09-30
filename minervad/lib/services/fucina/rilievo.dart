@@ -406,14 +406,24 @@ class Rilevatore {
     // La partizione EFI montata con `x-systemd.automount` compare in
     // /proc/mounts solo dopo che qualcuno l'ha aperta: guardando nel momento
     // sbagliato, il suo `vfat` non c'è. Il tipo scritto in fstab c'è sempre.
+    //
+    // E la catena del suo disco, per la stessa ragione: il controller, la
+    // cifratura, LVM di un disco d'avvio che adesso non è montato servono lo
+    // stesso all'avvio. (Trovato da una revisione automatica della PR.)
+    final catena = <String>[];
     for (final e in allAvvio.entries) {
-      if (e.value == 'auto' || e.value.startsWith('fuse.')) continue;
-      for (final mod in _moduliDelFilesystem(e.value)) {
-        tieni(mod, 'Filesystem di «${e.key}» (da /etc/fstab).');
+      final tipo = e.value.tipo;
+      if (tipo != 'auto' && !tipo.startsWith('fuse.')) {
+        for (final mod in _moduliDelFilesystem(tipo)) {
+          tieni(mod, 'Filesystem di «${e.key}» (da /etc/fstab).');
+        }
       }
+      final dev = _devDaFstab(e.value.sorgente);
+      if (dev == null) continue;
+      final nome = await _nomeDelBlocco(dev);
+      if (nome != null) await _catena(nome, catena, tieni, e.key, 0);
     }
 
-    final catena = <String>[];
     for (final m in montati) {
       final dove = m['dove']!;
       if (dove != '/' && !allAvvio.containsKey(dove)) continue;
@@ -433,17 +443,36 @@ class Rilevatore {
   /// I punti di montaggio scritti in /etc/fstab, col loro tipo, tranne
   /// quelli `noauto` (che all'avvio non si montano) e lo swap (che non ha un
   /// punto).
-  Future<Map<String, String>> _montaggiDAvvio() async {
-    final fuori = <String, String>{};
+  Future<Map<String, ({String sorgente, String tipo})>> _montaggiDAvvio() async {
+    final fuori = <String, ({String sorgente, String tipo})>{};
     for (final riga in (await _leggi('etc/fstab')).split('\n')) {
       final r = riga.trim();
       if (r.isEmpty || r.startsWith('#')) continue;
       final c = r.split(RegExp(r'\s+'));
       if (c.length < 3 || c[2] == 'swap' || c[1] == 'none') continue;
       if (c.length > 3 && c[3].split(',').contains('noauto')) continue;
-      fuori[_senzaOttali(c[1])] = c[2];
+      fuori[_senzaOttali(c[1])] = (sorgente: _senzaOttali(c[0]), tipo: c[2]);
     }
     return fuori;
+  }
+
+  /// Da una sorgente di fstab (`UUID=…`, `LABEL=…`, `PARTUUID=…`,
+  /// `PARTLABEL=…` o `/dev/…`) al percorso in /dev che la rappresenta, o
+  /// `null` se non è un disco.
+  static String? _devDaFstab(String sorgente) {
+    const nomi = {
+      'UUID=': 'by-uuid',
+      'LABEL=': 'by-label',
+      'PARTUUID=': 'by-partuuid',
+      'PARTLABEL=': 'by-partlabel',
+    };
+    for (final e in nomi.entries) {
+      if (sorgente.startsWith(e.key)) {
+        final v = sorgente.substring(e.key.length).replaceAll('"', '');
+        return v.isEmpty ? null : '/dev/disk/${e.value}/$v';
+      }
+    }
+    return sorgente.startsWith('/dev/') ? sorgente : null;
   }
 
   /// `/dev/mapper/radice` → `dm-0`, `/dev/nvme0n1p2` → `nvme0n1p2`.
@@ -651,6 +680,7 @@ const List<Attrezzo> attrezzi = [
   Attrezzo('cpio', 'cpio', 'impacchettare le intestazioni del kernel'),
   Attrezzo('xz', 'xz', 'aprire i sorgenti scaricati'),
   Attrezzo('patch', 'patch', 'applicare le patch di CachyOS'),
+  Attrezzo('gnupg', 'gpg', 'verificare la firma del kernel'),
   Attrezzo('libelf', 'libelf.h', 'objtool', intestazione: true),
   Attrezzo('openssl', 'openssl/ssl.h', 'firmare i moduli',
       intestazione: true),
