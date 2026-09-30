@@ -234,8 +234,16 @@ Singleton {
         // Il tetto è una rete, non una regola: se un giorno una risposta non
         // arrivasse, la coda crescerebbe per sempre dentro un processo che
         // non si riavvia mai.
-        if (comp._inCorso.length > 64)
-            comp._inCorso = comp._inCorso.slice(comp._inCorso.length - 32);
+        //
+        // Ma dev'essere una rete che non si tocca quando va tutto bene. Era a
+        // 64, tagliava a 32, e all'apertura del canale si mandano una
+        // novantina di scorciatoie di fila: il taglio scattava SEMPRE, e le
+        // risposte `ok N` ancora in viaggio finivano sulle domande venute
+        // dopo — `dispositivi`, `puntatore`, `stato`, `risparmio` perse
+        // (30 settembre 2026). A canale aperto il compositore risponde a ogni
+        // riga; la rete resta, ma ben sopra quello che si manda davvero.
+        if (comp._inCorso.length > 1024)
+            comp._inCorso = comp._inCorso.slice(comp._inCorso.length - 512);
         comp._inCorso.push(String(verbo));
         canale.write(comp.ultimaRiga + "\n");
     }
@@ -1708,8 +1716,25 @@ Singleton {
     /// compositori vogliono l'una e l'altra insieme, perché il gestore dei
     /// cursori si costruisce con entrambe e non c'è modo di cambiarne una
     /// lasciando l'altra.
+    ///
+    /// ── Un tema con uno spazio nel nome ──────────────────────────────────
+    ///
+    /// Il compositore legge `cursore <tema> <misura>` a PAROLE: «Bibata
+    /// Modern Ice» arrivava come tema «Bibata» e misura «Modern» — cioè 24,
+    /// qualunque misura si fosse scelta, e un tema che non esiste (30
+    /// settembre 2026). Finché il compositore non legge il tema come resto
+    /// della riga, un nome con spazi non si manda: si ripiega su Adwaita,
+    /// che c'è ovunque, e almeno la MISURA — quella che serve a chi vede
+    /// poco — arriva giusta.
     function cursore(tema, misura) {
-        comp._nostro("cursore", [String(tema), String(misura)]);
+        var t = String(tema);
+        if (/\s/.test(t)) {
+            console.warn("[MINERVA][Compositore] il tema del puntatore «" + t
+                         + "» ha uno spazio nel nome e il compositore non sa "
+                         + "leggerlo: uso Adwaita.");
+            t = "Adwaita";
+        }
+        comp._nostro("cursore", [t, String(misura)]);
     }
 
     /// Chiude la sessione grafica.

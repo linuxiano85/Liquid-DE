@@ -86,6 +86,23 @@ Page {
                 }
                 return;
             }
+            // ── La prova rifiutata ──────────────────────────────────────
+            //
+            // La risposta a `schermo-prova` non la guardava nessuno. Un modo
+            // che il compositore rifiuta («no …») faceva partire lo stesso il
+            // conto alla rovescia «Lo schermo si vede bene?» su un cambio mai
+            // avvenuto, e «Mantieni» finiva in un avviso sul registro: sullo
+            // schermo nessun errore (30 settembre 2026). Adesso la domanda si
+            // ritira e il perché si legge nel riquadro.
+            if (cosa === "schermo-prova") {
+                if (testo.indexOf("ok") !== 0) {
+                    guard.armed = false;
+                    page.previous = null;
+                    page.displayError = testo.indexOf("no ") === 0 ? testo.substring(3) : testo;
+                    page.reload();
+                }
+                return;
+            }
             if (cosa === "schermo-conferma") {
                 if (testo === "ok") {
                     page.salvaDopoRisposta = true;
@@ -151,6 +168,7 @@ Page {
     }
 
     function apply(nome, modo, scala, gradi, cosa) {
+        page.displayError = "";
         // Una seconda modifica mentre la domanda è ancora a schermo è la
         // prova migliore che si possa chiedere: chi la fa sta vedendo e sta
         // cliccando. La domanda precedente si chiude come confermata, e questa
@@ -167,6 +185,7 @@ Page {
     }
 
     function disable(nome) {
+        page.displayError = "";
         if (guard.armed && page.previous && page.previous.nome !== nome)
             guard.keep();
         if (!guard.armed)

@@ -23,6 +23,20 @@ import "greeter" as Accesso
 ShellRoot {
     id: radice
 
+    // ── La lingua scelta, anche qui ──────────────────────────────────────
+    //
+    // La scrivania, le Impostazioni e ogni app legano `requestedLanguage` a
+    // `general.language`; la schermata di accesso no, e seguiva la lingua DI
+    // SISTEMA. Con Minerva in inglese su un sistema italiano restava in
+    // italiano, unico pezzo della scrivania a farlo (30 settembre 2026).
+    // Sono processi diversi e non si leggono le proprietà a vicenda: la riga
+    // va ripetuta qui.
+    Binding {
+        target: Core.Strings
+        property: "requestedLanguage"
+        value: Core.Ipc.get("general.language", "auto")
+    }
+
     // La schermata di accesso È una scrivania: la disposizione della tastiera
     // qui conta più che altrove, perché è il posto dove si scrive una password
     // che non si vede. Una tastiera americana al login vuol dire una password

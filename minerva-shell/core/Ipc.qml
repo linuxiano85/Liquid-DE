@@ -259,14 +259,33 @@ QtObject {
             // Osservato il 10 agosto 2026 tenendo la shell viva con il demone
             // spento: dieci righe «Coda piena, messaggio scartato:
             // get_windows» e nient'altro in coda.
+            //
+            // ── …MA SOLO SE È UNA DOMANDA (30 settembre 2026) ───────────────
+            //
+            // Per un ORDINE l'ordine conta. Un interruttore acceso, spento e
+            // riacceso a demone fermo mandava `true`, `false`, `true`: il
+            // secondo `true` era «un doppione» e spariva, il demone ripartiva
+            // e applicava `false`, e l'interruttore diceva acceso finché non
+            // arrivavano le impostazioni vere. Lo stesso con iscriviti /
+            // disiscriviti / iscriviti. Adesso si scartano solo le domande
+            // (`_eDomanda`); per `set_setting` sullo stesso percorso vale
+            // l'ultimo valore, che prende il posto del vecchio in fondo alla
+            // coda — dopo tutto ciò che c'era prima.
             var testo = JSON.stringify(payload);
-            for (var i = 0; i < ipc._coda.length; i++) {
-                if (JSON.stringify(ipc._coda[i]) === testo)
+            var c = ipc._coda.slice();
+            for (var i = 0; i < c.length; i++) {
+                if (ipc._eDomanda(payload.action)
+                        && JSON.stringify(c[i]) === testo)
                     return false;
+                if (payload.action === "set_setting"
+                        && c[i].action === "set_setting"
+                        && c[i].path === payload.path) {
+                    c.splice(i, 1);
+                    break;
+                }
             }
 
-            if (ipc._coda.length < ipc._codaMax) {
-                var c = ipc._coda.slice();
+            if (c.length < ipc._codaMax) {
                 c.push(payload);
                 ipc._coda = c;
             } else {
@@ -278,12 +297,28 @@ QtObject {
         return true;
     }
 
+    /// Le richieste che CHIEDONO e basta: chiederle due volte dà la stessa
+    /// risposta due volte, e in coda se ne tiene una. Tutto il resto cambia
+    /// qualcosa, e lì l'ordine e il numero contano. Nel dubbio un'azione è
+    /// un ordine: un ordine ripetuto costa un giro, uno perso mente.
+    function _eDomanda(azione) {
+        var a = String(azione || "");
+        return /^get_/.test(a) || /_(state|stato|list|zones|info|elenco|panoramica|inventario)$/.test(a)
+            || a === "scorciatoie_compositore" || a === "fs_places" || a === "fs_volumes"
+            || a === "fs_jobs" || a === "fs_formats" || a === "mime_categories";
+    }
+
     /// Svuota la coda. Da chiamare quando la connessione si apre.
     function _svuotaCoda() {
         if (ipc._coda.length === 0)
             return;
         var c = ipc._coda;
         ipc._coda = [];
+        // Le scritture rimaste in coda partono ADESSO: la loro attesa della
+        // conferma comincia da qui, non da quando le si era chieste.
+        var adesso = Date.now();
+        for (var k in ipc._inVolo)
+            ipc._inVolo[k].quando = adesso;
         for (var i = 0; i < c.length; i++)
             ipc._scrivi(JSON.stringify(c[i]) + "\n");
         console.log("[MINERVA][IPC] Spediti", c.length, "messaggi rimasti in coda.");
@@ -314,8 +349,71 @@ QtObject {
         }
         node[parts[parts.length - 1]] = value;
         ipc.settings = copy;
+        ipc._segnaInVolo(path, value);
 
         return send({ "action": "set_setting", "path": path, "value": value });
+    }
+
+    // ── Le scritture ancora in volo ──────────────────────────────────────
+    //
+    // `setSetting` aggiorna subito la copia locale, e poi il demone rimanda
+    // TUTTE le impostazioni con `settings_changed`, una volta per scrittura.
+    // Si sostituiva la copia in blocco, e fra due scritture ravvicinate
+    // succedeva questo: si accende A, si accende B; arriva l'eco di A, che B
+    // non lo sa ancora, e l'interruttore B torna indietro sotto il dito per
+    // un giro di disco del demone — poi arriva l'eco di B e si rimette.
+    // Trovato in revisione il 30 settembre 2026.
+    //
+    // Adesso ogni scrittura resta segnata qui finché un annuncio non porta
+    // proprio quel valore. Fino ad allora vince lei; ma non per sempre: una
+    // scrittura rifiutata dal demone non torna mai, e dopo tre secondi si
+    // crede al demone — così un valore rifiutato si rivede com'è davvero.
+    property var _inVolo: ({})
+    readonly property int _attesaConferma: 3000
+
+    function _segnaInVolo(path, value) {
+        var v = ipc._inVolo;
+        v[path] = { "valore": JSON.stringify(value === undefined ? null : value),
+                    "quando": Date.now() };
+        ipc._inVolo = v;
+    }
+
+    /// Le impostazioni arrivate dal demone, con sopra le scritture nostre
+    /// che il demone non ha ancora fatto proprie.
+    function _conScrittureInVolo(arrivate) {
+        var adesso = Date.now();
+        var sopra = {};
+        var quante = 0;
+        var restano = {};
+        for (var path in ipc._inVolo) {
+            var w = ipc._inVolo[path];
+            var node = arrivate;
+            var parts = path.split(".");
+            for (var i = 0; i < parts.length && node !== undefined && node !== null; i++)
+                node = (typeof node === "object") ? node[parts[i]] : undefined;
+            if (JSON.stringify(node === undefined ? null : node) === w.valore)
+                continue;                       // confermata: da qui vale il demone
+            if (adesso - w.quando > ipc._attesaConferma)
+                continue;                       // mai confermata: si crede al demone
+            restano[path] = w;
+            sopra[path] = JSON.parse(w.valore);
+            quante++;
+        }
+        ipc._inVolo = restano;
+        if (quante === 0)
+            return arrivate;
+        var copy = JSON.parse(JSON.stringify(arrivate || {}));
+        for (var p in sopra) {
+            var pezzi = p.split(".");
+            var n = copy;
+            for (var j = 0; j < pezzi.length - 1; j++) {
+                if (typeof n[pezzi[j]] !== "object" || n[pezzi[j]] === null)
+                    n[pezzi[j]] = {};
+                n = n[pezzi[j]];
+            }
+            n[pezzi[pezzi.length - 1]] = sopra[p];
+        }
+        return copy;
     }
 
     /// Scrive PIÙ impostazioni in un colpo solo.
@@ -356,6 +454,7 @@ QtObject {
                 node = node[parts[i]];
             }
             node[parts[parts.length - 1]] = mappa[path];
+            ipc._segnaInVolo(path, mappa[path]);
         }
         ipc.settings = copy;
 
@@ -363,6 +462,8 @@ QtObject {
     }
 
     function resetSettings() {
+        // Il ripristino vince su tutto quel che era in volo prima di lui.
+        ipc._inVolo = ({});
         return send({ "action": "reset_settings" });
     }
 
@@ -1897,7 +1998,7 @@ QtObject {
                 break;
             case "init_state":
                 if (msg.payload.settings) {
-                    ipc.settings = msg.payload.settings;
+                    ipc.settings = ipc._conScrittureInVolo(msg.payload.settings);
                     // Da qui in poi i colori sono quelli veri: chi aspettava
                     // per non dipingere sbagliato può partire.
                     ipc._settingsNote = true;
@@ -1987,7 +2088,7 @@ QtObject {
                                   String((msg.payload || {}).perche || ""));
                 break;
             case "settings_changed":
-                ipc.settings = msg.payload;
+                ipc.settings = ipc._conScrittureInVolo(msg.payload);
                 ipc.settingsReceived(ipc.settings);
                 break;
             case "scorciatoie_compositore":

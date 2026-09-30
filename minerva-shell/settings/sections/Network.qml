@@ -47,6 +47,14 @@ Page {
             var lines = out.split("\n");
             for (var i = 0; i < lines.length; i++) {
                 var p = lines[i].split("\t");
+                // Le righe delle reti arrivano come le scrive `nmcli -t`,
+                // e si dividono qui: vedi `campiTerse`.
+                if (p[0] === "RETE") {
+                    var f = page.campiTerse(lines[i].substring(5));
+                    if (f.length < 3)
+                        continue;
+                    p = ["NET", f[0], f[1], f[2], f[3] === "*" ? "yes" : ""];
+                }
                 if (p.length < 2)
                     continue;
                 if (p[0] === "WIFI") {
@@ -125,7 +133,34 @@ Page {
             "| awk -F: '$1==\"ethernet\" && $2==\"connected\" {print $3}')\"; " +
             "nmcli -t -f SSID,SIGNAL,SECURITY,IN-USE device wifi list" +
             (soloLettura ? " --rescan no" : "") + " 2>/dev/null " +
-            "| awk -F: 'NF>=3 {print \"NET\\t\" $1 \"\\t\" $2 \"\\t\" $3 \"\\t\" ($4==\"*\" ? \"yes\" : \"\")}'");
+            "| sed 's/^/RETE\\t/'");
+    }
+
+    /// Divide una riga di `nmcli -t` nei suoi campi.
+    ///
+    /// ── Perché non più `awk -F:` ─────────────────────────────────────────
+    ///
+    /// In modo terso nmcli separa i campi con `:` e, dentro un valore, scrive
+    /// `\:` e `\\`. `awk -F:` quella barra non la conosce: la rete «Casa:5G»
+    /// diventava «Casa\» con segnale «5G», e collegarsi falliva con «la rete
+    /// non si vede più». Trovato in revisione il 30 settembre 2026.
+    function campiTerse(riga) {
+        var campi = new Array(0);
+        var ora = "";
+        var t = String(riga || "");
+        for (var i = 0; i < t.length; i++) {
+            var c = t.charAt(i);
+            if (c === "\\" && i + 1 < t.length) {
+                ora += t.charAt(++i);
+            } else if (c === ":") {
+                campi.push(ora);
+                ora = "";
+            } else {
+                ora += c;
+            }
+        }
+        campi.push(ora);
+        return campi;
     }
 
     function rescan() {
@@ -180,13 +215,21 @@ Page {
             page.refresh(true);
             if (codice === 0)
                 return;
-            var testo = uscita + "\n" + errore;
+            var testo = page.senzaDomande(uscita + "\n" + errore);
             if (senza && page.mancaLaPassword(testo)) {
                 connectDialog.open(ssid);
                 return;
             }
             page.error = page.spiegaErrore(testo);
         }
+    }
+
+    /// Toglie le domande di `nmcli --ask` dall'uscita. «Password: » la scrive
+    /// nmcli stesso quando la chiede (su stdin, vedi `connect`), senza andare
+    /// a capo: lasciandola lì, `mancaLaPassword` la troverebbe in OGNI errore
+    /// e «la rete non si vede più» diventerebbe «la password non è giusta».
+    function senzaDomande(testo) {
+        return String(testo || "").replace(/Password( \([^)]*\))?:\s*/g, "");
     }
 
     function mancaLaPassword(testo) {
@@ -219,8 +262,28 @@ Page {
         page._provaSenzaPassword = (!password || password === "") && protetta === true;
         var argv = ["env", "LC_ALL=C", "nmcli", "--wait", "45",
                     "device", "wifi", "connect", ssid];
-        if (password && password !== "")
-            argv = argv.concat(["password", password]);
+        // ── La password NON va fra gli argomenti ─────────────────────────
+        //
+        // Era `… connect <ssid> password <psk>`: gli argomenti di un processo
+        // li legge chiunque in `/proc/<pid>/cmdline`, e con `--wait 45` la
+        // password del Wi-Fi restava in vista fino a quarantacinque secondi.
+        // Trovato in revisione il 30 settembre 2026.
+        //
+        // Adesso `--ask` e la password su stdin. Letto nel sorgente di nmcli
+        // 1.46 (`src/nmcli/devices.c` e `common.c`): con `--ask`, se la rete
+        // è protetta e il profilo non ha già una password, nmcli chiede
+        // «Password: » con readline, che legge una riga da stdin anche quando
+        // stdin non è un terminale; se il profilo ce l'ha ma è sbagliata, la
+        // richiesta arriva dal suo agente dei segreti, che con `--ask` legge
+        // allo stesso modo. In tutti e due i casi la riga è una sola.
+        //
+        // Da provare sulla macchina vera: qui non c'è una scheda Wi-Fi.
+        if (password && password !== "") {
+            connector.startConIngresso(["env", "LC_ALL=C", "nmcli", "--ask", "--wait", "45",
+                                        "device", "wifi", "connect", ssid],
+                                       password + "\n");
+            return;
+        }
         connector.start(argv);
     }
 

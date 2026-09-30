@@ -264,10 +264,47 @@ QtObject {
         var wanted = Math.round(percent);
         var v = Math.max(1, Math.min(100, wanted));
         sys.brightness = v;
-        Core.Ipc.send({ "action": "system_action", "what": "brightness", "value": v });
+        sys._luceDaMandare = v;
+        if (!sys._ritmoLuce.running)
+            sys._mandaLuce();
         // Anche qui l'avviso deve comparire quando si è già in fondo: è lo
         // stesso motivo del volume, e la stessa risposta.
         sys.adjusted("brightness", (wanted > 100) || (wanted < 1));
+    }
+
+    // ── Al demone al più una luminosità ogni ottanta millisecondi ────────
+    //
+    // Il cursore chiama `setBrightness` a ogni movimento del mouse, cioè
+    // sessanta volte al secondo, e ogni chiamata era un messaggio e — dal
+    // demone — un `brightnessctl` lanciato per conto suo, senza aspettare il
+    // precedente. Un secondo di trascinata erano sessanta processi in gara:
+    // vinceva l'ultimo a FINIRE, non l'ultimo lanciato, e la luminosità
+    // restava su un valore di mezzo. A demone fermo, poi, sessanta valori
+    // diversi riempivano la coda di `Core.Ipc` e buttavano fuori il resto.
+    // Trovato in revisione il 30 settembre 2026.
+    //
+    // Adesso il primo valore parte subito, i successivi si tengono da parte
+    // e parte l'ULTIMO a ogni scatto: il dito vede la luce muoversi, il
+    // demone riceve una manciata di valori, e quello finale arriva sempre.
+    property int _luceDaMandare: -1
+    property int _luceMandata: -1
+
+    function _mandaLuce() {
+        if (sys._luceDaMandare < 0 || sys._luceDaMandare === sys._luceMandata) {
+            // Fermi: la prossima volta si manda comunque, anche lo stesso
+            // numero — nel frattempo i tasti possono aver cambiato la luce.
+            sys._luceMandata = -1;
+            return;
+        }
+        sys._luceMandata = sys._luceDaMandare;
+        Core.Ipc.send({ "action": "system_action", "what": "brightness",
+                        "value": sys._luceMandata });
+        sys._ritmoLuce.restart();
+    }
+
+    property Timer _ritmoLuce: Timer {
+        interval: 80
+        onTriggered: sys._mandaLuce()
     }
 
     function stepBrightness(delta) {

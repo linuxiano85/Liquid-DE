@@ -71,8 +71,11 @@ Item {
     /// Vero mentre PAM sta pensando. Il campo si chiude: una seconda password
     /// mandata mentre la prima è in volo confonde la macchina a stati di PAM.
     property bool inCorso: false
-    /// Quante volte di fila si è sbagliato. Serve alla pausa crescente.
-    property int errori: 0
+    /// Quante volte di fila si è sbagliato, e la pausa: UNO per tutto il
+    /// blocco, non uno per schermo (vedi `Tentativi.qml`). `blocco.qml` passa
+    /// il suo; quello di serie serve solo a chi usa questa schermata da sola.
+    property Schermo.Tentativi tentativi: Schermo.Tentativi {}
+    readonly property int errori: blocco.tentativi.errori
     property string avviso: ""
 
     // ── La pausa che cresce ──────────────────────────────────────────────
@@ -82,15 +85,8 @@ Item {
     // lasciata accesa. Cresce e si ferma a otto secondi, perché oltre quella
     // soglia dà fastidio a chi la password la sa e non ferma di più chi non
     // la sa (a quel punto tanto vale spegnere il computer e portarselo via).
-    readonly property int pausa: blocco.errori === 0 ? 0
-        : Math.min(8000, 500 * Math.pow(2, blocco.errori - 1))
-    property bool inPausa: false
-
-    Timer {
-        id: attesa
-        interval: blocco.pausa
-        onTriggered: blocco.inPausa = false
-    }
+    readonly property int pausa: blocco.tentativi.pausa
+    readonly property bool inPausa: blocco.tentativi.inPausa
 
     PamContext {
         id: pam
@@ -104,15 +100,12 @@ Item {
         onCompleted: function (result) {
             blocco.inCorso = false;
             if (result === PamResult.Success) {
-                blocco.errori = 0;
+                blocco.tentativi.giusto();
                 blocco.avviso = "";
                 blocco.sbloccato();
                 return;
             }
-            blocco.errori++;
-            blocco.inPausa = blocco.pausa > 0;
-            if (blocco.inPausa)
-                attesa.restart();
+            blocco.tentativi.sbagliato();
             campo.text = "";
             blocco.avviso = result === PamResult.MaxTries
                 ? (blocco.it ? "Troppi tentativi. Aspetta un momento."

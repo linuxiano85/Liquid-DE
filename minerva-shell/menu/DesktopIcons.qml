@@ -469,6 +469,7 @@ Item {
         // Un launcher non si «apre»: si lancia. Il demone legge il .desktop
         // e ne esegue il comando, come per le voci del menu.
         if (icons.isLauncher(voce.name)) {
+            icons._lanciato = voce.path;
             Core.Ipc.launchDesktop(voce.path);
             return;
         }
@@ -506,6 +507,10 @@ Item {
     /// `shell.qml`, dentro una finestra di sovrapposizione vera.
     signal apriConRichiesto(string percorso, bool eseguibile)
 
+    /// L'ultimo lanciatore aperto da qui, per riconoscere la risposta del
+    /// demone quando lo rifiuta (vedi `onFileResultReceived`).
+    property string _lanciato: ""
+
     property var rendiEseguibile: Core.Exec {}
 
     /// Il `chmod +x`, chiesto dal pannello che ora sta nella shell.
@@ -516,6 +521,26 @@ Item {
     Connections {
         target: Core.Ipc
         function onFileResultReceived(result) {
+            // ── Un lanciatore rifiutato si dice ─────────────────────────
+            //
+            // Dal 30 settembre 2026 il demone non lancia un `.desktop` di cui
+            // non si fida (senza il permesso di esecuzione, fuori dalle
+            // cartelle delle applicazioni: il modo classico di far partire
+            // un comando travestito da icona scaricata). Lo dice con
+            // `fs_result {ok:false, error, path}`, e qui la risposta non la
+            // leggeva nessuno: doppio clic sull'icona, e niente. Il gestore
+            // file mostra lo stesso errore nel suo riquadro dei problemi.
+            //
+            // Solo se il lanciatore l'ha aperto QUESTA scrivania: ce n'è una
+            // per schermo, e il gestore file ascolta lo stesso canale.
+            if (result.ok === false && result.error && result.path
+                    && result.path === icons._lanciato) {
+                icons._lanciato = "";
+                Core.Notifications.daMinerva(
+                    Core.Strings.lang === "it" ? "Non l'ho aperto" : "Not opened",
+                    String(result.error));
+                return;
+            }
             if (result.needsChoice !== true)
                 return;
             var paths = result.paths || [];
