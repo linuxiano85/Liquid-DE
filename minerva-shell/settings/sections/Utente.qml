@@ -827,14 +827,39 @@ Page {
         // La password va su STDIN, non fra gli argomenti: la riga di comando
         // di un processo la può leggere chiunque, in `/proc`. Vedi
         // `scripts/minerva-utente`.
-        cambio.command = ["sh", "-c",
-            'printf "%s\\n" "$1" | pkexec "$2" password "$3" 2>&1',
-            "sh", nuova.text, page.comandoUtente, page.io.nome];
+        //
+        // ── E su stdin DAVVERO, non come argomento di `sh` ──────────────
+        //
+        // Fino al 30 settembre 2026 qui c'era `printf "%s\n" "$1" | pkexec
+        // …` con la password passata come `$1` di `sh -c`: il commento qui
+        // sopra diceva stdin, ma la password stava nella riga di comando di
+        // `sh`, leggibile in `/proc/<pid>/cmdline` da chiunque per tutto il
+        // tempo in cui polkit aspettava la finestrella. Adesso `sh` non la
+        // vede nemmeno: la scrive il `Process` sul suo stdin appena parte, e
+        // `exec pkexec` lo eredita così com'è. `sh` resta solo per il `2>&1`,
+        // che porta i messaggi d'errore dello script nel riquadro.
+        if (cambio.running)
+            return;
+        cambio._daScrivere = nuova.text;
+        cambio.stdinEnabled = true;
+        cambio.command = ["sh", "-c", 'exec pkexec "$1" password "$2" 2>&1',
+                          "sh", page.comandoUtente, page.io.nome];
         cambio.running = true;
     }
 
     Process {
         id: cambio
+        /// La password nuova, solo fra il lancio e la scrittura su stdin.
+        property string _daScrivere: ""
+        onStarted: {
+            cambio.write(cambio._daScrivere + "\n");
+            cambio._daScrivere = "";
+            // Chiudere stdin (Qt scrive prima quel che è in attesa): lo
+            // script legge una riga sola, e un canale lasciato aperto è un
+            // posto in più dove la password resterebbe ad aspettare.
+            cambio.stdinEnabled = false;
+        }
+        onExited: cambio._daScrivere = ""
         stdout: StdioCollector {
             onStreamFinished: {
                 var t = text.trim();
