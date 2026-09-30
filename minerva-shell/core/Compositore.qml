@@ -139,6 +139,11 @@ Singleton {
         // pagato una volta. Vedi `compositore/src/canale.h`.
         onConnectedChanged: {
             comp._inCorso = [];
+            if (!canale.connected) {
+                comp._riprovaFraPoco();
+                return;
+            }
+            comp._apertoDa = Date.now();
             if (canale.connected) {
                 // Tre nomi, non tutto: `scrivania` perché da quel numero
                 // dipende quali barre del titolo si disegnano, `scorciatoia`
@@ -194,6 +199,45 @@ Singleton {
                 comp._risposta(t);
             }
         }
+    }
+
+    // ── Riprovare, ma non di corsa ───────────────────────────────────────
+    //
+    // Il `Socket` di Quickshell si ricollega DA SOLO appena il canale cade,
+    // subito e senza pausa. Di solito va benissimo; ma il compositore accetta
+    // al più sedici collegamenti (`CLIENTI_MAX` in `compositore/src/canale.c`)
+    // e al diciassettesimo risponde «no troppi collegamenti» e chiude. Con sei
+    // app tenute pronte e qualche finestra aperta, una shell che riparte
+    // entrava in un giro stretto — collega, rifiutato, ricollega — e a ogni
+    // giro rimandava `ascolta` e chiedeva di nuovo le scorciatoie al demone:
+    // tre processi al cento per cento, e una shell senza canale che non
+    // sentiva più `inattivo`, cioè non bloccava più lo schermo da sola.
+    // Trovato in revisione il 30 settembre 2026.
+    //
+    // Adesso chi cade si stacca (`connected = false` ferma il ricollegamento
+    // automatico) e riprova dopo un'attesa che raddoppia fino a cinque
+    // secondi. Un canale rimasto aperto a lungo che cade riparte dall'attesa
+    // breve: è il compositore che si riavvia, non uno che ci rifiuta.
+    //
+    // Il Timer è a scatto singolo e parte solo quando il canale cade: la
+    // porta non si sveglia da sola (la regola è in `porta_compositore_test`,
+    // cambiata il 1º ottobre 2026 proprio per lasciar passare questo).
+    property double _apertoDa: 0
+    property int _attesa: 250
+
+    function _riprovaFraPoco() {
+        if (!comp.nostro)
+            return;
+        var visse = comp._apertoDa > 0 ? Date.now() - comp._apertoDa : 0;
+        comp._apertoDa = 0;
+        comp._attesa = visse > 10000 ? 250 : Math.min(5000, comp._attesa * 2);
+        canale.connected = false;
+        comp._riprova.interval = comp._attesa;
+        comp._riprova.restart();
+    }
+
+    property Timer _riprova: Timer {
+        onTriggered: if (comp.nostro) canale.connected = true
     }
 
     /// La riga da mandare, come stringa. A parte dal mandarla, per due motivi
@@ -1717,24 +1761,21 @@ Singleton {
     /// cursori si costruisce con entrambe e non c'è modo di cambiarne una
     /// lasciando l'altra.
     ///
-    /// ── Un tema con uno spazio nel nome ──────────────────────────────────
+    /// ── Prima la misura, poi il tema ─────────────────────────────────────
     ///
-    /// Il compositore legge `cursore <tema> <misura>` a PAROLE: «Bibata
+    /// Il compositore leggeva `cursore <tema> <misura>` a PAROLE: «Bibata
     /// Modern Ice» arrivava come tema «Bibata» e misura «Modern» — cioè 24,
-    /// qualunque misura si fosse scelta, e un tema che non esiste (30
-    /// settembre 2026). Finché il compositore non legge il tema come resto
-    /// della riga, un nome con spazi non si manda: si ripiega su Adwaita,
-    /// che c'è ovunque, e almeno la MISURA — quella che serve a chi vede
-    /// poco — arriva giusta.
+    /// qualunque misura si fosse scelta, e un tema che non esiste. Dal 1º
+    /// ottobre 2026 legge anche `cursore <misura> <tema…>`, col tema fino a
+    /// fine riga, spazi compresi (`compositore/src/main.c`, verbo `cursore`):
+    /// qui si manda quella forma, e il nome arriva intero.
     function cursore(tema, misura) {
-        var t = String(tema);
-        if (/\s/.test(t)) {
-            console.warn("[MINERVA][Compositore] il tema del puntatore «" + t
-                         + "» ha uno spazio nel nome e il compositore non sa "
-                         + "leggerlo: uso Adwaita.");
-            t = "Adwaita";
-        }
-        comp._nostro("cursore", [t, String(misura)]);
+        // La misura dev'essere fatta di sole cifre: è così che il compositore
+        // distingue la forma nuova da quella vecchia. E niente a-capo nel
+        // tema: la riga finisce lì, e il resto diventerebbe un altro comando.
+        var mis = Math.round(Number(misura));
+        comp._nostro("cursore", [String(mis > 0 ? mis : 24),
+                                 String(tema).replace(/[\r\n]+/g, " ").trim()]);
     }
 
     /// Chiude la sessione grafica.

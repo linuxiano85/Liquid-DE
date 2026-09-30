@@ -10870,9 +10870,39 @@ void minerva_comando(struct minerva *m, const char *riga,
 	// Il vecchio gestore si butta DOPO aver messo su il nuovo: buttarlo
 	// prima vorrebbe dire un istante con il cursore che punta a un tema
 	// distrutto, e quell'istante è quando si ridisegna.
+	//
+	// ── Due forme, e la nuova regge i nomi con gli spazi ─────────────────
+	//
+	//     cursore <misura> <tema fino a fine riga>    (dal 1º ottobre 2026)
+	//     cursore <tema> <misura>                     (quella di prima)
+	//
+	// Leggere il tema come PAROLA spezzava «Bibata Modern Ice» in tema
+	// «Bibata» e misura «Modern» — cioè 24, qualunque misura si fosse
+	// scelta, e un tema che non esiste. Nella forma nuova la misura viene
+	// prima e il tema è tutto il resto, spazi compresi, come il nome in
+	// `dispositivo`. Si riconoscono dalla prima parola: una misura è fatta
+	// solo di cifre, e un tema di sole cifre non esiste.
 	if (strcmp(verbo, "cursore") == 0) {
-		char *tema = parola(&resto);
-		char *mis = parola(&resto);
+		char *prima = parola(&resto);
+		char *tema = NULL;
+		char *mis = NULL;
+		bool solo_cifre = prima != NULL && *prima != '\0';
+		for (const char *c = prima; solo_cifre && *c != '\0'; c++)
+			if (!isdigit((unsigned char)*c))
+				solo_cifre = false;
+		if (solo_cifre) {
+			mis = prima;
+			while (*resto == ' ' || *resto == '\t')
+				resto++;
+			size_t l = strlen(resto);
+			while (l > 0 && (resto[l - 1] == ' ' || resto[l - 1] == '\t'
+					|| resto[l - 1] == '\r' || resto[l - 1] == '\n'))
+				resto[--l] = '\0';
+			tema = resto;
+		} else {
+			tema = prima;
+			mis = parola(&resto);
+		}
 		int misura = mis != NULL ? atoi(mis) : 24;
 		if (misura <= 0 || misura > 512)
 			misura = 24;

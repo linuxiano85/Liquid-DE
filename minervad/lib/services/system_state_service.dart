@@ -105,7 +105,11 @@ int potenzaDaProcNetWireless(String testo) {
 class SystemStateService {
   final EventBus _eventBus;
 
-  SystemStateService(this._eventBus);
+  /// [scriviLuce] serve alle prove: di serie è `brightnessctl`.
+  SystemStateService(this._eventBus, {Future<void> Function(int)? scriviLuce})
+      : _scriviLuce = scriviLuce;
+
+  final Future<void> Function(int)? _scriviLuce;
 
   // ── Lo stato ─────────────────────────────────────────────────────────────
 
@@ -557,11 +561,45 @@ class SystemStateService {
     _riverifica();
   }
 
+  // ── La luminosità: una scrittura alla volta, e vince l'ultima ──────────
+  //
+  // Il messaggio si gestisce senza aspettare il precedente (il server non
+  // mette in fila i messaggi di un client), e ogni `setBrightness` lanciava
+  // il suo `brightnessctl`. Trascinando il cursore ne partivano decine in
+  // parallelo, e la luminosità finale era quella del processo che FINIVA per
+  // ultimo, non di quello lanciato per ultimo: si lasciava il dito al 30% e
+  // lo schermo restava al 55%. Trovato in revisione il 30 settembre 2026.
+  //
+  // Adesso gira un `brightnessctl` alla volta. Chi arriva mentre uno gira
+  // lascia solo il suo valore, che prende il posto di quello lasciato da chi
+  // era arrivato prima: finita la scrittura in corso, parte l'ULTIMO valore
+  // chiesto, e i valori di mezzo — che nessuno vuole più — non partono. Lo
+  // stato annunciato invece cambia subito, a ogni chiamata: il cursore delle
+  // altre finestre segue il dito come prima.
+  int? _luceVoluta;
+  bool _luceInCorso = false;
+
   Future<void> setBrightness(int percento) async {
     final v = percento.clamp(1, 100);
     _brightness = v;
     _eventBus.publish(MinervaEvent(type: 'system_state', payload: state));
-    await _sh('brightnessctl -q set $v% 2>/dev/null');
+    _luceVoluta = v;
+    if (_luceInCorso) return; // la raccoglie chi sta già scrivendo
+    _luceInCorso = true;
+    try {
+      while (_luceVoluta != null) {
+        final daScrivere = _luceVoluta!;
+        _luceVoluta = null;
+        final scrivi = _scriviLuce;
+        if (scrivi != null) {
+          await scrivi(daScrivere);
+        } else {
+          await _sh('brightnessctl -q set $daScrivere% 2>/dev/null');
+        }
+      }
+    } finally {
+      _luceInCorso = false;
+    }
   }
 
   void _riverifica() {
