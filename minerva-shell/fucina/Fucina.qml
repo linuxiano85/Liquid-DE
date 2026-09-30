@@ -181,6 +181,13 @@ FloatingWindow {
         };
     }
 
+    function _stesseScelte(altre) {
+        var mie = finestra.scelte();
+        for (var k in mie)
+            if (JSON.stringify(mie[k]) !== JSON.stringify(altre[k])) return false;
+        return true;
+    }
+
     /// Un modulo del rilievo si tiene o no. Quello di serie si toglie; un
     /// candidato si aggiunge. Gli essenziali non arrivano qui: la casella è
     /// bloccata.
@@ -274,6 +281,7 @@ FloatingWindow {
                                      + "trattini (da 1 a 24), senza trattini ai lati.";
             return;
         }
+        finestra.ricettaErrore = "";
         Core.Ipc.fucinaCalcola(finestra.scelte());
     }
 
@@ -384,6 +392,13 @@ FloatingWindow {
 
         function onFucinaRicetta(r) {
             if (!r) return;
+            // ── Una risposta vecchia non copre una nuova ────────────────────
+            //
+            // Due richieste in volo (si è cliccato mentre la prima tornava)
+            // possono tornare in qualunque ordine. Il piano che si mostra deve
+            // essere quello delle scelte che si vedono: se la risposta porta
+            // scelte diverse da quelle di adesso, ne sta arrivando un'altra.
+            if (r.ok === true && r.scelte && !finestra._stesseScelte(r.scelte)) return;
             if (r.ok !== true) {
                 finestra.ricettaErrore = String(r.errore || "Non riesco a fare il piano.");
                 return;
@@ -633,13 +648,18 @@ FloatingWindow {
         }
 
         Row {
+            id: riassunto
             anchors.left: parent.left
             anchors.leftMargin: Theme.Effects.space5
+            anchors.right: azioni.left
+            anchors.rightMargin: Theme.Effects.space4
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.Effects.space2
+            clip: true
             visible: !finestra.chiedoConferma
 
             Text {
+                id: numero
                 anchors.verticalCenter: parent.verticalCenter
                 text: finestra.ricetta ? String(finestra.ricetta.quanti) : "—"
                 color: Theme.Colors.accent
@@ -650,6 +670,7 @@ FloatingWindow {
             }
 
             Text {
+                id: descrizione
                 anchors.verticalCenter: parent.verticalCenter
                 text: {
                     var tot = finestra.rilievo && finestra.rilievo.moduli
@@ -662,9 +683,14 @@ FloatingWindow {
                 font.pixelSize: Theme.Typography.sizeSM
             }
 
+            // L'errore prende lo spazio che resta, e si taglia: passare sotto
+            // «Compila» vorrebbe dire non leggerlo e non poter premere.
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: finestra.ricettaErrore !== ""
+                width: Math.max(0, riassunto.width - numero.implicitWidth
+                                   - descrizione.implicitWidth - Theme.Effects.space2 * 2)
+                elide: Text.ElideRight
                 text: "· " + finestra.ricettaErrore
                 color: Theme.Colors.warning
                 font.family: Theme.Typography.fontDisplay
@@ -673,6 +699,7 @@ FloatingWindow {
         }
 
         Row {
+            id: azioni
             anchors.right: parent.right
             anchors.rightMargin: Theme.Effects.space5
             anchors.verticalCenter: parent.verticalCenter

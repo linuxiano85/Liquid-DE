@@ -165,7 +165,7 @@ Item {
 
                         Text {
                             visible: String(modelData.quando || "") !== ""
-                            text: "Compilato il " + String(modelData.quando).replace("T", " alle ").substring(0, 25)
+                            text: "Compilato il " + String(modelData.quando).substring(0, 19).replace("T", " alle ")
                                   + (modelData.moduli ? " · " + modelData.moduli + " moduli" : "")
                             color: Theme.Colors.textFaint
                             font.family: Theme.Typography.fontDisplay

@@ -402,9 +402,11 @@ Ricetta calcola(Rilievo r, Scelte s, Cartelle c,
         soloLaPrimaVolta: true),
     if (s.sorgente == TipoSorgente.cachyos)
       Passo('patch', 'Applica le patch di CachyOS',
-          'La serie base di CachyOS e lo scheduler BORE, per il kernel '
-              '${serieDi(s.versione)}. Prima si prova a secco: se una non si '
-              'applica, l\'albero resta pulito.',
+          'Lo scheduler BORE di CachyOS e, dove la pubblicano ancora (fino '
+              'alla 6.17), la loro serie base, per il kernel '
+              '${serieDi(s.versione)}. Ognuna si prova prima a secco: se una non '
+              'si applica ci si ferma, e la volta dopo l\'albero si rifà da '
+              'capo.',
           soloLaPrimaVolta: true),
     Passo('base',
         s.base == 'in-uso' && r.configPartenza.isNotEmpty

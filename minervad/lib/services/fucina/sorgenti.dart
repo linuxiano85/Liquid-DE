@@ -11,9 +11,9 @@ import 'ricetta.dart';
 ///
 /// Giacomo usava «sia i repository di Linux che quelli di CachyOS». Qui non
 /// sono due alberi separati: è **un albero solo** — l'archivio ufficiale da
-/// kernel.org — e, se si sceglie CachyOS, la loro serie di patch applicata
-/// sopra. È esattamente come costruisce il proprio kernel CachyOS nel suo
-/// PKGBUILD, e vuol dire una sola strada da scaricare, controllare e
+/// kernel.org — e, se si sceglie CachyOS, le loro patch applicate sopra: lo
+/// scheduler BORE sempre, la serie base dove CachyOS la pubblica ancora
+/// (fino alla 6.17). Una sola strada da scaricare, controllare e
 /// ricompilare.
 ///
 /// ── Che cosa garantisce la somma di controllo, e che cosa no ────────────
@@ -48,15 +48,20 @@ class Sorgenti {
       'https://cdn.kernel.org/pub/linux/kernel/v${versione.split('.').first}.x/'
       'sha256sums.asc');
 
-  /// Le patch di CachyOS per una serie, nell'ordine in cui si applicano: la
-  /// serie base (che contiene già i loro miglioramenti di sistema) e lo
-  /// scheduler BORE, che è quello del loro kernel di serie.
-  static List<Uri> patchCachyos(String serie) => [
-        Uri.parse('https://raw.githubusercontent.com/CachyOS/kernel-patches/'
-            'master/$serie/all/0001-cachyos-base-all.patch'),
-        Uri.parse('https://raw.githubusercontent.com/CachyOS/kernel-patches/'
-            'master/$serie/sched/0001-bore-cachy.patch'),
-      ];
+  /// La serie base di CachyOS per una serie del kernel. **Può non
+  /// esserci**: fino alla 6.17 CachyOS la pubblicava in
+  /// `kernel-patches/<serie>/all/`, dalla 6.18 in quella cartella non c'è più
+  /// (trovato il 30 settembre 2026 guardando il loro repository, dopo che la
+  /// prima versione della Fucina la dava per scontata).
+  static Uri baseCachyos(String serie) => Uri.parse(
+      'https://raw.githubusercontent.com/CachyOS/kernel-patches/master/'
+      '$serie/all/0001-cachyos-base-all.patch');
+
+  /// Lo scheduler BORE nella versione di CachyOS: c'è per tutte le serie, ed
+  /// è quello del loro kernel di serie.
+  static Uri boreCachyos(String serie) => Uri.parse(
+      'https://raw.githubusercontent.com/CachyOS/kernel-patches/master/'
+      '$serie/sched/0001-bore-cachy.patch');
 
   /// Le versioni che si possono scegliere, con quale sorgente ha ognuna.
   ///
@@ -83,11 +88,17 @@ class Sorgenti {
         'versioni': <dynamic>[],
       };
     }
+    // Due domande per serie, in parallelo: BORE (senza, «CachyOS» non vuol
+    // dire niente) e la serie base (che dalla 6.18 non si trova più lì).
     await Future.wait([
-      for (final v in fuori)
-        esiste(patchCachyos(serieDi('${v['versione']}')).first)
+      for (final v in fuori) ...[
+        esiste(boreCachyos(serieDi('${v['versione']}')))
             .then((si) => v['cachyos'] = si)
             .catchError((_) => v['cachyos'] = false),
+        esiste(baseCachyos(serieDi('${v['versione']}')))
+            .then((si) => v['cachyosBase'] = si)
+            .catchError((_) => v['cachyosBase'] = false),
+      ],
     ]);
     return {'ok': true, 'versioni': fuori};
   }
@@ -108,6 +119,7 @@ class Sorgenti {
         'finita': r['iseol'] == true,
         'data': (r['released'] is Map) ? '${r['released']['isodate']}' : '',
         'cachyos': false,
+        'cachyosBase': false,
       });
     }
     return fuori;

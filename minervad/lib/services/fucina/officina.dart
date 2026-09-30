@@ -482,14 +482,24 @@ class Officina {
 
   Future<String?> _patch(String versione, String albero) async {
     final serie = serieDi(versione);
-    for (final u in Sorgenti.patchCachyos(serie)) {
+    // La serie base prima, se c'è; BORE poi, e senza BORE ci si ferma.
+    final daApplicare = <Uri>[];
+    if (await sorgenti.esiste(Sorgenti.baseCachyos(serie))) {
+      daApplicare.add(Sorgenti.baseCachyos(serie));
+    } else {
+      _riga('CachyOS non pubblica più la serie base per il $serie (dalla '
+          '6.18 non c\'è): applico solo lo scheduler BORE.');
+    }
+    daApplicare.add(Sorgenti.boreCachyos(serie));
+
+    for (final u in daApplicare) {
       final nome = 'cachyos-$serie-${u.pathSegments.last}';
       final f = File('$lavoro/archivi/$nome');
       _riga('Scarico ${u.pathSegments.last}.');
       final e = await scarica(u, f, annullato: () => _annullato);
       if (e != null) {
-        return 'CachyOS non ha (o non ha ancora) le patch per la serie '
-            '$serie: $e';
+        return 'CachyOS non ha (o non ha ancora) ${u.pathSegments.last} per '
+            'la serie $serie: $e';
       }
       final prova =
           await _lancia(['patch', '-Np1', '--dry-run', '-i', f.path], albero);

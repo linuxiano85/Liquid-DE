@@ -29,6 +29,10 @@ Item {
 
     readonly property bool cachyosSi: pagina.voceVersione !== null
                                       && pagina.voceVersione.cachyos === true
+    /// La serie base di CachyOS: fino alla 6.17 sì, dalla 6.18 in poi nel
+    /// loro repository non c'è più, e resta solo BORE.
+    readonly property bool cachyosBase: pagina.voceVersione !== null
+                                        && pagina.voceVersione.cachyosBase === true
 
     // ── A sinistra: le scelte ────────────────────────────────────────────
 
@@ -68,8 +72,10 @@ Item {
                 Etichetta {
                     cliccabile: true
                     scelta: pagina.f.sorgente === "cachyos"
-                    testo: "CachyOS" + (pagina.voceVersione !== null && !pagina.cachyosSi
-                                        ? " · niente patch per questa serie" : "")
+                    testo: "CachyOS" + (pagina.voceVersione === null ? ""
+                                        : !pagina.cachyosSi ? " · niente patch per questa serie"
+                                        : pagina.cachyosBase ? " · base e BORE"
+                                        : " · solo BORE")
                     tono: pagina.f.sorgente === "cachyos" && pagina.voceVersione !== null
                           && !pagina.cachyosSi ? "attenzione" : ""
                     onPremuta: pagina.f.sorgente = "cachyos"
@@ -79,11 +85,14 @@ Item {
             Text {
                 width: parent.width
                 wrapMode: Text.WordWrap
-                text: pagina.f.sorgente === "cachyos"
-                      ? "L'archivio ufficiale con sopra la serie di patch di CachyOS e lo "
-                        + "scheduler BORE, come fa il loro kernel. Le patch seguono l'ultima "
-                        + "versione di ogni serie."
-                      : "L'archivio ufficiale di kernel.org, così com'è."
+                text: pagina.f.sorgente !== "cachyos"
+                      ? "L'archivio ufficiale di kernel.org, così com'è."
+                      : (pagina.cachyosBase
+                         ? "L'archivio ufficiale con sopra la serie base di CachyOS e lo "
+                           + "scheduler BORE. Le patch seguono l'ultima versione di ogni serie."
+                         : "L'archivio ufficiale con sopra lo scheduler BORE di CachyOS. La "
+                           + "loro serie base, per questa versione, non la pubblicano più nel "
+                           + "repository delle patch: il kernel non sarà uguale al loro.")
                 color: Theme.Colors.textFaint
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeXS
@@ -306,6 +315,7 @@ Item {
                 }
 
                 Repeater {
+                    id: ripetiPassi
                     model: pagina.ric ? pagina.ric.passi : []
 
                     Rectangle {
@@ -408,6 +418,14 @@ Item {
             }
         }
 
+        // Il passo che sta lavorando resta sotto gli occhi: la compilazione è
+        // il decimo passo, e senza questo il piano mostrerebbe i primi
+        // quattro — già finiti — per tutta la durata.
+        Connections {
+            target: pagina.f
+            function onPassiChanged() { Qt.callLater(pagina._mostraPassoAttivo); }
+        }
+
         Ui.Scorrimento {
             bersaglio: piano
             anchors { right: piano.right; top: piano.top; bottom: piano.bottom }
@@ -424,6 +442,19 @@ Item {
             stato: pagina.f._statoDiario()
             avanzamento: pagina.f.compilando && pagina.f.attesi > 0
                          ? Math.min(1, pagina.f.fatti / pagina.f.attesi) : -1
+        }
+    }
+
+    function _mostraPassoAttivo() {
+        if (!pagina.ric) return;
+        var l = pagina.ric.passi;
+        for (var i = 0; i < l.length; i++) {
+            if (pagina.f.passi[l[i].id] !== "via") continue;
+            var voce = ripetiPassi.itemAt(i);
+            if (!voce) return;
+            var massimo = Math.max(0, piano.contentHeight - piano.height);
+            piano.contentY = Math.max(0, Math.min(massimo, voce.y - Theme.Effects.space2));
+            return;
         }
     }
 
