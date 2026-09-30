@@ -44,6 +44,9 @@ import '../services/bluetooth_pairing_service.dart';
 import '../services/tema_icone_service.dart';
 import '../services/foto_service.dart';
 import 'canale_segreto.dart';
+import 'lanciatori.dart';
+import 'righe.dart';
+import '../core/salvataggio.dart';
 import '../core/ambiente.dart';
 import '../core/minerva_paths.dart';
 
@@ -506,6 +509,13 @@ class WebSocketServer {
       final nome = '${e['name'] ?? ''}';
       if (!nome.endsWith('.desktop')) continue;
       if (++fatti > 60) return;
+      // Nome e icona dichiarati SOLO per i lanciatori di cui ci si fida —
+      // quelli che `launch_desktop` lancerebbe senza chiedere. Altrove un
+      // `.desktop` scaricato può chiamarsi «Fattura_2026.pdf» con l'icona di
+      // un PDF, ed è esattamente così che si fa aprire a qualcuno un
+      // programma (30 settembre 2026). Si vede il nome del file, che non può
+      // mentire. Vedi `ipc/lanciatori.dart`.
+      if (await Lanciatori.percheNo('${e['path']}') != null) continue;
       try {
         final app = await _appScanner.parseFromPath('${e['path']}');
         if (app == null) continue;
@@ -719,7 +729,17 @@ class WebSocketServer {
     this._finestre,
     this._processi, {
     String? socket,
-  }) : _percorsoSocket = socket ?? socketConfigurato;
+    String? fileSegreto,
+  })  : _percorsoSocket = socket ?? socketConfigurato,
+        // ignore: prefer_initializing_formals
+        _fileSegreto = fileSegreto;
+
+  /// Dove scrivere la parola d'ordine, se non nel posto di sempre
+  /// (`CanaleSegreto.candidati`). Serve alle prove che accendono il server
+  /// vero: senza, scriverebbero nel file del canale della sessione di chi le
+  /// lancia — `_nonRubareIlPosto` le fermerebbe, ma una prova non deve
+  /// nemmeno arrivarci vicino.
+  final String? _fileSegreto;
 
   /// Avvia il server e si mette in ascolto degli eventi del bus per inoltrarli ai client.
   Future<void> start() async {
@@ -753,16 +773,34 @@ class WebSocketServer {
       // Il segreto DOPO aver preso il socket, perché nel file ci va anche il
       // percorso; e prima di accettare chiunque, perché un demone che ascolta
       // e non ha ancora una parola d'ordine è un demone che non la chiede.
-      _segreto = await CanaleSegreto.scriviNuovo(socket: _percorsoSocket);
+      _segreto = await CanaleSegreto.scriviNuovo(
+          percorsoFile: _fileSegreto, socket: _percorsoSocket);
       print('[MINERVA][IPC][OK] Indirizzo del canale in '
           '${CanaleSegreto.scrittoIn} (sessione «${CanaleSegreto.sessione()}»)');
 
       _server!.listen(_handleNewClient);
 
       // Ascolta tutti gli eventi del bus e li trasmette ai client interessati
+      //
+      // ── Con una rete sotto ─────────────────────────────────────────────
+      //
+      // Un'eccezione qui dentro non torna a nessuno: va alla zona, e in
+      // `bin/minervad.dart` tutto ciò che non è un socket vuol dire `exit(1)`.
+      // Il 30 settembre 2026 bastava un `subscribe` con un numero nella lista
+      // perché il primo evento successivo — lo stato di sistema, ogni dodici
+      // secondi — facesse uscire il demone; e dopo cinque uscite in due minuti
+      // il guardiano smette di rialzarlo, cioè niente dock e niente menù fino
+      // al riavvio della sessione. La causa è riparata in `subscribe`; questa
+      // è la rete per la prossima.
       _eventBusSubscription = _eventBus.stream.listen((event) {
-        if (event.type == 'settings_changed') _applyIconThemeFromSettings();
-        _broadcastEvent(event);
+        try {
+          if (event.type == 'settings_changed') _applyIconThemeFromSettings();
+          _broadcastEvent(event);
+        } catch (e, dove) {
+          print('[MINERVA][IPC][ERRORE] Non sono riuscito a inoltrare '
+              '«${event.type}»: $e');
+          print(dove);
+        }
       });
 
       // L'avanzamento dei trasferimenti va a TUTTI i client, senza passare dal
@@ -836,8 +874,19 @@ class WebSocketServer {
       await cartella.create(recursive: true);
       await Process.run('chmod', ['700', cartella.path]);
     }
+    await _cartellaNostra(cartella);
 
     if (await file.exists()) {
+      // Si toglie solo un SOCKET rimasto per terra. Un file vero con quel
+      // nome — un `MINERVA_IPC_SOCKET` scritto male che punta a un documento —
+      // non è un avanzo nostro, e cancellarlo sarebbe distruggere il lavoro
+      // di qualcuno per un errore di battitura.
+      final tipo =
+          await FileSystemEntity.type(_percorsoSocket, followLinks: false);
+      if (tipo != FileSystemEntityType.unixDomainSock) {
+        throw StateError('$_percorsoSocket esiste e non è un socket: non lo '
+            'tocco. Scegli un altro percorso con MINERVA_IPC_SOCKET.');
+      }
       if (await _rispondeQualcuno(_percorsoSocket)) {
         throw StateError(
             'C\'è già un minervad in ascolto su $_percorsoSocket. Due demoni '
@@ -876,6 +925,34 @@ class WebSocketServer {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// La cartella del socket deve essere NOSTRA e chiusa agli altri.
+  ///
+  /// Senza `XDG_RUNTIME_DIR` il socket finisce in `/tmp/liquid-de-<utente>`
+  /// (vedi `MinervaPaths.runtime`), e fino al 30 settembre 2026 se quella
+  /// cartella c'era già non si guardava di chi fosse. Un altro utente poteva
+  /// crearla prima, aperta a tutti, e poi spostare il nostro socket e mettere
+  /// il suo al suo posto: la shell, che trova l'indirizzo nel file del canale,
+  /// si sarebbe collegata a lui e gli avrebbe detto la parola d'ordine — e
+  /// dopo, i documenti salvati, le password degli account, tutto.
+  ///
+  /// Stessa regola che `CanaleSegreto` applica alla cartella del segreto: non
+  /// un collegamento, del nostro utente, non scrivibile da gruppo e altri.
+  static Future<void> _cartellaNostra(Directory cartella) async {
+    final tipo = await FileSystemEntity.type(cartella.path, followLinks: false);
+    final proprietario =
+        await Process.run('stat', ['-c', '%u', '--', cartella.path]);
+    final io = await Process.run('id', ['-u']);
+    if (tipo == FileSystemEntityType.link ||
+        proprietario.exitCode != 0 ||
+        io.exitCode != 0 ||
+        '${proprietario.stdout}'.trim() != '${io.stdout}'.trim() ||
+        ((await cartella.stat()).mode & 0x12) != 0) {
+      throw StateError('La cartella del socket (${cartella.path}) non è una '
+          'cartella privata di questo utente: non ci ascolto. Dev\'essere '
+          'tua e non scrivibile da altri (chmod 700).');
     }
   }
 
@@ -925,18 +1002,18 @@ class WebSocketServer {
     // diventa `\n`, due caratteri. Quindi una riga è sempre esattamente un
     // messaggio.
     //
-    // `utf8.decoder` prima di `LineSplitter` e non dopo, perché un carattere
-    // accentato può essere spezzato a metà fra due pezzi: decodificare pezzo
-    // per pezzo lo romperebbe. Il decodificatore di Dart tiene i byte a metà
-    // e li ricongiunge da sé.
-    socket
-        .cast<List<int>>()
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen(
-      (riga) {
-        if (riga.isNotEmpty) _handleClientMessage(client, riga);
-      },
+    // Il taglio lo fa `TagliaRighe` e non più `LineSplitter`, che non aveva
+    // un tetto: vedi `ipc/righe.dart` per il gigabyte del 30 settembre 2026.
+    // Si taglia sui byte e si decodifica una riga intera alla volta, così un
+    // carattere accentato spezzato fra due pezzi si ricongiunge da sé.
+    final righe = TagliaRighe();
+    socket.listen(
+      (pezzo) => righe.aggiungi(
+        pezzo,
+        () => client.autenticato ? rigaMassima : rigaMassimaPrimaDelSaluto,
+        (riga) => _rigaArrivata(client, riga),
+        () => _rigaTroppoLunga(client),
+      ),
       onError: (err) {
         // ── Una finestra che si chiude non è un errore ────────────────
         //
@@ -968,9 +1045,60 @@ class WebSocketServer {
         _removeClient(client);
       },
       onDone: () {
+        // Come faceva `LineSplitter`: l'ultima riga senza a-capo si serve lo
+        // stesso — adesso però non può essere più lunga del tetto.
+        final ultima = righe.resto();
+        if (ultima.isNotEmpty) _rigaArrivata(client, ultima);
         _removeClient(client);
       },
     );
+  }
+
+  /// Il tetto di una riga prima del saluto. Un `ciao` è un centinaio di byte:
+  /// sessantaquattro chilobyte sono seicento volte il necessario, e sono
+  /// comunque l'unica memoria che un estraneo può farci tenere.
+  static const int rigaMassimaPrimaDelSaluto = 64 * 1024;
+
+  /// Il tetto dopo il saluto. Il messaggio più grosso che si manda davvero è
+  /// un documento dentro `fs_write` o `radice_scrivi`: l'editor apre fino a
+  /// 8 MB, e il JSON con le sue barre rovesciate può gonfiarlo. Trentadue
+  /// mega lo lasciano passare e fermano chi manda un gigabyte.
+  static const int rigaMassima = 32 * 1024 * 1024;
+
+  void _rigaArrivata(WebSocketClientConnection client, List<int> byte) {
+    // Chi è già stato tolto — un saluto sbagliato, una riga di troppo — non
+    // viene più servito, nemmeno per le righe arrivate nello stesso pezzo.
+    if (!_clients.contains(client)) return;
+    final String riga;
+    try {
+      riga = utf8.decode(byte);
+    } on FormatException catch (e) {
+      // Come prima, quando era il flusso a rompersi: chi manda byte che non
+      // sono UTF-8 non sta parlando il nostro protocollo.
+      print('[MINERVA][IPC][ERRORE] Un client ha mandato una riga che non è '
+          'UTF-8: $e');
+      _removeClient(client);
+      return;
+    }
+    if (riga.isNotEmpty) _handleClientMessage(client, riga);
+  }
+
+  void _rigaTroppoLunga(WebSocketClientConnection client) {
+    if (!_clients.contains(client)) return;
+    if (!client.autenticato) {
+      print('[MINERVA][IPC][ATTENZIONE] Un client non ancora presentato ha '
+          'mandato più di $rigaMassimaPrimaDelSaluto byte senza un a-capo: '
+          'chiuso.');
+      _removeClient(client);
+      return;
+    }
+    // Uno dei nostri: il messaggio si butta e lo si dice, ma la connessione
+    // resta — una finestra che ha provato a salvare un documento enorme non
+    // deve perdere anche la barra.
+    print('[MINERVA][IPC][ERRORE] Un messaggio di oltre $rigaMassima byte è '
+        'stato scartato.');
+    _nonSonoRiuscito(client, null,
+        'messaggio troppo lungo (oltre $rigaMassima byte): scartato');
   }
 
   /// La parola d'ordine è giusta: da qui in poi il client è uno di noi, e
@@ -1018,11 +1146,50 @@ class WebSocketServer {
     // andato con un tentativo di accesso a metà, quel tentativo va annullato —
     // greetd tiene UNA sessione in configurazione, e lasciarla lì impedisce
     // al greeter successivo di cominciarne una.
+    //
+    // ── E l'annullamento non può far cadere il demone ──────────────────
+    //
+    // Qui c'era `_greetd?.annulla();` senza attendere niente. Se la
+    // schermata manda `greeter_respond` e si chiude subito dopo (una sessione
+    // che parte, un crash, la shell che si riavvia), l'annullamento arriva
+    // mentre l'invio di prima è ancora in corso: `flush` su un socket che sta
+    // già facendo `flush` lancia «StreamSink is bound to a stream». Riprodotto
+    // il 30 settembre 2026: quell'errore non è un socket, quindi arrivava alla
+    // zona e `bin/minervad.dart` faceva `exit(1)` — il demone del greeter giù
+    // per una schermata che se ne andava. La coda degli invii la mette
+    // `GreetdService`; questa è la rete dalla parte di chi chiama.
     if (identical(_ilGreeter, client)) {
       _ilGreeter = null;
-      _greetd?.annulla();
+      final g = _greetd;
+      if (g != null) {
+        unawaited(g.annulla().catchError((Object e) {
+          print('[MINERVA][GREETD][WARN] Annullamento dopo l\'uscita della '
+              'schermata non riuscito: $e');
+        }));
+      }
+    }
+
+    // Le ricerche che questo client aveva lanciato: camminavano per il disco
+    // anche dopo la sua uscita, per risultati che nessuno avrebbe letto.
+    for (final chiave in _ricercheDi.remove(client) ?? const <String>{}) {
+      _ricerca.ferma(chiave);
+    }
+    for (final chiave in _scansioniDi.remove(client) ?? const <String>{}) {
+      _foto.fermaScansione(chiave);
     }
   }
+
+  /// Le ricerche di file e le scansioni della galleria in corso, per client.
+  ///
+  /// La chiave passata ai servizi è `<client>|<id>` e non l'`id` da solo:
+  /// l'`id` lo sceglie la finestra, e due finestre che usano lo stesso numero
+  /// si fermavano la ricerca a vicenda con `fs_search_cancel`. Alla finestra
+  /// torna l'`id` suo, com'era.
+  final Map<WebSocketClientConnection, Set<String>> _ricercheDi = {};
+  final Map<WebSocketClientConnection, Set<String>> _scansioniDi = {};
+
+  static String _chiaveDi(WebSocketClientConnection client, String id) =>
+      '${identityHashCode(client)}|$id';
 
   /// Il comando che apre `riga` dentro un terminale.
   ///
@@ -1174,10 +1341,14 @@ class WebSocketServer {
   Future<void> _eseguiAzione(WebSocketClientConnection client, Object? action,
       Map<String, dynamic> msg) async {
     switch (action) {
+      // `whereType` e non `cast`: `cast` è una vista che controlla il tipo
+      // solo quando legge, cioè al primo evento trasmesso — dentro il
+      // listener del bus, dove un `[1, "x"]` faceva uscire il demone
+      // (30 settembre 2026). Un nome che non è una stringa non è un evento.
       case 'subscribe':
-        final List<dynamic>? events = msg['events'];
-        if (events != null) {
-          client.subscribedEvents = events.cast<String>();
+        final events = msg['events'];
+        if (events is List) {
+          client.subscribedEvents = events.whereType<String>().toList();
         }
         break;
       // ── Qui c'era la SECONDA porta verso il compositore ───────────────
@@ -1266,8 +1437,22 @@ class WebSocketServer {
         // sulla scrivania — lanciato come un programma qualunque. Senza
         // questa strada il doppio clic su un launcher della scrivania lo
         // aprirebbe come testo.
+        //
+        // Ma non QUALSIASI launcher: fuori dalle cartelle delle applicazioni
+        // solo se è eseguibile. Vedi `ipc/lanciatori.dart` per la «fattura»
+        // del 30 settembre 2026. Il rifiuto torna come `fs_result`, che il
+        // gestore file già mostra.
         final path = msg['path'];
-        if (path is String && path.isNotEmpty) {
+        final no = path is String && path.isNotEmpty
+            ? await Lanciatori.percheNo(path)
+            : null;
+        if (no != null) {
+          print('[MINERVA][IPC][ATTENZIONE] Lanciatore non lanciato: $path');
+          client.send({
+            'event': 'fs_result',
+            'payload': {'ok': false, 'error': no, 'path': path},
+          });
+        } else if (path is String && path.isNotEmpty) {
           final app = await _appScanner.parseFromPath(path);
           if (app != null && app.exec.isNotEmpty) {
             final comando = app.needsTerminal
@@ -1494,20 +1679,26 @@ class WebSocketServer {
       // una finestra ferma per venti secondi.
       case 'fs_search':
         final id = '${msg['id'] ?? client.hashCode}';
+        final chiave = _chiaveDi(client, id);
+        (_ricercheDi[client] ??= {}).add(chiave);
         unawaited(() async {
-          await for (final pezzo in _ricerca.cerca(
-            id,
-            '${msg['path']}',
-            '${msg['query'] ?? ''}',
-            ancheNascosti: msg['hidden'] == true,
-          )) {
-            client.send({'event': 'fs_search', 'payload': pezzo});
+          try {
+            await for (final pezzo in _ricerca.cerca(
+              chiave,
+              '${msg['path']}',
+              '${msg['query'] ?? ''}',
+              ancheNascosti: msg['hidden'] == true,
+            )) {
+              client.send({'event': 'fs_search', 'payload': {...pezzo, 'id': id}});
+            }
+          } finally {
+            _ricercheDi[client]?.remove(chiave);
           }
         }());
         break;
 
       case 'fs_search_cancel':
-        _ricerca.ferma('${msg['id'] ?? client.hashCode}');
+        _ricerca.ferma(_chiaveDi(client, '${msg['id'] ?? client.hashCode}'));
         break;
 
       // ── La galleria ────────────────────────────────────────────────
@@ -1558,16 +1749,26 @@ class WebSocketServer {
       case 'foto_scansiona':
         {
           final id = '${msg['id'] ?? client.hashCode}';
+          final chiave = _chiaveDi(client, id);
+          (_scansioniDi[client] ??= {}).add(chiave);
           unawaited(() async {
-            await for (final pezzo in _foto.scansiona(id)) {
-              client.send({'event': 'foto_scansione', 'payload': pezzo});
+            try {
+              await for (final pezzo in _foto.scansiona(chiave)) {
+                client.send({
+                  'event': 'foto_scansione',
+                  'payload': {...pezzo, 'id': id},
+                });
+              }
+            } finally {
+              _scansioniDi[client]?.remove(chiave);
             }
           }());
         }
         break;
 
       case 'foto_scansiona_ferma':
-        _foto.fermaScansione('${msg['id'] ?? client.hashCode}');
+        _foto.fermaScansione(
+            _chiaveDi(client, '${msg['id'] ?? client.hashCode}'));
         break;
 
       case 'foto_panoramica':
@@ -2340,12 +2541,11 @@ class WebSocketServer {
           final text = msg['text'];
           if (path is String && path.isNotEmpty && text is String) {
             try {
-              // Prima in un file temporaneo e poi sopra il vero: una
-              // scrittura interrotta a metà non deve lasciare il documento
-              // troncato.
-              final temporaneo = File('$path.minerva.tmp');
-              await temporaneo.writeAsString(text, flush: true);
-              await temporaneo.rename(path);
+              // Prima in un file provvisorio e poi sopra il vero, ma senza
+              // perdere permessi, gruppo e collegamenti: fino al 30 settembre
+              // 2026 un `~/.ssh/config` a 0600 salvato da qui diventava 0644.
+              // Vedi `core/salvataggio.dart`.
+              await Salvataggio.scrivi(path, text);
               client.send({
                 'event': 'fs_result',
                 'payload': {'ok': true, 'path': path},
@@ -3193,11 +3393,22 @@ class WebSocketServer {
       case 'radice_azione':
         {
           final op = msg['op'];
-          final args = (msg['args'] as List?)?.cast<String>() ?? const [];
-          if (op is! String || args.isEmpty) {
+          final args =
+              (msg['args'] as List?)?.whereType<String>().toList() ?? const [];
+          // Solo i verbi che cambiano una cartella. Fino al 30 settembre 2026
+          // da qui passava QUALUNQUE verbo dell'aiutante — anche `scrivi`,
+          // che senza contenuto sullo standard input svuotava il file da
+          // root, e quelli della manutenzione, che hanno porte loro.
+          final ammesso = RadiceService.operazioniDiFile.contains(op);
+          if (!ammesso || args.isEmpty) {
             client.send({
               'event': 'radice_esito',
-              'payload': {'ok': false, 'error': 'Richiesta incompleta.'},
+              'payload': {
+                'ok': false,
+                'error': ammesso || op is! String || op.isEmpty
+                    ? 'Richiesta incompleta.'
+                    : 'L\'operazione «$op» non passa da qui.',
+              },
             });
             break;
           }
@@ -3740,9 +3951,15 @@ class WebSocketClientConnection {
   /// che nessuno può costruire una di queste connessioni dimenticandosi di
   /// farlo. La rete vera è comunque un'altra, ed è in `bin/minervad.dart`:
   /// questa dice CHI è morto, quella garantisce che il demone non muoia con lui.
-  WebSocketClientConnection(this._socket) {
+  WebSocketClientConnection(this._socket,
+      {this.inAttesaMassimo = inAttesaPredefinito}) {
     _socket.done.then((_) => _muore(null), onError: _muore);
   }
+
+  /// Quanto si tiene in memoria per un client che non legge, prima di
+  /// chiuderlo. Vedi `sendGrezzo`.
+  final int inAttesaMassimo;
+  static const int inAttesaPredefinito = 32 * 1024 * 1024;
 
   /// Questa connessione non riceve più. Una volta sola, qualunque sia la
   /// strada da cui si è saputo.
@@ -3846,23 +4063,70 @@ class WebSocketClientConnection {
       return;
     }
     if (!autenticato && evento != 'ciao') return;
+    // L'a-capo è il confine fra un messaggio e il prossimo: vedi
+    // `_handleNewClient`. Senza, dall'altra parte due risposte spedite
+    // vicine arriverebbero attaccate e il parser le butterebbe via
+    // entrambe.
+    final riga = '$testo\n';
+    // ── Un client che non legge non può riempire il demone ────────────
+    //
+    // `write` non blocca mai: quello che il kernel non accetta resta in
+    // memoria QUI, senza limite. Una finestra ferma — il suo filo grafico
+    // bloccato, un SIGSTOP — continua a ricevere `windows_state` fino a sedici
+    // volte al secondo; provato il 30 settembre 2026, 1500 risposte non
+    // lette hanno portato il demone da 255 a 445 MB. Adesso si conta quello
+    // che aspetta, e oltre il tetto il client si chiude: se si riprende, si
+    // ricollega e riceve lo stato da capo, che è comunque quello che gli
+    // serve.
+    //
+    // I caratteri e non i byte: un conto per difetto sui caratteri accentati,
+    // che per un tetto di decine di mega non cambia niente.
+    if (_inAttesa + riga.length > inAttesaMassimo) {
+      print('[MINERVA][IPC][WARN] Un client non legge più da un pezzo '
+          '(${_inAttesa ~/ 1024} KB in attesa, fermo su "$evento"): chiuso.');
+      falliti++;
+      _muore(null);
+      _socket.destroy();
+      return;
+    }
+    _inAttesa += riga.length;
+    _daMandare.add(riga);
+    if (!_inVolo) _svuota();
+  }
+
+  /// Quello che è stato scritto e che il sistema non ha ancora accettato.
+  int _inAttesa = 0;
+  final List<String> _daMandare = [];
+  bool _inVolo = false;
+
+  /// Manda quello che è in coda, un `flush` alla volta.
+  ///
+  /// Un `flush` alla volta non è pignoleria: un secondo `flush` mentre il
+  /// primo è in corso lancia «StreamSink is bound to a stream». Ed è il
+  /// `flush` che dice quando il sistema ha preso i byte, cioè quando smettono
+  /// di contare in `_inAttesa`.
+  Future<void> _svuota() async {
+    _inVolo = true;
     try {
-      // L'a-capo è il confine fra un messaggio e il prossimo: vedi
-      // `_handleNewClient`. Senza, dall'altra parte due risposte spedite
-      // vicine arriverebbero attaccate e il parser le butterebbe via
-      // entrambe.
-      _socket.write('$testo\n');
+      while (_daMandare.isNotEmpty && !_chiuso) {
+        final pezzo = _daMandare.join();
+        _daMandare.clear();
+        _socket.write(pezzo);
+        await _socket.flush();
+        _inAttesa -= pezzo.length;
+      }
     } catch (e) {
       falliti++;
       if (falliti == 1) {
-        print('[MINERVA][IPC][WARN] Un client non riceve più (primo mancato: '
-            '"$evento"): $e');
+        print('[MINERVA][IPC][WARN] Un client non riceve più: $e');
       }
       // E si smette di provarci. Prima si contava e si continuava a scrivere:
       // un tubo rotto restava nell'elenco fino a fine sessione, e ogni
       // `windows_state` — fino a sedici al secondo — era un'altra occasione
       // per l'errore che uccideva il demone.
       _muore(null);
+    } finally {
+      _inVolo = false;
     }
   }
 

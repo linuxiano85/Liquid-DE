@@ -48,6 +48,7 @@ class SettingsApi {
       final decoded = jsonDecode(content);
       if (decoded is Map<String, dynamic>) {
         _settings = decoded;
+        _testoNoto = content;
         // Il blur è stato tolto il 28 settembre 2026 («a questo punto il blur
         // lo eliminerei»): chi l'aveva scelto passa al filtro che c'è. In
         // memoria: il file si riscrive alla prossima impostazione cambiata.
@@ -112,14 +113,37 @@ class SettingsApi {
         }
         // Breve delay per evitare letture parziali durante il salvataggio
         await Future.delayed(const Duration(milliseconds: 100));
-        print('[MINERVA][CORE][INFO] Rilevata modifica a settings.json. Ricaricamento...');
-        await _loadSettings();
-        _notifyChanged();
+        // ── In fila con i salvataggi ─────────────────────────────────────
+        //
+        // `_stopWatcher` ferma gli eventi NUOVI, non un callback già dentro
+        // questa attesa di cento millesimi: fino al 30 settembre 2026 quel
+        // callback poteva ricaricare `_settings` nel mezzo di un salvataggio,
+        // che poi lo sovrascriveva. Nella fila arriva dopo, e legge il file
+        // com'è davvero. E si ripara come all'avvio: chi scrive il file a
+        // mano può sbagliare un tipo quanto chiunque altro.
+        await _inCoda(() async {
+          print('[MINERVA][CORE][INFO] Rilevata modifica a settings.json. Ricaricamento...');
+          await _ricarica();
+          _notifyChanged();
+        });
       });
       _sorveglianzeAperte++;
     } catch (e) {
       print('[MINERVA][CORE][ERRORE] Watcher impostazioni non avviato: $e');
     }
+  }
+
+  /// Il testo del file come l'abbiamo letto o scritto l'ultima volta. Se sul
+  /// disco c'è altro, qualcuno l'ha cambiato da fuori.
+  String? _testoNoto;
+
+  /// Rilegge il file e lo rimette in forma: le chiavi sconosciute via, quelle
+  /// mancanti e quelle col tipo sbagliato ai valori di fabbrica. In memoria:
+  /// il file si riscrive al prossimo salvataggio.
+  Future<void> _ricarica() async {
+    await _loadSettings();
+    _potaSconosciute();
+    _fillMissingDefaults();
   }
 
   void _notifyChanged() {
@@ -216,19 +240,25 @@ class SettingsApi {
   /// mappa vuota di fabbrica vuol dire «qui le chiavi le mette l'utente»,
   /// e sotto di esse si scrive quel che si vuole.
   bool _applyValue(String path, dynamic value) {
-    const effectRanges = <String, List<double>>{
-      'windows.rigidita': [0.5, 2],
-      'windows.smorzamento': [0.15, 0.95], 'windows.elastico': [0, 3],
-      'windows.elasticoUltimo': [0.1, 3], 'windows.effettoOpacita': [0.5, 1],
-    };
-    final range = effectRanges[path];
-    if (range != null && (value is! num || !value.isFinite || value < range[0] || value > range[1])) return false;
-
     final segments = path.split('.');
     if (segments.isEmpty || segments.any((s) => s.isEmpty)) return false;
     if (!_esisteDiFabbrica(segments)) {
       print('[MINERVA][CORE][ERRORE] Impostazione inesistente: "$path" '
           '— non è nei valori di fabbrica, e non si inventa');
+      return false;
+    }
+    // ── E deve avere la FORMA di quella di fabbrica ─────────────────────
+    //
+    // Fino al 30 settembre 2026 il percorso si controllava e il valore no.
+    // Provato sul demone: `set_setting shell 7` sostituiva il gruppo intero
+    // con un numero, e al riavvio restava lì — `_fillMissingDefaults` vedeva
+    // «c'è» e passava oltre; `launcher.fixedApps = [1, 2]` faceva rispondere
+    // `azione_fallita` a ogni apertura del menù, per sempre. Un gruppo si
+    // può ancora scrivere intero (la shell lo fa con `riva.angoli` e
+    // `isola.mostra`), ma con una mappa che ha le sue chiavi e i suoi tipi.
+    if (!_conforme(path, _fabbricaA(segments), value)) {
+      print('[MINERVA][CORE][ERRORE] Impostazione "$path": il valore non ha '
+          'il tipo di quello di fabbrica — rifiutato');
       return false;
     }
 
@@ -254,6 +284,54 @@ class SettingsApi {
   /// L'albero di fabbrica, costruito una volta sola: `defaultSettings()` lo
   /// ricrea da zero ogni volta, e qui si guarda a ogni scrittura.
   static final Map<String, dynamic> _fabbrica = defaultSettings();
+
+  /// Il valore ha la forma di quello di fabbrica?
+  ///
+  /// [fabbrica] è `null` sotto una mappa libera (lì comanda l'utente) e per le
+  /// poche chiavi che di fabbrica valgono `null`: niente con cui confrontare.
+  /// I numeri sono numeri, interi o no: un cursore manda 960.5 dove la
+  /// fabbrica dice 960. Una lista di fabbrica fatta di nomi vuole nomi; una
+  /// lista vuota di fabbrica non dice cosa conterrà, e si accetta.
+  static bool _conforme(String percorso, dynamic fabbrica, dynamic valore) {
+    final intervallo = _intervalli[percorso];
+    if (intervallo != null) {
+      return valore is num &&
+          valore.isFinite &&
+          valore >= intervallo[0] &&
+          valore <= intervallo[1];
+    }
+    if (fabbrica == null) return true;
+    if (fabbrica is Map) {
+      if (valore is! Map) return false;
+      if (fabbrica.isEmpty) return true; // mappa libera
+      for (final e in valore.entries) {
+        final chiave = e.key;
+        if (chiave is! String || !fabbrica.containsKey(chiave)) return false;
+        if (!_conforme('$percorso.$chiave', fabbrica[chiave], e.value)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (fabbrica is num) return valore is num && valore.isFinite;
+    if (fabbrica is bool) return valore is bool;
+    if (fabbrica is String) return valore is String;
+    if (fabbrica is List) {
+      if (valore is! List) return false;
+      if (fabbrica.isNotEmpty && fabbrica.every((x) => x is String)) {
+        return valore.every((x) => x is String);
+      }
+      return true;
+    }
+    return true;
+  }
+
+  /// Le manopole degli effetti che hanno un intervallo, oltre al tipo.
+  static const _intervalli = <String, List<double>>{
+    'windows.rigidita': [0.5, 2],
+    'windows.smorzamento': [0.15, 0.95], 'windows.elastico': [0, 3],
+    'windows.elasticoUltimo': [0.1, 3], 'windows.effettoOpacita': [0.5, 1],
+  };
 
   static bool _esisteDiFabbrica(List<String> segments) {
     dynamic nodo = _fabbrica;
@@ -293,8 +371,23 @@ class SettingsApi {
   Future<void> _coda = Future.value();
 
   Future<T> _transazione<T>(T Function() modifica, String logMessage) {
-    final mia = _coda.then((_) async {
+    return _inCoda(() async {
       await _stopWatcher();
+      // ── Chi ha cambiato il file da fuori, prima di noi ───────────────
+      //
+      // Un editor di testo salva `settings.json`, e un istante dopo — prima
+      // che la sorveglianza se ne accorga — un cursore delle Impostazioni
+      // manda `set_setting`. Fino al 30 settembre 2026 questo salvataggio
+      // partiva dalle impostazioni in memoria, quelle di PRIMA, e scriveva
+      // sopra la modifica appena fatta: persa, senza traccia. Il file è di
+      // pochi chilobyte: rileggerlo costa meno di perdere una scelta.
+      try {
+        final suDisco = await File(_configPath).readAsString();
+        if (_testoNoto != null && suDisco != _testoNoto) await _ricarica();
+      } catch (_) {
+        // Illeggibile o sparito: si parte da quello che c'è in memoria, e il
+        // salvataggio lo rimette a posto.
+      }
       final prima = _settings;
       try {
         _settings = jsonDecode(jsonEncode(prima)) as Map<String, dynamic>;
@@ -314,6 +407,12 @@ class SettingsApi {
         _startWatcher();
       }
     });
+  }
+
+  /// Mette un lavoro in fila dopo gli altri: i salvataggi e i ricaricamenti
+  /// dal disco toccano tutti `_settings`, e uno alla volta.
+  Future<T> _inCoda<T>(Future<T> Function() lavoro) {
+    final mia = _coda.then((_) => lavoro());
     // La coda non deve interrompersi se un salvataggio va male: chi viene dopo
     // ha comunque diritto a provarci.
     _coda = mia.then<void>((_) {}, onError: (Object e, StackTrace s) {});
@@ -332,9 +431,10 @@ class SettingsApi {
     const encoder = JsonEncoder.withIndent('  ');
     final finale = File(_configPath);
     final provvisorio = File('$_configPath.nuovo');
-    await provvisorio.writeAsString('${encoder.convert(valori ?? _settings)}\n',
-        flush: true);
+    final testo = '${encoder.convert(valori ?? _settings)}\n';
+    await provvisorio.writeAsString(testo, flush: true);
     await provvisorio.rename(finale.path);
+    _testoNoto = testo;
   }
 
 
@@ -409,20 +509,35 @@ class SettingsApi {
   bool _fillMissingDefaults() {
     var changed = false;
 
-    void merge(Map<String, dynamic> target, Map<String, dynamic> defaults) {
+    // ── E ripara i tipi sbagliati ────────────────────────────────────────
+    //
+    // «C'è» non bastava: un `shell` che vale 7 c'è, e restava 7 a ogni avvio
+    // (30 settembre 2026). Un valore che non ha la forma di quello di
+    // fabbrica torna di fabbrica, e lo si dice: una scelta persa si vede nel
+    // registro, un menù che non si apre più no.
+    void merge(Map<String, dynamic> target, Map<String, dynamic> defaults,
+        String dove) {
       for (final entry in defaults.entries) {
+        final percorso = dove.isEmpty ? entry.key : '$dove.${entry.key}';
         final existing = target[entry.key];
+        final diFabbrica = entry.value;
         if (!target.containsKey(entry.key)) {
-          target[entry.key] = entry.value;
+          target[entry.key] = diFabbrica;
           changed = true;
         } else if (existing is Map<String, dynamic> &&
-            entry.value is Map<String, dynamic>) {
-          merge(existing, entry.value as Map<String, dynamic>);
+            diFabbrica is Map<String, dynamic> &&
+            diFabbrica.isNotEmpty) {
+          merge(existing, diFabbrica, percorso);
+        } else if (!_conforme(percorso, diFabbrica, existing)) {
+          print('[MINERVA][CORE][WARN] Impostazione "$percorso" col tipo '
+              'sbagliato (${jsonEncode(existing)}): torna quella di fabbrica.');
+          target[entry.key] = diFabbrica;
+          changed = true;
         }
       }
     }
 
-    merge(_settings, defaultSettings());
+    merge(_settings, defaultSettings(), '');
     return changed;
   }
 

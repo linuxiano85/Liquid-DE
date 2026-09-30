@@ -108,12 +108,28 @@ class PluginManager {
       print('[MINERVA][CORE][OK] Plugin "$name" avviato con successo (PID: ${process.pid}).');
 
       // Reindirizza l'output del plugin sui log di Minerva
-      process.stdout.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
+      // ── Quello che un plugin stampa non può far cadere il demone ─────
+      //
+      // Con `utf8.decoder` un solo byte che non è UTF-8 — un nome di file in
+      // Latin-1, un carattere tagliato — diventava un errore del flusso, e
+      // senza `onError` quell'errore arrivava alla zona: `exit(1)`. Provato
+      // il 30 settembre 2026 con un plugin che stampa `\377`. E siccome il
+      // plugin riparte col demone e ristampa la stessa cosa, dopo cinque giri
+      // il guardiano smetteva di rialzarlo. Un carattere storto nel registro
+      // è un carattere storto, non un guasto.
+      const leggibile = Utf8Decoder(allowMalformed: true);
+      process.stdout.transform(leggibile).transform(const LineSplitter()).listen(
+          (line) {
         print('[MINERVA][PLUGIN][$name] $line');
+      }, onError: (Object e) {
+        print('[MINERVA][PLUGIN][$name][ERRORE] Uscita illeggibile: $e');
       });
 
-      process.stderr.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
+      process.stderr.transform(leggibile).transform(const LineSplitter()).listen(
+          (line) {
         print('[MINERVA][PLUGIN][$name][ERRORE] $line');
+      }, onError: (Object e) {
+        print('[MINERVA][PLUGIN][$name][ERRORE] Errori illeggibili: $e');
       });
 
       process.exitCode.then((code) {

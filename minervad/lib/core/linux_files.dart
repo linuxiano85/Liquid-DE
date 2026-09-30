@@ -71,4 +71,42 @@ abstract final class LinuxFiles {
   /// Entrambi i nomi devono esistere: il vecchio bersaglio resta recuperabile
   /// al nome temporaneo fino alla pulizia successiva al commit.
   static void exchange(String from, String to) => _renameWith(from, to, 2);
+
+  // `open` è variadica in C; senza il terzo argomento (il modo, che serve solo
+  // a O_CREAT) chiamarla con due argomenti fissi è corretto su x86_64 e
+  // aarch64. Niente O_DIRECTORY: vale 0x10000 su uno e 0x4000 sull'altro, e
+  // una cartella si apre benissimo con O_RDONLY.
+  static final _open = _libc.lookupFunction<Int32 Function(Pointer<Uint8>, Int32),
+      int Function(Pointer<Uint8>, int)>('open');
+  static final _fsync = _libc.lookupFunction<Int32 Function(Int32),
+      int Function(int)>('fsync');
+  static final _close = _libc.lookupFunction<Int32 Function(Int32),
+      int Function(int)>('close');
+
+  /// Rende duraturo un `rename` appena fatto dentro [cartella].
+  ///
+  /// Il file scritto con `flush: true` è al sicuro, ma il NOME nuovo sta nella
+  /// cartella: senza questo, dopo un'interruzione di corrente la cartella può
+  /// ancora indicare il file vecchio. Dart non sa aprire una cartella, quindi
+  /// si passa da libc.
+  static void fsyncCartella(String cartella) {
+    final p = _string(cartella);
+    try {
+      final fd = _open(p, 0); // O_RDONLY
+      if (fd < 0) {
+        throw FileSystemException('Non riesco ad aprire la cartella', cartella,
+            OSError('open', _errno().value));
+      }
+      try {
+        if (_fsync(fd) != 0) {
+          throw FileSystemException('fsync della cartella non riuscito',
+              cartella, OSError('fsync', _errno().value));
+        }
+      } finally {
+        _close(fd);
+      }
+    } finally {
+      _free(p.cast<Void>());
+    }
+  }
 }
