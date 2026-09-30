@@ -91,6 +91,14 @@ struct richiesta {
 	guint fonte_socket;
 	gchar *percorso;
 	GPid figlio;
+	// La sorgente che raccoglie la finestra quando esce (`figlio_uscito`).
+	guint fonte_figlio;
+	// L'annullamento di polkitd: il `GCancellable` della richiesta e il
+	// nostro aggancio. `dentro_annullo` vale durante il suo gestore, dove
+	// staccarsi bloccherebbe per sempre (vedi `richiesta_chiudi`).
+	GCancellable *annullabile;
+	gulong aggancio_annullo;
+	bool dentro_annullo;
 	GString *coda;
 	PolkitAgentSession *sessione;
 	GTask *compito;
@@ -100,6 +108,12 @@ struct richiesta {
 	gchar *utente;
 	gchar *messaggio;
 };
+
+static void figlio_raccolto(GPid pid, gint stato, gpointer dati) {
+	(void)stato;
+	(void)dati;
+	g_spawn_close_pid(pid);
+}
 
 static void richiesta_chiudi(struct richiesta *r) {
 	if (r->fonte_socket != 0) {
@@ -122,11 +136,26 @@ static void richiesta_chiudi(struct richiesta *r) {
 		unlink(r->percorso);
 		g_clear_pointer(&r->percorso, g_free);
 	}
+	if (r->aggancio_annullo != 0 && !r->dentro_annullo)
+		g_cancellable_disconnect(r->annullabile, r->aggancio_annullo);
+	r->aggancio_annullo = 0;
 	if (r->figlio > 0) {
 		// La finestra si chiude da sé quando il socket cade; il segnale è
 		// la rete di sicurezza per il caso in cui non lo faccia.
 		kill(r->figlio, SIGTERM);
-		g_spawn_close_pid(r->figlio);
+		// ── E chi è uscito va RACCOLTO ───────────────────────────────
+		//
+		// Con `G_SPAWN_DO_NOT_REAP_CHILD` il processo non lo raccoglie
+		// nessuno, e `g_spawn_close_pid` su Unix non fa niente: ogni
+		// password chiesta lasciava uno `qs` zombie per tutta la vita
+		// dell'agente. La sorgente legata a questa richiesta si stacca
+		// (la richiesta sta per essere liberata) e al suo posto ne resta
+		// una che raccoglie e basta. 30 settembre 2026.
+		if (r->fonte_figlio != 0) {
+			g_source_remove(r->fonte_figlio);
+			r->fonte_figlio = 0;
+		}
+		g_child_watch_add(r->figlio, figlio_raccolto, NULL);
 		r->figlio = 0;
 	}
 	if (r->coda != NULL) {
@@ -255,6 +284,62 @@ static void su_completata(PolkitAgentSession *s, gboolean ottenuto,
 		}
 		g_object_unref(compito);
 	}
+}
+
+// ── Annullare una richiesta, a qualunque punto sia ──────────────────────
+//
+// Se la finestra ha già parlato la sessione è partita, e annullarla fa
+// arrivare `completed` (quindi `su_completata`, che chiude e risponde). Se
+// invece la finestra non si è mai collegata la sessione non è mai partita, e
+// nessun `completed` arriverebbe: si chiude e si risponde qui.
+static void richiesta_annulla(struct richiesta *r) {
+	if (r->finita)
+		return;
+	if (r->con >= 0 && r->sessione != NULL) {
+		polkit_agent_session_cancel(r->sessione);
+		return;
+	}
+	r->finita = true;
+	GTask *compito = r->compito;
+	r->compito = NULL;
+	richiesta_chiudi(r);
+	g_idle_add(libera_dopo, r);
+	if (compito != NULL) {
+		g_task_return_new_error(compito, POLKIT_ERROR, POLKIT_ERROR_CANCELLED,
+			"richiesta annullata prima che la finestra rispondesse");
+		g_object_unref(compito);
+	}
+}
+
+// ── La finestra è uscita da sola ─────────────────────────────────────────
+//
+// Chiusa dall'utente, o caduta prima ancora di collegarsi (`qs` che non
+// parte, un QML che non si carica): senza questo la richiesta restava appesa
+// per sempre — polkit aspettava una risposta che nessuno avrebbe dato, e il
+// programma che chiedeva il permesso sembrava bloccato. 30 settembre 2026.
+static void figlio_uscito(GPid pid, gint stato, gpointer dati) {
+	(void)stato;
+	struct richiesta *r = dati;
+	r->fonte_figlio = 0;   // una sorgente di figlio scatta una volta sola
+	r->figlio = 0;
+	g_spawn_close_pid(pid);
+	richiesta_annulla(r);
+}
+
+// ── polkitd ritira la richiesta ──────────────────────────────────────────
+//
+// Il `GCancellable` scatta quando polkitd annulla — il programma che
+// chiedeva è uscito, o l'attesa è scaduta. Qui non lo ascoltava nessuno: la
+// finestra della password restava aperta per una domanda che non c'era più,
+// e la sessione con l'aiutante di polkit restava viva. 30 settembre 2026.
+static void su_annullata(GCancellable *annullabile, gpointer dati) {
+	(void)annullabile;
+	struct richiesta *r = dati;
+	// Dentro questo gestore `g_cancellable_disconnect` aspetterebbe la fine
+	// del gestore stesso, cioè per sempre: `richiesta_chiudi` non stacca.
+	r->dentro_annullo = true;
+	richiesta_annulla(r);
+	r->dentro_annullo = false;
 }
 
 // ── Leggere quello che dice la finestra ──────────────────────────────────
@@ -542,9 +627,19 @@ static void minerva_agente_inizia(PolkitAgentListener *ascoltatore,
 		return;
 	}
 	g_strfreev(ambiente);
+	r->fonte_figlio = g_child_watch_add(r->figlio, figlio_uscito, r);
 
 	r->fonte_ascolto = g_unix_fd_add(r->ascolto, G_IO_IN,
 		qualcuno_si_collega, r);
+
+	// Per ultimo: se polkitd ha GIÀ annullato, `g_cancellable_connect`
+	// chiama il gestore subito, qui dentro, e la richiesta deve essere già
+	// tutta in piedi per potersi chiudere.
+	if (annullabile != NULL) {
+		r->annullabile = annullabile;
+		r->aggancio_annullo = g_cancellable_connect(annullabile,
+			G_CALLBACK(su_annullata), r, NULL);
+	}
 }
 
 static gboolean minerva_agente_finisci(PolkitAgentListener *ascoltatore,
