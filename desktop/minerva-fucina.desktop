@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Fucina
+Name[en]=Forge
+GenericName=Kernel su misura
+GenericName[en]=Custom kernel builder
+Comment=Un kernel con solo quello che serve a questo computer
+Comment[en]=A kernel with only what this computer needs
+Exec=minerva-fucina
+Icon=minerva-fucina
+StartupWMClass=minerva-fucina
+Terminal=false
+StartupNotify=false
+Categories=System;Settings;
+Keywords=kernel;linux;moduli;compila;localmodconfig;modprobed;cachyos;fucina;modules;build;compile;

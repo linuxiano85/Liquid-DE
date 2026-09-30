@@ -70,6 +70,15 @@ class RadiceService {
     'pulisci-lingue',
     'pulisci-registro',
     'togli-orfani',
+    // ── E le due della Fucina ──────────────────────────────────────────
+    //
+    // Installano e tolgono un kernel compilato da te. Prendono il NOME del
+    // kernel (e, per installare, la cartella d'uscita da cui prenderlo), e
+    // l'aiutante rifiuta qualunque nome che non contenga `-fucina-`: il
+    // kernel della distribuzione non si tocca da qui. Vedi
+    // `services/fucina_service.dart` e `scripts/minerva-radice`.
+    'fucina-installa',
+    'fucina-togli',
   };
 
   /// `126` quando la finestrella della password viene annullata, `127` quando

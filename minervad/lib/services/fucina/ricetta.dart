@@ -1,0 +1,576 @@
+import 'catalogo.dart';
+import 'rilievo.dart';
+
+/// La ricetta: dalle scelte di chi guarda al piano esatto di quello che si
+/// farà, comando per comando.
+///
+/// ── Una funzione pura, e non per eleganza ───────────────────────────────
+///
+/// Qui non si legge un file e non si lancia un processo: entrano un rilievo e
+/// delle scelte, esce un piano. Per tre ragioni:
+///
+///  1. **Il piano si mostra prima di eseguirlo.** È la prima regola di
+///     Manutenzione — niente si tocca senza averlo mostrato — e per mostrare
+///     quello che si farà bisogna poterlo calcolare senza farlo.
+///  2. **La finestra manda scelte, mai comandi.** Il demone ricalcola la
+///     ricetta da capo quando si preme «Compila», con le stesse scelte:
+///     nessun comando arriva dal canale, quindi nessuno può farne partire uno
+///     suo passando da noi. È la regola di `manutenzione_pulisci`
+///     («identificativi, mai percorsi»).
+///  3. **Si prova senza un kernel.** Un rilievo finto e tre scelte bastano.
+class Ricetta {
+  final Scelte scelte;
+  final List<String> moduli;
+  final Map<String, int> perFamiglia;
+
+  /// I moduli che si sarebbero tenuti e che invece si tolgono, con il
+  /// perché: tolti a mano o da un preset.
+  final Map<String, String> tolti;
+  final List<Impostazione> impostazioni;
+  final List<Passo> passi;
+  final String rilascio;
+  final List<String> avvisi;
+
+  const Ricetta({
+    required this.scelte,
+    required this.moduli,
+    required this.perFamiglia,
+    required this.tolti,
+    required this.impostazioni,
+    required this.passi,
+    required this.rilascio,
+    required this.avvisi,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'scelte': scelte.toJson(),
+        'moduli': moduli,
+        'quanti': moduli.length,
+        'perFamiglia': perFamiglia,
+        'tolti': tolti,
+        'impostazioni': [for (final i in impostazioni) i.toJson()],
+        'passi': [for (final p in passi) p.toJson()],
+        'rilascio': rilascio,
+        'avvisi': avvisi,
+      };
+
+  /// Il file che `localmodconfig` legge al posto di `lsmod` (variabile
+  /// `LSMOD`). Ha la forma dell'uscita di `lsmod`: una riga d'intestazione,
+  /// poi un modulo per riga col nome in prima colonna. Gli altri due campi
+  /// non li legge nessuno, ma `streamline_config.pl` si aspetta la forma.
+  String get fileLsmod => [
+        'Module                  Size  Used by',
+        for (final m in moduli) '${m.padRight(24)}0  0',
+      ].join('\n');
+}
+
+/// Un passo del piano.
+///
+/// `comando` vuoto vuol dire un passo che il demone fa da sé, in Dart —
+/// scaricare, controllare, copiare — e che nel piano si mostra con la sola
+/// descrizione. Un comando è un ELENCO di argomenti, mai una riga da far
+/// leggere a una shell: nessun nome di cartella può diventare un secondo
+/// comando.
+class Passo {
+  final String id;
+  final String titolo;
+  final String spiega;
+  final List<String> comando;
+
+  /// Se il passo si salta quando l'albero è già pronto (estratto e
+  /// patchato): è la differenza fra la prima compilazione e le successive.
+  final bool soloLaPrimaVolta;
+
+  const Passo(this.id, this.titolo, this.spiega,
+      {this.comando = const [], this.soloLaPrimaVolta = false});
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'titolo': titolo,
+        'spiega': spiega,
+        'comando': comando,
+        'soloLaPrimaVolta': soloLaPrimaVolta,
+      };
+}
+
+/// Da dove vengono i sorgenti.
+enum TipoSorgente { vanilla, cachyos }
+
+class Scelte {
+  final Set<String> tolti;
+  final Set<String> aggiunti;
+  final Set<String> scorte;
+  final Set<String> preset;
+  final TipoSorgente sorgente;
+  final String versione;
+
+  /// `in-uso` (la configurazione del kernel che gira adesso, da
+  /// `/proc/config.gz`) o `defconfig` (quella di serie del kernel).
+  final String base;
+  final String compilatore;
+  final bool lto;
+  final bool provaVeloce;
+  final bool nativo;
+  final String nome;
+
+  const Scelte({
+    this.tolti = const {},
+    this.aggiunti = const {},
+    this.scorte = const {},
+    this.preset = const {},
+    this.sorgente = TipoSorgente.vanilla,
+    this.versione = '',
+    this.base = 'in-uso',
+    this.compilatore = 'gcc',
+    this.lto = false,
+    this.provaVeloce = false,
+    this.nativo = false,
+    this.nome = '',
+  });
+
+  /// Dalle scelte arrivate dal canale. Ogni campo si controlla: dal canale
+  /// arriva testo, e un nome di kernel con dentro una barra diventerebbe un
+  /// percorso in `/boot`.
+  ///
+  /// Solleva [SceltaNonValida] con una frase da mostrare così com'è.
+  factory Scelte.daJson(Map<String, dynamic> j) {
+    Set<String> insieme(Object? v) => {
+          if (v is List)
+            for (final x in v)
+              if (x is String && _nomeModulo.hasMatch(x)) x.replaceAll('-', '_'),
+        };
+
+    final nome = '${j['nome'] ?? ''}'.trim();
+    if (!nomeValido(nome)) {
+      throw const SceltaNonValida('Il nome del kernel può avere solo lettere '
+          'minuscole, cifre e trattini, da 1 a 24 caratteri, e non può '
+          'cominciare o finire con un trattino.');
+    }
+    final sorgente = switch ('${j['sorgente'] ?? 'vanilla'}') {
+      'vanilla' => TipoSorgente.vanilla,
+      'cachyos' => TipoSorgente.cachyos,
+      final s => throw SceltaNonValida('Sorgente sconosciuta: «$s».'),
+    };
+    final versione = '${j['versione'] ?? ''}'.trim();
+    if (!versioneValida(versione)) {
+      throw SceltaNonValida('Versione del kernel non valida: «$versione». '
+          'Serve una versione rilasciata, come 6.17 o 6.17.2.');
+    }
+    final base = '${j['base'] ?? 'in-uso'}';
+    if (base != 'in-uso' && base != 'defconfig') {
+      throw SceltaNonValida('Configurazione di partenza sconosciuta: «$base».');
+    }
+    final comp = '${j['compilatore'] ?? 'gcc'}';
+    if (comp != 'gcc' && comp != 'clang') {
+      throw SceltaNonValida('Compilatore sconosciuto: «$comp».');
+    }
+    final lto = j['lto'] == true;
+    if (lto && comp != 'clang') {
+      throw const SceltaNonValida('LTO nel kernel ufficiale esiste solo con '
+          'Clang: scegli Clang o togli LTO.');
+    }
+    return Scelte(
+      tolti: insieme(j['tolti']),
+      aggiunti: insieme(j['aggiunti']),
+      scorte: insieme(j['scorte']).where(_scortaNota).toSet(),
+      preset: insieme(j['preset']).where(_presetNoto).toSet(),
+      sorgente: sorgente,
+      versione: versione,
+      base: base,
+      compilatore: comp,
+      lto: lto,
+      provaVeloce: j['provaVeloce'] == true,
+      nativo: j['nativo'] == true,
+      nome: nome,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'tolti': tolti.toList()..sort(),
+        'aggiunti': aggiunti.toList()..sort(),
+        'scorte': scorte.toList()..sort(),
+        'preset': preset.toList()..sort(),
+        'sorgente': sorgente.name,
+        'versione': versione,
+        'base': base,
+        'compilatore': compilatore,
+        'lto': lto,
+        'provaVeloce': provaVeloce,
+        'nativo': nativo,
+        'nome': nome,
+      };
+
+  /// Il nome che finisce in `CONFIG_LOCALVERSION`, e da lì nel rilascio, nel
+  /// nome del file in `/boot` e nella cartella dei moduli.
+  ///
+  /// Il prefisso `fucina-` non è decorazione: è il segno con cui l'aiutante
+  /// di root riconosce un kernel nostro. Non installa e non toglie niente che
+  /// non lo porti, e quindi il kernel della distribuzione — quello che ti
+  /// riporta a casa se il nostro non parte — non è raggiungibile da qui.
+  String get localversion => '-fucina-$nome';
+
+  String get rilascio => '$versione$localversion';
+}
+
+class SceltaNonValida implements Exception {
+  final String messaggio;
+  const SceltaNonValida(this.messaggio);
+  @override
+  String toString() => messaggio;
+}
+
+final RegExp _nomeModulo = RegExp(r'^[A-Za-z0-9_-]{1,64}$');
+final RegExp _nome = RegExp(r'^[a-z0-9]([a-z0-9-]{0,22}[a-z0-9])?$');
+final RegExp _versione = RegExp(r'^[1-9][0-9]?\.[0-9]{1,3}(\.[0-9]{1,4})?$');
+
+bool nomeValido(String s) => _nome.hasMatch(s);
+
+// Fuori dalla classe: dentro `Scelte` il nome `scorte` è il campo, non il
+// catalogo, e una funzione di fabbrica non vede nemmeno quello.
+bool _scortaNota(String id) => scorte.any((x) => x.id == id);
+bool _presetNoto(String id) => presets.any((x) => x.id == id);
+
+/// Solo versioni rilasciate: `6.17` o `6.17.2`. Le candidate (`-rc`) non
+/// stanno su cdn.kernel.org con le altre e non hanno una somma di controllo
+/// pubblicata: per ora restano fuori, ed è detto.
+bool versioneValida(String s) => _versione.hasMatch(s);
+
+/// La serie di una versione: `6.17.2` → `6.17`. È il nome della cartella
+/// delle patch di CachyOS.
+String serieDi(String versione) => versione.split('.').take(2).join('.');
+
+/// Dove sta tutto quello che la Fucina scrive. Si calcola fuori (dal
+/// servizio, con `MinervaPaths`) e si passa, così la ricetta resta pura.
+class Cartelle {
+  /// L'albero dei sorgenti, per esempio `…/alberi/6.17.2-vanilla/linux-6.17.2`.
+  final String albero;
+
+  /// Dove finisce il kernel pronto da installare: `…/uscita/<rilascio>`.
+  final String uscita;
+
+  /// Il file `LSMOD` per localmodconfig.
+  final String lsmod;
+
+  const Cartelle(
+      {required this.albero, required this.uscita, required this.lsmod});
+}
+
+/// Calcola la ricetta.
+///
+/// `nuclei` è quanti lavori paralleli dare a `make`; `ccache` se c'è.
+Ricetta calcola(Rilievo r, Scelte s, Cartelle c,
+    {required int nuclei, bool ccache = false}) {
+  final avvisi = <String>[];
+  final combinati = combinaPreset(s.preset);
+
+  // ── I moduli ─────────────────────────────────────────────────────────
+  final tenuti = <String>{};
+  final tolti = <String, String>{};
+  final famigliaDi = <String, String>{
+    for (final v in r.moduli.values) v.nome: v.famiglia,
+  };
+
+  final togliFamiglie = combinati?.togliFamiglie ?? const <String>{};
+  for (final v in r.moduli.values) {
+    final essenziale = v.fonti.contains('essenziale');
+    if (v.tenutoDiSerie || s.aggiunti.contains(v.nome)) {
+      // Un modulo aggiunto a mano vince sul preset: la scelta fatta su QUEL
+      // modulo è più precisa di quella fatta sulla sua famiglia.
+      if (!essenziale &&
+          togliFamiglie.contains(v.famiglia) &&
+          !s.aggiunti.contains(v.nome)) {
+        tolti[v.nome] = 'tolto dal preset (famiglia «${v.famiglia}»)';
+        continue;
+      }
+      if (s.tolti.contains(v.nome)) {
+        if (essenziale) {
+          // Non si toglie, e lo si dice: un essenziale tolto è un computer
+          // che non si avvia, e una scelta ignorata in silenzio è una
+          // scelta che l'utente crede di aver fatto.
+          avvisi.add('«${v.nome}» serve ad avviare '
+              '(${r.avvio.perche[v.nome] ?? 'essenziale'}): resta.');
+        } else {
+          tolti[v.nome] = 'tolto a mano';
+          continue;
+        }
+      }
+      tenuti.add(v.nome);
+    }
+  }
+
+  // Le scorte: quelle scelte più quelle che un preset accende da solo.
+  final tutteLeScorte = {...s.scorte, ...?combinati?.scorte};
+  for (final sc in scorte) {
+    if (!tutteLeScorte.contains(sc.id)) continue;
+    for (final m in sc.moduli) {
+      if (s.tolti.contains(m)) continue;
+      tenuti.add(m);
+      famigliaDi.putIfAbsent(m, () => famigliaDiScorta(sc.id));
+      tolti.remove(m);
+    }
+  }
+
+  // Un modulo aggiunto a mano che il rilievo non conosce (non è né
+  // caricato, né candidato): si tiene lo stesso, ma senza famiglia.
+  for (final m in s.aggiunti) {
+    if (s.tolti.contains(m)) continue;
+    tenuti.add(m);
+    famigliaDi.putIfAbsent(m, () => 'altro');
+  }
+
+  final moduli = tenuti.toList()..sort();
+  final perFamiglia = <String, int>{};
+  for (final m in moduli) {
+    final f = famigliaDi[m] ?? 'altro';
+    perFamiglia[f] = (perFamiglia[f] ?? 0) + 1;
+  }
+
+  // ── Le impostazioni ──────────────────────────────────────────────────
+  final impostazioni = <Impostazione>[
+    Impostazione('LOCALVERSION', s.localversion,
+        'Il nome del kernel: finisce nel rilascio, in /boot e nei moduli.'),
+    const Impostazione('LOCALVERSION_AUTO', 'n',
+        'Nessun suffisso aggiunto da git: il nome è solo quello scelto.'),
+    ...?combinati?.impostazioni,
+    if (s.provaVeloce) ...provaVeloce,
+    if (s.lto) ...ltoSottile,
+    if (s.nativo)
+      const Impostazione('X86_NATIVE_CPU', 'y',
+          'Compilato per QUESTO processore: più rapido qui, e non parte su '
+              'un processore più vecchio.'),
+  ];
+
+  if (s.provaVeloce) {
+    avvisi.add('Prova veloce: senza simboli di debug non c\'è BTF, e senza '
+        'BTF gli scheduler sched_ext (scx_*) non partono.');
+  }
+  if (s.nativo) {
+    avvisi.add('Ottimizzato per questo processore: se sposti il disco su un '
+        'computer con un processore più vecchio, questo kernel non parte. '
+        'Quello della distribuzione resta installato e parte sempre.');
+  }
+  if (s.base == 'in-uso' && r.configPartenza.isEmpty) {
+    avvisi.add('Non trovo la configurazione del kernel in uso (né '
+        '/proc/config.gz, né /boot/config-${r.rilascio}, né quella nelle '
+        'intestazioni): si parte da defconfig, e molti driver mancheranno.');
+  }
+  if (s.base == 'defconfig' || r.configPartenza.isEmpty) {
+    avvisi.add('Da defconfig: localmodconfig toglie moduli ma non ne '
+        'aggiunge. Un driver che defconfig non accende non ci sarà, anche se '
+        'è nell\'elenco — scorte comprese.');
+  }
+  if (!r.modprobed.presente) {
+    avvisi.add('Senza modprobed-db il kernel conoscerà solo quello che è '
+        'collegato adesso. Collega ora quello che usi di rado, o accendi le '
+        'scorte.');
+  }
+  final mancanti = [
+    for (final a in (r.macchina['attrezzi'] as List? ?? const []))
+      if (a is Map && a['indispensabile'] == true && a['presente'] != true)
+        '${a['nome']}',
+  ];
+  final compOk = (r.macchina['attrezzi'] as List? ?? const []).any((a) =>
+      a is Map && a['nome'] == s.compilatore && a['presente'] == true);
+  if (!compOk) mancanti.add(s.compilatore);
+  if (mancanti.isNotEmpty) {
+    avvisi.add('Mancano programmi per compilare: ${mancanti.join(', ')}. '
+        'Su Arch e CachyOS: sudo pacman -S --needed ${mancanti.join(' ')}');
+  }
+
+  // ── I passi ──────────────────────────────────────────────────────────
+  final make = <String>[
+    'make',
+    if (s.compilatore == 'clang') 'LLVM=1',
+    if (ccache) 'CC=ccache ${s.compilatore == 'clang' ? 'clang' : 'gcc'}',
+  ];
+  final configurazioni = <String>[
+    'scripts/config',
+    '--file',
+    '.config',
+    for (final i in impostazioni) ..._argomentiConfig(i),
+  ];
+
+  final passi = <Passo>[
+    Passo('scarica', 'Scarica i sorgenti',
+        'linux-${s.versione}.tar.xz da cdn.kernel.org, con la somma di '
+            'controllo SHA-256 pubblicata accanto. Se c\'è già e torna, non '
+            'si riscarica.',
+        soloLaPrimaVolta: true),
+    Passo('estrai', 'Apri l\'archivio',
+        'Una volta sola: le compilazioni successive riusano l\'albero e '
+            'ricompilano solo quello che è cambiato.',
+        soloLaPrimaVolta: true),
+    if (s.sorgente == TipoSorgente.cachyos)
+      Passo('patch', 'Applica le patch di CachyOS',
+          'La serie base di CachyOS e lo scheduler BORE, per il kernel '
+              '${serieDi(s.versione)}. Prima si prova a secco: se una non si '
+              'applica, l\'albero resta pulito.',
+          soloLaPrimaVolta: true),
+    Passo('base',
+        s.base == 'in-uso' && r.configPartenza.isNotEmpty
+            ? 'Parti dalla configurazione del kernel in uso'
+            : 'Parti dalla configurazione di serie',
+        s.base == 'in-uso' && r.configPartenza.isNotEmpty
+            ? 'Da ${r.configPartenza}: tutto quello che il kernel di adesso '
+                'sa fare, prima di scremare.'
+            : 'make defconfig: la configurazione minima di serie. Attenzione: '
+                'localmodconfig toglie e non aggiunge, quindi un driver che '
+                'defconfig non ha non ci sarà nemmeno se è nell\'elenco.',
+        comando: s.base == 'in-uso' && r.configPartenza.isNotEmpty
+            ? const []
+            : [...make, 'defconfig']),
+    Passo('allinea', 'Allinea alla nuova versione',
+        'Le opzioni nuove prendono il loro valore di serie, senza domande.',
+        comando: [...make, 'olddefconfig']),
+    Passo('screma', 'Screma i moduli',
+        'localmodconfig con l\'elenco della Fucina (${moduli.length} moduli): '
+            'tutto quello che non è nell\'elenco esce dalla configurazione.',
+        comando: [...make, 'LSMOD=${c.lsmod}', 'localmodconfig']),
+    Passo('imposta', 'Applica preset e nome',
+        '${impostazioni.length} valori, ognuno col suo perché.',
+        comando: configurazioni),
+    Passo('riallinea', 'Risolvi le dipendenze',
+        'Kconfig sistema quello che i valori appena scritti richiedono.',
+        comando: [...make, 'olddefconfig']),
+    const Passo('controlla', 'Controlla che i valori ci siano',
+        'Si rilegge il .config: un valore che non ha preso si dice, con il '
+            'suo nome.'),
+    Passo('compila', 'Compila',
+        'Il kernel e i moduli, con $nuclei lavori in parallelo'
+            '${ccache ? ' e ccache' : ''}.',
+        comando: [...make, '-j$nuclei', 'bzImage', 'modules']),
+    Passo('rilascio', 'Leggi il nome del kernel',
+        'Deve essere ${s.rilascio}: se è diverso, qualcosa ha cambiato il '
+            'nome e ci si ferma.',
+        comando: [...make, '-s', 'kernelrelease']),
+    Passo('moduli', 'Prepara i moduli',
+        'Copiati e alleggeriti nella cartella d\'uscita, non ancora nel '
+            'sistema.',
+        comando: [
+          ...make,
+          'INSTALL_MOD_PATH=${c.uscita}',
+          'INSTALL_MOD_STRIP=1',
+          'modules_install',
+        ]),
+    const Passo('impacchetta', 'Prepara il kernel da installare',
+        'L\'immagine e la configurazione accanto ai moduli. Da qui in poi '
+            'manca solo «Installa», che chiede la password.'),
+  ];
+
+  return Ricetta(
+    scelte: s,
+    moduli: moduli,
+    perFamiglia: perFamiglia,
+    tolti: tolti,
+    impostazioni: impostazioni,
+    passi: passi,
+    rilascio: s.rilascio,
+    avvisi: avvisi,
+  );
+}
+
+/// La famiglia dei moduli di una scorta che il rilievo non ha visto.
+String famigliaDiScorta(String scorta) => switch (scorta) {
+      'filesystem' => 'filesystem',
+      'chiavette' => 'chiavette',
+      'controller' => 'controller',
+      'bluetooth' => 'bluetooth',
+      'vpn' => 'rete',
+      'virtualizzazione' => 'virtualizzazione',
+      'webcam' => 'webcam',
+      'stampa' => 'stampa',
+      _ => 'altro',
+    };
+
+/// Gli argomenti di `scripts/config` per un valore. I booleani hanno i loro
+/// verbi; numeri e stringhe no, e la differenza conta: `--set-val` scrive il
+/// valore così com'è, `--set-str` lo mette fra virgolette.
+List<String> _argomentiConfig(Impostazione i) {
+  switch (i.valore) {
+    case 'y':
+      return ['--enable', i.simbolo];
+    case 'n':
+      return ['--disable', i.simbolo];
+    case 'm':
+      return ['--module', i.simbolo];
+  }
+  if (RegExp(r'^-?[0-9]+$').hasMatch(i.valore)) {
+    return ['--set-val', i.simbolo, i.valore];
+  }
+  return ['--set-str', i.simbolo, i.valore];
+}
+
+/// Controlla un `.config` contro le impostazioni chieste. Restituisce le
+/// righe da dire: una per valore che non ha preso.
+///
+/// Un valore può non prendere per due ragioni, tutte e due legittime: il
+/// simbolo non esiste in questa versione (`X86_NATIVE_CPU` prima della
+/// 6.16), o Kconfig l'ha cambiato perché una dipendenza non c'è (LTO senza
+/// Clang). In tutti e due i casi si compila lo stesso — ma chi ha chiesto
+/// quel valore deve saperlo, o crederà di avere un kernel che non ha.
+///
+/// ── I «choice» si guardano insieme ──────────────────────────────────────
+///
+/// Tick, prelazione, debug, LTO, pagine enormi: in ognuno si accende una voce
+/// e si spengono le altre. Se la voce chiesta non c'è, Kconfig ne accende
+/// un'altra, e contando voce per voce uscirebbero due righe per lo stesso
+/// fatto («PREEMPT doveva essere y» e «PREEMPT_LAZY doveva essere n»). Si
+/// dice una riga sola: che cosa si era chiesto, e che cosa è rimasto.
+List<String> controllaConfig(String config, List<Impostazione> chieste) {
+  final valori = <String, String>{};
+  for (final riga in config.split('\n')) {
+    final m = RegExp(r'^CONFIG_([A-Za-z0-9_]+)=(.*)$').firstMatch(riga);
+    if (m != null) {
+      valori[m.group(1)!] = m.group(2)!;
+      continue;
+    }
+    final n = RegExp(r'^# CONFIG_([A-Za-z0-9_]+) is not set$').firstMatch(riga);
+    if (n != null) valori[n.group(1)!] = 'n';
+  }
+  String? visto(String s) => valori[s];
+  bool uguale(Impostazione i) {
+    final v = visto(i.simbolo);
+    if (v == null) return i.valore == 'n';
+    return v == i.valore || v == '"${i.valore}"';
+  }
+
+  final fuori = <String>[];
+  final giaDetti = <String>{};
+  for (final gruppo in sceltePerGruppo) {
+    final chiesteQui =
+        chieste.where((i) => gruppo.contains(i.simbolo)).toList();
+    final accesa = chiesteQui.where((i) => i.valore == 'y').toList();
+    if (accesa.length != 1) continue;
+    giaDetti.addAll(chiesteQui.map((i) => i.simbolo));
+    if (visto(accesa.single.simbolo) == 'y') continue;
+    final rimasta =
+        gruppo.where((s) => visto(s) == 'y').toList();
+    fuori.add(rimasta.isEmpty
+        ? '${accesa.single.simbolo} non ha preso, e nessun\'altra voce dello '
+            'stesso gruppo è accesa: in questa versione quel gruppo non c\'è, '
+            'o dipende da qualcosa che manca.'
+        : '${accesa.single.simbolo} non si può scegliere in questa versione '
+            '(o su questo processore): è rimasto ${rimasta.join(', ')}.');
+  }
+  for (final i in chieste) {
+    if (giaDetti.contains(i.simbolo) || uguale(i)) continue;
+    final v = visto(i.simbolo);
+    fuori.add(v == null
+        ? '${i.valore} per ${i.simbolo} non ha preso: in questa versione il '
+            'simbolo non esiste, o dipende da qualcosa che manca.'
+        : '${i.simbolo} doveva essere ${i.valore} ed è $v: Kconfig l\'ha '
+            'cambiato per una dipendenza.');
+  }
+  return fuori;
+}
+
+/// I «choice» di Kconfig che la Fucina tocca. Vedi [controllaConfig].
+const List<Set<String>> sceltePerGruppo = [
+  {'HZ_100', 'HZ_250', 'HZ_300', 'HZ_1000'},
+  {'PREEMPT_NONE', 'PREEMPT_VOLUNTARY', 'PREEMPT', 'PREEMPT_LAZY', 'PREEMPT_RT'},
+  {'DEBUG_INFO_NONE', 'DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT', 'DEBUG_INFO_DWARF4',
+   'DEBUG_INFO_DWARF5'},
+  {'LTO_NONE', 'LTO_CLANG_THIN', 'LTO_CLANG_FULL'},
+  {'TRANSPARENT_HUGEPAGE_ALWAYS', 'TRANSPARENT_HUGEPAGE_MADVISE',
+   'TRANSPARENT_HUGEPAGE_NEVER'},
+];

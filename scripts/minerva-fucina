@@ -1,0 +1,21 @@
+#!/bin/sh
+# minerva-fucina — Kernel su misura per questo computer.
+#
+# Se è già aperta la porta davanti invece di aprirne una seconda: due finestre
+# della Fucina insieme mostrerebbero la stessa compilazione due volte, e una
+# delle due potrebbe chiederne un'altra mentre la prima lavora. La
+# compilazione vive nel demone, non qui: chiudere la finestra non la ferma.
+# Con `MINERVA_FUCINA_DORMIENTE=1` si costruisce e basta, senza mostrarsi.
+set -e
+
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+
+CONFIG="$ROOT/minerva-shell/app.qml"
+QUALE=fucina
+DORMIENTE=MINERVA_FUCINA_DORMIENTE
+TARGET=""
+
+# Da qui in poi non torna: apre, prepara o avvia l'ospite. Il perché di ognuna
+# delle tre strade sta scritto lì dentro, una volta per tutte le app.
+. "$ROOT/scripts/minerva-ospite"

@@ -18,6 +18,11 @@
 #   minerva-radice pulisci-registro
 #   minerva-radice togli-orfani     <pacchetto> [<pacchetto>...]
 #
+# E le due della Fucina, che installano e tolgono un kernel compilato da te:
+#
+#   minerva-radice fucina-installa  <cartella d'uscita> <rilascio>
+#   minerva-radice fucina-togli     <rilascio>
+#
 # Lo lancia `pkexec`, cioè gira come root. Non si chiama a mano.
 #
 # ── Perché un aiutante, e non «apri la finestra come amministratore» ────────
@@ -145,6 +150,102 @@ annota() {
             >> "$REGISTRO"
         chmod 600 "$REGISTRO"
     } 2>/dev/null || true
+}
+
+# ── Il nome di un kernel della Fucina ──────────────────────────────────────
+#
+# `6.17.2-fucina-prova`: una versione rilasciata, `-fucina-`, e un nome di
+# lettere minuscole, cifre e trattini. È la stessa regola di
+# `fucina/ricetta.dart`, ricontrollata qui perché un controllo che vive solo
+# nel demone non è un controllo.
+#
+# Un a capo si rifiuta PRIMA di `grep`: `grep` guarda una riga alla volta, e
+# «6.17-fucina-a<a capo>qualunque-cosa» passerebbe grazie alla prima.
+controlla_rilascio() {
+    [ -n "$1" ] || muori "nome del kernel vuoto."
+    [ "$(printf '%s' "$1" | wc -l)" -eq 0 ] || muori "nome del kernel non valido."
+    printf '%s' "$1" | grep -Eqx \
+        '[1-9][0-9]?\.[0-9]{1,3}(\.[0-9]{1,4})?-fucina-[a-z0-9]([a-z0-9-]{0,22}[a-z0-9])?' \
+        || muori "«$1» non è un kernel della Fucina."
+}
+
+# ── La voce nel bootloader ─────────────────────────────────────────────────
+#
+# Tre bootloader, tre trattamenti diversi, e il perché di ognuno:
+#
+#  · **systemd-boot**: una voce è un file di testo in `loader/entries`, e
+#    scriverne uno nostro non tocca quelle degli altri. Lo si fa, ma solo se
+#    kernel e voci stanno in /boot: con la partizione EFI montata altrove
+#    bisognerebbe copiare il kernel anche lì, e quella strada non è provata.
+#  · **GRUB**: le voci le scrive `grub-mkconfig`, che trova da solo i
+#    `vmlinuz-*` in /boot. Lo si rilancia.
+#  · **Limine**: la configurazione è un file solo, scritto a mano o da uno
+#    strumento della distribuzione (CachyOS ne ha uno suo). Modificarlo da
+#    qui vorrebbe dire litigare con quello strumento: si stampa la voce da
+#    aggiungere, e la si aggiunge a mano.
+#
+# Le righe che cominciano per `nota:` arrivano alla finestra così come sono.
+voce_avvio() {
+    REL_V="$1"
+    FATTO=no
+    if command -v bootctl >/dev/null 2>&1 && bootctl is-installed >/dev/null 2>&1; then
+        DOVE=$(bootctl -x 2>/dev/null || bootctl -p 2>/dev/null || true)
+        if [ "$DOVE" = "/boot" ]; then
+            RIGA=$(tr ' ' '\n' < /proc/cmdline \
+                   | grep -v -e '^BOOT_IMAGE=' -e '^initrd=' | tr '\n' ' ')
+            mkdir -p /boot/loader/entries
+            {
+                printf 'title   Linux %s (Fucina)\n' "$REL_V"
+                printf 'linux   /vmlinuz-%s\n' "$REL_V"
+                for U in amd-ucode.img intel-ucode.img; do
+                    if [ -f "/boot/$U" ]; then printf 'initrd  /%s\n' "$U"; fi
+                done
+                printf 'initrd  /initramfs-%s.img\n' "$REL_V"
+                printf 'options %s\n' "$RIGA"
+            } > "/boot/loader/entries/fucina-$REL_V.conf"
+            chmod 644 "/boot/loader/entries/fucina-$REL_V.conf"
+            printf 'nota: voce di systemd-boot scritta (loader/entries/fucina-%s.conf).\n' "$REL_V"
+            # Senza un «default» in loader.conf, systemd-boot parte dalla voce
+            # che ordina per prima, e può essere la nostra: un kernel di prova
+            # che diventa quello di tutti i giorni senza che nessuno l'abbia
+            # deciso. Non lo si cambia da qui — è una scelta di chi usa il
+            # computer — ma lo si dice.
+            if ! grep -Eq '^[[:space:]]*default[[:space:]]' /boot/loader/loader.conf 2>/dev/null; then
+                printf 'nota: /boot/loader/loader.conf non dice quale voce parte di serie: potrebbe partire da sola la nuova. Se non vuoi, scrivici «default» con la voce di sempre.\n'
+            fi
+            FATTO=si
+        else
+            printf 'nota: systemd-boot tiene le voci in %s e non in /boot: la voce va aggiunta a mano.\n' "${DOVE:-?}"
+        fi
+    fi
+    if [ -f /boot/grub/grub.cfg ] && command -v grub-mkconfig >/dev/null 2>&1; then
+        grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 \
+            || muori "grub-mkconfig non è riuscito: il kernel è installato ma GRUB non lo vede."
+        printf 'nota: menu di GRUB rigenerato. GRUB mette in cima il kernel con la versione più alta: se è il nuovo, parte lui di serie, e quello di sempre resta nelle opzioni avanzate.\n'
+        FATTO=si
+    fi
+    for L in /boot/limine.conf /boot/limine/limine.conf /boot/EFI/limine/limine.conf; do
+        if [ -f "$L" ]; then
+            printf 'nota: Limine (%s) va aggiornato a mano. La voce:\n' "$L"
+            printf 'nota:   /Linux %s (Fucina)\n' "$REL_V"
+            printf 'nota:       protocol: linux\n'
+            printf 'nota:       path: boot():/vmlinuz-%s\n' "$REL_V"
+            printf 'nota:       module_path: boot():/initramfs-%s.img\n' "$REL_V"
+            printf 'nota:       cmdline: %s\n' "$(tr -d '\n' < /proc/cmdline | sed 's/BOOT_IMAGE=[^ ]* *//')"
+            FATTO=si
+            break
+        fi
+    done
+    if [ "$FATTO" = no ]; then
+        printf 'nota: non ho riconosciuto il bootloader: il kernel è in /boot, la voce va aggiunta a mano.\n'
+    fi
+}
+
+togli_voce_avvio() {
+    rm -f -- "/boot/loader/entries/fucina-$1.conf"
+    if [ -f /boot/grub/grub.cfg ] && command -v grub-mkconfig >/dev/null 2>&1; then
+        grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 || true
+    fi
 }
 
 # La porta su cui Minerva presta una fotografia a un televisore. Sta scritta
@@ -586,6 +687,112 @@ case "$AZIONE" in
         pacman -Rns --noconfirm -- $DAVVERO >/dev/null 2>&1 \
             || muori "pacman non ha potuto togliere quei pacchetti."
         printf 'fatto%s\n' "$DAVVERO"
+        ;;
+
+    # ── Minerva Fucina: installare un kernel compilato da te ─────────────
+    #
+    # La Fucina compila come utente, nella cache, e lascia tutto in una
+    # cartella d'uscita: `boot/vmlinuz-<rilascio>`, `boot/config-<rilascio>`
+    # e `lib/modules/<rilascio>/`. Questo verbo la porta nel sistema, crea
+    # l'initramfs e la voce del bootloader.
+    #
+    # ── Il nome è la cintura di sicurezza ─────────────────────────────────
+    #
+    # Si installa e si toglie SOLO un rilascio che contiene `-fucina-`. Il
+    # kernel della distribuzione non ha quel nome, e quindi da qui non si
+    # sovrascrive e non si cancella: è quello che ti riporta a casa se il
+    # nostro non parte, e deve restare raggiungibile qualunque cosa succeda
+    # dall'altra parte del canale.
+    #
+    # E non si installa sopra il kernel che sta girando: i suoi moduli sono
+    # quelli che il sistema carica adesso, e cambiarli sotto i suoi piedi è
+    # un sistema che al prossimo `modprobe` carica un modulo di un altro
+    # kernel.
+    fucina-installa)
+        [ $# -eq 2 ] || muori "servono la cartella d'uscita e il nome del kernel."
+        controlla_rilascio "$2"
+        REL="$2"
+        controlla_percorso "$1"
+        USCITA="$PULITO"
+        [ "$(basename -- "$USCITA")" = "$REL" ] \
+            || muori "la cartella non è quella di «$REL»."
+        if [ ! -d "$USCITA" ] || [ -L "$USCITA" ]; then muori "non trovo $USCITA."; fi
+        # Tua, e di nessun altro: pkexec ci dice per conto di chi lavoriamo.
+        [ "$(stat -c %u -- "$USCITA")" = "$PKEXEC_UID" ] \
+            || muori "la cartella d'uscita non è di chi ha chiesto."
+        IMG="$USCITA/boot/vmlinuz-$REL"
+        MOD="$USCITA/lib/modules/$REL"
+        if [ ! -f "$IMG" ] || [ -L "$IMG" ]; then muori "manca l'immagine del kernel."; fi
+        if [ ! -d "$MOD" ] || [ -L "$MOD" ]; then muori "mancano i moduli."; fi
+        # Niente collegamenti e niente file speciali: un collegamento dentro
+        # i moduli copiato da root diventa un collegamento di root verso
+        # dove vuole chi l'ha scritto.
+        STRANI=$(find "$USCITA" \( -type l -o -type p -o -type s -o -type b \
+                 -o -type c \) -print 2>/dev/null | head -n 1)
+        [ -z "$STRANI" ] || muori "nella cartella d'uscita c'è un file che non va: $STRANI"
+        [ "$REL" != "$(uname -r)" ] \
+            || muori "«$REL» è il kernel in uso: riavvia su un altro per reinstallarlo."
+
+        annota "fucina-installa $REL da $USCITA"
+
+        # I moduli: prima in una cartella a parte, poi al loro posto. Una
+        # copia interrotta a metà lascia la cartella a parte, non un kernel
+        # con metà dei moduli.
+        NUOVI="/usr/lib/modules/.fucina-$REL.nuovo"
+        rm -rf -- "$NUOVI"
+        cp -r -- "$MOD" "$NUOVI" || muori "non riesco a copiare i moduli."
+        chown -R root:root -- "$NUOVI"
+        # I permessi si RIFANNO, non si copiano: niente bit setuid, niente
+        # scrivibile da altri, qualunque cosa ci fosse nella cartella tua.
+        chmod -R u=rwX,go=rX -- "$NUOVI"
+        if [ -e "/usr/lib/modules/$REL" ]; then
+            [ ! -L "/usr/lib/modules/$REL" ] || muori "/usr/lib/modules/$REL è un collegamento."
+            rm -rf -- "/usr/lib/modules/$REL"
+        fi
+        mv -- "$NUOVI" "/usr/lib/modules/$REL"
+        depmod "$REL" || muori "depmod non è riuscito."
+
+        install -m 644 -o root -g root -- "$IMG" "/boot/vmlinuz-$REL"
+        if [ -f "$USCITA/boot/config-$REL" ] && [ ! -L "$USCITA/boot/config-$REL" ]; then
+            install -m 644 -o root -g root -- "$USCITA/boot/config-$REL" "/boot/config-$REL"
+        fi
+
+        # L'initramfs, con lo strumento che la distribuzione usa già: le sue
+        # regole (/etc/mkinitcpio.conf, dracut.conf) valgono anche per noi.
+        if command -v mkinitcpio >/dev/null 2>&1; then
+            mkinitcpio -k "$REL" -g "/boot/initramfs-$REL.img" >/dev/null 2>&1 \
+                || muori "mkinitcpio non è riuscito a fare l'initramfs."
+        elif command -v dracut >/dev/null 2>&1; then
+            dracut --force "/boot/initramfs-$REL.img" "$REL" >/dev/null 2>&1 \
+                || muori "dracut non è riuscito a fare l'initramfs."
+        else
+            muori "non so fare l'initramfs: non trovo né mkinitcpio né dracut."
+        fi
+
+        voce_avvio "$REL"
+        annota "fucina-installa $REL fatto"
+        printf 'fatto %s\n' "$REL"
+        ;;
+
+    # ── E toglierlo ───────────────────────────────────────────────────────
+    #
+    # Lo stesso controllo sul nome: dal nome si ricavano i percorsi, e un nome
+    # che passa il controllo non può uscire da /boot e da /usr/lib/modules.
+    fucina-togli)
+        [ $# -eq 1 ] || muori "serve il nome del kernel."
+        controlla_rilascio "$1"
+        REL="$1"
+        [ "$REL" != "$(uname -r)" ] \
+            || muori "«$REL» è il kernel in uso: riavvia su un altro, poi toglilo."
+        if [ -L "/usr/lib/modules/$REL" ]; then
+            muori "/usr/lib/modules/$REL è un collegamento: non lo tocco."
+        fi
+        annota "fucina-togli $REL"
+        rm -f -- "/boot/vmlinuz-$REL" "/boot/initramfs-$REL.img" \
+                 "/boot/initramfs-$REL-fallback.img" "/boot/config-$REL"
+        rm -rf -- "/usr/lib/modules/$REL"
+        togli_voce_avvio "$REL"
+        printf 'fatto %s\n' "$REL"
         ;;
 
     *)

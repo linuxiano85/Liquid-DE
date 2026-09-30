@@ -399,7 +399,7 @@ mkdir -p "$ICONE"
 # menu non esiste, e infatti l'MP3 continuava ad aprirlo un'altra cosa.
 for app in minerva-files minerva-settings minerva-monitor minerva-viewer \
            minerva-editor minerva-calcolatrice minerva-media minerva-custodia \
-           minerva-manutenzione minerva-terminale; do
+           minerva-manutenzione minerva-terminale minerva-fucina; do
     # Un collegamento e non una copia: il file nel progetto resta l'unico da
     # correggere, e una modifica vale subito senza reinstallare niente.
     ln -sf "$MINERVA_DIR/scripts/$app" "$CARTELLA_BIN/$app"

@@ -83,6 +83,8 @@ QtObject {
           "titles": ["Minerva · Media"] },
         { "appId": "minerva-manutenzione.desktop",
           "titles": ["Minerva · Manutenzione", "Minerva · Maintenance"] },
+        { "appId": "minerva-fucina.desktop",
+          "titles": ["Minerva · Fucina", "Minerva · Forge"] },
         // Il Terminale porta nel titolo quello che la shell dice (la
         // cartella, il programma in corso): si abbina per inizio, come
         // l'editor.
