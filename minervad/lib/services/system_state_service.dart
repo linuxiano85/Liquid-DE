@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../core/event_bus.dart';
 import 'dbus.dart';
+import 'processo_limitato.dart';
 
 /// SystemStateService — Lo stato dell'apparecchio, letto UNA VOLTA per tutti.
 ///
@@ -175,11 +176,14 @@ class SystemStateService {
   /// Esegue uno script di shell e ne restituisce l'uscita, o "" se qualcosa
   /// va storto. Un comando che manca (niente `nmcli`, niente `brightnessctl`)
   /// non è un errore: è un computer diverso dal nostro.
+  ///
+  /// Con `eseguiLimitato`: allo scadere la shell si uccide invece di restare
+  /// viva dietro a un future che nessuno aspetta più (30 settembre 2026).
   Future<String> _sh(String script) async {
     try {
-      final r = await Process.run('sh', ['-c', script])
-          .timeout(const Duration(seconds: 8));
-      return (r.stdout as String);
+      final r = await eseguiLimitato('sh', ['-c', script],
+          limite: const Duration(seconds: 8));
+      return r.scaduto ? '' : r.stdout;
     } catch (_) {
       return '';
     }
@@ -355,12 +359,13 @@ class SystemStateService {
     // identificatore e non viene tradotto, ma il resto dell'uscita sì.
     String attive = '';
     try {
-      final r = await Process.run(
+      final r = await eseguiLimitato(
         'nmcli',
         ['-t', '-f', 'TYPE,NAME', 'connection', 'show', '--active'],
-        environment: {'LC_ALL': 'C'},
-      ).timeout(const Duration(seconds: 8));
-      attive = r.stdout as String;
+        ambiente: {'LC_ALL': 'C'},
+        limite: const Duration(seconds: 8),
+      );
+      if (!r.scaduto) attive = r.stdout;
     } catch (_) {
       // nmcli che manca non è un errore: è un computer diverso dal nostro.
     }

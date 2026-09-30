@@ -222,6 +222,13 @@ class AutostartService {
   /// Se la voce è di sistema se ne fa prima una copia nella cartella
   /// dell'utente: `/etc/xdg/autostart` non è scrivibile, e non deve esserlo.
   Future<Map<String, dynamic>> imposta(String file, bool acceso) async {
+    // Lo stesso controllo di `togli`, che qui mancava (30 settembre 2026):
+    // `imposta('../../.bashrc', false)` arrivava a `~/.bashrc` e ci
+    // aggiungeva `Hidden=true`, e dalla parte di sistema copiava in casa
+    // qualunque file indicato. Un nome, non un percorso.
+    if (file.contains('/') || file.contains('..') || !file.endsWith('.desktop')) {
+      return {'ok': false, 'error': 'Nome non valido.'};
+    }
     final mio = File('$cartellaUtente/$file');
 
     if (!await mio.exists()) {

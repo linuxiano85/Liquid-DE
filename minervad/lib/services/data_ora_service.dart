@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'processo_limitato.dart';
+
 /// DataOraService — Data, ora, fuso orario e sincronizzazione.
 ///
 /// Mancava del tutto, ed è una delle prime cose che si cerca su un computer
@@ -44,11 +46,15 @@ class DataOraService {
   /// Lo stato attuale, già pronto per il pannello.
   Future<Map<String, dynamic>> stato() async {
     try {
-      final r = await Process.run(comando, const ['show'], runInShell: false);
-      if (r.exitCode != 0) {
-        return _statoVuoto('$comando show è uscito con ${r.exitCode}');
+      final r = await eseguiLimitato(comando, const ['show'],
+          limite: const Duration(seconds: 10));
+      if (r.scaduto) {
+        return _statoVuoto('$comando show non ha risposto');
       }
-      return statoDaShow(r.stdout as String);
+      if (r.codice != 0) {
+        return _statoVuoto('$comando show è uscito con ${r.codice}');
+      }
+      return statoDaShow(r.stdout);
     } on ProcessException catch (e) {
       // Su un sistema senza systemd `timedatectl` non esiste. Non è un errore
       // da nascondere: la pagina deve poter dire «qui non posso fare niente»
@@ -76,10 +82,10 @@ class DataOraService {
     final gia = _fusiCache;
     if (gia != null) return gia;
     try {
-      final r =
-          await Process.run(comando, const ['list-timezones'], runInShell: false);
-      if (r.exitCode != 0) return const [];
-      final lista = (r.stdout as String)
+      final r = await eseguiLimitato(comando, const ['list-timezones'],
+          limite: const Duration(seconds: 10));
+      if (!r.ok) return const [];
+      final lista = r.stdout
           .split('\n')
           .map((r) => r.trim())
           .where((r) => r.isNotEmpty)
@@ -134,14 +140,25 @@ class DataOraService {
     return _esegui(['set-time', quando]);
   }
 
+  /// ── Il tempo massimo (30 settembre 2026) ─────────────────────────────
+  ///
+  /// L'intestazione del file promette di distinguere «rifiutato» da «non ha
+  /// risposto nessuno», ma qui non c'era nessun limite: senza un agente di
+  /// polkit la richiesta restava appesa, e la pagina con lei. Due minuti
+  /// bastano a chiunque per scrivere la password nella finestrella.
   Future<Map<String, dynamic>> _esegui(List<String> argomenti) async {
     try {
-      final r = await Process.run(comando, argomenti, runInShell: false);
-      if (r.exitCode == 0) return {'ok': true};
-      final detto = ((r.stderr as String).trim().isNotEmpty
-              ? r.stderr as String
-              : r.stdout as String)
-          .trim();
+      final r = await eseguiLimitato(comando, argomenti,
+          limite: const Duration(minutes: 2));
+      if (r.scaduto) {
+        return {
+          'ok': false,
+          'errore': 'Nessuno ha risposto alla richiesta della password: '
+              'manca l\'agente di autorizzazione?',
+        };
+      }
+      if (r.codice == 0) return {'ok': true};
+      final detto = (r.stderr.trim().isNotEmpty ? r.stderr : r.stdout).trim();
       return {'ok': false, 'errore': detto.isEmpty ? 'Rifiutato' : detto};
     } on ProcessException catch (e) {
       return {'ok': false, 'errore': e.message};

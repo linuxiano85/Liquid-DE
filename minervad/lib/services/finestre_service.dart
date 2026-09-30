@@ -72,6 +72,7 @@ class FinestreService {
   bool _veloce = false;
   int _clienti = 0;
   bool _inLettura = false;
+  bool _daRileggere = false;
 
   /// Vero quando l'ultima lettura non ha trovato nessuna finestra.
   bool _nessunaFinestra = false;
@@ -228,13 +229,29 @@ class FinestreService {
 
     // Due letture che si accavallano direbbero la stessa cosa due volte, e
     // nell'ordine sbagliato: la seconda partita può rispondere prima.
-    if (_inLettura) return;
+    //
+    // ── Ma chi arriva durante una lettura non si butta (30 settembre 2026) ──
+    //
+    // Si tornava indietro e basta. Se la lettura in corso aveva fotografato
+    // la scrivania PRIMA dell'evento — l'ultima finestra chiusa e una nuova
+    // aperta subito dopo — rispondeva `[]`, `_nessunaFinestra` fermava anche
+    // il passo di riposo, e la finestra nuova restava senza barra fino al
+    // prossimo evento. Si segna che va rifatta, e la si rifà una volta alla
+    // fine: lo stesso rimedio di `SystemStateService.leggi`.
+    if (_inLettura) {
+      _daRileggere = true;
+      return;
+    }
     _inLettura = true;
     String json;
     try {
       json = await _compositore.getClientsRaw();
     } finally {
       _inLettura = false;
+    }
+    if (_daRileggere) {
+      _daRileggere = false;
+      scheduleMicrotask(spingiFinestre);
     }
 
     if (json.isEmpty) return;

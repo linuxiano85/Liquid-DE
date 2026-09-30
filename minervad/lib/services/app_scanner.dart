@@ -236,7 +236,8 @@ class AppScanner {
       _impronta = '';
     }
 
-    final List<DesktopApp> scannedApps = [];
+    // `null` al posto dell'app vuol dire «c'è, ed è NASCOSTA»: vedi sotto.
+    final List<(String, DesktopApp?)> scannedApps = [];
     print('[MINERVA][MATRIX][INFO] scan dirs: ${_scanDirectories.join(":")} '
         '(XDG_DATA_DIRS=${Platform.environment['XDG_DATA_DIRS'] ?? ""})');
 
@@ -247,9 +248,12 @@ class AppScanner {
       try {
         await for (final entity in dir.list(recursive: true, followLinks: true)) {
           if (entity is File && entity.path.endsWith('.desktop')) {
-            final app = await _parseDesktopFile(entity);
+            final nascosti = <String>{};
+            final app = await _parseDesktopFile(entity, nascosti: nascosti);
             if (app != null) {
-              scannedApps.add(app);
+              scannedApps.add((app.id.toLowerCase(), app));
+            } else if (nascosti.isNotEmpty) {
+              scannedApps.add((nascosti.first.toLowerCase(), null));
             }
           }
         }
@@ -261,19 +265,34 @@ class AppScanner {
     // Rimuove i doppioni tenendo il primo trovato: le directory sono in
     // ordine di precedenza XDG, quindi la versione dell'utente vince su
     // quella di sistema invece di essere sovrascritta da lei.
-    final Map<String, DesktopApp> uniqueApps = {};
-    for (final app in scannedApps) {
-      uniqueApps.putIfAbsent(app.id.toLowerCase(), () => app);
-    }
-
-    _apps = uniqueApps.values.toList()
-      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    //
+    // ── Anche quando la versione dell'utente è NASCOSTA (30 settembre 2026) ──
+    //
+    // Nascondere un programma dal menu, per la specifica e per ogni editor di
+    // menu (alacarte, quello di KDE), vuol dire scriverne una copia in
+    // `~/.local/share/applications` con `NoDisplay=true` o `Hidden=true`. Qui
+    // quella copia veniva scartata PRIMA di togliere i doppioni, e allora
+    // vinceva la versione di sistema: il programma nascosto ricompariva.
+    // La copia nascosta adesso occupa il suo posto, e non si mostra.
+    _apps = senzaDoppioni(scannedApps);
     await novita.aggiorna(_apps.map((a) => a.id));
 
     print('[MINERVA][MATRIX][OK] Scansione applicazioni completata. Trovate ${_apps.length} app.');
     // Con `forza` l'impronta era stata azzerata: si rimette adesso, o la
     // prossima chiamata rifarebbe tutto un'altra volta.
     if (_impronta.isEmpty) _impronta = await _improntaDelle();
+  }
+
+  /// Il primo trovato per ogni id vince, anche se è nascosto (`null`): in
+  /// quel caso il programma non si mostra. Pubblica per provarla senza
+  /// dover fabbricare le cartelle XDG di chi esegue le prove.
+  static List<DesktopApp> senzaDoppioni(List<(String, DesktopApp?)> trovati) {
+    final unici = <String, DesktopApp?>{};
+    for (final (id, app) in trovati) {
+      unici.putIfAbsent(id, () => app);
+    }
+    return unici.values.whereType<DesktopApp>().toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   }
 
   /// La lingua di chi usa il computer, da `LC_MESSAGES` o `LANG`: «it_IT».
@@ -301,7 +320,11 @@ class AppScanner {
     return null;
   }
 
-  Future<DesktopApp?> _parseDesktopFile(File file) async {
+  /// `nascosti`: se il file c'è ma dichiara `NoDisplay` o `Hidden`, il suo id
+  /// finisce lì dentro. Chi scandisce ha bisogno di saperlo, per non far
+  /// vincere al suo posto la versione di sistema.
+  Future<DesktopApp?> _parseDesktopFile(File file,
+      {Set<String>? nascosti}) async {
     try {
       final lines = await file.readAsLines();
       
@@ -313,6 +336,7 @@ class AppScanner {
       List<String> mimeTypes = [];
       bool needsTerminal = false;
       bool noDisplay = false;
+      bool hidden = false;
       // Le chiavi che la ricerca per funzione vuole nella lingua di chi usa
       // il computer: `Chiave[it_IT]` batte `Chiave[it]`, che batte `Chiave`.
       final localizzate = <String, Map<int, String>>{};
@@ -356,6 +380,9 @@ class AppScanner {
           icon = line.substring(5).trim();
         } else if (line.startsWith('NoDisplay=')) {
           noDisplay = (line.substring(10).trim().toLowerCase() == 'true');
+        } else if (line.startsWith('Hidden=')) {
+          // Per la specifica, `Hidden=true` vuol dire «come se non ci fosse».
+          hidden = (line.substring(7).trim().toLowerCase() == 'true');
         } else if (line.startsWith('Categories=')) {
           categories = line.substring(11).split(';').where((c) => c.isNotEmpty).toList();
         } else if (line.startsWith('StartupWMClass=')) {
@@ -372,11 +399,15 @@ class AppScanner {
         }
       }
 
-      if (noDisplay || name == null || exec == null) {
+      final id = file.path.split('/').last;
+
+      if (noDisplay || hidden) {
+        nascosti?.add(id);
         return null;
       }
-
-      final id = file.path.split('/').last;
+      if (name == null || exec == null) {
+        return null;
+      }
 
       String migliore(String k) {
         final v = localizzate[k];

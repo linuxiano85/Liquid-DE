@@ -90,6 +90,20 @@ class GreetdFramer {
   /// capire, leggendo un registro, se ci si è fermati a metà messaggio.
   int get inAttesa => _buffer.length;
 
+  /// Butta via quello che era rimasto a metà.
+  ///
+  /// ── Perché serve (30 settembre 2026) ──────────────────────────────────
+  ///
+  /// Il buffer sopravviveva alla connessione. Se greetd cadeva a metà di un
+  /// messaggio, i byte rimasti venivano letti come la TESTA della prima
+  /// risposta della connessione nuova: provato, sei byte vecchi davanti a
+  /// un messaggio intero danno «Control character in string». E con una
+  /// lunghezza assurda rimasta in testa, ogni connessione successiva
+  /// falliva allo stesso modo finché il demone non ripartiva — una
+  /// schermata di accesso che non fa più entrare nessuno. Una connessione
+  /// nuova comincia sempre da un buffer vuoto.
+  void azzera() => _buffer.clear();
+
   /// Un messaggio di greetd è una manciata di byte. Un megabyte è già mille
   /// volte il necessario: oltre, non è un messaggio lungo, è un errore.
   static const int _limiteMessaggio = 1024 * 1024;
@@ -175,11 +189,21 @@ class GreetdService {
     try {
       final s = await Socket.connect(
           InternetAddress(percorso, type: InternetAddressType.unix), 0);
+      _framer.azzera();
       _socket = s;
+      // Il guasto si racconta solo se riguarda il socket di ADESSO: la
+      // chiusura di uno vecchio può arrivare dopo che ci si è già
+      // riconnessi, e distruggerebbe la connessione buona.
       s.listen(
         _arrivati,
-        onError: (e) => _guasto('Errore di lettura: $e'),
-        onDone: () => _guasto('greetd ha chiuso la connessione'),
+        onError: (e) {
+          if (identical(_socket, s)) _guasto('Errore di lettura: $e');
+        },
+        onDone: () {
+          if (identical(_socket, s)) {
+            _guasto('greetd ha chiuso la connessione');
+          }
+        },
         cancelOnError: true,
       );
       print('[MINERVA][GREETD][OK] Connesso a $percorso');
@@ -209,16 +233,40 @@ class GreetdService {
   /// fallire.
   void _guasto(String descrizione, {bool zitto = false}) {
     if (!zitto) print('[MINERVA][GREETD][ERRORE] $descrizione');
-    _risposte.add({
-      'type': 'error',
-      'error_type': 'error',
-      'description': descrizione,
-    });
-    _socket?.destroy();
+    if (!_risposte.isClosed) {
+      _risposte.add({
+        'type': 'error',
+        'error_type': 'error',
+        'description': descrizione,
+      });
+    }
+    final s = _socket;
     _socket = null;
+    s?.destroy();
+    _framer.azzera();
   }
 
-  Future<void> _manda(Map<String, dynamic> messaggio) async {
+  /// L'ultimo invio messo in fila. Vedi `_manda`.
+  Future<void> _coda = Future<void>.value();
+
+  /// Manda un messaggio, uno alla volta.
+  ///
+  /// ── La fila (30 settembre 2026) ──────────────────────────────────────
+  ///
+  /// `add` + `flush` su un socket non si possono accavallare: un secondo
+  /// `add` mentre il `flush` del primo è ancora in volo solleva «StreamSink
+  /// is bound to a stream». Due richieste della schermata che arrivano
+  /// vicine — l'annullamento e la nuova `create_session`, o la schermata
+  /// che se ne va mentre la risposta è in volo — bastavano a far cadere la
+  /// seconda con un'eccezione. Qui ogni invio aspetta il precedente, e un
+  /// invio andato male non blocca quelli dopo.
+  Future<void> _manda(Map<String, dynamic> messaggio) {
+    final turno = _coda.then((_) => _mandaSubito(messaggio));
+    _coda = turno.then((_) {}, onError: (Object _) {});
+    return turno;
+  }
+
+  Future<void> _mandaSubito(Map<String, dynamic> messaggio) async {
     if (!await connetti()) {
       // `zitto` quando siamo fuori da un greeter: la ragione sta su
       // `_dettoCheNonSiamoUnGreeter`. Il client riceve la risposta lo stesso.
@@ -226,8 +274,15 @@ class GreetdService {
           zitto: socketDaUsare == null);
       return;
     }
-    _socket!.add(GreetdFramer.encode(messaggio));
-    await _socket!.flush();
+    final s = _socket!;
+    try {
+      s.add(GreetdFramer.encode(messaggio));
+      await s.flush();
+    } catch (e) {
+      // Si dice alla schermata con la forma di sempre, invece di lasciare
+      // che l'eccezione salga fino al canale e la schermata resti in attesa.
+      if (identical(_socket, s)) _guasto('Errore di scrittura: $e');
+    }
   }
 
   /// Comincia il tentativo di accesso per un utente.
@@ -260,9 +315,12 @@ class GreetdService {
   Future<void> annulla() => _manda({'type': 'cancel_session'});
 
   Future<void> chiudi() async {
-    await _socket?.close();
-    _socket?.destroy();
+    // Prima si dimentica il socket, poi lo si chiude: così la sua chiusura
+    // non passa per `_guasto`, che scriverebbe su `_risposte` già chiuso.
+    final s = _socket;
     _socket = null;
+    await s?.close();
+    s?.destroy();
     await _risposte.close();
   }
 }

@@ -55,9 +55,47 @@ import 'dart:io';
 ///
 /// Quindi si legge a PEZZI e si guarda dentro quello che si è accumulato.
 class BluetoothPairingService {
+  /// Il programma da lanciare. Si cambia solo nelle prove, con un
+  /// `bluetoothctl` finto che risponde come quello vero.
+  final String programma;
+
+  BluetoothPairingService({this.programma = 'bluetoothctl'});
+
   Process? _sessione;
   StreamSubscription<String>? _ascolto;
+  StreamSubscription<String>? _ascoltoErrori;
   Timer? _scadenza;
+
+  // ── Tre difetti dello stesso giro (30 settembre 2026) ───────────────────
+  //
+  // Trovati in revisione con un `bluetoothctl` finto, e tutti e tre dopo il
+  // «Pairing successful»:
+  //
+  //  1. `connect` NON partiva mai. `_scrivi` faceva `write` + `flush` senza
+  //     aspettare il `flush`, e il `write` successivo — `connect` subito
+  //     dopo `trust` — sollevava «StreamSink is bound to a stream»,
+  //     inghiottito dal `catch`. La finestra diceva «Accoppiato e collegato»
+  //     e il dispositivo restava scollegato.
+  //  2. L'esito scattava a OGNI pezzo di uscita successivo, perché il testo
+  //     accumulato conteneva ancora «Pairing successful»: undici «fatto»,
+  //     undici `trust`, undici timer di chiusura.
+  //  3. L'ascolto di stderr non si cancellava mai, e quei timer non sapevano
+  //     di quale sessione fossero: uno rimasto indietro poteva chiudere
+  //     l'accoppiamento successivo.
+  //
+  // Da qui la fila delle scritture, l'esito una volta sola, e il numero
+  // della sessione.
+
+  /// L'ultima scrittura messa in fila: ognuna aspetta il `flush` della
+  /// precedente.
+  Future<void> _fila = Future<void>.value();
+
+  /// Vero quando questa sessione ha già avuto il suo esito.
+  bool _finito = false;
+
+  /// Cresce a ogni accoppiamento: i timer si ricordano il loro, e se nel
+  /// frattempo ne è cominciato un altro non toccano niente.
+  int _numeroSessione = 0;
 
   /// Quello che `bluetoothctl` ha detto finora e che non è ancora stato
   /// riconosciuto. Si azzera a ogni domanda riconosciuta, altrimenti la stessa
@@ -198,6 +236,9 @@ class BluetoothPairingService {
     _mac = mac;
     _accumulato = '';
     _domandaInCorso = '';
+    _finito = false;
+    _fila = Future<void>.value();
+    final mia = ++_numeroSessione;
 
     try {
       // `LC_ALL=C` perché tutto quello che si riconosce qui sotto sono parole
@@ -205,7 +246,7 @@ class BluetoothPairingService {
       // e l'accoppiamento risulta fallito mentre sta funzionando. Trappola già
       // presa in questo progetto.
       _sessione = await Process.start(
-        'bluetoothctl',
+        programma,
         const [],
         environment: const {'LC_ALL': 'C'},
       );
@@ -214,14 +255,19 @@ class BluetoothPairingService {
       return {'ok': false, 'error': 'Non trovo «bluetoothctl».'};
     }
 
-    _ascolto = _sessione!.stdout
-        .transform(utf8.decoder)
-        .listen(_arrivato, onError: (_) {}, cancelOnError: false);
-    // Anche stderr: `Failed to pair` a volte esce di là.
-    _sessione!.stderr.transform(utf8.decoder).listen(_arrivato,
-        onError: (_) {}, cancelOnError: false);
+    _ascolto = _sessione!.stdout.transform(utf8.decoder).listen((pezzo) {
+      if (mia == _numeroSessione) _arrivato(pezzo);
+    }, onError: (_) {}, cancelOnError: false);
+    // Anche stderr: `Failed to pair` a volte esce di là. Si tiene la
+    // sottoscrizione per poterla chiudere con il resto.
+    _ascoltoErrori =
+        _sessione!.stderr.transform(utf8.decoder).listen((pezzo) {
+      if (mia == _numeroSessione) _arrivato(pezzo);
+    }, onError: (_) {}, cancelOnError: false);
 
     _scadenza = Timer(_tempoMassimo, () {
+      if (mia != _numeroSessione || _finito) return;
+      _finito = true;
       _annuncia({
         'stato': 'fallito',
         'error': 'Ci ha messo troppo. Rimettilo in modalità accoppiamento e '
@@ -240,12 +286,20 @@ class BluetoothPairingService {
     // E ci vogliono le pause: la registrazione passa da D-Bus, non è
     // istantanea, e `default-agent` mandato subito dopo risponde «No agent is
     // registered» — verificato anche questo.
+    //
+    // Dopo ogni pausa si guarda se la sessione è ancora questa: annullata nel
+    // frattempo, e magari già ricominciata per un altro dispositivo, il
+    // `pair` di questo MAC finirebbe dentro la sessione nuova.
+    bool ancoraMia() => mia == _numeroSessione && _sessione != null;
     _scrivi('agent off');
     await Future<void>.delayed(const Duration(milliseconds: 1500));
+    if (!ancoraMia()) return {'ok': false, 'error': 'Annullato.'};
     _scrivi('agent KeyboardDisplay');
     await Future<void>.delayed(const Duration(milliseconds: 1500));
+    if (!ancoraMia()) return {'ok': false, 'error': 'Annullato.'};
     _scrivi('default-agent');
     await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (!ancoraMia()) return {'ok': false, 'error': 'Annullato.'};
     _scrivi('pair $mac');
 
     _annuncia({'stato': 'avviato', 'mac': mac});
@@ -260,6 +314,7 @@ class BluetoothPairingService {
     _domandaInCorso = '';
     _scrivi(si ? 'yes' : 'no');
     if (!si) {
+      _finito = true;
       _annuncia({'stato': 'fallito', 'error': 'Annullato.'});
       _chiudi();
     }
@@ -271,6 +326,7 @@ class BluetoothPairingService {
   Future<Map<String, dynamic>> annulla() async {
     if (_sessione == null) return {'ok': true};
     _scrivi('cancel-pairing $_mac');
+    _finito = true;
     _annuncia({'stato': 'fallito', 'error': 'Annullato.'});
     _chiudi();
     return {'ok': true};
@@ -286,8 +342,22 @@ class BluetoothPairingService {
       _accumulato = _accumulato.substring(_accumulato.length - 4000);
     }
 
+    // Un esito per sessione: quello che `bluetoothctl` stampa dopo — le
+    // proprietà che cambiano, l'eco di `trust` e `connect` — non deve farlo
+    // scattare di nuovo. Resta una sola domanda a cui rispondere, ed è
+    // proprio una di quelle che arrivano DOPO: l'autorizzazione dei servizi.
+    if (_finito) {
+      if (leggiDomanda(_accumulato)?['tipo'] == 'servizio') {
+        _scrivi('yes');
+        _accumulato = '';
+      }
+      return;
+    }
+
     final esito = leggiEsito(_accumulato);
     if (esito != null) {
+      _finito = true;
+      _accumulato = '';
       if (esito['ok'] == true) {
         // Accoppiato: adesso «fidati» e «connetti», dentro la STESSA sessione.
         // Fuori sarebbero due sessioni senza agente, che è il difetto da cui
@@ -301,7 +371,12 @@ class BluetoothPairingService {
               : 'Accoppiato e collegato.',
         });
         // Un istante per lasciar passare `trust` e `connect` prima di chiudere.
-        Timer(const Duration(seconds: 4), _chiudi);
+        // Solo QUESTA sessione: se nel frattempo ne è cominciata un'altra, il
+        // timer non la tocca.
+        final mia = _numeroSessione;
+        Timer(const Duration(seconds: 4), () {
+          if (mia == _numeroSessione) _chiudi();
+        });
       } else {
         _annuncia({'stato': 'fallito', 'error': esito['error']});
         _chiudi();
@@ -322,6 +397,7 @@ class BluetoothPairingService {
     // Il PIN da battere qui non è supportato: si dice, invece di restare muti
     // finché non scade.
     if (domanda['tipo'] == 'pin') {
+      _finito = true;
       _annuncia({
         'stato': 'fallito',
         'error': 'Questo dispositivo vuole che il codice venga battuto sul '
@@ -344,13 +420,22 @@ class BluetoothPairingService {
   }
 
   void _scrivi(String comando) {
-    try {
-      _sessione?.stdin.write('$comando\n');
-      _sessione?.stdin.flush();
-    } catch (_) {
-      // Sessione già chiusa: non è un guasto da raccontare, il chiamante lo
-      // scopre dall'evento di esito.
-    }
+    final s = _sessione;
+    if (s == null) return;
+    _mettiInFila(s, comando);
+  }
+
+  /// Scrive dopo che la scrittura precedente è arrivata: vedi `_fila`.
+  void _mettiInFila(Process s, String comando) {
+    _fila = _fila.then((_) async {
+      try {
+        s.stdin.write('$comando\n');
+        await s.stdin.flush();
+      } catch (_) {
+        // Sessione già chiusa: non è un guasto da raccontare, il chiamante lo
+        // scopre dall'evento di esito.
+      }
+    });
   }
 
   void _annuncia(Map<String, dynamic> evento) {
@@ -362,13 +447,14 @@ class BluetoothPairingService {
     _scadenza = null;
     _ascolto?.cancel();
     _ascolto = null;
+    _ascoltoErrori?.cancel();
+    _ascoltoErrori = null;
     final s = _sessione;
     _sessione = null;
     if (s == null) return;
-    try {
-      s.stdin.write('quit\n');
-      s.stdin.flush();
-    } catch (_) {}
+    // In fila anche lui: dopo un `no` o un `cancel-pairing` il `quit` si
+    // perdeva allo stesso modo del `connect`.
+    _mettiInFila(s, 'quit');
     // E se «quit» non basta, si insiste: una sessione lasciata viva tiene
     // l'agente registrato, e il prossimo accoppiamento trova il posto occupato.
     Timer(const Duration(seconds: 2), () => s.kill());

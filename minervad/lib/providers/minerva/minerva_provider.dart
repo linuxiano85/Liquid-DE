@@ -249,6 +249,38 @@ class MinervaProvider implements CompositorProvider {
     ];
   }
 
+  // ── «Non lo so» non è «niente» (30 settembre 2026) ──────────────────────
+  //
+  // `getClientsRaw` e `getWorkspaces` ripiegano apposta — `[]` e una
+  // scrivania 1 finta — perché la barra e la dock preferiscono un disegno a
+  // un buco. Ma chi DECIDE qualcosa sulle finestre non può confondere le due
+  // cose: il respiro della memoria leggeva «nessuna finestra in vista» e dopo
+  // un minuto comprimeva TUTTE le app, anche quella sotto le dita, per il
+  // solo fatto che il compositore non aveva risposto. Queste due dicono
+  // `null` quando la risposta non c'è.
+
+  /// Le finestre, o `null` se il compositore non ha risposto come si deve.
+  Future<String?> finestreSeRisponde() async {
+    final r = await _chiedi('finestre');
+    if (!r.startsWith('ok')) return null;
+    final carico = caricoOk(r);
+    return _sembraJson(carico) ? carico : null;
+  }
+
+  /// L'identificativo della scrivania attiva, o `null` se non si sa.
+  Future<int?> scrivaniaAttivaSeRisponde() async {
+    final r = await _chiedi('scrivanie');
+    if (!r.startsWith('ok')) return null;
+    try {
+      final l = jsonDecode(caricoOk(r));
+      if (l is! List) return null;
+      for (final w in l.whereType<Map>()) {
+        if (w['attiva'] == true) return (w['id'] as num?)?.toInt();
+      }
+    } catch (_) {}
+    return null;
+  }
+
   // ── Ascoltare ───────────────────────────────────────────────────────────
 
   @override

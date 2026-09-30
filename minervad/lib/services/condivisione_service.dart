@@ -477,11 +477,19 @@ class CondivisioneService {
         .transform(utf8.decoder)
         .listen(raccolto.write, onError: (_) {}, cancelOnError: false);
 
+    // In fila, ognuna dopo il `flush` della precedente (30 settembre 2026):
+    // un `write` mentre il `flush` di prima è in volo solleva «StreamSink is
+    // bound to a stream», e il `catch` lo inghiottiva. È il difetto che
+    // faceva perdere il `connect` all'accoppiamento Bluetooth; qui oggi le
+    // scritture sono distanziate da attese, ma basta toglierne una.
+    var fila = Future<void>.value();
     void scrivi(String c) {
-      try {
-        sessione.stdin.write('$c\n');
-        sessione.stdin.flush();
-      } catch (_) {}
+      fila = fila.then((_) async {
+        try {
+          sessione.stdin.write('$c\n');
+          await sessione.stdin.flush();
+        } catch (_) {}
+      });
     }
 
     try {

@@ -236,18 +236,36 @@ class TemaIconeService {
     return {'ok': true, 'messaggio': 'Tema tolto.'};
   }
 
-  Future<void> _copiaCartella(Directory da, Directory a) async {
+  Future<void> _copiaCartella(Directory da, Directory a,
+      {String? radice}) async {
+    final cima = radice ?? _normale(da.absolute.path);
     await a.create(recursive: true);
     await for (final v in da.list(recursive: false, followLinks: false)) {
       final nome = v.path.split('/').last;
       if (v is Directory) {
-        await _copiaCartella(v, Directory('${a.path}/$nome'));
+        await _copiaCartella(v, Directory('${a.path}/$nome'), radice: cima);
       } else if (v is File) {
         await v.copy('${a.path}/$nome');
+      } else if (v is Link) {
+        // ── I collegamenti si tengono, se restano dentro il tema ─────────
+        //
+        // Si saltavano tutti, per paura di ricrearli puntati fuori. Ma i
+        // temi grandi SONO fatti di collegamenti — in Papirus e Breeze metà
+        // delle icone sono alias di un'altra, e a volte un'intera cartella
+        // di misura (`@2x`) è un collegamento — e il tema installato usciva
+        // pieno di buchi (30 settembre 2026). Si ricrea uguale un
+        // collegamento RELATIVO che, risolto, resta dentro il tema; quelli
+        // assoluti o che escono si saltano ancora.
+        final bersaglio = await v.target();
+        if (bersaglio.startsWith('/')) continue;
+        final dove = _normale('${_normale(da.absolute.path)}/$bersaglio');
+        if (dove != cima && !dove.startsWith('$cima/')) continue;
+        await Link('${a.path}/$nome').create(bersaglio);
       }
-      // I collegamenti simbolici si saltano: dentro un tema puntano quasi
-      // sempre a un'altra icona dello stesso tema, e ricrearli male
-      // significherebbe farli puntare fuori.
     }
   }
+
+  /// Il percorso senza `.` e `..`, senza toccare il disco.
+  static String _normale(String percorso) =>
+      Uri.file(percorso).normalizePath().toFilePath();
 }
