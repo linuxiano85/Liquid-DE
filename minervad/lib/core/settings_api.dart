@@ -651,9 +651,17 @@ class SettingsApi {
           // classica è la barra di Minerva, a tutta larghezza, che resta
           // come scelta.
           'stile': 'isola',
-          // L'Isola a scomparsa: nascosta oltre il bordo, ricompare con una
-          // sosta del puntatore lassù. Giacomo, 25 settembre 2026: «così
-          // recuperiamo spazio».
+          // Come sta l'Isola: 'sempre' (riserva la fascia), 'elude' (c'è
+          // finché nessuna finestra le arriva sotto) o 'nascondi' (oltre il
+          // bordo, torna con una sosta del puntatore lassù). Giacomo, 30
+          // settembre 2026: «servirebbe avere l'isola dove si trova l'ora in
+          // modalità eludi finestre perché quando sono sul desktop per vedere
+          // l'ora devo sempre salire su e farla comparire». Gli stessi tre
+          // modi della dock (`dock.modo`).
+          'modoIsola': 'elude',
+          // Il valore di prima (25 settembre, «così recuperiamo spazio»): si
+          // legge ancora solo per chi l'aveva SPENTO, che ritrova l'Isola
+          // sempre su. Vedi `modoIsola` in `minerva-shell/shell.qml`.
           'aScomparsa': true,
           // Qui c'era `'opacity': 0.10`. Tolta il 5 settembre 2026: non la
           // leggeva NESSUNO — zero occorrenze in tutto il progetto — e la

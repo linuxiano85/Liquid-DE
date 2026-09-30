@@ -986,7 +986,7 @@ ShellRoot {
                 screen: scrivania.modelData
                 visible: root.barraIsola
                 inBasso: root.barraInBasso
-                aScomparsa: Core.Ipc.get("bar.aScomparsa", true) === true
+                modo: root.modoIsola
                 riservata: root.rivaRiservata
                 consenso: root.consenso
                 tenuta: isolaGiorno.aperto
@@ -2319,6 +2319,16 @@ ShellRoot {
     /// Com'è messa la dock, per l'IPC `minerva dock`. Le scrive la dock
     /// stessa: vedi il blocco `Dock { }` più sotto.
     property string dockModo: "sempre"
+
+    /// Come sta l'Isola (`bar.modoIsola`), leggendo anche il valore di prima:
+    /// chi aveva spento «a scomparsa» (`bar.aScomparsa`) la voleva sempre su,
+    /// e sempre su resta. Lo stesso conto è in `settings/sections/Dock.qml`.
+    readonly property string modoIsola: {
+        var m = String(Core.Ipc.get("bar.modoIsola", ""));
+        if (m === "sempre" || m === "elude" || m === "nascondi")
+            return m;
+        return Core.Ipc.get("bar.aScomparsa", true) === false ? "sempre" : "elude";
+    }
     property bool dockVisibile: true
     /// Il puntatore è sopra la dock: è la ragione per cui una dock che
     /// dovrebbe nascondersi resta dov'è, ed è giusto che resti.

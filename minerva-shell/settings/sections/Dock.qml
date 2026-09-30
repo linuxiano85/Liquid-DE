@@ -34,6 +34,14 @@ Page {
             return m;
         return Core.Ipc.get("dock.autoHide", false) ? "nascondi" : "sempre";
     }
+    /// Come sta l'Isola, leggendo anche il valore di prima: lo stesso conto
+    /// di `modoIsola` in `shell.qml`.
+    readonly property string modoIsola: {
+        var m = String(Core.Ipc.get("bar.modoIsola", ""));
+        if (m === "sempre" || m === "elude" || m === "nascondi")
+            return m;
+        return Core.Ipc.get("bar.aScomparsa", true) === false ? "sempre" : "elude";
+    }
     /// L'angolo toccato nella miniatura: la scelta qui sotto è la sua.
     property string angoloScelto: "bassoSx"
     readonly property var nomiAngoli: ({
@@ -579,7 +587,7 @@ Page {
                 // L'Isola: a scomparsa sbuca per metà dal bordo.
                 Rectangle {
                     id: isolaMini
-                    readonly property bool nascosta: Core.Ipc.get("bar.aScomparsa", true) === true
+                    readonly property bool nascosta: page.modoIsola === "nascondi"
                     width: parent.width * 0.3; height: 20; radius: 10
                     x: (parent.width - width) / 2
                     y: miniatura.barraInBasso
@@ -606,7 +614,10 @@ Page {
                         anchors.margins: -8
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: Core.Ipc.setSetting("bar.aScomparsa", !isolaMini.nascosta)
+                        // Toccata, passa al modo dopo: sempre → elude → nascondi.
+                        onClicked: Core.Ipc.setSetting("bar.modoIsola",
+                            page.modoIsola === "sempre" ? "elude"
+                            : page.modoIsola === "elude" ? "nascondi" : "sempre")
                     }
                 }
                 Text {
@@ -845,14 +856,29 @@ Page {
 
         S.SettingRow {
             width: parent.width
-            label: page.it ? "A scomparsa" : "Auto-hide"
+            label: page.it ? "Quando si toglie di mezzo" : "When it steps aside"
             description: page.it
-                ? "Nascosta oltre il bordo, torna fermando il puntatore lassù: le finestre usano tutto lo schermo."
-                : "Hidden past the edge, it comes back when the pointer rests up there."
-            controlWidth: 60
-            control: S.ToggleSwitch {
-                checked: Core.Ipc.get("bar.aScomparsa", true) === true
-                onToggled: function(v) { Core.Ipc.setSetting("bar.aScomparsa", v); }
+                ? "«Elude le finestre»: sulla scrivania libera l'ora si vede, e l'Isola si ritira quando una finestra arriva lassù. Nascosta, torna fermando il puntatore sul bordo."
+                : "“Dodge windows”: on a free desktop the clock shows, and the Island steps back when a window reaches it. Hidden, it comes back when the pointer rests on the edge."
+            // Le stesse tre voci della dock, e la stessa larghezza: con
+            // meno, la terza usciva dal bordo (vedi la riga della dock).
+            controlWidth: 400
+            control: S.ChoicePicker {
+                value: page.modoIsola
+                options: [
+                    { "value": "sempre",
+                      "label": page.it ? "Sempre" : "Always" },
+                    { "value": "elude",
+                      "label": page.it ? "Elude le finestre" : "Dodge windows" },
+                    { "value": "nascondi",
+                      "label": page.it ? "Si nasconde" : "Hide" }
+                ]
+                onPicked: function(v) {
+                    Core.Ipc.setSetting("bar.modoIsola", v);
+                    // Il valore di prima, allineato: una versione vecchia
+                    // continua a capire «nascosta sì/no».
+                    Core.Ipc.setSetting("bar.aScomparsa", v !== "sempre");
+                }
             }
         }
 

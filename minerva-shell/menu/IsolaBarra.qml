@@ -55,8 +55,45 @@ PanelWindow {
     // bordo se non con Super giù; e tenendo Super (`consenso`) l'Isola sale
     // anche sopra lo schermo intero — per questo, finché dura, sta sul piano
     // più alto.
-    /// `bar.aScomparsa`: nascosta finché non la si chiama.
-    property bool aScomparsa: true
+    /// `bar.modoIsola`: 'sempre', 'elude' o 'nascondi'.
+    property string modo: "elude"
+    /// Negli ultimi due non riserva la fascia, e il bordo la richiama.
+    readonly property bool aScomparsa: isolaBarra.modo !== "sempre"
+
+    // ── Elude le finestre ────────────────────────────────────────────────
+    //
+    // Sulla scrivania libera l'ora si deve vedere senza andarla a prendere
+    // (Giacomo, 30 settembre 2026). Si ritira solo quando una finestra
+    // arriva dove starebbe la capsula: lo stesso conto della dock in «elude»
+    // (`dock/Dock.qml`, `copertaDaUnaFinestra`). Si guarda il posto dove la
+    // capsula sta QUANDO È SU, non dove è adesso: appena ritirata non
+    // coprirebbe più niente e tornerebbe su, avanti e indietro per sempre.
+    readonly property rect ingombro: Qt.rect(
+        (isolaBarra.screen ? isolaBarra.screen.x : 0) + (isolaBarra.width - capsula.width) / 2,
+        (isolaBarra.screen ? isolaBarra.screen.y : 0)
+            + (isolaBarra.inBasso && isolaBarra.screen
+               ? isolaBarra.screen.height - Theme.Effects.barHeight : 0),
+        capsula.width, Theme.Effects.barHeight)
+    readonly property bool coperta: {
+        if (isolaBarra.modo !== "elude")
+            return false;
+        var f = Core.Windows.all || [];
+        var r = isolaBarra.ingombro;
+        for (var i = 0; i < f.length; i++) {
+            var w = f[i];
+            if (w.minimized === true)
+                continue;
+            if (w.workspace !== undefined && Core.Compositore.scrivaniaAttiva > 0
+                && w.workspace !== Core.Compositore.scrivaniaAttiva)
+                continue;
+            if (w.w === undefined || w.h === undefined)
+                continue;
+            if (w.x < r.x + r.width && w.x + w.w > r.x
+                && w.y < r.y + r.height && w.y + w.h > r.y)
+                return true;
+        }
+        return false;
+    }
     /// Una finestra ingrandita o a schermo intero: niente la fa comparire da
     /// sola (le notifiche comprese).
     property bool riservata: false
@@ -67,6 +104,7 @@ PanelWindow {
 
     property bool svelata: false
     readonly property bool su: !isolaBarra.aScomparsa || isolaBarra.svelata
+                               || (isolaBarra.modo === "elude" && !isolaBarra.coperta)
                                || isolaBarra.consenso || isolaBarra.tenuta
                                || (isolaBarra.arrivata !== null && !isolaBarra.riservata)
     function svela() {
@@ -135,6 +173,7 @@ PanelWindow {
         var r = [];
         r.push("isola " + (isolaBarra.inBasso ? "in basso" : "in alto")
                + " · " + (isolaBarra.su ? "su" : "nascosta")
+               + " · modo " + isolaBarra.modo + (isolaBarra.coperta ? " (coperta)" : "")
                + " · larga " + Math.round(capsula.width));
         if (isolaBarra.arrivata)
             r.push("notifica: " + isolaBarra.arrivata.appName + " — " + isolaBarra.arrivata.summary);
