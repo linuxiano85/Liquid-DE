@@ -80,6 +80,11 @@ PanelWindow {
             isola.origine = dove;
         isola.apri();
     }
+    /// La stessa carta, girata sul calendario: la apre l'ora nell'Isola.
+    function apriCalendario(dove) {
+        isola.apriDa(dove);
+        isola.giraSu("mese");
+    }
     function apri() {
         if (isola.aperto) return;
         isola.oggi = new Date();
@@ -133,9 +138,27 @@ PanelWindow {
     Timer { id: spegni; interval: Theme.Motion.liquido ? 600 : 0; onTriggered: if (!isola.aperto) isola.mostrato = false }
 
     MouseArea {
+        id: fuoriIsola
         anchors.fill: parent
         enabled: isola.aperto
         onPressed: isola.chiudi()
+    }
+
+    // ── La capsula resta cliccabile ─────────────────────────────────────
+    //
+    // La carta copre tutto lo schermo per chiudersi al tocco fuori, e così
+    // copriva anche la capsula da cui è uscita: toccare l'ora col meteo
+    // aperto chiudeva invece di girare sul calendario. Il buco lascia
+    // passare i tocchi alla capsula, che sa quale faccia chiedere.
+    mask: Region {
+        item: fuoriIsola
+        Region {
+            intersection: Intersection.Subtract
+            x: isola.origine.x
+            y: isola.origine.y
+            width: isola.origine.width
+            height: isola.origine.height
+        }
     }
     Item {
         anchors.fill: parent

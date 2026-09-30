@@ -94,8 +94,41 @@ PanelWindow {
         spegni.stop();
         cassetto.carica();
     }
+    // ── Il trascinamento finisce SEMPRE, anche se viene interrotto ────────
+    //
+    // Trascinando il Cassetto fino all'altro bordo, il puntatore spingeva
+    // contro quel bordo e il compositore apriva le Stanze: il Cassetto si
+    // chiudeva a metà gesto, la MouseArea riceveva «annullato» e non
+    // «rilasciato», e lo `scarto` restava appiccicato. Il Cassetto rimaneva
+    // disegnato dall'altra parte con l'impostazione ancora com'era: gli
+    // appunti a sinistra, ma per aprirli bisognava spingere a destra (PC di
+    // prova, 29 settembre 2026). Qualunque sia il modo in cui il gesto
+    // finisce — rilascio, annullamento, chiusura — si passa da qui.
+    //
+    // E durante lo scambio il Cassetto resta sotto la mano: `_tiene` spegne
+    // la molla mentre si trascina, e dopo lo scambio lo scarto resta dov'è
+    // finché il lato non cambia davvero (vedi `scambioRiserva` in cima).
+    // `_tiene` è anche la guardia: il gesto si chiude UNA volta — la
+    // chiusura che arriva dopo lo scambio non deve chiederne un altro.
+    readonly property bool inTrascinamento: presa.pressed || cassetto._tiene
+    function _fineTrascinamento() {
+        if (!cassetto._tiene)
+            return;
+        // `_tiene` si spegne PRIMA di toccare lo scarto, o la molla si
+        // riaccende quando la posizione è già saltata.
+        cassetto._tiene = false;
+        var verso = cassetto.aSinistra ? presa.scarto : -presa.scarto;
+        if (verso > cassetto.width / 3) {
+            scambioRiserva.restart();
+            cassetto.scambioChiesto();
+        } else {
+            presa.scarto = 0;
+        }
+    }
+
     function chiudi() {
         if (!cassetto.aperto) return;
+        cassetto._fineTrascinamento();
         cassetto.aperto = false;
         cassetto.armato = false;
         spegni.restart();
@@ -288,22 +321,8 @@ PanelWindow {
                 if (cassetto._tiene)
                     presa.scarto = mapToItem(null, m.x, 0).x - presa.inizio;
             }
-            onReleased: presa.lascia(false)
-            onCanceled: presa.lascia(true)
-            // `_tiene` si spegne PRIMA di toccare lo scarto, o la molla si
-            // riaccende quando la posizione è già saltata.
-            function lascia(annullato) {
-                if (!cassetto._tiene)
-                    return;
-                cassetto._tiene = false;
-                var verso = cassetto.aSinistra ? presa.scarto : -presa.scarto;
-                if (!annullato && verso > cassetto.width / 3) {
-                    scambioRiserva.restart();
-                    cassetto.scambioChiesto();
-                } else {
-                    presa.scarto = 0;
-                }
-            }
+            onReleased: cassetto._fineTrascinamento()
+            onCanceled: cassetto._fineTrascinamento()
         }
 
         Item {

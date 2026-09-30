@@ -673,8 +673,10 @@ FloatingWindow {
     /// stessa cartella si fa in un attimo, tornare dove si era no.
     function apriNuovaFinestra() {
         var dir = manager.current ? manager.current.path : "";
-        Quickshell.execDetached(dir !== "" ? ["minerva-files", dir]
-                                           : ["minerva-files"]);
+        // `--nuova-finestra`: senza, lo script trovava questo processo e gli
+        // chiedeva una scheda — la «Nuova finestra» era una «Nuova scheda».
+        Quickshell.execDetached(dir !== "" ? ["minerva-files", "--nuova-finestra", dir]
+                                           : ["minerva-files", "--nuova-finestra"]);
     }
 
     function openTerminalHere() {

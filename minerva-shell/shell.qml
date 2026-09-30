@@ -990,8 +990,17 @@ ShellRoot {
                 riservata: root.rivaRiservata
                 consenso: root.consenso
                 tenuta: isolaGiorno.aperto
+                // Ogni voce apre la sua faccia; toccata di nuovo, richiude.
+                // Aperta sull'altra faccia, la gira invece di chiudersi.
                 onGiornataChiesta: function(dove) {
-                    if (isolaGiorno.aperto) isolaGiorno.chiudi(); else isolaGiorno.apriDa(dove);
+                    if (isolaGiorno.aperto && isolaGiorno.faccia === "giorno") isolaGiorno.chiudi();
+                    else if (isolaGiorno.aperto) isolaGiorno.giraSu("giorno");
+                    else isolaGiorno.apriDa(dove);
+                }
+                onCalendarioChiesto: function(dove) {
+                    if (isolaGiorno.aperto && isolaGiorno.faccia === "mese") isolaGiorno.chiudi();
+                    else if (isolaGiorno.aperto) isolaGiorno.giraSu("mese");
+                    else isolaGiorno.apriCalendario(dove);
                 }
                 onNotificheChieste: function(dove) {
                     if (isolaGiorno.aperto && isolaGiorno.faccia === "notifiche") isolaGiorno.chiudi();
@@ -1018,28 +1027,42 @@ ShellRoot {
                 onSchermataChiesta: function(modo, ritardo) { root.scattaSchermata(modo, ritardo); }
             }
 
-            // ── Le Stanze: escono dal bordo sinistro ──────────────────────
+            // ── Lo spazio libero sui bordi di lato ────────────────────────
+            //
+            // Stanze e Cassetto escono di lato e non devono coprire né la
+            // barra né la dock, che stanno sempre su bordi opposti. Prima
+            // ognuno faceva i suoi conti e il Cassetto ne saltava due: con la
+            // barra in basso la copriva, con la dock in alto ne copriva
+            // l'inizio (PC di prova, 29 settembre 2026). Un conto solo, per
+            // tutti e due, sui due bordi.
+            readonly property bool _dockSu: dock.screenRect.height > 0 && root.dockInAlto
+            readonly property bool _dockGiu: dock.screenRect.height > 0 && !root.dockInAlto
+            readonly property real rivaAlto: Math.max(
+                root.barraInBasso ? 0 : Theme.Effects.barHeight,
+                scrivania._dockSu ? dock.screenRect.y + dock.screenRect.height : 0)
+            readonly property real rivaBasso: Math.max(
+                root.barraInBasso ? Theme.Effects.barHeight : 0,
+                scrivania._dockGiu && scrivania.modelData
+                    ? scrivania.modelData.height - dock.screenRect.y : 0)
+
+            // ── Le Stanze: di serie dal bordo sinistro ────────────────────
             Stanze {
                 id: stanzeLato
                 screen: scrivania.modelData
                 aDestra: root.cassettoASinistra
                 onScambioChiesto: root.scambiaBordi()
-                margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
-                margineBasso: dock.screenRect.height > 0 && !root.dockInAlto && scrivania.modelData
-                              ? Math.max(0, scrivania.modelData.height - dock.screenRect.y)
-                              : (root.barraInBasso ? Theme.Effects.barHeight : 0)
+                margineAlto: scrivania.rivaAlto
+                margineBasso: scrivania.rivaBasso
             }
 
-            // ── Il Cassetto degli appunti: esce dal bordo destro ──────────
+            // ── Il Cassetto degli appunti: di serie dal bordo destro ──────
             Cassetto {
                 id: cassettoAppunti
                 screen: scrivania.modelData
                 aSinistra: root.cassettoASinistra
                 onScambioChiesto: root.scambiaBordi()
-                margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
-                margineBasso: dock.screenRect.height > 0 && !root.dockInAlto && scrivania.modelData
-                              ? Math.max(0, scrivania.modelData.height - dock.screenRect.y)
-                              : 0
+                margineAlto: scrivania.rivaAlto
+                margineBasso: scrivania.rivaBasso
             }
 
             // ── Attività: i processi, dentro la shell ────────────────────
@@ -1134,6 +1157,12 @@ ShellRoot {
                             isolaBarra.svela();
                         return;
                     }
+                    // Mentre si trascina Stanze o Cassetto verso l'altro
+                    // bordo, la spinta contro quel bordo è il gesto stesso,
+                    // non una richiesta: aprire l'altro pannello chiudeva
+                    // quello in mano e interrompeva lo scambio.
+                    if (stanzeLato.inTrascinamento || cassettoAppunti.inTrascinamento)
+                        return;
                     // Chi esce da quale bordo lo decide `riva.cassetto`.
                     var cassettoQui = (quale === "sinistra") === root.cassettoASinistra;
                     if (quale !== "destra" && quale !== "sinistra")

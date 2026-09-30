@@ -54,6 +54,14 @@ else
         -Dwlroots:renderers="$RENDERERS" -Dwlroots:backends=drm,libinput,x11 \
         -Dwlroots:session=enabled -Dwlroots:xwayland=enabled
 fi
+# Il riepilogo qui sopra scrive «vulkan-renderer : NO» in rosso, e sembra un
+# guasto: il 29 settembre 2026 su un computer nuovo è stato letto come «manca
+# vulkan-renderer». È voluto, e va detto subito sotto.
+case ",$RENDERERS," in
+    *,vulkan,*) ;;
+    *) echo "Nota: «vulkan-renderer : NO» è voluto, non manca niente: gli effetti" \
+            "esistono solo con gles2 (per provarlo: MINERVA_RENDERERS=gles2,vulkan)." ;;
+esac
 meson compile -C "$BUILD"
 meson test -C "$BUILD" --print-errorlogs
 

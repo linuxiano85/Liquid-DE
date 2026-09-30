@@ -1197,6 +1197,11 @@ QtObject {
         return send({ "action": "custodia_salva", "percorso": percorso,
                       "messaggio": messaggio, "forza": forza === true });
     }
+    /// Nome ed email con cui firmare i salvataggi di un progetto.
+    function custodiaFirma(percorso, nome, email) {
+        return send({ "action": "custodia_firma", "percorso": percorso,
+                      "nome": nome, "email": email });
+    }
     function custodiaInizia(percorso) {
         return send({ "action": "custodia_inizia", "percorso": percorso });
     }

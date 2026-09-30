@@ -30,7 +30,15 @@ PanelWindow {
 
     WlrLayershell.namespace: "quickshell"
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    // ── La tastiera, tutta, finché è aperto ─────────────────────────────
+    //
+    // Era `OnDemand`: il compositore dà la tastiera a una superficie così
+    // solo quando la si CLICCA, e un menù aperto col tasto destro non viene
+    // cliccato prima di scegliere. `Esc` finiva alla finestra di sotto e il
+    // menù restava lì (PC di prova, 29 settembre 2026). Il menù esiste solo
+    // da aperto, quindi prendere la tastiera non toglie niente a nessuno.
+    WlrLayershell.keyboardFocus: menu.visible ? WlrKeyboardFocus.Exclusive
+                                              : WlrKeyboardFocus.None
 
     // Copre l'intero schermo, barra compresa: senza questo il layer verrebbe
     // spinto sotto la zona esclusiva della barra e le coordinate del mouse
@@ -193,6 +201,7 @@ PanelWindow {
         menu.items = menuItems;
         menu.menuX = x;
         menu.menuY = y;
+        menu._apertoAlle = Date.now();
         menu.visible = true;
         card.scale = 0.94;
         card.opacity = 0;
@@ -205,6 +214,22 @@ PanelWindow {
             return;
         menu.visible = false;
         menu.dismissed();
+    }
+
+    // ── Si è aperta un'altra finestra: il menù non le resta sopra ────────
+    //
+    // Con `Super+I` a menù aperto, le Impostazioni comparivano SOTTO il
+    // menù, che restava lì finché non si cliccava. La finestra attiva che
+    // cambia vuol dire che l'attenzione è andata altrove. Il primo attimo
+    // dopo l'apertura non conta: il menù della barra del titolo dà il fuoco
+    // alla finestra e subito dopo si apre, e non deve richiudersi da solo.
+    property real _apertoAlle: 0
+    Connections {
+        target: Core.Windows
+        function onActiveAddressChanged() {
+            if (menu.visible && Date.now() - menu._apertoAlle > 500)
+                menu.close();
+        }
     }
 
     // Chiudere cliccando fuori è il modo in cui ogni menu contestuale

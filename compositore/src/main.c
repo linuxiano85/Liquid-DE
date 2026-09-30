@@ -1124,6 +1124,12 @@ struct finestra {
 	/// due** — è la segnalazione «finestre con barra del titolo doppiate» del
 	/// 30 agosto 2026.
 	bool csd_richiesto;
+	/// Il contrario: il programma ha CHIESTO la nostra barra, via
+	/// `xdg-decoration`. Vale più della lista dei CSD, e per lo stesso motivo:
+	/// Chrome con «Usa barra del titolo e bordi di sistema» acceso la chiede,
+	/// e se gliela si nega non la disegna nessuno — una finestra senza
+	/// pulsanti per chiuderla (computer di prova, 29 settembre 2026).
+	bool ssd_richiesto;
 
 	struct wl_listener x_associa;
 	struct wl_listener x_dissocia;
@@ -2560,13 +2566,21 @@ static int finestra_barra_alta(const struct finestra *f) {
 //  · i programmi che se la disegnano da soli (i browser, la roba GNOME) non
 //    smettono di farlo perché glielo chiediamo: `xdg-decoration` lo
 //    implementano in pochi, e chi non lo implementa non lo sa nemmeno.
+// Le finestre di Minerva: la barra ce l'hanno nel QML, e non ne prendono una
+// seconda nemmeno se la chiedono (Qt chiede SERVER_SIDE da sé).
+static bool app_nostra(const char *classe) {
+	if (classe == NULL)
+		return false;
+	return strncmp(classe, "minerva-", 8) == 0
+		|| strcmp(classe, "org.quickshell") == 0
+		|| strcmp(classe, "quickshell") == 0;
+}
+
 static bool le_spetta(const struct minerva *m, const char *classe) {
 	if (classe == NULL)
 		return true;
 
-	if (strncmp(classe, "minerva-", 8) == 0)
-		return false;
-	if (strcmp(classe, "org.quickshell") == 0 || strcmp(classe, "quickshell") == 0)
+	if (app_nostra(classe))
 		return false;
 
 	char bassa[256];
@@ -2600,8 +2614,11 @@ static bool le_spetta(const struct minerva *m, const char *classe) {
 // c'è di sicuro. Chiamarla due volte non costa niente: se la risposta non
 // cambia non tocca nulla.
 static void finestra_decidi_barra(struct finestra *f, const char *classe) {
-	const bool spetta = le_spetta(f->m, classe) && !f->x11_senza_cornice
-		&& !f->csd_richiesto;
+	// Chi ha chiesto la nostra barra la ottiene anche se è nella lista dei
+	// CSD: la lista è per chi non dice niente. Le nostre app no, mai.
+	const bool voluta = le_spetta(f->m, classe)
+		|| (f->ssd_richiesto && !app_nostra(classe));
+	const bool spetta = voluta && !f->x11_senza_cornice && !f->csd_richiesto;
 	if (spetta == f->decorata && (!spetta || f->barra != NULL))
 		return;
 
@@ -3180,11 +3197,15 @@ static void finestra_riduci(struct finestra *f, bool si) {
 
 /// Quante finestre ha quella scrivania. Serve a saltare le vuote col gesto
 /// della rotellina, che è quello che fa `workspace e+1` in Hyprland.
+// Si contano solo le finestre COMPARSE, come fa `comando_finestre`: un
+// programma X11 tiene finestre che non si mostrano mai (kdialog, Steam,
+// Wine), e contarle faceva sembrare occupata una stanza vuota — ai pallini
+// della barra e a «salta le stanze vuote» (PC di prova, 29 settembre 2026).
 static int scrivania_quante(struct minerva *m, int quale) {
 	int quante = 0;
 	struct finestra *f;
 	wl_list_for_each(f, &m->finestre_elenco, link) {
-		if (f->scrivania == quale && !f->ridotta)
+		if (f->scrivania == quale && !f->ridotta && f->comparsa)
 			quante++;
 	}
 	return quante;
@@ -3359,40 +3380,47 @@ static void comando_csd(struct minerva *m, char *resto) {
 // GNOME) e non poteva coprire gli altri: un programma nuovo non è in nessuna
 // lista, e nessuna lista lo sarà mai. Chiederglielo è l'unico modo che scala.
 //
-// L'ordine delle tre risposte non è indifferente:
+// Chi chiede qualcosa lo ottiene, in tutte e due le direzioni:
 //
-//  1. se Minerva ha deciso di NON decorarla (le nostre app, la lista dei CSD),
-//     è CLIENT_SIDE e non si discute: la nostra barra non c'è;
-//  2. se il programma ha chiesto CLIENT_SIDE, si dice di sì. È la riga nuova;
-//  3. altrimenti SERVER_SIDE, che è il caso normale — la maggioranza dei
-//     programmi non chiede niente, e la barra gliela mettiamo noi.
+//  1. le nostre app sono CLIENT_SIDE e non si discute: la barra ce l'hanno
+//     nel QML, anche quando Qt chiede la nostra;
+//  2. se il programma ha chiesto CLIENT_SIDE, si dice di sì;
+//  3. se ha chiesto SERVER_SIDE, si dice di sì anche se è nella lista dei
+//     CSD. Fino al 29 settembre 2026 qui vinceva la lista, e Chrome con
+//     «Usa barra del titolo e bordi di sistema» acceso restava senza
+//     pulsanti: lui aspettava la nostra barra, noi aspettavamo la sua;
+//  4. se non chiede niente decide la lista (`le_spetta`), che è il caso di
+//     chi il protocollo non lo implementa.
 //
-// Il caso 2 NON deve spegnere `f->decorata` da sé: quella è la decisione di
-// Minerva su chi merita la barra, e serve anche altrove (l'altezza da togliere,
-// il disegno della cornice). Si cambia solo la risposta al programma... e
-// invece no: se lui la disegna e noi pure, siamo al punto di partenza. Va
-// spenta, ed è il motivo per cui questa funzione prende `f` e non una copia.
+// Quello che ha chiesto si scrive in `csd_richiesto` / `ssd_richiesto` e la
+// decisione la prende `finestra_decidi_barra`, non questa funzione: là dentro
+// c'è anche il nodo della barra da creare o distruggere e l'albero del
+// programma da spostare di 42 pixel. Qui si risponde con quello che ha deciso.
 static void decorazione_applica(struct finestra *f) {
 	if (f->decorazione == NULL)
 		return;
 	if (!f->toplevel->base->initialized)
 		return;
 
-	enum wlr_xdg_toplevel_decoration_v1_mode modo =
-		WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
-	if (!f->decorata) {
-		modo = WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE;
-	} else if (f->decorazione->requested_mode
-			== WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE) {
-		modo = WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE;
-		// Ha detto che se la disegna lui: la nostra si toglie di mezzo, o
-		// sono due. Si passa da `finestra_decidi_barra` e non si tocca
-		// `f->decorata` a mano: là dentro c'è anche il nodo della barra da
-		// distruggere e l'albero del programma da rialzare di 42 pixel.
+	switch (f->decorazione->requested_mode) {
+	case WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE:
 		f->csd_richiesto = true;
-		finestra_decidi_barra(f, finestra_classe(f));
+		f->ssd_richiesto = false;
+		break;
+	case WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE:
+		f->csd_richiesto = false;
+		f->ssd_richiesto = true;
+		break;
+	default:
+		f->csd_richiesto = false;
+		f->ssd_richiesto = false;
+		break;
 	}
-	wlr_xdg_toplevel_decoration_v1_set_mode(f->decorazione, modo);
+	finestra_decidi_barra(f, finestra_classe(f));
+
+	wlr_xdg_toplevel_decoration_v1_set_mode(f->decorazione, f->decorata
+		? WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE
+		: WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
 }
 
 // ── La configure iniziale, senza la quale non compare NIENTE ─────────────
@@ -3500,6 +3528,42 @@ static void finestra_appare(struct finestra *f) {
 	int y = utile.y + (utile.height - h - alta) / 2;
 	if (x < utile.x) x = utile.x;
 	if (y < utile.y) y = utile.y;
+
+	// ── A cascata, se il posto è già preso ───────────────────────────────
+	//
+	// Due finestre della stessa misura nascevano nello stesso punto, una
+	// esattamente sopra l'altra: «Nuova finestra» nel gestore file sembrava
+	// non aver fatto niente (29 settembre 2026). Se al centro c'è già una
+	// finestra visibile di questa stanza, la nuova scende di 32 pixel in
+	// basso a destra, finché trova un posto libero dentro lo spazio utile.
+	if (prima_volta) {
+		for (int giro = 0; giro < 8; giro++) {
+			bool preso = false;
+			struct finestra *altra;
+			wl_list_for_each(altra, &f->m->finestre_elenco, link) {
+				if (altra == f || !altra->comparsa || altra->ridotta
+				    || altra->scrivania != f->scrivania
+				    || !finestra_visibile(altra))
+					continue;
+				struct wlr_box b;
+				finestra_box(altra, &b);
+				if (abs(b.x - x) < 8 && abs(b.y - y) < 8) {
+					preso = true;
+					break;
+				}
+			}
+			if (!preso)
+				break;
+			// Dove non c'è spazio si scende solo di lato (o solo in basso):
+			// meglio uno scarto a metà che due finestre una sull'altra.
+			const int dx = x + 32 + w <= utile.x + utile.width ? 32 : 0;
+			const int dy = y + 32 + h + alta <= utile.y + utile.height ? 32 : 0;
+			if (dx == 0 && dy == 0)
+				break;
+			x += dx;
+			y += dy;
+		}
+	}
 
 	finestra_posiziona(f, x, y, w, h + alta);
 	barra_aggiorna(f);
@@ -4056,12 +4120,14 @@ static void finestra_nuova(struct wl_listener *l, void *dati) {
 }
 
 // Quando il programma cambia idea. Succede poco, ma succede: GTK chiede la
-// modalità client subito dopo l'avvio se lo si lascia fare. La risposta è
-// sempre la nostra — è il compositore a decidere, non lui.
+// modalità client subito dopo l'avvio se lo si lascia fare, e Chrome la
+// cambia a finestra aperta quando si tocca «Usa barra del titolo e bordi di
+// sistema». La barra va ridisegnata subito, o comparirebbe al prossimo titolo.
 static void decorazione_modo(struct wl_listener *l, void *dati) {
 	(void)dati;
 	struct finestra *f = wl_container_of(l, f, decorazione_modo);
 	decorazione_applica(f);
+	barra_aggiorna(f);
 }
 
 static void decorazione_via(struct wl_listener *l, void *dati) {
@@ -4072,9 +4138,10 @@ static void decorazione_via(struct wl_listener *l, void *dati) {
 	f->decorazione = NULL;
 }
 
-// Non risolve tutto, e va detto: i browser non implementano questo protocollo
-// e la barra se la disegnano comunque. Per quelli c'è `le_spetta`, che è un
-// elenco — brutto, ma è la stessa lista che Minerva usa già.
+// Non risolve tutto, e va detto: Firefox e le app GTK non implementano questo
+// protocollo e la barra se la disegnano comunque. Per quelli c'è `le_spetta`,
+// che è un elenco — brutto, ma è la stessa lista che Minerva usa già. Chrome
+// invece lo implementa, e quello che chiede vale più dell'elenco.
 static void decorazione_nuova(struct wl_listener *l, void *dati) {
 	(void)l;
 	struct wlr_xdg_toplevel_decoration_v1 *d = dati;

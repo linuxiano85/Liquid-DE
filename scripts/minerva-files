@@ -61,6 +61,15 @@ if qs ipc -p "$CONFIG" call files ping >/dev/null 2>&1; then
     exec qs ipc -p "$CONFIG" call files open "$TARGET" >/dev/null
 fi
 
+# ── 3-bis. Una finestra in più, nello stesso processo ───────────────────────
+#
+# «Nuova finestra» (Ctrl+Maiusc+N, la dock) passava di qui come tutti gli
+# altri e diventava una scheda (PC di prova, 29 settembre 2026, K1). Sul PC
+# di prova la cura era un secondo processo; qui la finestra in più la fa
+# nascere il gestore file aperto (`files finestra`, vedi `filemanager.qml`):
+# stesso risultato, pochi megabyte invece di un'app intera. Se il gestore
+# file non è aperto, `--nuova-finestra` è semplicemente il primo avvio.
+
 # ── 4. Altrimenti si parte ──────────────────────────────────────────────────
 #
 # `-d` stacca dal terminale: chi ci lancia da un file `.desktop` o da una shell

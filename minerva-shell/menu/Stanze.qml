@@ -71,12 +71,17 @@ PanelWindow {
     /// scambia. `_tiene` si spegne PRIMA di toccare lo scarto: i legami si
     /// rifanno subito, e la molla deve essere già accesa quando la posizione
     /// cambia, o la colonna salta invece di scivolare.
+    ///
+    /// Anche ANNULLATA vale: annullata a metà vuol dire, quasi sempre, che
+    /// la spinta sull'altro bordo ha aperto il Cassetto e rubato la presa
+    /// (PC di prova, 29 settembre 2026, K4). Scartarla lasciava le Stanze
+    /// incastrate dall'altra parte con l'impostazione di prima.
     function _lascia(annullato) {
         if (!stanze._tiene)
             return;
         stanze._tiene = false;
         var verso = stanze.aDestra ? -presaStanze.scarto : presaStanze.scarto;
-        if (!annullato && verso > stanze.width / 3) {
+        if (verso > stanze.width / 3) {
             scambioRiserva.restart();
             stanze.scambioChiesto();
         } else {
@@ -98,8 +103,9 @@ PanelWindow {
     // secondo, su ogni schermo, anche a Stanze chiuse. Misurato il 29
     // settembre 2026: metà del lavoro della shell a scrivania ferma.
     //
-    // Il disegno usa il numero, quante finestre e la loro classe: la firma è
-    // quella, e l'elenco si sostituisce solo quando la firma cambia.
+    // Il disegno usa il numero, quante finestre e di quale app (l'icona o
+    // l'iniziale): la firma è quella, e l'elenco si sostituisce solo quando
+    // la firma cambia.
     readonly property var _calcolato: {
         Core.Compositore.scrivanie;
         var tutte = Core.Windows.all || [];
@@ -112,7 +118,10 @@ PanelWindow {
             var dentro = [];
             for (var j = 0; j < tutte.length; j++) {
                 var w = tutte[j];
-                if (w.workspace === n && !w.own)
+                // Le finestre della shell no, le APP di Minerva sì: prima
+                // `!w.own` toglieva anche Impostazioni, File e Terminale, e
+                // una stanza con dentro solo loro si diceva «vuota».
+                if (w.workspace === n && (!w.own || Core.Apps.forWindow(w)))
                     dentro.push(w);
             }
             fuori.push({ "numero": n, "finestre": dentro });
@@ -126,7 +135,13 @@ PanelWindow {
     function _aggiornaElenco() {
         var c = stanze._calcolato;
         var f = c.map(function(s) {
-            return s.numero + ":" + s.finestre.map(function(w) { return w.appClass; }).join(",");
+            return s.numero + ":" + s.finestre.map(function(w) {
+                // L'app riconosciuta, non la classe: le nostre app in un
+                // processo solo si chiamano tutte `minerva-app` e le
+                // distingue il titolo (vedi l'icona più sotto).
+                var a = Core.Apps.forWindow(w);
+                return a ? a.appId : w.appClass;
+            }).join(",");
         }).join("|");
         if (f === stanze._firma) return;
         stanze._firma = f;
@@ -144,8 +159,17 @@ PanelWindow {
         spegni.stop();
     }
     property real _chiuseAlle: 0
+    // ── Il trascinamento finisce SEMPRE (vedi lo stesso in Cassetto.qml) ──
+    //
+    // Annullato a metà — l'altro bordo che apre il Cassetto, la colonna che
+    // si chiude — lo `scarto` restava appiccicato e le Stanze restavano
+    // incastrate oltre il bordo. E un trascinamento partito da una stanza
+    // non vale anche come tocco su quella stanza (prima si finiva lì dentro).
+    readonly property bool inTrascinamento: presaStanze.pressed || stanze._tiene
+
     function chiudi() {
         if (!stanze.aperto) return;
+        stanze._lascia(true);
         stanze._chiuseAlle = Date.now();
         stanze.aperto = false;
         spegni.restart();
@@ -251,9 +275,18 @@ PanelWindow {
         height: Math.min(pila.implicitHeight + 2 * Theme.Effects.space3,
                          stanze.height - stanze.margineAlto - stanze.margineBasso - 2 * margine)
         y: stanze.margineAlto + (stanze.height - stanze.margineAlto - stanze.margineBasso - height) / 2
+        // ── A destra, dalla larghezza d'ARRIVO ───────────────────────────
+        //
+        // Qui c'era `width`, che durante l'apertura è la larghezza animata
+        // (64 → 260 con la sua molla): la molla della `x` inseguiva un
+        // bersaglio che si spostava a ogni fotogramma, e a destra la colonna
+        // restava fuori dallo schermo per un secondo buono prima di entrare
+        // (PC di prova, 29 settembre 2026). A sinistra non succedeva perché
+        // lì la `x` non dipende dalla larghezza. Con `larga` il bersaglio sta
+        // fermo e le due molle non si rincorrono più.
         x: {
-            var dentro = stanze.aDestra ? stanze.width - margine - width : margine;
-            var fuori = stanze.aDestra ? stanze.width + 30 : -width - 30;
+            var dentro = stanze.aDestra ? stanze.width - margine - colonna.larga : margine;
+            var fuori = stanze.aDestra ? stanze.width + 30 : -colonna.larga - 30;
             return ((stanze.aperto || stanze.sbirciata) && stanze._entra ? dentro : fuori) + presaStanze.scarto;
         }
         Behavior on x {
@@ -371,14 +404,45 @@ PanelWindow {
                         Behavior on opacity { NumberAnimation { duration: Theme.Motion.quick } }
                         Repeater {
                             model: stanza.modelData.finestre.slice(0, 5)
-                            delegate: Image {
+                            delegate: Item {
+                                id: finestraIcona
                                 required property var modelData
                                 width: 26; height: 26
-                                sourceSize.width: 52; sourceSize.height: 52
-                                asynchronous: true
-                                source: {
-                                    var i = Core.Apps.iconForClass(modelData.appClass);
-                                    return i ? "file://" + i : "";
+                                // `forWindow` e non la classe: le app di
+                                // Minerva che vivono in un processo solo si
+                                // chiamano tutte `minerva-app`, e le
+                                // distingue il titolo.
+                                readonly property var app: Core.Apps.forWindow(finestraIcona.modelData)
+                                readonly property string icona: finestraIcona.app && finestraIcona.app.icon
+                                                                ? finestraIcona.app.icon : ""
+                                Image {
+                                    anchors.fill: parent
+                                    visible: finestraIcona.icona !== ""
+                                    sourceSize.width: 52; sourceSize.height: 52
+                                    asynchronous: true
+                                    source: finestraIcona.icona !== "" ? "file://" + finestraIcona.icona : ""
+                                }
+                                // Senza icona, l'iniziale — come nella dock.
+                                // Prima la riga restava vuota: una stanza con
+                                // dentro una finestra che non si vedeva.
+                                Rectangle {
+                                    anchors.fill: parent
+                                    visible: finestraIcona.icona === ""
+                                    radius: Theme.Effects.radiusSM
+                                    color: Qt.alpha(Theme.Colors.accent, 0.18)
+                                    border.width: Theme.Effects.hairline
+                                    border.color: Qt.alpha(Theme.Colors.accent, 0.5)
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: String(finestraIcona.app && finestraIcona.app.name
+                                                     ? finestraIcona.app.name
+                                                     : (finestraIcona.modelData.appClass || finestraIcona.modelData.title || "?"))
+                                              .charAt(0).toUpperCase()
+                                        color: Theme.Colors.accent
+                                        font.family: Theme.Typography.fontDisplay
+                                        font.pixelSize: Theme.Typography.sizeSM
+                                        font.weight: Theme.Typography.weightMedium
+                                    }
                                 }
                             }
                         }

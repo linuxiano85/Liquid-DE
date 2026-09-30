@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Effects
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Pam
 
 import "../theme" as Theme
@@ -327,11 +328,25 @@ Item {
                 visible: status === Image.Ready
                 // `~/.face` come ripiego: è la convenzione più vecchia, ed è
                 // la stessa che guarda il demone per la schermata di accesso.
-                source: "file:///var/lib/AccountsService/icons/" + blocco.utente
-                onStatusChanged: {
-                    if (status === Image.Error
-                            && String(source).indexOf(".face") === -1)
-                        source = "file://" + Quickshell.env("HOME") + "/.face";
+                //
+                // Si carica solo un ritratto che c'è. Prima si provavano tutti
+                // e due alla cieca, e chi non ne ha nessuno si trovava due
+                // «Cannot open» nel registro a ogni blocco — proprio il
+                // registro che si legge quando il blocco non va.
+                source: ritrattoCercato.trovato !== "" ? "file://" + ritrattoCercato.trovato : ""
+
+                Process {
+                    id: ritrattoCercato
+                    property string trovato: ""
+                    running: true
+                    command: ["sh", "-c",
+                        "for f in \"$1\" \"$2\"; do [ -r \"$f\" ] && { printf '%s' \"$f\"; exit 0; }; done",
+                        "sh",
+                        "/var/lib/AccountsService/icons/" + blocco.utente,
+                        Quickshell.env("HOME") + "/.face"]
+                    stdout: StdioCollector {
+                        onStreamFinished: ritrattoCercato.trovato = text.trim()
+                    }
                 }
                 // Il tondo. `Image` non ritaglia da sé: la maschera è la
                 // stessa che usa la schermata di accesso, e va tenuta uguale —

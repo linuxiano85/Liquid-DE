@@ -161,14 +161,52 @@ class IconResolver {
   String get detectedTheme => famiglia(_detectedTheme);
 
   IconResolver() {
-    _home = Platform.environment['HOME'] ?? '';
-    _iconRoots = [
-      '$_home/.local/share/icons',
-      '$_home/.icons',
+    final env = Platform.environment;
+    _home = env['HOME'] ?? '';
+    _iconRoots = _radiciBase(env, _home);
+    _iconRoots.addAll(_radiciAnnidate());
+  }
+
+  /// Le cartelle base delle icone, in ordine di precedenza.
+  ///
+  /// Erano quattro scritte a mano, e mancava proprio quella di Liquid DE:
+  /// l'installatore mette le icone delle nostre app in
+  /// `~/.local/opt/liquid-de/share/icons/hicolor`, la sessione aggiunge quel
+  /// `share` in testa a `XDG_DATA_DIRS`, e qui non lo guardava nessuno. I
+  /// `.desktop` si trovavano (lo scanner legge `XDG_DATA_DIRS`), le icone no:
+  /// sul computer di prova del 29 settembre 2026 la dock mostrava File,
+  /// Impostazioni e Custodia senza icona.
+  ///
+  /// Adesso si segue la specifica — `XDG_DATA_HOME` e ogni `XDG_DATA_DIRS`,
+  /// ciascuno con `/icons` — e il prefisso di Liquid DE si aggiunge anche per
+  /// nome (stessa regola di `scripts/minerva-cartelle.sh`), perché un demone
+  /// avviato con un ambiente povero non perda di nuovo le icone.
+  static List<String> _radiciBase(Map<String, String> env, String home) {
+    String base(String variabile, String ripiego) {
+      final v = env[variabile] ?? '';
+      return v.startsWith('/') ? v : ripiego;
+    }
+
+    final dataHome = base('XDG_DATA_HOME', '$home/.local/share');
+    final dataDirs = (env['XDG_DATA_DIRS']?.isNotEmpty == true
+            ? env['XDG_DATA_DIRS']!
+            : '/usr/local/share:/usr/share')
+        .split(':')
+        .where((d) => d.startsWith('/'));
+    final prefisso = base('LIQUID_PREFISSO', '$home/.local/opt/liquid-de');
+
+    String senzaBarra(String d) =>
+        d.length > 1 && d.endsWith('/') ? d.substring(0, d.length - 1) : d;
+
+    return <String>{
+      '$home/.local/share/icons',
+      '$home/.icons',
+      '${senzaBarra(dataHome)}/icons',
+      for (final d in dataDirs) '${senzaBarra(d)}/icons',
+      '${senzaBarra(prefisso)}/share/icons',
       '/usr/local/share/icons',
       '/usr/share/icons',
-    ];
-    _iconRoots.addAll(_radiciAnnidate());
+    }.toList();
   }
 
   /// Le cartelle scompattate UNA DI TROPPO.

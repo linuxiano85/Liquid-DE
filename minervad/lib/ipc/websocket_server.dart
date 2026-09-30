@@ -2562,6 +2562,20 @@ class WebSocketServer {
         }
         break;
 
+      case 'custodia_firma':
+        {
+          final p = msg['percorso'];
+          final n = msg['nome'];
+          final e = msg['email'];
+          client.send({
+            'event': 'custodia_esito',
+            'payload': p is String && n is String && e is String
+                ? await _custodia.firmaAMano(p, n, e)
+                : {'ok': false, 'errore': 'Richiesta incompleta.'},
+          });
+        }
+        break;
+
       case 'custodia_inizia':
         {
           final p = msg['percorso'];
