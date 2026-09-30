@@ -544,15 +544,30 @@ class Officina {
 
   Future<String?> _patch(String versione, String albero) async {
     final serie = serieDi(versione);
+    // ── Un commit, non «master» ────────────────────────────────────────
+    //
+    // `master` cambia sotto i piedi: due download a un minuto di distanza
+    // possono dare due patch diverse. Si chiede prima a che commit è, e si
+    // scarica da QUEL commit: le patch della base e di BORE vengono dallo
+    // stesso istante del loro repository, e il commit resta scritto nel
+    // kernel pronto. Non è una firma — CachyOS non firma le patch — ma dice
+    // esattamente che cosa c'è dentro. (Da una revisione automatica.)
+    final refs = await sorgenti.testo(Sorgenti.refsCachyos);
+    final commit = refs == null ? null : Sorgenti.commitDaRefs(refs);
+    if (commit == null) {
+      return 'Non riesco a sapere a che commit sono le patch di CachyOS: senza, '
+          'non so che cosa applicherei.';
+    }
+    _riga('Patch di CachyOS al commit $commit.');
     // La serie base prima, se c'è; BORE poi, e senza BORE ci si ferma.
     final daApplicare = <Uri>[];
-    if (await sorgenti.esiste(Sorgenti.baseCachyos(serie))) {
-      daApplicare.add(Sorgenti.baseCachyos(serie));
+    if (await sorgenti.esiste(Sorgenti.baseCachyos(serie, commit))) {
+      daApplicare.add(Sorgenti.baseCachyos(serie, commit));
     } else {
       _riga('CachyOS non pubblica più la serie base per il $serie (dalla '
           '6.18 non c\'è): applico solo lo scheduler BORE.');
     }
-    daApplicare.add(Sorgenti.boreCachyos(serie));
+    daApplicare.add(Sorgenti.boreCachyos(serie, commit));
 
     for (final u in daApplicare) {
       final nome = 'cachyos-$serie-${u.pathSegments.last}';
@@ -577,18 +592,19 @@ class Officina {
       // c'è dentro.
       final somma = await _somma(f.path) ?? '?';
       _riga('Applicata ${u.pathSegments.last} (SHA-256 $somma).');
-      await _segnaPatch(albero, u.pathSegments.last, somma);
+      await _segnaPatch(albero, u.pathSegments.last, somma, commit);
     }
     return null;
   }
 
-  Future<void> _segnaPatch(String albero, String nome, String somma) async {
+  Future<void> _segnaPatch(
+      String albero, String nome, String somma, String commit) async {
     final f = File('$albero/.fucina-patch.json');
     var elenco = <dynamic>[];
     try {
       elenco = jsonDecode(await f.readAsString()) as List;
     } catch (_) {}
-    elenco.add({'nome': nome, 'sha256': somma});
+    elenco.add({'nome': nome, 'sha256': somma, 'commit': commit});
     await f.writeAsString(jsonEncode(elenco));
   }
 

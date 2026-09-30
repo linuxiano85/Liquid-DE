@@ -101,15 +101,27 @@ class Sorgenti {
   /// `kernel-patches/<serie>/all/`, dalla 6.18 in quella cartella non c'è più
   /// (trovato il 30 settembre 2026 guardando il loro repository, dopo che la
   /// prima versione della Fucina la dava per scontata).
-  static Uri baseCachyos(String serie) => Uri.parse(
-      'https://raw.githubusercontent.com/CachyOS/kernel-patches/master/'
+  static Uri baseCachyos(String serie, [String rif = 'master']) => Uri.parse(
+      'https://raw.githubusercontent.com/CachyOS/kernel-patches/$rif/'
       '$serie/all/0001-cachyos-base-all.patch');
 
   /// Lo scheduler BORE nella versione di CachyOS: c'è per tutte le serie, ed
   /// è quello del loro kernel di serie.
-  static Uri boreCachyos(String serie) => Uri.parse(
-      'https://raw.githubusercontent.com/CachyOS/kernel-patches/master/'
+  static Uri boreCachyos(String serie, [String rif = 'master']) => Uri.parse(
+      'https://raw.githubusercontent.com/CachyOS/kernel-patches/$rif/'
       '$serie/sched/0001-bore-cachy.patch');
+
+  /// Dove si chiede a che commit è `master` delle patch di CachyOS: il
+  /// protocollo HTTP di git, lo stesso di `git ls-remote`, che non passa
+  /// dall'API di GitHub e dai suoi limiti.
+  static final Uri refsCachyos = Uri.parse(
+      'https://github.com/CachyOS/kernel-patches/info/refs?service=git-upload-pack');
+
+  /// Il commit di `master` dalla risposta di [refsCachyos], o `null`.
+  static String? commitDaRefs(String risposta) => RegExp(
+          r'([0-9a-f]{40}) refs/heads/master\b')
+      .firstMatch(risposta)
+      ?.group(1);
 
   /// Le versioni che si possono scegliere, con quale sorgente ha ognuna.
   ///
