@@ -238,6 +238,13 @@ Item {
         }
     }
 
+    // La barra della colonna: scorre anche lei, e deve dirlo (la guardia di
+    // `scorrimento_test.dart`). Sorella del Flickable, mai figlia.
+    Ui.Scorrimento {
+        bersaglio: colonna
+        anchors { right: colonna.right; top: colonna.top; bottom: colonna.bottom }
+    }
+
     Rectangle {
         id: divisore
         anchors.top: parent.top
