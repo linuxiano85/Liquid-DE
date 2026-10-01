@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'albero.dart';
+import 'prova_avvio.dart';
 import 'ricetta.dart';
 import 'rilievo.dart';
 import 'sorgenti.dart';
@@ -64,6 +65,9 @@ class Officina {
   /// sostituisce nelle prove: quella vera va in rete e chiede gpg.
   final Future<String?> Function(String versione, File archivio)? verificaFirma;
 
+  /// Dice se c'è KVM per la prova d'avvio. Si sostituisce nelle prove.
+  final Future<bool> Function()? conKvm;
+
   Officina({
     required this.lavoro,
     required this.statoDir,
@@ -76,6 +80,7 @@ class Officina {
             {void Function(int, int)? progresso, bool Function()? annullato})?
         scarica,
     this.verificaFirma,
+    this.conKvm,
   })  : sorgenti = sorgenti ?? Sorgenti(),
         lancia = lancia ?? _lanciaVero,
         scarica = scarica ?? scaricaFile;
@@ -462,6 +467,8 @@ class Officina {
         return _lancia(p.comando, c.albero);
       case 'impacchetta':
         return _impacchetta(r, rilievo, c);
+      case 'avvia':
+        return _provaAvvio(r, c, avvisi);
       default:
         if (p.comando.isEmpty) return null;
         return _lancia(p.comando, c.albero);
@@ -791,6 +798,134 @@ class Officina {
     return null;
   }
 
+  // ── La prova d'avvio ─────────────────────────────────────────────────
+
+  /// Se c'è KVM per chi compila. Si sostituisce nelle prove (vedi il
+  /// costruttore): la macchina di chi le lancia non è quella di Giacomo.
+  Future<bool> _conKvm() async {
+    try {
+      final r = await Process.run('test', ['-r', '/dev/kvm', '-a', '-w', '/dev/kvm']);
+      return r.exitCode == 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Avvia il kernel appena impacchettato in QEMU, con l'initramfs minimo di
+  /// `prova_avvio.dart`, e scrive com'è andata in `fucina.json`: un kernel
+  /// che non è partito non si installa (`FucinaService.installa`).
+  ///
+  /// Tre esiti, non due. **Partito**; **non partito**, e la compilazione
+  /// finisce in errore; **non so**: QEMU non c'è, o il kernel è compilato
+  /// per QUESTO processore e non c'è KVM per dargli il processore vero —
+  /// l'emulazione può non avere le sue istruzioni, e un fallimento lì non
+  /// direbbe niente del kernel.
+  Future<String?> _provaAvvio(Ricetta r, Cartelle c, List<String> avvisi) async {
+    final rel = r.rilascio;
+    final initramfs = File('$lavoro/prova-avvio.cpio');
+    await initramfs.writeAsBytes(initramfsMinimo());
+    final kvm = await (conKvm ?? _conKvm)();
+    final t0 = DateTime.now();
+    final righe = <String>[];
+    _riga(kvm ? 'Con KVM: il processore vero (-cpu host).'
+        : 'Senza KVM: emulazione (-cpu max), più lenta.');
+    final limite = Duration(seconds: kvm ? 120 : 600);
+    final esito = await _lanciaConCodice(
+        comandoQemu(
+            kernel: '${c.uscita}/boot/vmlinuz-$rel',
+            initramfs: initramfs.path,
+            kvm: kvm),
+        lavoro,
+        raccogli: righe,
+        limite: limite);
+    final secondi = DateTime.now().difference(t0).inSeconds;
+    bool? ok;
+    var perche = '';
+    // Con `setsid` davanti, un QEMU che non c'è non è un'eccezione: è
+    // `setsid` che esce con 127 (126 se c'è ma non si esegue).
+    if (esito.codice == 127 || esito.codice == 126) {
+      ok = null;
+      perche = 'manca QEMU (su Arch: pacman -S qemu-system-x86)';
+    } else if (esito.codice == null) {
+      if (_annullato) return 'Fermata.';
+      perche = esito.errore ?? '';
+      if (perche.startsWith('Non riesco ad avviare')) {
+        perche = 'manca QEMU (su Arch: pacman -S qemu-system-x86)';
+      } else {
+        ok = false; // scaduto: un kernel piantato prima di /init
+      }
+    } else if (riuscita(esito.codice!, righe)) {
+      ok = true;
+    } else {
+      ok = false;
+      // L'ultima riga che dice qualcosa: di solito il panico.
+      perche = righe.lastWhere(
+          (l) => l.contains('panic') || l.contains('Panic'),
+          orElse: () => righe.isEmpty
+              ? 'nessuna riga sulla console (codice ${esito.codice})'
+              : righe.last).trim();
+    }
+    if (ok == false) {
+      if (r.scelte.nativo && !kvm) {
+        ok = null;
+        perche = 'kernel per questo processore senza KVM: l\'emulazione può non '
+            'avere le sue istruzioni ($perche)';
+      }
+    }
+    await _segnaProvaAvvio(c, {
+      'ok': ok,
+      'secondi': secondi,
+      'kvm': kvm,
+      'perche': perche,
+    });
+    if (ok == true) {
+      _riga('Partito: arrivato allo spazio utente in $secondi s.');
+      return null;
+    }
+    if (ok == null) {
+      final a = 'Prova d\'avvio non fatta: $perche.';
+      _riga('⚠ $a');
+      avvisi.add(a);
+      return null;
+    }
+    return 'Il kernel non arriva allo spazio utente in QEMU ($perche): non '
+        'installarlo. Il diario ha le ultime righe della sua console.';
+  }
+
+  Future<void> _segnaProvaAvvio(Cartelle c, Map<String, dynamic> prova) async {
+    final f = File('${c.uscita}/fucina.json');
+    try {
+      final j = (jsonDecode(await f.readAsString()) as Map).cast<String, dynamic>();
+      j['provaAvvio'] = prova;
+      await f.writeAsString(const JsonEncoder.withIndent('  ').convert(j));
+    } catch (_) {}
+  }
+
+  /// Come [_lancia], ma dice il codice d'uscita invece di giudicarlo (per
+  /// QEMU 0 e 99 vogliono dire cose diverse, e nessuno dei due è un errore
+  /// di per sé), e ferma il processo dopo `limite`. `codice` è null se il
+  /// processo non è partito, è stato fermato o è scaduto: allora `errore`
+  /// dice perché.
+  Future<({int? codice, String? errore})> _lanciaConCodice(
+      List<String> comando, String cartella,
+      {List<String>? raccogli, required Duration limite}) async {
+    var codice = -1;
+    var scaduto = false;
+    final e = await _lancia(comando, cartella,
+        raccogli: raccogli,
+        limite: limite,
+        quandoScade: () => scaduto = true,
+        codiceVisto: (c) => codice = c,
+        tuttiBuoni: true);
+    if (scaduto) {
+      return (codice: null,
+          errore: 'tempo scaduto (${limite.inSeconds} s) senza arrivare allo '
+              'spazio utente');
+    }
+    if (e != null) return (codice: null, errore: e);
+    return (codice: codice, errore: null);
+  }
+
   /// Lancia un comando e ne racconta l'uscita riga per riga.
   ///
   /// `invii`: `localmodconfig` può fare domande sulle opzioni nuove, e
@@ -800,7 +935,12 @@ class Officina {
   ///
   /// `raccogli`: le righe dell'uscita normale finiscono anche qui.
   Future<String?> _lancia(List<String> comando, String cartella,
-      {bool invii = false, List<String>? raccogli}) async {
+      {bool invii = false,
+      List<String>? raccogli,
+      Duration? limite,
+      void Function()? quandoScade,
+      void Function(int)? codiceVisto,
+      bool tuttiBuoni = false}) async {
     if (_annullato) return 'Fermata.';
     var eseguibile = comando.first;
     if (eseguibile.startsWith('scripts/')) eseguibile = '$cartella/$eseguibile';
@@ -847,12 +987,22 @@ class Officina {
     } catch (_) {
       // Il processo ha chiuso l'ingresso senza leggerlo: va bene così.
     }
+    // Un limite di tempo, per chi può non finire mai da solo (QEMU con un
+    // kernel che si pianta senza andare in panico).
+    final sveglia = limite == null
+        ? null
+        : Timer(limite, () {
+            quandoScade?.call();
+            unawaited(_segnale(p.pid, 'KILL'));
+          });
     final codice = await p.exitCode;
+    sveglia?.cancel();
     await a;
     await b;
     _processo = null;
     if (_annullato) return 'Fermata.';
-    if (codice == 0) return null;
+    codiceVisto?.call(codice);
+    if (codice == 0 || tuttiBuoni) return null;
     final errore = ultime.lastWhere(
         (r) => r.contains('rror') || r.contains('rrore'),
         orElse: () => ultime.isEmpty ? '' : ultime.last);
