@@ -337,6 +337,11 @@ class Officina {
       }
       _passo = p.id;
       final t0 = DateTime.now();
+      // Le righe del passo prima partono PRIMA del passo dopo: senza, il
+      // diario mostrava «Da accendere…» (di «completa») sotto il titolo di
+      // «imposta». Visto nel diario della compilazione vera.
+      _spedizione?.cancel();
+      _spedisci();
       if (p.soloLaPrimaVolta && pronto) {
         _manda('passo', {
           'id': p.id, 'titolo': p.titolo, 'indice': i,

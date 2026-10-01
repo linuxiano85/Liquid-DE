@@ -509,16 +509,16 @@ const Map<String, String> _soloIntel = {
   'INTEL_IOMMU': 'L\'IOMMU di Intel (VT-d): su una piattaforma AMD non c\'è.',
   'X86_SGX': 'Le enclavi SGX esistono solo sui processori Intel.',
   'INTEL_TDX_HOST': 'Le macchine virtuali cifrate TDX esistono solo su Intel.',
-  'X86_INTEL_PSTATE': 'Il regolatore di frequenza di Intel: su AMD lavorano '
-      'amd-pstate o acpi-cpufreq.',
 };
+// I regolatori di frequenza (`X86_INTEL_PSTATE`, `X86_AMD_PSTATE`) NON sono
+// qui: li accende `SCHED_MC_PRIO` per i core preferiti, e chiederli spenti
+// dava solo un avviso. Trovato compilando davvero il 7.2.8, 1° ottobre 2026.
+
 
 /// Funzioni che esistono solo sui processori AMD.
 const Map<String, String> _soloAmd = {
   'AMD_IOMMU': 'L\'IOMMU di AMD (AMD-Vi): su una piattaforma Intel non c\'è.',
   'AMD_MEM_ENCRYPT': 'La cifratura della memoria SME/SEV esiste solo su AMD.',
-  'X86_AMD_PSTATE': 'Il regolatore di frequenza di AMD: su Intel lavora '
-      'intel_pstate.',
   'AMD_NUMA': 'La lettura dei nodi NUMA dai vecchi northbridge AMD.',
 };
 
