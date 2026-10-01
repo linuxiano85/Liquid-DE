@@ -456,10 +456,129 @@ const List<Impostazione> provaVeloce = [
 
 /// Clang con LTO sottile. Con GCC non si chiede: nel kernel ufficiale LTO
 /// esiste solo con Clang.
+///
+/// ── Perché sottile e non piena ──────────────────────────────────────────
+///
+/// `LTO_CLANG_FULL` mette tutto il kernel in un modulo solo e lo ottimizza
+/// su un filo: ore di collegamento e decine di gigabyte di memoria, per un
+/// guadagno che le misure pubbliche danno nell'ordine del rumore rispetto a
+/// ThinLTO. E AutoFDO passa il profilo al collegamento solo con ThinLTO
+/// (`scripts/Makefile.autofdo`: `--lto-sample-profile` sta sotto
+/// `CONFIG_LTO_CLANG_THIN`). `LTO_CLANG_THIN_DIST` (7.x) è ThinLTO
+/// distribuito: stesso risultato, serve a chi compila su più macchine.
 const List<Impostazione> ltoSottile = [
   Impostazione('LTO_CLANG_THIN', 'y',
       'Ottimizza fra un file e l\'altro, in parallelo: kernel un po\' più '
           'rapido, compilazione più lunga.'),
   Impostazione('LTO_NONE', 'n', 'Va con LTO_CLANG_THIN.'),
   Impostazione('LTO_CLANG_FULL', 'n', 'Va con LTO_CLANG_THIN.'),
+  Impostazione('LTO_CLANG_THIN_DIST', 'n', 'Va con LTO_CLANG_THIN.'),
 ];
+
+/// Clang SENZA LTO, detto per nome. Vedi il commento in `calcola`: una
+/// configurazione di partenza compilata con ThinLTO (quella di CachyOS) lo
+/// terrebbe acceso.
+const List<Impostazione> ltoNessuno = [
+  Impostazione('LTO_NONE', 'y', 'LTO non scelto: spento anche se il kernel '
+      'di partenza lo aveva.'),
+  Impostazione('LTO_CLANG_THIN', 'n', 'Va con LTO_NONE.'),
+  Impostazione('LTO_CLANG_FULL', 'n', 'Va con LTO_NONE.'),
+  Impostazione('LTO_CLANG_THIN_DIST', 'n', 'Va con LTO_NONE.'),
+];
+
+// ── Su misura dentro il kernel ──────────────────────────────────────────
+//
+// Giacomo, 1° ottobre 2026: «kernel mai visti prima per precisione di
+// personalizzazione su misura del PC». `localmodconfig` lavora solo sui
+// moduli; queste regole toccano quello che sta DENTRO il kernel, e ognuna
+// viene da una misura fatta sulla macchina nel rilievo.
+//
+// La regola che le tiene tutte: **ognuna, sbagliata, lascia un kernel che
+// parte lo stesso**. Più processori di quelli previsti: si usano i primi.
+// NUMA spento su una macchina che ne ha due nodi: si avvia e va un po' più
+// piano. Le funzioni di un fornitore su un processore dell'altro non sono
+// mai state usate. Quello che invece potrebbe lasciare un computer fermo —
+// driver dentro il kernel che il rilievo non vede, `HYPERVISOR_GUEST` (da
+// cui dipende x2APIC quando manca il remapping degli interrupt), i
+// fornitori di processore interi (vogliono `EXPERT`, che CachyOS ha spento)
+// — resta fuori, di proposito.
+
+/// Funzioni che esistono solo sui processori Intel: su un AMD non sono mai
+/// usate.
+const Map<String, String> _soloIntel = {
+  'INTEL_IOMMU': 'L\'IOMMU di Intel (VT-d): su una piattaforma AMD non c\'è.',
+  'X86_SGX': 'Le enclavi SGX esistono solo sui processori Intel.',
+  'INTEL_TDX_HOST': 'Le macchine virtuali cifrate TDX esistono solo su Intel.',
+  'X86_INTEL_PSTATE': 'Il regolatore di frequenza di Intel: su AMD lavorano '
+      'amd-pstate o acpi-cpufreq.',
+};
+
+/// Funzioni che esistono solo sui processori AMD.
+const Map<String, String> _soloAmd = {
+  'AMD_IOMMU': 'L\'IOMMU di AMD (AMD-Vi): su una piattaforma Intel non c\'è.',
+  'AMD_MEM_ENCRYPT': 'La cifratura della memoria SME/SEV esiste solo su AMD.',
+  'X86_AMD_PSTATE': 'Il regolatore di frequenza di AMD: su Intel lavora '
+      'intel_pstate.',
+  'AMD_NUMA': 'La lettura dei nodi NUMA dai vecchi northbridge AMD.',
+};
+
+/// Le regole, dai numeri del rilievo (`macchina`). Una misura che manca
+/// (zero, o un fornitore che non è né Intel né AMD) non produce la regola:
+/// nel dubbio non si toglie.
+List<Impostazione> suMisura(Map<String, dynamic> macchina) {
+  final fuori = <Impostazione>[];
+
+  // ── Quanti processori ────────────────────────────────────────────────
+  //
+  // `NR_CPUS` dimensiona ogni struttura per-processore fissata alla
+  // compilazione: circa 8 KB di kernel per processore previsto, dice
+  // l'aiuto di Kconfig. Arch ne prevede 320, CachyOS 8192 (con MAXSMP).
+  // Si usano i processori POSSIBILI (`/sys/devices/system/cpu/possible`,
+  // che comprende quelli che il firmware dice di poter aggiungere), con un
+  // margine: la potenza di due successiva. Un 12 thread diventa 16, un 16
+  // resta 16: chi cambia processore con uno da 24 thread vede i primi 16
+  // finché non ricompila — e la verifica al primo avvio lo direbbe.
+  final possibili = macchina['cpuPossibili'] is int
+      ? macchina['cpuPossibili'] as int
+      : 0;
+  final nuclei = macchina['nuclei'] is int ? macchina['nuclei'] as int : 0;
+  final quanti = possibili > nuclei ? possibili : nuclei;
+  if (quanti > 0) {
+    var nr = 2;
+    while (nr < quanti) {
+      nr *= 2;
+    }
+    if (nr > 512) nr = 512; // il massimo senza CPUMASK_OFFSTACK
+    if (nr >= quanti) {
+      fuori.add(Impostazione('MAXSMP', 'n',
+          'MAXSMP fissa NR_CPUS a 8192: spento, per poterlo misurare.'));
+      fuori.add(Impostazione('NR_CPUS', '$nr',
+          'Questa macchina ha $quanti processori possibili: se ne prevedono '
+              '$nr (la potenza di due successiva, come margine) invece di '
+              'centinaia.'));
+    }
+  }
+
+  // ── NUMA, se c'è un nodo solo ────────────────────────────────────────
+  //
+  // Su un computer da scrivania c'è un nodo di memoria solo: tutto il codice
+  // NUMA (il bilanciamento automatico, le politiche di allocazione) lavora
+  // per niente. Un Threadripper o un EPYC impostati per avere più nodi li
+  // mostrano in /sys, e lì la regola non scatta.
+  if (macchina['nodiNuma'] == 1) {
+    fuori.add(const Impostazione('NUMA', 'n',
+        'Un solo nodo di memoria: il codice NUMA non avrebbe niente da '
+            'bilanciare.'));
+  }
+
+  // ── Le funzioni dell'altro fornitore ─────────────────────────────────
+  final altro = switch (macchina['fornitore']) {
+    'GenuineIntel' => _soloAmd,
+    'AuthenticAMD' => _soloIntel,
+    _ => const <String, String>{},
+  };
+  for (final e in altro.entries) {
+    fuori.add(Impostazione(e.key, 'n', e.value));
+  }
+  return fuori;
+}

@@ -1,5 +1,6 @@
 import 'catalogo.dart';
 import 'rilievo.dart';
+import 'scaffale.dart';
 
 /// La ricetta: dalle scelte di chi guarda al piano esatto di quello che si
 /// farà, comando per comando.
@@ -113,6 +114,25 @@ class Scelte {
   final bool nativo;
   final String nome;
 
+  /// Il kernel «pronto al profilo»: compilato con `AUTOFDO_CLANG`, così
+  /// che il profilo registrato mentre lo usi si possa riportare sul codice.
+  /// È il primo dei due tempi; vedi `fucina_service.dart`, «Su misura del
+  /// tuo uso».
+  final bool autofdo;
+
+  /// Il secondo tempo: il rilascio del kernel su cui è stato registrato il
+  /// profilo (`6.17.2-fucina-prova`), o vuoto. Il profilo vive nella cache
+  /// della Fucina, accanto al `vmlinux` di quel kernel.
+  final String profilo;
+
+  /// Le regole «su misura dentro il kernel»: processori possibili, NUMA,
+  /// funzioni dell'altro fornitore. Vedi `suMisura` in `catalogo.dart`.
+  final bool misura;
+
+  /// Prima di dire «pronto», avvia il kernel in QEMU e guarda se arriva
+  /// allo spazio utente. Vedi `prova_avvio.dart`.
+  final bool provaAvvio;
+
   const Scelte({
     this.tolti = const {},
     this.aggiunti = const {},
@@ -126,6 +146,10 @@ class Scelte {
     this.provaVeloce = false,
     this.nativo = false,
     this.nome = '',
+    this.autofdo = false,
+    this.profilo = '',
+    this.misura = false,
+    this.provaAvvio = false,
   });
 
   /// Dalle scelte arrivate dal canale. Ogni campo si controlla: dal canale
@@ -169,6 +193,19 @@ class Scelte {
       throw const SceltaNonValida('LTO nel kernel ufficiale esiste solo con '
           'Clang: scegli Clang o togli LTO.');
     }
+    // Il profilo arriva come NOME di un kernel nostro, mai come percorso: il
+    // file lo trova il demone nella sua cache. Un nome che non passa il
+    // controllo dell'aiutante di root non passa nemmeno qui.
+    final profilo = '${j['profilo'] ?? ''}'.trim();
+    if (profilo.isNotEmpty && !Scaffale.nostro(profilo)) {
+      throw SceltaNonValida('«$profilo» non è un kernel della Fucina: il '
+          'profilo si prende solo da uno dei nostri.');
+    }
+    final autofdo = j['autofdo'] == true || profilo.isNotEmpty;
+    if (autofdo && comp != 'clang') {
+      throw const SceltaNonValida('AutoFDO esiste solo con Clang: il profilo '
+          'lo legge Clang, GCC nel kernel non lo sa usare.');
+    }
     return Scelte(
       tolti: insieme(j['tolti']),
       aggiunti: insieme(j['aggiunti']),
@@ -182,6 +219,10 @@ class Scelte {
       provaVeloce: j['provaVeloce'] == true,
       nativo: j['nativo'] == true,
       nome: nome,
+      autofdo: autofdo,
+      profilo: profilo,
+      misura: j['misura'] == true,
+      provaAvvio: j['provaAvvio'] == true,
     );
   }
 
@@ -198,6 +239,10 @@ class Scelte {
         'provaVeloce': provaVeloce,
         'nativo': nativo,
         'nome': nome,
+        'autofdo': autofdo,
+        'profilo': profilo,
+        'misura': misura,
+        'provaAvvio': provaAvvio,
       };
 
   /// Il nome che finisce in `CONFIG_LOCALVERSION`, e da lì nel rilascio, nel
@@ -251,8 +296,15 @@ class Cartelle {
   /// Il file `LSMOD` per localmodconfig.
   final String lsmod;
 
+  /// Il profilo AutoFDO da dare a Clang, o vuoto: `…/profili/<rilascio del
+  /// kernel profilato>/autofdo.prof`.
+  final String profilo;
+
   const Cartelle(
-      {required this.albero, required this.uscita, required this.lsmod});
+      {required this.albero,
+      required this.uscita,
+      required this.lsmod,
+      this.profilo = ''});
 }
 
 /// Calcola la ricetta.
@@ -334,10 +386,41 @@ Ricetta calcola(Rilievo r, Scelte s, Cartelle c,
     ...?combinati?.impostazioni,
     if (s.provaVeloce) ...provaVeloce,
     if (s.lto) ...ltoSottile,
+    // ── Con Clang, quello che non si è scelto si spegne per nome ─────────
+    //
+    // Trovato rileggendo la catena il 1° ottobre 2026: il kernel di CachyOS
+    // è compilato con Clang, ThinLTO, AutoFDO e Propeller, e la sua
+    // configurazione (`/proc/config.gz`) li porta tutti accesi. Partendo da
+    // lì con GCC si spengono da soli (dipendono da Clang); con Clang no, e
+    // chi aveva lasciato LTO e il profilo spenti si ritrovava un kernel con
+    // ThinLTO e le opzioni di Propeller senza profilo — più lento da
+    // compilare e più grosso — senza che il controllo dicesse niente,
+    // perché nessuno li aveva chiesti.
+    if (s.compilatore == 'clang' && !s.lto) ...ltoNessuno,
+    if (s.compilatore == 'clang')
+      Impostazione('AUTOFDO_CLANG', s.autofdo ? 'y' : 'n',
+          s.autofdo
+              ? (s.profilo.isEmpty
+                  ? 'Il kernel pronto al profilo: le informazioni che servono '
+                      'a riportare sul codice quello che registrerà perf.'
+                  : 'Clang ottimizza col profilo registrato su ${s.profilo}.')
+              : 'Senza profilo AutoFDO non serve: spento anche se il kernel '
+                  'di partenza lo aveva.'),
+    if (s.compilatore == 'clang')
+      const Impostazione('PROPELLER_CLANG', 'n',
+          'Propeller vuole un terzo passaggio e uno strumento che Arch non '
+              'impacchetta: spento anche se il kernel di partenza lo aveva.'),
+    if (s.autofdo && r.macchina['profilo'] is Map &&
+        (r.macchina['profilo'] as Map)['tipo'] == 'amd-brs')
+      const Impostazione('PERF_EVENTS_AMD_BRS', 'y',
+          'Zen 3: il campionamento dei salti (BRS) con cui perf registra il '
+              'profilo.'),
     if (s.nativo)
       const Impostazione('X86_NATIVE_CPU', 'y',
-          'Compilato per QUESTO processore: più rapido qui, e non parte su '
-              'un processore più vecchio.'),
+          'Compilato per QUESTO processore (-march=native): più rapido qui, '
+              'e non parte su un processore più vecchio. C\'è dal 6.16; con '
+              'Clang serve la 19.1 o più recente.'),
+    if (s.misura) ...suMisura(r.macchina),
   ];
 
   if (s.provaVeloce) {
@@ -362,8 +445,37 @@ Ricetta calcola(Rilievo r, Scelte s, Cartelle c,
   }
   if (s.base == 'defconfig' || r.configPartenza.isEmpty) {
     avvisi.add('Da defconfig: localmodconfig toglie moduli ma non ne '
-        'aggiunge. Un driver che defconfig non accende non ci sarà, anche se '
-        'è nell\'elenco — scorte comprese.');
+        'aggiunge. Essenziali, scorte e moduli aggiunti a mano si accendono '
+        'dall\'albero dei sorgenti; gli altri driver che defconfig non ha non '
+        'ci saranno, anche se sono nell\'elenco.');
+  }
+  if (s.compilatore == 'clang' && !s.lto && s.autofdo) {
+    avvisi.add('AutoFDO rende di più con ThinLTO: senza, il profilo arriva '
+        'ai singoli file ma non al collegamento, dove si decide quasi tutto.');
+  }
+  if (s.autofdo && s.profilo.isEmpty) {
+    final p = r.macchina['profilo'];
+    avvisi.add(p is Map && p['possibile'] == true
+        ? 'Primo tempo di AutoFDO: installa questo kernel, avvialo, usalo come '
+            'sempre e registra il profilo dalla pagina Kernel. Poi «Ricompila '
+            'col profilo».'
+        : 'Questo kernel sarà pronto al profilo, ma su questo computer il '
+            'profilo non si può registrare: ${p is Map ? p['perche'] : 'non '
+            'so dire perché'}');
+  }
+  if (s.provaAvvio && s.nativo) {
+    avvisi.add('Prova d\'avvio di un kernel «solo per questo processore»: si '
+        'fa con KVM (-cpu host). Senza KVM l\'emulazione può non avere le '
+        'istruzioni che il kernel usa, e un fallimento non vorrebbe dire niente.');
+  }
+  if (r.macchina['monolitico'] == true &&
+      s.base == 'in-uso' &&
+      r.configPartenza.isNotEmpty) {
+    avvisi.add('Il kernel in uso non ha moduli (è tutto dentro): partendo '
+        'dalla sua configurazione la scrematura non toglie niente, e il '
+        'kernel nuovo avrà dentro tutto quello che ha quello di adesso. '
+        'Scorte ed essenziali che gli mancano si aggiungono dall\'albero dei '
+        'sorgenti.');
   }
   if (!r.modprobed.presente) {
     avvisi.add('Senza modprobed-db il kernel conoscerà solo quello che è '
@@ -375,19 +487,53 @@ Ricetta calcola(Rilievo r, Scelte s, Cartelle c,
       if (a is Map && a['indispensabile'] == true && a['presente'] != true)
         '${a['nome']}',
   ];
-  final compOk = (r.macchina['attrezzi'] as List? ?? const []).any((a) =>
-      a is Map && a['nome'] == s.compilatore && a['presente'] == true);
-  if (!compOk) mancanti.add(s.compilatore);
+  bool presente(String nome) => (r.macchina['attrezzi'] as List? ?? const [])
+      .any((a) => a is Map && a['nome'] == nome && a['presente'] == true);
+  if (!presente(s.compilatore)) mancanti.add(s.compilatore);
+  // `LLVM=1` non vuol dire solo clang: anche il linker (ld.lld) e gli
+  // attrezzi binari (llvm-ar, llvm-nm, llvm-objcopy…). Senza, Kconfig si
+  // ferma al primo `make` con un «linker non supportato» che non nomina il
+  // pacchetto. Su Arch sono `lld` e `llvm`.
+  if (s.compilatore == 'clang') {
+    for (final a in const ['lld', 'llvm']) {
+      if (_conosciuto(r, a) && !presente(a)) mancanti.add(a);
+    }
+  }
+  if (s.profilo.isNotEmpty && _conosciuto(r, 'llvm') && !presente('llvm')) {
+    mancanti.add('llvm');
+  }
+  if (!s.provaVeloce && _conosciuto(r, 'pahole') && !presente('pahole')) {
+    avvisi.add('Manca pahole: senza, Kconfig spegne BTF da solo, e senza BTF '
+        'gli scheduler sched_ext (scx_*) non partono. Su Arch: pacman -S pahole');
+  }
+  if (s.provaAvvio && _conosciuto(r, 'qemu-system-x86') && !presente('qemu-system-x86')) {
+    avvisi.add('Manca QEMU per la prova d\'avvio: su Arch, pacman -S '
+        'qemu-system-x86. Senza, la prova si salta e lo si dice.');
+  }
   if (mancanti.isNotEmpty) {
-    avvisi.add('Mancano programmi per compilare: ${mancanti.join(', ')}. '
-        'Su Arch e CachyOS: sudo pacman -S --needed ${mancanti.join(' ')}');
+    final pacchetti = mancanti.toSet().toList();
+    avvisi.add('Mancano programmi per compilare: ${pacchetti.join(', ')}. '
+        'Su Arch e CachyOS: sudo pacman -S --needed ${pacchetti.join(' ')}');
   }
 
   // ── I passi ──────────────────────────────────────────────────────────
+  // ── Lo stesso `make` per OGNI passo ────────────────────────────────────
+  //
+  // Compilatore, LLVM e profilo entrano in ogni invocazione, identici:
+  // Kconfig ricalcola le dipendenze dal compilatore che vede (`CC_IS_CLANG`,
+  // `LD_IS_LLD`, la versione), e un `olddefconfig` lanciato con un
+  // compilatore diverso da quello della compilazione riscrive il .config.
+  //
+  // ccache no col profilo: il profilo non è fra quello che ccache guarda
+  // quando decide se un oggetto è già pronto, e il secondo tempo di AutoFDO
+  // riuserebbe gli oggetti del primo — compilati SENZA profilo — dicendo
+  // di averlo applicato.
+  final conCcache = ccache && s.profilo.isEmpty;
   final make = <String>[
     'make',
     if (s.compilatore == 'clang') 'LLVM=1',
-    if (ccache) 'CC=ccache ${s.compilatore == 'clang' ? 'clang' : 'gcc'}',
+    if (conCcache) 'CC=ccache ${s.compilatore == 'clang' ? 'clang' : 'gcc'}',
+    if (s.profilo.isNotEmpty) 'CLANG_AUTOFDO_PROFILE=${c.profilo}',
   ];
   final configurazioni = <String>[
     'scripts/config',
@@ -434,6 +580,11 @@ Ricetta calcola(Rilievo r, Scelte s, Cartelle c,
         'localmodconfig con l\'elenco della Fucina (${moduli.length} moduli): '
             'tutto quello che non è nell\'elenco esce dalla configurazione.',
         comando: [...make, 'LSMOD=${c.lsmod}', 'localmodconfig']),
+    const Passo('completa', 'Completa essenziali e scorte',
+        'Dall\'albero dei sorgenti: per ogni modulo essenziale, di scorta o '
+            'aggiunto a mano che la configurazione non accende, il simbolo '
+            'di Kconfig che lo costruisce, messo a «m». È quello che '
+            'localmodconfig non fa: toglie e non aggiunge.'),
     Passo('imposta', 'Applica preset e nome',
         '${impostazioni.length} valori, ognuno col suo perché.',
         comando: configurazioni),
@@ -445,7 +596,8 @@ Ricetta calcola(Rilievo r, Scelte s, Cartelle c,
             'suo nome.'),
     Passo('compila', 'Compila',
         'Il kernel e i moduli, con $nuclei lavori in parallelo'
-            '${ccache ? ' e ccache' : ''}.',
+            '${conCcache ? ' e ccache' : ''}'
+            '${s.profilo.isNotEmpty ? ', col profilo di ${s.profilo}' : ''}.',
         comando: [...make, '-j$nuclei', 'bzImage', 'modules']),
     Passo('rilascio', 'Leggi il nome del kernel',
         'Deve essere ${s.rilascio}: se è diverso, qualcosa ha cambiato il '
@@ -460,9 +612,15 @@ Ricetta calcola(Rilievo r, Scelte s, Cartelle c,
           'INSTALL_MOD_STRIP=1',
           'modules_install',
         ]),
-    const Passo('impacchetta', 'Prepara il kernel da installare',
-        'L\'immagine e la configurazione accanto ai moduli. Da qui in poi '
-            'manca solo «Installa», che chiede la password.'),
+    Passo('impacchetta', 'Prepara il kernel da installare',
+        'L\'immagine e la configurazione accanto ai moduli'
+            '${s.autofdo ? ', e il vmlinux da parte per il profilo' : ''}. Da '
+            'qui in poi manca solo «Installa», che chiede la password.'),
+    if (s.provaAvvio)
+      const Passo('avvia', 'Prova d\'avvio in QEMU',
+          'Il kernel appena fatto parte in una macchina virtuale con un '
+              'initramfs minimo, e deve arrivare allo spazio utente. Non tocca '
+              '/boot e non prova i tuoi dischi: dice se il kernel parte.'),
   ];
 
   return Ricetta(
@@ -476,6 +634,12 @@ Ricetta calcola(Rilievo r, Scelte s, Cartelle c,
     avvisi: avvisi,
   );
 }
+
+/// Il rilievo conosce quell'attrezzo? Un rilievo vecchio (o finto, nelle
+/// prove) che non lo elenca non deve far dire «manca».
+bool _conosciuto(Rilievo r, String nome) =>
+    (r.macchina['attrezzi'] as List? ?? const [])
+        .any((a) => a is Map && a['nome'] == nome);
 
 /// La famiglia dei moduli di una scorta che il rilievo non ha visto.
 String famigliaDiScorta(String scorta) => switch (scorta) {
@@ -525,16 +689,7 @@ List<String> _argomentiConfig(Impostazione i) {
 /// fatto («PREEMPT doveva essere y» e «PREEMPT_LAZY doveva essere n»). Si
 /// dice una riga sola: che cosa si era chiesto, e che cosa è rimasto.
 List<String> controllaConfig(String config, List<Impostazione> chieste) {
-  final valori = <String, String>{};
-  for (final riga in config.split('\n')) {
-    final m = RegExp(r'^CONFIG_([A-Za-z0-9_]+)=(.*)$').firstMatch(riga);
-    if (m != null) {
-      valori[m.group(1)!] = m.group(2)!;
-      continue;
-    }
-    final n = RegExp(r'^# CONFIG_([A-Za-z0-9_]+) is not set$').firstMatch(riga);
-    if (n != null) valori[n.group(1)!] = 'n';
-  }
+  final valori = leggiConfig(config);
   String? visto(String s) => valori[s];
   bool uguale(Impostazione i) {
     final v = visto(i.simbolo);
@@ -572,13 +727,42 @@ List<String> controllaConfig(String config, List<Impostazione> chieste) {
   return fuori;
 }
 
+/// Un `.config` letto: simbolo (senza `CONFIG_`) → valore così com'è
+/// scritto, `n` per le righe «is not set». Un simbolo che non c'è non c'è.
+Map<String, String> leggiConfig(String config) {
+  final valori = <String, String>{};
+  for (final riga in config.split('\n')) {
+    final m = RegExp(r'^CONFIG_([A-Za-z0-9_]+)=(.*)$').firstMatch(riga);
+    if (m != null) {
+      valori[m.group(1)!] = m.group(2)!;
+      continue;
+    }
+    final n = RegExp(r'^# CONFIG_([A-Za-z0-9_]+) is not set$').firstMatch(riga);
+    if (n != null) valori[n.group(1)!] = 'n';
+  }
+  return valori;
+}
+
+/// I moduli che il passo «completa» deve trovare accesi: gli essenziali,
+/// quelli delle scorte scelte e quelli aggiunti a mano — non i tolti.
+/// Sono i moduli per cui la Fucina ha promesso qualcosa a chi guarda.
+Set<String> daCompletare(Ricetta r, Rilievo ril) {
+  final scelte = {...r.scelte.scorte, ...?combinaPreset(r.scelte.preset)?.scorte};
+  return {
+    ...ril.avvio.moduli,
+    for (final sc in scorte)
+      if (scelte.contains(sc.id)) ...sc.moduli,
+    ...r.scelte.aggiunti,
+  }.where((m) => r.moduli.contains(m)).toSet();
+}
+
 /// I «choice» di Kconfig che la Fucina tocca. Vedi [controllaConfig].
 const List<Set<String>> sceltePerGruppo = [
   {'HZ_100', 'HZ_250', 'HZ_300', 'HZ_1000'},
   {'PREEMPT_NONE', 'PREEMPT_VOLUNTARY', 'PREEMPT', 'PREEMPT_LAZY', 'PREEMPT_RT'},
   {'DEBUG_INFO_NONE', 'DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT', 'DEBUG_INFO_DWARF4',
    'DEBUG_INFO_DWARF5'},
-  {'LTO_NONE', 'LTO_CLANG_THIN', 'LTO_CLANG_FULL'},
+  {'LTO_NONE', 'LTO_CLANG_THIN', 'LTO_CLANG_FULL', 'LTO_CLANG_THIN_DIST'},
   {'TRANSPARENT_HUGEPAGE_ALWAYS', 'TRANSPARENT_HUGEPAGE_MADVISE',
    'TRANSPARENT_HUGEPAGE_NEVER'},
 ];

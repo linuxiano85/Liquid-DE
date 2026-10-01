@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'albero.dart';
 import 'ricetta.dart';
 import 'rilievo.dart';
 import 'sorgenti.dart';
@@ -92,8 +93,15 @@ class Officina {
       albero: '$base/linux-${s.versione}',
       uscita: '$lavoro/uscita/${s.rilascio}',
       lsmod: '$lavoro/lsmod-${s.nome}.txt',
+      profilo: s.profilo.isEmpty ? '' : '${profiliDi(lavoro, s.profilo)}/autofdo.prof',
     );
   }
+
+  /// Dove stanno le cose di un kernel per AutoFDO: il suo `vmlinux` (perf e
+  /// llvm-profgen hanno bisogno di QUELLO, con gli stessi indirizzi del
+  /// kernel che girava), la sua configurazione e il profilo convertito.
+  static String profiliDi(String lavoro, String rilascio) =>
+      '$lavoro/profili/$rilascio';
 
   // ── Lo stato ─────────────────────────────────────────────────────────
 
@@ -293,6 +301,15 @@ class Officina {
 
     final ultimoPrimaVolta =
         r.passi.lastIndexWhere((p) => p.soloLaPrimaVolta);
+    _mappa = null;
+    _completati = const [];
+
+    // Il secondo tempo di AutoFDO senza il profilo è un kernel compilato
+    // «col profilo» che di profilo non ne ha: lo si dice prima di scaricare.
+    if (c.profilo.isNotEmpty && !await File(c.profilo).exists()) {
+      errore = 'Non trovo il profilo di ${r.scelte.profilo} (${c.profilo}): '
+          'registralo prima dalla pagina Kernel, avviato su quel kernel.';
+    }
 
     // ── Prima di tutto, lo spazio ──────────────────────────────────────
     //
@@ -300,7 +317,7 @@ class Officina {
     // quindici gigabyte, a seconda di quanti moduli restano. Scoprirlo a
     // metà, con il disco pieno e `make` che scrive errori incomprensibili, è
     // il modo peggiore: lo si dice prima di scaricare.
-    final libero = await _spazioLibero();
+    final libero = errore == null ? await _spazioLibero() : null;
     if (libero != null && libero < spazioMinimo) {
       errore = 'Servono almeno ${spazioMinimo ~/ 1000000000} GB liberi dove '
           'la Fucina lavora ($lavoro): ce ne sono '
@@ -386,8 +403,17 @@ class Officina {
       case 'patch':
         return _patch(r.scelte.versione, c.albero);
       case 'base':
-        if (p.comando.isNotEmpty) return _lancia(p.comando, c.albero);
+        if (p.comando.isNotEmpty) {
+          // Da defconfig non c'è una configurazione «da cui si è partiti» da
+          // portare col kernel: quella di una compilazione precedente non
+          // deve restare lì a mentire.
+          final vecchia = File('${c.albero}/.fucina-partenza.config');
+          if (await vecchia.exists()) await vecchia.delete();
+          return _lancia(p.comando, c.albero);
+        }
         return _base(rilievo.configPartenza, c.albero);
+      case 'completa':
+        return _completa(r, rilievo, c);
       case 'screma':
         await File(c.lsmod).parent.create(recursive: true);
         await File(c.lsmod).writeAsString('${r.fileLsmod}\n');
@@ -397,6 +423,23 @@ class Officina {
         for (final a in controllaConfig(config, r.impostazioni)) {
           _riga('⚠ $a');
           avvisi.add(a);
+        }
+        // I moduli che «completa» ha acceso: Kconfig può averne rimesso a
+        // «n» qualcuno, se dipende da qualcosa che in questa configurazione
+        // non c'è. Si dice per nome di modulo, che è quello che chi guarda
+        // ha scelto, e non per simbolo.
+        final m = _mappa;
+        if (m != null && _completati.isNotEmpty) {
+          final ancora =
+              confronta(leggiConfig(config), m, _completati).mancanti;
+          if (ancora.isNotEmpty) {
+            final a = 'Non sono entrati, anche se li avevi chiesti (scorte, '
+                'essenziali o aggiunti): ${ancora.join(', ')}. Kconfig li ha '
+                'lasciati fuori perché dipendono da qualcosa che questa '
+                'configurazione non ha.';
+            _riga('⚠ $a');
+            avvisi.add(a);
+          }
         }
         return null;
       case 'rilascio':
@@ -616,8 +659,54 @@ class Officina {
     final byte = await File(vero).readAsBytes();
     final testo = partenza.endsWith('.gz') ? gzip.decode(byte) : byte;
     await File('$albero/.config').writeAsBytes(testo);
+    // Una copia che viaggia col kernel: `impacchetta` la mette accanto ai
+    // moduli, e quando questo kernel sarà quello in uso il rilievo ripartirà
+    // da lei e non dalla sua configurazione già scremata.
+    await File('$albero/.fucina-partenza.config').writeAsBytes(testo);
     _riga('Configurazione di partenza: $partenza.');
     return null;
+  }
+
+  // ── Completare quello che localmodconfig non aggiunge ────────────────
+
+  /// La mappa moduli → simboli dell'albero di questa compilazione, e i
+  /// moduli che `completa` ha acceso: servono ancora a `controlla`.
+  MappaModuli? _mappa;
+  List<String> _completati = const [];
+
+  Future<String?> _completa(Ricetta r, Rilievo rilievo, Cartelle c) async {
+    _riga('Leggo nei Makefile quale simbolo costruisce ogni modulo.');
+    final mappa = await MappaModuli.leggi(c.albero);
+    _mappa = mappa;
+    final config = await File('${c.albero}/.config').readAsString();
+    final voluti = daCompletare(r, rilievo);
+    final esito = confronta(leggiConfig(config), mappa, voluti);
+    // Gli sconosciuti si dicono solo fra quelli scelti da chi guarda: gli
+    // essenziali hanno nomi di più versioni (`sha256_generic` e `sha256`),
+    // e uno che in questo albero non c'è non è una notizia.
+    final scelti = {...voluti}..removeAll(rilievo.avvio.moduli);
+    final ignoti = esito.sconosciuti.where(scelti.contains).toList();
+    if (ignoti.isNotEmpty) {
+      _riga('⚠ Non trovo nei sorgenti di questa versione: ${ignoti.join(', ')} '
+          '(nome cambiato, o un modulo che viene da fuori).');
+    }
+    if (esito.mancanti.isEmpty) {
+      _riga('Niente da aggiungere: la configurazione accende già tutti i '
+          '${voluti.length} moduli promessi.');
+      _completati = const [];
+      return null;
+    }
+    _completati = esito.mancanti;
+    final moduli = leggiConfig(config)['MODULES'] == 'y';
+    _riga('Da accendere (${esito.mancanti.length}): ${esito.mancanti.join(', ')}'
+        '${moduli ? '' : ' — la configurazione non ha moduli: entrano nel '
+            'kernel (=y)'}.');
+    return _lancia([
+      'scripts/config',
+      '--file',
+      '.config',
+      for (final s in esito.daAccendere) ...['--module', s],
+    ], c.albero);
   }
 
   Future<String?> _impacchetta(Ricetta r, Rilievo rilievo, Cartelle c) async {
@@ -639,6 +728,29 @@ class Officina {
     if (!await immagine.exists()) return 'Manca arch/x86/boot/bzImage.';
     await immagine.copy('${boot.path}/vmlinuz-$rel');
     await File('${c.albero}/.config').copy('${boot.path}/config-$rel');
+    final partenza = File('${c.albero}/.fucina-partenza.config');
+    if (await partenza.exists()) {
+      await partenza.copy('${moduli.path}/fucina-partenza.config');
+    }
+
+    // ── Il primo tempo di AutoFDO: il vmlinux da parte ────────────────
+    //
+    // Il profilo si converte con il vmlinux del kernel che girava mentre lo
+    // si registrava, indirizzo per indirizzo. L'albero invece si riusa: la
+    // prossima compilazione — compresa quella col profilo — riscrive il suo
+    // vmlinux. Quindi una copia, `--reflink=auto`: su Btrfs (CachyOS di
+    // serie) non occupa spazio finché i due file non divergono.
+    if (r.scelte.autofdo) {
+      final dove = Directory(profiliDi(lavoro, rel));
+      await dove.create(recursive: true);
+      final e = await _lancia([
+        'cp', '--reflink=auto', '--',
+        '${c.albero}/vmlinux', '${dove.path}/vmlinux',
+      ], c.albero);
+      if (e != null) return 'Non riesco a mettere da parte il vmlinux: $e';
+      await File('${c.albero}/.config').copy('${dove.path}/config');
+      _riga('vmlinux da parte per il profilo: ${dove.path}');
+    }
 
     List<dynamic> patch = const [];
     try {
@@ -651,6 +763,11 @@ class Officina {
       'scelte': r.scelte.toJson(),
       'moduli': r.moduli.length,
       'patch': patch,
+      if (r.scelte.profilo.isNotEmpty)
+        'profilo': {
+          'da': r.scelte.profilo,
+          'sha256': await _somma(c.profilo) ?? '?',
+        },
       'quando': DateTime.now().toIso8601String(),
     }));
 

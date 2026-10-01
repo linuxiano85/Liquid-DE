@@ -92,6 +92,22 @@ class Rilevatore {
     final dispositivi = await _dispositivi(indice);
 
     _dici('moduli', 'Leggo i moduli caricati e il diario di modprobed.', 2);
+    // ── Un kernel senza moduli ──────────────────────────────────────────
+    //
+    // Senza `CONFIG_MODULES` non c'è /proc/modules, e non ci sono gli indici
+    // in /usr/lib/modules: è la macchina virtuale di prova (6.18 tutto
+    // dentro), ed è il caso di parecchi kernel di macchine virtuali e di
+    // schede. Il rilievo allora vede solo gli essenziali, per nome, e la
+    // scrematura non ha niente da scremare. Prima del 1° ottobre 2026 non lo
+    // diceva nessuno: si vedevano «8 moduli» e basta.
+    final monolitico = !await File(_p('proc/modules')).exists();
+    if (monolitico) {
+      avvisi.add('Il kernel in uso non carica moduli: ha tutto dentro. Il '
+          'rilievo vede i dispositivi ma non sa dire quale modulo li '
+          'guiderebbe, e partendo dalla sua configurazione localmodconfig non '
+          'toglie niente. Essenziali e scorte si cercano nei sorgenti del '
+          'kernel nuovo e si accendono da lì.');
+    }
     final caricati = await _caricati();
     final esterni = await _esterni();
     if (esterni.isNotEmpty) {
@@ -119,6 +135,14 @@ class Rilevatore {
 
     _dici('macchina', 'Guardo processore, memoria e attrezzi.', 4);
     final macchina = await _macchina(rilascio);
+    macchina['monolitico'] = monolitico;
+    final partenza = await _configPartenza(rilascio);
+    if (partenza.endsWith('/fucina-partenza.config')) {
+      avvisi.add('Stai usando un kernel della Fucina: si parte dalla '
+          'configurazione da cui era partito lui ($partenza), non dalla sua, '
+          'che è già scremata. Altrimenti ogni kernel nuovo perderebbe quello '
+          'che il precedente aveva tolto, e non lo ritroverebbe più.');
+    }
 
     // ── L'incrocio ─────────────────────────────────────────────────────
     final moduli = <String, VoceModulo>{};
@@ -177,7 +201,7 @@ class Rilevatore {
       moduli: moduli,
       avvio: avvio,
       modprobed: diario,
-      configPartenza: await _configPartenza(rilascio),
+      configPartenza: partenza,
       indiceRegole: indice.regole,
       avvisi: avvisi,
     );
@@ -190,8 +214,19 @@ class Rilevatore {
   /// (`/proc/config.gz`, se è compilato con `IKCONFIG_PROC`), la copia che
   /// Debian e Fedora mettono in `/boot`, e quella delle intestazioni, che su
   /// Arch c'è se è installato `linux-headers`.
+  ///
+  /// Su un kernel della Fucina, prima di tutto, la configurazione da cui era
+  /// partito lui: l'officina la mette accanto ai suoi moduli
+  /// (`fucina-partenza.config`). Ripartire da `/proc/config.gz` vorrebbe
+  /// dire scremare una configurazione già scremata, e un driver tolto una
+  /// volta non tornerebbe più. (Trovato rileggendo la catena il 1° ottobre
+  /// 2026.)
   Future<String> _configPartenza(String rilascio) async {
     for (final c in [
+      if (rilascio.contains('-fucina-')) ...[
+        'usr/lib/modules/$rilascio/fucina-partenza.config',
+        'lib/modules/$rilascio/fucina-partenza.config',
+      ],
       'proc/config.gz',
       if (rilascio.isNotEmpty) 'boot/config-$rilascio',
       if (rilascio.isNotEmpty) 'usr/lib/modules/$rilascio/build/.config',
@@ -498,8 +533,11 @@ class Rilevatore {
     if (uuid.isNotEmpty) {
       tieni('dm_mod', 'Device mapper sotto «$dove».');
       if (uuid.startsWith('CRYPT-')) {
+        // `sha256_generic` fino al 6.15, `sha256` dopo: si nominano tutti e
+        // due, e il passo «completa» dell'officina tace su quello che
+        // nell'albero nuovo non c'è.
         for (final m in const ['dm_crypt', 'aesni_intel', 'xts', 'cbc',
-                               'essiv', 'sha256_generic']) {
+                               'essiv', 'sha256_generic', 'sha256']) {
           tieni(m, 'Il disco cifrato di «$dove».');
         }
       }
@@ -582,6 +620,10 @@ class Rilevatore {
             '')
         .split(' ')
         .toSet();
+    final fornitore = RegExp(r'^vendor_id\s*:\s*(\S+)', multiLine: true)
+            .firstMatch(cpu)
+            ?.group(1) ??
+        '';
     final ramKb = int.tryParse(RegExp(r'^MemTotal:\s*(\d+)', multiLine: true)
                 .firstMatch(await _leggi('proc/meminfo'))
                 ?.group(1) ??
@@ -595,8 +637,123 @@ class Rilevatore {
       'ramGB': (ramKb / 1024 / 1024 * 10).round() / 10,
       'livelloX86': livelloX86(flags),
       'uefi': await Directory(_p('sys/firmware/efi')).exists(),
+      'fornitore': fornitore,
+      'cpuPossibili':
+          contaElenco(await _leggi('sys/devices/system/cpu/possible')),
+      'nodiNuma': await _nodiNuma(),
+      'profilo': profiloHw(fornitore, flags, await _rami()),
       'attrezzi': await _attrezzi(),
     };
+  }
+
+  /// Quanti nodi di memoria: le cartelle `node<N>` in
+  /// `/sys/devices/system/node`. Zero se la cartella non c'è (un kernel
+  /// senza NUMA): «non so», e la regola che lo usa non scatta.
+  Future<int> _nodiNuma() async {
+    var n = 0;
+    try {
+      await for (final e in Directory(_p('sys/devices/system/node')).list()) {
+        if (RegExp(r'/node[0-9]+$').hasMatch(e.path)) n++;
+      }
+    } catch (_) {}
+    return n;
+  }
+
+  /// Quanti salti tiene il registro dei salti del processore, come lo vede
+  /// perf: `caps/branches` della PMU dei processori (`cpu`, o `cpu_core` sugli
+  /// Intel con due tipi di core). Zero se non c'è.
+  Future<int> _rami() async {
+    for (final pmu in const ['cpu', 'cpu_core']) {
+      final v = int.tryParse(
+          (await _leggi('sys/bus/event_source/devices/$pmu/caps/branches'))
+              .trim());
+      if (v != null && v > 0) return v;
+    }
+    return 0;
+  }
+
+  /// `0-15` → 16, `0,2-3` → 3, vuoto → 0. È la forma di
+  /// `/sys/devices/system/cpu/possible`.
+  static int contaElenco(String testo) {
+    var n = 0;
+    for (final pezzo in testo.trim().split(',')) {
+      final m = RegExp(r'^(\d+)(?:-(\d+))?$').firstMatch(pezzo.trim());
+      if (m == null) continue;
+      final a = int.parse(m.group(1)!);
+      final b = m.group(2) == null ? a : int.parse(m.group(2)!);
+      if (b >= a) n += b - a + 1;
+    }
+    return n;
+  }
+
+  /// ── Si può registrare un profilo AutoFDO qui? ─────────────────────────
+  ///
+  /// AutoFDO vuole i SALTI, non i campioni normali: perf registra a ogni
+  /// campione gli ultimi salti presi (`perf record -b`), e da lì Clang
+  /// ricava quali rami si prendono davvero. Serve quindi un registro dei
+  /// salti nel processore. Dalla documentazione del kernel
+  /// (Documentation/dev-tools/autofdo.rst, 6.13 e seguenti) e dal kernel
+  /// stesso (arch/x86/events):
+  ///
+  ///  · **Intel**: LBR, da Haswell in qua in pratica. Non ha un segno in
+  ///    /proc/cpuinfo (solo `arch_lbr`, dagli Alder Lake): lo si vede da
+  ///    `caps/branches` della PMU, se il kernel in uso lo espone.
+  ///  · **AMD Zen 4 e successivi**: LbrExtV2, segno `amd_lbr_v2`.
+  ///  · **AMD Zen 3**: solo gli EPYC con BRS (segno `brs`); i Ryzen Zen 3 no.
+  ///    BRS nel kernel è `PERF_EVENTS_AMD_BRS`, che la ricetta accende.
+  ///  · **Macchine virtuali**: il registro dei salti quasi mai arriva
+  ///    all'ospite.
+  ///
+  /// L'evento non è nella risposta: lo sceglie l'aiutante di root dal
+  /// `tipo`, da un elenco chiuso. Sono i nomi delle tabelle di perf
+  /// (tools/perf/pmu-events), che non hanno bisogno di libpfm:
+  /// `BR_INST_RETIRED.NEAR_TAKEN` (Intel, da Sandy Bridge) ed
+  /// `ex_ret_brn_tkn` (AMD, Zen 1–6, codice 0xc4: lo stesso evento
+  /// RETIRED_TAKEN_BRANCH_INSTRUCTIONS della documentazione).
+  static Map<String, dynamic> profiloHw(
+      String fornitore, Set<String> flags, int rami) {
+    final virtuale = flags.contains('hypervisor');
+    Map<String, dynamic> no(String perche) => {
+          'possibile': false,
+          'tipo': '',
+          'perche': virtuale
+              ? '$perche In una macchina virtuale il registro dei salti '
+                  'quasi mai arriva all\'ospite.'
+              : perche,
+        };
+    switch (fornitore) {
+      case 'GenuineIntel':
+        if (rami > 0 || flags.contains('arch_lbr')) {
+          return {
+            'possibile': true,
+            'tipo': 'intel',
+            'perche': 'Intel con LBR${rami > 0 ? ' ($rami salti)' : ''}.',
+          };
+        }
+        return no('Il kernel in uso non mostra l\'LBR del processore (né '
+            'caps/branches della PMU, né il segno arch_lbr).');
+      case 'AuthenticAMD':
+        if (flags.contains('amd_lbr_v2')) {
+          return {
+            'possibile': true,
+            'tipo': 'amd',
+            'perche': 'AMD con LbrExtV2 (Zen 4 o più recente).',
+          };
+        }
+        if (flags.contains('brs')) {
+          return {
+            'possibile': true,
+            'tipo': 'amd-brs',
+            'perche': 'AMD Zen 3 con BRS (EPYC).',
+          };
+        }
+        return no('Questo AMD non ha un registro dei salti che perf sappia '
+            'leggere: serve Zen 4 o più recente (LbrExtV2), o uno Zen 3 EPYC '
+            '(BRS). I Ryzen Zen 3 e precedenti no.');
+      default:
+        return no('Processore «$fornitore»: AutoFDO su x86 vuole un Intel '
+            'con LBR o un AMD Zen 4 (o uno Zen 3 EPYC).');
+    }
   }
 
   /// Il livello della micro-architettura x86-64, dai flag della CPU. Sono
@@ -673,6 +830,14 @@ const List<Attrezzo> attrezzi = [
   Attrezzo('clang', 'clang', 'compilare con Clang e LTO',
       indispensabile: false),
   Attrezzo('lld', 'ld.lld', 'collegare con LLVM', indispensabile: false),
+  // `LLVM=1` usa anche llvm-ar, llvm-nm, llvm-objcopy, llvm-strip; e
+  // llvm-profgen (stesso pacchetto, su Arch) converte il profilo AutoFDO.
+  Attrezzo('llvm', 'llvm-ar', 'gli attrezzi di LLVM=1 e il profilo AutoFDO',
+      indispensabile: false),
+  Attrezzo('perf', 'perf', 'registrare il profilo AutoFDO',
+      indispensabile: false),
+  Attrezzo('qemu-system-x86', 'qemu-system-x86_64', 'la prova d\'avvio prima di '
+      'installare', indispensabile: false),
   Attrezzo('flex', 'flex', 'leggere Kconfig'),
   Attrezzo('bison', 'bison', 'leggere Kconfig'),
   Attrezzo('bc', 'bc', 'calcolare le costanti del tempo'),
