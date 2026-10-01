@@ -1149,6 +1149,9 @@ QtObject {
     signal fucinaInstallato(var info)
     signal fucinaTolto(var info)
     signal fucinaVerifica(var info)
+    /// La fine della registrazione del profilo AutoFDO: `{ok, errore,
+    /// rilascio, minuti, sommato, byte}`. Arriva dopo minuti.
+    signal fucinaProfilato(var info)
 
     signal custodiaPanoramica(var info)
     signal custodiaDettaglio(var info)
@@ -1200,6 +1203,11 @@ QtObject {
     }
     function fucinaVerificaOra() {
         return send({ "action": "fucina_verifica" });
+    }
+    /// Il profilo si registra sul kernel in uso: si manda il suo NOME, che il
+    /// demone e l'aiutante ricontrollano, e quanti minuti.
+    function fucinaRegistraProfilo(rilascio, minuti) {
+        return send({ "action": "fucina_profila", "rilascio": rilascio, "minuti": minuti });
     }
 
     /// Toglie le voci spuntate. Si mandano **identificativi**, mai percorsi: i
@@ -2300,6 +2308,9 @@ QtObject {
                 break;
             case "fucina_verifica":
                 ipc.fucinaVerifica(msg.payload);
+                break;
+            case "fucina_profilato":
+                ipc.fucinaProfilato(msg.payload);
                 break;
             case "custodia_panoramica":
                 ipc.custodiaPanoramica(msg.payload);

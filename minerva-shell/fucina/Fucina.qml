@@ -142,6 +142,16 @@ FloatingWindow {
     property bool provaVeloce: false
     property bool nativo: false
     property string nome: "prova"
+    /// AutoFDO, primo tempo: il kernel «pronto al profilo».
+    property bool autofdo: false
+    /// AutoFDO, secondo tempo: il NOME del kernel su cui si è registrato il
+    /// profilo, o vuoto. Lo mette «Ricompila col profilo» nella pagina Kernel.
+    property string profilo: ""
+    /// Le regole su misura dentro il kernel (processori, NUMA, fornitore):
+    /// di serie sì, perché nessuna di loro può lasciare un kernel che non
+    /// parte. Vedi `suMisura` in `fucina/catalogo.dart`.
+    property bool misura: true
+    property bool provaAvvio: false
 
     /// La versione l'ha scelta chi guarda: allora l'elenco che arriva dopo
     /// non gliela cambia sotto il naso.
@@ -177,8 +187,44 @@ FloatingWindow {
             "lto": finestra.lto && finestra.compilatore === "clang",
             "provaVeloce": finestra.provaVeloce,
             "nativo": finestra.nativo,
-            "nome": finestra.nome
+            "nome": finestra.nome,
+            "autofdo": (finestra.autofdo || finestra.profilo !== "")
+                       && finestra.compilatore === "clang",
+            "profilo": finestra.compilatore === "clang" ? finestra.profilo : "",
+            "misura": finestra.misura,
+            "provaAvvio": finestra.provaAvvio
         };
+    }
+
+    /// Il secondo tempo di AutoFDO: le scelte del kernel profilato, il suo
+    /// profilo, e un nome nuovo accanto al suo. Non compila: porta alla
+    /// pagina Compila, dove il piano si vede prima di premere.
+    function ricompilaColProfilo(k) {
+        var s = k.scelte || ({});
+        function mappa(l) {
+            var m = ({});
+            (l || []).forEach(function (x) { m[x] = true; });
+            return m;
+        }
+        finestra.tolti = mappa(s.tolti);
+        finestra.aggiunti = mappa(s.aggiunti);
+        finestra.scorte = mappa(s.scorte);
+        finestra.preset = mappa(s.preset);
+        finestra.sorgente = String(s.sorgente || "vanilla");
+        finestra.versioneScelta = true;
+        finestra.versione = String(s.versione || finestra.versione);
+        finestra.base = String(s.base || "in-uso");
+        finestra.compilatore = "clang";
+        finestra.lto = s.lto === true;
+        finestra.provaVeloce = s.provaVeloce === true;
+        finestra.nativo = s.nativo === true;
+        finestra.misura = s.misura === true;
+        finestra.autofdo = true;
+        finestra.profilo = String(k.rilascio);
+        // «prova» → «prova-afdo», senza superare i 24 caratteri del nome.
+        var n = String(s.nome || "prova").replace(/-afdo$/, "");
+        finestra.nome = n.substring(0, 19).replace(/-+$/, "") + "-afdo";
+        finestra.pagina = "compila";
     }
 
     function _stesseScelte(altre) {
@@ -293,13 +339,21 @@ FloatingWindow {
     onVersioneChanged: finestra.ricalcola()
     onBaseChanged: finestra.ricalcola()
     onCompilatoreChanged: {
-        if (finestra.compilatore !== "clang") finestra.lto = false;
+        if (finestra.compilatore !== "clang") {
+            finestra.lto = false;
+            finestra.autofdo = false;
+            finestra.profilo = "";
+        }
         finestra.ricalcola();
     }
     onLtoChanged: finestra.ricalcola()
     onProvaVeloceChanged: finestra.ricalcola()
     onNativoChanged: finestra.ricalcola()
     onNomeChanged: finestra.ricalcola()
+    onAutofdoChanged: finestra.ricalcola()
+    onProfiloChanged: finestra.ricalcola()
+    onMisuraChanged: finestra.ricalcola()
+    onProvaAvvioChanged: finestra.ricalcola()
 
     // ── Le azioni ────────────────────────────────────────────────────────
 

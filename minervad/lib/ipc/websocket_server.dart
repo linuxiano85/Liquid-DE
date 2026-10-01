@@ -2997,6 +2997,17 @@ class WebSocketServer {
         });
         break;
 
+      // Il secondo tempo di AutoFDO: perf registra (da root, con
+      // l'aiutante) per i minuti chiesti mentre usi il computer, poi il
+      // demone converte. Arriva il NOME del kernel, che deve essere quello
+      // in uso; la risposta arriva alla fine, dopo minuti.
+      case 'fucina_profila':
+        client.send({
+          'event': 'fucina_profilato',
+          'payload': await _fucina.profila(msg['rilascio'], msg['minuti']),
+        });
+        break;
+
       case 'custodia_github_accedi':
         client.send({
           'event': 'custodia_github',

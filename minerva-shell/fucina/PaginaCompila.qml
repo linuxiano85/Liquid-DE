@@ -214,6 +214,60 @@ Item {
                 onCommutata: pagina.f.nativo = !pagina.f.nativo
             }
 
+            Scelta {
+                testo: "Su misura anche dentro il kernel"
+                spiega: "Quanti processori prevedere, NUMA se c'è un nodo solo, e "
+                        + "via le funzioni che esistono solo sui processori dell'altro "
+                        + "fornitore. Misurato su questa macchina; nessuna di queste "
+                        + "regole può impedire al kernel di partire."
+                acceso: pagina.f.misura
+                onCommutata: pagina.f.misura = !pagina.f.misura
+            }
+
+            /// Il profilo AutoFDO si può registrare qui? Lo dice il rilievo.
+            readonly property var hwProfilo: pagina.f.rilievo && pagina.f.rilievo.macchina
+                                             ? (pagina.f.rilievo.macchina.profilo || null) : null
+
+            Scelta {
+                testo: pagina.f.profilo !== "" ? "Col profilo di " + pagina.f.profilo
+                                               : "Su misura del tuo uso (AutoFDO)"
+                spiega: pagina.f.profilo !== ""
+                        ? "Secondo tempo: Clang ottimizza il kernel con quello che perf ha "
+                          + "registrato mentre usavi " + pagina.f.profilo + ". Togli la "
+                          + "spunta per tornare a un kernel senza profilo."
+                        : "Due tempi. Questo kernel nasce pronto al profilo: lo installi, "
+                          + "lo usi come sempre e dalla pagina Kernel registri per qualche "
+                          + "minuto che cosa fa; poi lo ricompili col profilo. Solo con "
+                          + "Clang. "
+                          + (sinistra.hwProfilo === null ? ""
+                             : sinistra.hwProfilo.possibile === true
+                               ? "Questo processore va bene: " + sinistra.hwProfilo.perche
+                               : "Qui il profilo non si può registrare: "
+                                 + sinistra.hwProfilo.perche)
+                acceso: pagina.f.autofdo || pagina.f.profilo !== ""
+                attiva: pagina.f.compilatore === "clang"
+                        && (pagina.f.profilo !== "" || (sinistra.hwProfilo !== null
+                                                       && sinistra.hwProfilo.possibile === true))
+                onCommutata: {
+                    if (pagina.f.profilo !== "") {
+                        pagina.f.profilo = "";
+                        pagina.f.autofdo = false;
+                    } else {
+                        pagina.f.autofdo = !pagina.f.autofdo;
+                    }
+                }
+            }
+
+            Scelta {
+                testo: "Prova d'avvio in QEMU"
+                spiega: "Prima di dire «pronto», il kernel parte in una macchina "
+                        + "virtuale con un initramfs minimo e deve arrivare allo spazio "
+                        + "utente. Non tocca /boot e non prova i tuoi dischi: dice se parte. "
+                        + "Se non parte, non si installa."
+                acceso: pagina.f.provaAvvio
+                onCommutata: pagina.f.provaAvvio = !pagina.f.provaAvvio
+            }
+
             Titolo {
                 testo: "Nome"
                 sotto: "Finisce nel nome del kernel, in /boot e nel menu d'avvio. Serve a "

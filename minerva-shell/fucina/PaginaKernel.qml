@@ -27,11 +27,37 @@ Item {
     property var note: ({})
     property string errore: ""
 
+    /// Il kernel su cui perf sta registrando il profilo, o vuoto.
+    property string registrando: ""
+    /// Quanti minuti registrare: dieci di uso normale bastano a un primo
+    /// profilo; le registrazioni successive si sommano.
+    property int minuti: 10
+
+    readonly property var hwProfilo: pagina.f.rilievo && pagina.f.rilievo.macchina
+                                     ? (pagina.f.rilievo.macchina.profilo || null) : null
+
     Connections {
         target: Core.Ipc
 
         function onFucinaInstallato(e) { pagina._esito(e, "installato"); }
         function onFucinaTolto(e) { pagina._esito(e, "tolto"); }
+        function onFucinaProfilato(e) {
+            var chi = pagina.registrando;
+            pagina.registrando = "";
+            if (!e) return;
+            var n = pagina.f._copia(pagina.note);
+            if (e.ok === true) {
+                pagina.errore = "";
+                n[chi] = ["Profilo " + (e.sommato === true ? "sommato a quello di prima" : "pronto")
+                          + ": " + e.minuti + " minuti, " + Math.round((e.byte || 0) / 1024)
+                          + " KB. Adesso «Ricompila col profilo»."];
+            } else {
+                pagina.errore = e.annullato === true ? "Hai annullato la richiesta della password."
+                                                     : String(e.errore || "Non ce l'ho fatta.");
+            }
+            pagina.note = n;
+            Core.Ipc.fucinaChiediKernel();
+        }
     }
 
     function _esito(e, cosa) {
@@ -161,6 +187,46 @@ Item {
                                 testo: "pronto da installare"
                                 scelta: true
                             }
+                            Etichetta {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: modelData.prontoAlProfilo === true
+                                testo: modelData.profilo === true ? "profilo registrato"
+                                                                  : "pronto al profilo"
+                                tono: modelData.profilo === true ? "buono" : ""
+                            }
+                            Etichetta {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: String(modelData.colProfiloDi || "") !== ""
+                                testo: "col profilo di " + modelData.colProfiloDi
+                            }
+                            Etichetta {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: modelData.provaAvvio !== undefined && modelData.provaAvvio !== null
+                                testo: modelData.provaAvvio && modelData.provaAvvio.ok === true
+                                       ? "partito in QEMU" : "non partito in QEMU"
+                                tono: modelData.provaAvvio && modelData.provaAvvio.ok === true
+                                      ? "buono" : "attenzione"
+                            }
+                        }
+
+                        // AutoFDO: che cosa fare adesso con questo kernel.
+                        Text {
+                            visible: modelData.prontoAlProfilo === true && !chiede
+                            width: parent.width
+                            wrapMode: Text.WordWrap
+                            text: modelData.inUso !== true
+                                  ? "Per registrare il profilo, avviati su questo kernel."
+                                  : (pagina.hwProfilo && pagina.hwProfilo.possibile !== true
+                                     ? "Qui il profilo non si può registrare: " + pagina.hwProfilo.perche
+                                     : (pagina.registrando === rel
+                                        ? "Sto registrando per " + pagina.minuti + " minuti: usa il "
+                                          + "computer come sempre, o lancia un lavoro tipico."
+                                        : "Registra mentre usi il computer come sempre: "
+                                          + pagina.minuti + " minuti (chiede la password: perf "
+                                          + "guarda il kernel di tutto il sistema)."))
+                            color: Theme.Colors.textMuted
+                            font.family: Theme.Typography.fontDisplay
+                            font.pixelSize: Theme.Typography.sizeXS
                         }
 
                         Text {
@@ -224,6 +290,25 @@ Item {
                             attivo: pagina.lavorando === ""
                             testo: pagina.lavorando === rel ? "Sto togliendo…" : "Togli"
                             onScelto: { pagina.conferma = rel; pagina.azione = "togli"; }
+                        }
+                        Pulsante {
+                            visible: !chiede && modelData.prontoAlProfilo === true
+                                     && modelData.inUso === true
+                                     && pagina.hwProfilo !== null && pagina.hwProfilo.possibile === true
+                            attivo: pagina.registrando === ""
+                            testo: pagina.registrando === rel ? "Sto registrando…" : "Registra il profilo"
+                            onScelto: {
+                                pagina.registrando = rel;
+                                pagina.errore = "";
+                                Core.Ipc.fucinaRegistraProfilo(rel, pagina.minuti);
+                            }
+                        }
+                        Pulsante {
+                            visible: !chiede && modelData.profilo === true
+                            attivo: !pagina.f.compilando && pagina.registrando === ""
+                            primario: true
+                            testo: "Ricompila col profilo"
+                            onScelto: pagina.f.ricompilaColProfilo(modelData)
                         }
                         Pulsante {
                             visible: chiede

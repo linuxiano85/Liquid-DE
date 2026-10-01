@@ -68,6 +68,7 @@ class Scaffale {
           v['quando'] = '${j['quando'] ?? ''}';
           v['moduli'] = j['moduli'];
           v['scelte'] = j['scelte'];
+          v['provaAvvio'] = j['provaAvvio'];
         } catch (_) {}
       }
     } catch (_) {}
@@ -87,6 +88,20 @@ class Scaffale {
       } catch (_) {
         continue;
       }
+    }
+
+    // ── AutoFDO: chi è pronto al profilo, e chi ce l'ha ─────────────────
+    //
+    // Un kernel è «pronto al profilo» se il suo vmlinux è stato messo da
+    // parte quando lo si è compilato (`profili/<rilascio>/vmlinux`): è quello
+    // che serve per convertire quello che registra perf. Il profilo
+    // convertito sta accanto.
+    for (final v in voci.values) {
+      final p = '$lavoro/profili/${v['rilascio']}';
+      v['prontoAlProfilo'] = await File('$p/vmlinux').exists();
+      v['profilo'] = await File('$p/autofdo.prof').exists();
+      final s = v['scelte'];
+      v['colProfiloDi'] = s is Map ? '${s['profilo'] ?? ''}' : '';
     }
 
     final elenco = voci.values.toList()

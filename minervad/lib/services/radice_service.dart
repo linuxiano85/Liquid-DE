@@ -70,7 +70,7 @@ class RadiceService {
     'pulisci-lingue',
     'pulisci-registro',
     'togli-orfani',
-    // ── E le due della Fucina ──────────────────────────────────────────
+    // ── E le tre della Fucina ──────────────────────────────────────────
     //
     // Installano e tolgono un kernel compilato da te. Prendono il NOME del
     // kernel (e, per installare, la cartella d'uscita da cui prenderlo), e
@@ -79,6 +79,10 @@ class RadiceService {
     // `services/fucina_service.dart` e `scripts/minerva-radice`.
     'fucina-installa',
     'fucina-togli',
+    // Registra con perf il profilo AutoFDO del kernel in uso (che deve essere
+    // nostro). Prende solo quanti secondi e che tipo di processore: l'evento
+    // lo sceglie l'aiutante da un elenco chiuso.
+    'fucina-profila',
   };
 
   /// `126` quando la finestrella della password viene annullata, `127` quando

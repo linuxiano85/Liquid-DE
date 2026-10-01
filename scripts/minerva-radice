@@ -18,10 +18,12 @@
 #   minerva-radice pulisci-registro
 #   minerva-radice togli-orfani     <pacchetto> [<pacchetto>...]
 #
-# E le due della Fucina, che installano e tolgono un kernel compilato da te:
+# E le tre della Fucina, che installano e tolgono un kernel compilato da te,
+# e registrano il profilo per ricompilarlo su misura del tuo uso:
 #
 #   minerva-radice fucina-installa  <cartella d'uscita> <rilascio>
 #   minerva-radice fucina-togli     <rilascio>
+#   minerva-radice fucina-profila   <secondi> <intel|amd|amd-brs>
 #
 # Lo lancia `pkexec`, cioè gira come root. Non si chiama a mano.
 #
@@ -179,10 +181,10 @@ controlla_rilascio() {
 #    bisognerebbe copiare il kernel anche lì, e quella strada non è provata.
 #  · **GRUB**: le voci le scrive `grub-mkconfig`, che trova da solo i
 #    `vmlinuz-*` in /boot. Lo si rilancia.
-#  · **Limine**: la configurazione è un file solo, scritto a mano o da uno
-#    strumento della distribuzione (CachyOS ne ha uno suo). Modificarlo da
-#    qui vorrebbe dire litigare con quello strumento: si stampa la voce da
-#    aggiungere, e la si aggiunge a mano.
+#  · **Limine**: vedi `voce_limine` qui sotto. Fino al 30 settembre si
+#    stampava la voce e basta; dal gennaio 2026 Limine è il bootloader che
+#    l'installatore di CachyOS propone di serie, e «aggiungila a mano» era la
+#    risposta per la maggior parte di chi usa la Fucina.
 #
 # Le righe che cominciano per `nota:` arrivano alla finestra così come sono.
 voce_avvio() {
@@ -224,25 +226,167 @@ voce_avvio() {
         printf 'nota: menu di GRUB rigenerato. GRUB mette in cima il kernel con la versione più alta: se è il nuovo, parte lui di serie, e quello di sempre resta nelle opzioni avanzate.\n'
         FATTO=si
     fi
-    for L in /boot/limine.conf /boot/limine/limine.conf /boot/EFI/limine/limine.conf; do
-        if [ -f "$L" ]; then
-            printf 'nota: Limine (%s) va aggiornato a mano. La voce:\n' "$L"
-            printf 'nota:   /Linux %s (Fucina)\n' "$REL_V"
-            printf 'nota:       protocol: linux\n'
-            printf 'nota:       path: boot():/vmlinuz-%s\n' "$REL_V"
-            printf 'nota:       module_path: boot():/initramfs-%s.img\n' "$REL_V"
-            printf 'nota:       cmdline: %s\n' "$(tr -d '\n' < /proc/cmdline | sed 's/BOOT_IMAGE=[^ ]* *//')"
-            FATTO=si
-            break
-        fi
-    done
+    if [ "$(quanti_limine)" -gt 0 ] || command -v limine-entry-tool >/dev/null 2>&1; then
+        voce_limine "$REL_V"
+        FATTO=si
+    fi
     if [ "$FATTO" = no ]; then
         printf 'nota: non ho riconosciuto il bootloader: il kernel è in /boot, la voce va aggiunta a mano.\n'
     fi
 }
 
+# ── Limine ─────────────────────────────────────────────────────────────
+#
+# Due strade, e la prima vince sempre:
+#
+#  1. **`limine-entry-tool`** (CachyOS lo installa con `limine-mkinitcpio-hook`
+#     quando si sceglie Limine). È lui che scrive le voci dei kernel di
+#     CachyOS — sotto la voce del sistema, con la riga di comando di
+#     /etc/default/limine (`KERNEL_CMDLINE[default]`), le copie dei file in
+#     `<ESP>/<machine-id>/<nome>/`, le sue copie di sicurezza e, se la
+#     configurazione è «iscritta» nel binario di Limine per il Secure Boot,
+#     la nuova iscrizione. Scrivere a mano accanto a lui vorrebbe dire
+#     litigarci; chiamarlo vuol dire avere la nostra voce fatta come le sue.
+#     I kernel che non vengono da un pacchetto non li tocca da solo (guarda
+#     solo quelli che `pacman -Qqo` riconosce), quindi la nostra voce resta.
+#  2. **A mano**, se lo strumento non c'è: un blocco fra due righe di
+#     commento `# fucina-inizio <rilascio>` e `# fucina-fine <rilascio>`, in
+#     FONDO al file (una voce in cima sposterebbe il numero di
+#     `default_entry`), con una copia di sicurezza prima e il file nuovo
+#     scritto accanto e spostato sopra il vecchio. Ma solo se:
+#       · /boot è la partizione FAT da cui parte Limine: la voce dice
+#         `boot():/vmlinuz-…`, e su un'altra partizione non si troverebbe;
+#       · la configurazione NON è iscritta nel binario
+#         (`ENABLE_ENROLL_LIMINE_CONFIG=yes` in /etc/default/limine): con
+#         un file cambiato, Limine rifiuterebbe di avviare QUALUNQUE voce,
+#         anche quella della distribuzione;
+#       · i file di configurazione fra cui Limine sceglie sono uno solo.
+#     Altrimenti si stampa la voce, come prima, e la si aggiunge a mano.
+
+# Il file di Limine, se ce n'è UNO solo fra i posti dove lo cerca. Due
+# vogliono dire che non sappiamo quale legga: stringa vuota, e chi chiama
+# lo dice.
+conf_limine() {
+    TROVATO=""
+    QUANTI=0
+    for C in /boot/limine.conf /boot/limine/limine.conf \
+             /boot/EFI/limine/limine.conf /boot/EFI/BOOT/limine.conf; do
+        if [ -f "$C" ] && [ ! -L "$C" ]; then
+            TROVATO="$C"
+            QUANTI=$((QUANTI + 1))
+        fi
+    done
+    if [ "$QUANTI" -eq 1 ]; then printf '%s' "$TROVATO"; fi
+}
+
+# Quanti file di Limine ci sono: zero vuol dire «niente Limine».
+quanti_limine() {
+    conf_limine >/dev/null
+    printf '%s' "$QUANTI"
+}
+
+# La riga di comando del kernel in uso, senza quello che aggiunge il
+# bootloader per sé.
+riga_comando() {
+    tr '\n' ' ' < /proc/cmdline | tr ' ' '\n' \
+        | grep -v -e '^BOOT_IMAGE=' -e '^initrd=' -e '^$' | tr '\n' ' ' \
+        | sed 's/ *$//'
+}
+
+blocco_limine() {
+    printf '# fucina-inizio %s\n' "$1"
+    printf '/Linux %s (Fucina)\n' "$1"
+    printf '    protocol: linux\n'
+    printf '    path: boot():/vmlinuz-%s\n' "$1"
+    for U in amd-ucode.img intel-ucode.img; do
+        if [ -f "/boot/$U" ]; then printf '    module_path: boot():/%s\n' "$U"; fi
+    done
+    printf '    module_path: boot():/initramfs-%s.img\n' "$1"
+    printf '    cmdline: %s\n' "$(riga_comando)"
+    printf '# fucina-fine %s\n' "$1"
+}
+
+# Il file senza il nostro blocco per quel rilascio. Solo righe fra i NOSTRI
+# segni, e per quel rilascio: le voci degli altri non si guardano nemmeno.
+senza_blocco() {
+    awk -v rel="$2" '
+        $0 == "# fucina-inizio " rel { dentro = 1; next }
+        dentro && $0 == "# fucina-fine " rel { dentro = 0; next }
+        !dentro { print }
+    ' "$1"
+}
+
+stampa_voce_limine() {
+    printf 'nota: Limine va aggiornato a mano (%s). La voce, in fondo al file:\n' "$2"
+    blocco_limine "$1" | grep -v '^# fucina-' | sed 's/^/nota:   /'
+}
+
+voce_limine() {
+    REL_L="$1"
+    if command -v limine-entry-tool >/dev/null 2>&1; then
+        CONF=$(conf_limine)
+        if [ -n "$CONF" ]; then cp -- "$CONF" "$CONF.fucina-bak"; fi
+        if limine-entry-tool --add-kernel "$REL_L" "/boot/vmlinuz-$REL_L" \
+                "/boot/initramfs-$REL_L.img" --comment "Fucina" --quiet >/dev/null 2>&1; then
+            printf 'nota: voce di Limine scritta con limine-entry-tool, accanto a quelle di sistema.\n'
+            return 0
+        fi
+        if [ -n "$CONF" ]; then mv -f -- "$CONF.fucina-bak" "$CONF"; fi
+        muori "limine-entry-tool non ha scritto la voce: il kernel è installato, la configurazione di Limine è com'era. Prova «sudo limine-entry-tool --add-kernel $REL_L /boot/vmlinuz-$REL_L /boot/initramfs-$REL_L.img»."
+    fi
+    CONF=$(conf_limine)
+    if [ -z "$CONF" ]; then
+        printf 'nota: ci sono più file di configurazione di Limine e non so quale legga: la voce va aggiunta a mano.\n'
+        stampa_voce_limine "$REL_L" "più file"
+        return 0
+    fi
+    if grep -Eq '^[[:space:]]*ENABLE_ENROLL_LIMINE_CONFIG[[:space:]]*=[[:space:]]*"?yes' /etc/default/limine 2>/dev/null; then
+        stampa_voce_limine "$REL_L" "la configurazione è iscritta nel binario di Limine: cambiarla a mano la renderebbe inavviabile"
+        return 0
+    fi
+    if [ "$(findmnt -n -o FSTYPE --target /boot 2>/dev/null)" != "vfat" ]; then
+        stampa_voce_limine "$REL_L" "/boot non è la partizione FAT da cui parte Limine"
+        return 0
+    fi
+    # Niente `cp -p` e niente `chmod`: su FAT permessi e proprietario li
+    # decide il montaggio, e chiederli fa fallire il comando.
+    cp -- "$CONF" "$CONF.fucina-bak" || muori "non riesco a fare la copia di sicurezza di $CONF."
+    if ! { { senza_blocco "$CONF" "$REL_L" && blocco_limine "$REL_L"; } > "$CONF.fucina-nuovo" \
+            && mv -f -- "$CONF.fucina-nuovo" "$CONF"; }; then
+        rm -f -- "$CONF.fucina-nuovo"
+        mv -f -- "$CONF.fucina-bak" "$CONF"
+        muori "non riesco a scrivere la voce in $CONF: è rimasto com'era."
+    fi
+    printf 'nota: voce di Limine scritta in fondo a %s (copia di prima in %s.fucina-bak).\n' "$CONF" "$CONF"
+}
+
+togli_voce_limine() {
+    REL_L="$1"
+    CONF=$(conf_limine)
+    if command -v limine-entry-tool >/dev/null 2>&1; then
+        # Solo se la configurazione lo nomina: chiedere di togliere una voce
+        # che non c'è è un errore suo, non nostro.
+        if [ -n "$CONF" ] && ! grep -Fq -- "$REL_L" "$CONF"; then return 0; fi
+        limine-entry-tool --remove-kernel "$REL_L" --quiet >/dev/null 2>&1 || :
+        if [ -n "$CONF" ] && grep -Fq -- "/$REL_L" "$CONF" \
+                && ! grep -Fxq -- "# fucina-inizio $REL_L" "$CONF"; then
+            muori "«$REL_L» è tolto, ma limine-entry-tool non ha tolto la sua voce. Prova «sudo limine-entry-tool --remove-kernel $REL_L»."
+        fi
+    fi
+    if [ -n "$CONF" ] && grep -Fxq -- "# fucina-inizio $REL_L" "$CONF"; then
+        cp -- "$CONF" "$CONF.fucina-bak" || muori "non riesco a fare la copia di sicurezza di $CONF."
+        if ! { senza_blocco "$CONF" "$REL_L" > "$CONF.fucina-nuovo" \
+                && mv -f -- "$CONF.fucina-nuovo" "$CONF"; }; then
+            rm -f -- "$CONF.fucina-nuovo"
+            mv -f -- "$CONF.fucina-bak" "$CONF"
+            muori "«$REL_L» è tolto, ma non riesco a togliere la sua voce da $CONF: toglila a mano."
+        fi
+    fi
+}
+
 togli_voce_avvio() {
     rm -f -- "/boot/loader/entries/fucina-$1.conf"
+    togli_voce_limine "$1"
     # Un GRUB che non si rigenera tiene nel menu una voce verso un kernel che
     # non c'è più: si dice, e non si risponde «fatto». (Trovato da una
     # revisione automatica della PR: prima l'errore si ingoiava.)
@@ -839,6 +983,80 @@ case "$AZIONE" in
         rm -rf -- "/usr/lib/modules/$REL"
         togli_voce_avvio "$REL"
         printf 'fatto %s\n' "$REL"
+        ;;
+
+    # ── Il profilo per AutoFDO ────────────────────────────────────────────
+    #
+    # Il secondo tempo del kernel «su misura del tuo uso»: mentre usi il
+    # computer come sempre, perf registra quali salti prende il kernel. Serve
+    # root per due ragioni: si guarda TUTTO il sistema (`-a`) e la parte del
+    # kernel (`:k`), che a un utente normale `perf_event_paranoid` nega — ed è
+    # giusto che la neghi. Abbassarla per tutti durante la registrazione
+    # (com'è scritto in qualche guida) aprirebbe la stessa porta a chiunque.
+    #
+    # Quello che si può chiedere è poco, di proposito:
+    #
+    #  · **quanto**: secondi, da 10 a un'ora;
+    #  · **che processore**: un nome da un elenco chiuso. L'evento lo sceglie
+    #    questo file, non chi chiama — nessuna stringa arriva fino a perf;
+    #  · **su che kernel**: nessuno. È quello in uso, e deve essere nostro:
+    #    il profilo si riporta sul codice col vmlinux di QUEL kernel.
+    #
+    # Il file va in una cartella di root (`/var/lib/minerva-fucina/profili`),
+    # dato a chi l'ha chiesto e leggibile solo da lui: contiene i salti del
+    # kernel di tutto il sistema, e la cartella dell'utente non è un posto in
+    # cui root scrive (un collegamento messo lì al momento giusto farebbe
+    # scrivere root dove vuole chi l'ha messo). Un tetto alla dimensione,
+    # perché un'ora di `make -j32` a un campione ogni 500009 salti sono
+    # gigabyte.
+    #
+    # Gli eventi sono i nomi delle tabelle di perf, senza libpfm: Intel
+    # `BR_INST_RETIRED.NEAR_TAKEN` (da Sandy Bridge), AMD `ex_ret_brn_tkn`
+    # (Zen 1–6, codice 0xc4 — lo stesso RETIRED_TAKEN_BRANCH_INSTRUCTIONS
+    # della documentazione del kernel; BRS di Zen 3 accetta solo quello).
+    # Il resto della riga è quello di Documentation/dev-tools/autofdo.rst.
+    fucina-profila)
+        [ $# -eq 2 ] || muori "servono i secondi e il tipo di processore."
+        SECONDI="$1"
+        case "$SECONDI" in
+            ''|*[!0-9]*) muori "secondi non validi: «$SECONDI»." ;;
+        esac
+        if [ "${#SECONDI}" -gt 4 ] || [ "$SECONDI" -lt 10 ] || [ "$SECONDI" -gt 3600 ]; then
+            muori "si registra da 10 secondi a un'ora."
+        fi
+        case "$2" in
+            intel) EVENTO='BR_INST_RETIRED.NEAR_TAKEN:k' ;;
+            amd|amd-brs) EVENTO='ex_ret_brn_tkn:k' ;;
+            *) muori "processore «$2» sconosciuto." ;;
+        esac
+        REL=$(uname -r)
+        printf '%s' "$REL" | grep -q -e '-fucina-' \
+            || muori "il profilo si registra avviati su un kernel della Fucina pronto al profilo, non su «$REL»."
+        controlla_rilascio "$REL"
+        command -v perf >/dev/null 2>&1 || muori "manca perf (su Arch: pacman -S perf)."
+
+        CASA=/var/lib/minerva-fucina
+        PROFILI="$CASA/profili"
+        for D in "$CASA" "$PROFILI"; do
+            if [ -L "$D" ]; then muori "$D è un collegamento: non lo uso."; fi
+            mkdir -p -- "$D"
+            chown root:root -- "$D"
+            chmod 755 -- "$D"
+        done
+        DATI="$PROFILI/$REL.data"
+        # Le registrazioni di prima, di qualunque kernel: il demone le ha già
+        # convertite (o non servono più), e sono gigabyte che l'utente da
+        # solo non può togliere da una cartella di root.
+        rm -f -- "$PROFILI"/*.data "$PROFILI"/*.data.old
+        annota "fucina-profila $REL $SECONDI s ($2)"
+        perf record -e "$EVENTO" -a -N -b -c 500009 --max-size=2G \
+                -o "$DATI" -- sleep "$SECONDI" >/dev/null 2>"$PROFILI/.errori" \
+            || muori "perf record non è riuscito: $(tail -n 2 "$PROFILI/.errori" 2>/dev/null | tr '\n' ' ')"
+        [ -s "$DATI" ] || muori "perf non ha registrato niente."
+        chown -- "$PKEXEC_UID" "$DATI"
+        chmod 600 -- "$DATI"
+        annota "fucina-profila $REL fatto"
+        printf 'fatto %s\n' "$DATI"
         ;;
 
     *)
