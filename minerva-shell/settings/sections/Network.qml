@@ -207,7 +207,7 @@ Page {
         // SecretAgent con l'identificatore della proprietà. Non rispondere
         // a prompt per identità, certificati o altre credenziali.
         page._wifiPrompt = (page._wifiPrompt + String(data)).slice(-2048);
-        if (!/(^|[\r\n])(?:Password: |[^\r\n]*\(802-11-wireless-security\.(?:psk|wep-key[0-3])\): )$/.test(page._wifiPrompt)) return;
+        if (!/(^|[\r\n])(?:Password: |[^\r\n]*\(802-11-wireless-security\.(?:psk|wep-key[0-3])\): )[\*\u2022]*$/.test(page._wifiPrompt)) return;
         // Cancella l'eventuale valore precompilato da readline.
         connector.write("\u0015" + page._wifiSecret + "\n");
         page._wifiSecret = "";

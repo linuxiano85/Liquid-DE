@@ -391,3 +391,11 @@ test('Wi-Fi UI reveals only while pressed and external text uses PlainText', () 
     assert.match(network, /id: netName\s+textFormat: Text\.PlainText/);
     assert.match(network, /Component\.onDestruction: page\.stopWifi\(\)/);
 });
+
+test('Wi-Fi accepts a real masked prefilled SecretAgent prompt and replaces its value', () => {
+    const { page, connector } = wifiFixture();
+    page.connect('Home', 'newpassword', true);
+    page.wifiOutput("Passwords or encryption keys are required to access the wireless network 'Home'.\nPassword (802-11-wireless-security.psk): ***********");
+    assert.deepEqual(connector.writes, ['\u0015newpassword\n']);
+    assert.equal(page._wifiSecret, '');
+});
