@@ -64,7 +64,7 @@ jobs:
         run: dart pub get
       - name: Analyze the launch guard
         working-directory: minervad
-        run: dart analyze --no-fatal-infos lib/services/desktop_launcher.dart
+        run: dart analyze lib/services/desktop_launcher.dart
       - name: Compile the full daemon to check IPC integration
         working-directory: minervad
         run: dart compile kernel bin/minervad.dart -o /tmp/minervad-check.dill
