@@ -29,5 +29,6 @@ child.on('close', (code, signal) => {
     clearTimeout(timeout); clearTimeout(finishAgent);
     console.log(JSON.stringify({ code, signal, writes, secretCleared: f.page._wifiSecret === '',
         argvHasSecret: JSON.stringify(argv).includes(secret), cmdlineHasSecret,
-        outputHasSecret: (output + errors).includes(secret) }));
+        outputHasSecret: (output + errors).includes(secret),
+        debug: process.env.WIFI_PROBE_DEBUG ? (output + errors).replaceAll(secret, '[REDACTED]') : undefined }));
 });

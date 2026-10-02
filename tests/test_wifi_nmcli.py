@@ -28,6 +28,7 @@ class NmcliPipeTests(dbusmock.DBusTestCase):
         self.addCleanup(self.server.wait)
         self.addCleanup(self.server.terminate)
         self.mock = dbus.Interface(self.obj, dbusmock.MOCK_IFACE)
+        self.manager_mock = dbus.Interface(self.bus.get_object(MANAGER, OBJ), dbusmock.MOCK_IFACE)
         dev = self.mock.AddWiFiDevice('mock_WiFi', 'wlan_test', 30)
         self.mock.AddAccessPoint(dev, 'Test_AP', 'Audit_Test_AP', '02:00:00:00:00:01',
                                  2, 2425, 5400, 80, 0x100)
@@ -76,7 +77,7 @@ agent.GetSecrets(settings, dbus.ObjectPath('/org/freedesktop/NetworkManager/Sett
     def env(self, secret):
         # The secret is fictitious and placed in the test driver's environment only.
         # Production does not use an environment variable to transfer credentials.
-        return dict(os.environ, TEST_WIFI_SECRET=secret, LC_ALL='C')
+        return dict(os.environ, TEST_WIFI_SECRET=secret, LC_ALL='C', WIFI_PROBE_DEBUG='1')
 
     def assert_probe(self, text):
         result = json.loads(text)
@@ -91,7 +92,7 @@ agent.GetSecrets(settings, dbus.ObjectPath('/org/freedesktop/NetworkManager/Sett
         r = subprocess.run(['node', str(ROOT / 'tests/wifi-nmcli-probe.mjs')],
                            env=self.env(secret), capture_output=True, text=True, timeout=15, check=True)
         self.assertEqual(self.assert_probe(r.stdout)['code'], 0)
-        calls = self.mock.GetMethodCalls('AddAndActivateConnection')
+        calls = self.manager_mock.GetMethodCalls('AddAndActivateConnection')
         self.assertEqual(len(calls), 1)
         self.assertEqual(str(calls[0][1][0]['802-11-wireless-security']['psk']), secret)
 
@@ -102,7 +103,10 @@ agent.GetSecrets(settings, dbus.ObjectPath('/org/freedesktop/NetworkManager/Sett
         self.addCleanup(lambda: p.kill() if p.poll() is None else None)
         until = time.monotonic() + 5
         while not self.mock.AgentOwner():
-            self.assertLess(time.monotonic(), until, 'SecretAgent registration timed out')
+            if time.monotonic() >= until:
+                p.kill(); out, err = p.communicate(timeout=5)
+                agents = dbus.Interface(self.bus.get_object(MANAGER, AGENTS), dbusmock.MOCK_IFACE)
+                self.fail('SecretAgent registration timed out: ' + str(agents.GetCalls()) + ' / ' + out + ' / ' + err)
             time.sleep(.02)
         self.mock.RequestSecret()
         out, err = p.communicate(timeout=15)
