@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'app_novita.dart';
 
 /// Rappresenta un'applicazione installata sul sistema (.desktop).
@@ -303,7 +304,17 @@ class AppScanner {
 
   Future<DesktopApp?> _parseDesktopFile(File file) async {
     try {
-      final lines = await file.readAsLines();
+      return parseContent(file.path, await file.readAsString());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Interpreta il contenuto già acquisito: il consenso e il lancio usano
+  /// la stessa copia, senza rileggere Exec da un percorso modificabile.
+  DesktopApp? parseContent(String path, String content, {bool launcherOnly = false}) {
+    try {
+      final lines = const LineSplitter().convert(content);
       
       String? name;
       String? exec;
@@ -312,6 +323,7 @@ class AppScanner {
       List<String> categories = [];
       List<String> mimeTypes = [];
       bool needsTerminal = false;
+      String entryType = "";
       bool noDisplay = false;
       // Le chiavi che la ricerca per funzione vuole nella lingua di chi usa
       // il computer: `Chiave[it_IT]` batte `Chiave[it]`, che batte `Chiave`.
@@ -352,6 +364,8 @@ class AppScanner {
         } else if (line.startsWith('Exec=')) {
           // Pulisce parametri speciali come %U, %F, %f, %u
           exec = line.substring(5).replaceAll(RegExp(r'%[fFuUnNdDksiv]'), '').trim();
+        } else if (line.startsWith('Type=')) {
+          entryType = line.substring(5).trim();
         } else if (line.startsWith('Icon=')) {
           icon = line.substring(5).trim();
         } else if (line.startsWith('NoDisplay=')) {
@@ -372,11 +386,12 @@ class AppScanner {
         }
       }
 
-      if (noDisplay || name == null || exec == null) {
+      if ((noDisplay && !launcherOnly) || name == null || exec == null ||
+          (launcherOnly && entryType != "Application")) {
         return null;
       }
 
-      final id = file.path.split('/').last;
+      final id = path.split('/').last;
 
       String migliore(String k) {
         final v = localizzate[k];

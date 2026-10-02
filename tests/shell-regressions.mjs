@@ -227,3 +227,69 @@ test('Night light schedule refreshes immediately and handles midnight boundaries
         update(luce, class { getHours() { return hour; } }); assert.equal(luce.dentroLOrario, expected);
     }
 });
+
+const ipcSource = source('minerva-shell/core/Ipc.qml');
+const consentSource = source('minerva-shell/ui/LauncherConsent.qml');
+function launcherIpc(connected = true) {
+    const sent = [], shown = [], ipc = { connected, _vivo: connected ? {} : null, _launcherSerial: 0,
+        _launcherCurrent: '', _coda: [], _launcherWindow: null,
+        _launcherWait: { restart() {}, stop() {} }, _scrivi: s => sent.push(JSON.parse(s)),
+        _showLauncher: d => { shown.push(d); return true; } };
+    for (const name of ['launchDesktop', '_launcherSendNow', '_cancelLauncher', '_launcherPrepared', '_launcherResult'])
+        ipc[name] = new Function('path', 'payload', 'data', 'ipc', body(ipcSource, `function ${name}(`));
+    const invoke = (name, arg) => ipc[name](arg, arg, arg, ipc);
+    for (const name of ['_launcherSendNow', '_cancelLauncher']) {
+        const fn = ipc[name]; ipc[name] = arg => fn(arg, arg, arg, ipc);
+    }
+    return { ipc, sent, shown, invoke };
+}
+test('Opening a desktop launcher prepares consent without sending any launch command', () => {
+    const { sent, shown, invoke } = launcherIpc();
+    assert.equal(invoke('launchDesktop', '/tmp/demo.desktop'), true);
+    assert.equal(sent.length, 1); assert.equal(sent[0].action, 'prepare_desktop');
+    assert.equal(shown.length, 1);
+});
+test('Offline launcher requests are rejected and never enter the offline queue', () => {
+    const { ipc, sent, shown, invoke } = launcherIpc(false);
+    assert.equal(invoke('launchDesktop', '/tmp/demo.desktop'), false);
+    assert.deepEqual(sent, []); assert.deepEqual(ipc._coda, []);
+    assert.ok(shown.at(-1).error); assert.equal(ipc._launcherCurrent, '');
+});
+test('Late launcher previews cannot reopen a canceled dialog and their tokens are revoked', () => {
+    const { sent, shown, invoke } = launcherIpc();
+    invoke('_launcherPrepared', { request: 'old', path: '/tmp/demo.desktop', token: 'old-token' });
+    assert.equal(shown.length, 0); assert.equal(sent[0].action, 'cancel_desktop');
+});
+test('The current preview is displayed, without approving it', () => {
+    const { ipc, sent, shown, invoke } = launcherIpc(); ipc._launcherCurrent = 'current';
+    const d = { request: 'current', token: 'token', path: '/tmp/demo.desktop', command: 'echo demo' };
+    invoke('_launcherPrepared', d);
+    assert.deepEqual(shown, [d]); assert.deepEqual(sent, []);
+});
+test('Only a matching launcher result can report failure to the active request', () => {
+    const { ipc, shown, invoke } = launcherIpc(); ipc._launcherCurrent = 'current';
+    invoke('_launcherResult', { request: 'old', error: 'stale' }); assert.equal(shown.length, 0);
+    invoke('_launcherResult', { request: 'current', error: 'changed' });
+    assert.equal(shown[0].error, 'changed'); assert.equal(ipc._launcherCurrent, '');
+});
+test('Expired, waiting and errored prompts cannot approve a launch', () => {
+    const approve = new Function('prompt', 'scadenza', 'Date', body(consentSource, 'function consenti('));
+    for (const [allowed, expires] of [[false, 5000], [true, 999]]) {
+        let starts = 0; const p = { autorizzabile: allowed, italiano: true, proposta: { expires }, accepted: () => starts++ };
+        approve(p, { stop() {} }, { now: () => 1000 }); assert.equal(starts, 0);
+    }
+});
+test('An approved prompt emits exactly its token, path and request, and clears the pending proposal', () => {
+    const started = [], p = { autorizzabile: true, proposta: { expires: 5000, token: 't', path: '/tmp/demo.desktop', request: 'r' },
+                             accepted: (...args) => started.push(args) };
+    new Function('prompt', 'scadenza', 'Date', body(consentSource, 'function consenti('))(p, { stop() {} }, { now: () => 1000 });
+    assert.deepEqual(started, [['t', '/tmp/demo.desktop', 'r']]); assert.deepEqual(p.proposta, {}); assert.equal(p.visible, false);
+});
+test('Launcher text cannot conceal controls or interpret markup', () => {
+    const display = new Function('value', body(consentSource, 'function visibile('));
+    assert.equal(display('abc\u202E\n'), 'abc\\u202e\\u000a');
+    assert.match(consentSource, /textFormat: TextEdit\.PlainText/);
+    const colors = source('minerva-shell/theme/Colors.qml');
+    for (const name of new Set([...consentSource.matchAll(/Theme\.Colors\.(\w+)/g)].map(m => m[1])))
+        assert.match(colors, new RegExp(`property color ${name}\\b`));
+});

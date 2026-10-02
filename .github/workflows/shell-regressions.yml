@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'minerva-shell/**'
+      - 'minervad/**'
+      - 'tests/desktop_launcher_test.dart'
       - 'tests/shell-regressions.mjs'
       - 'tests/test_greeter_state.py'
       - 'scripts/minerva-greetd'
@@ -13,6 +15,8 @@ on:
     branches: [principale, 'codex/shell-*']
     paths:
       - 'minerva-shell/**'
+      - 'minervad/**'
+      - 'tests/desktop_launcher_test.dart'
       - 'tests/shell-regressions.mjs'
       - 'tests/test_greeter_state.py'
       - 'scripts/minerva-greetd'
@@ -46,6 +50,26 @@ jobs:
           python3 -m py_compile scripts/minerva-greeter-state.py
       - name: Test real UID transitions and temporary greeter files
         run: sudo env REQUIRE_GREETER_PRIVILEGES=1 python3 tests/test_greeter_state.py
+
+  desktop-launcher:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: '3.12'
+      - name: Install daemon development dependencies
+        working-directory: minervad
+        run: dart pub get
+      - name: Analyze the launch guard
+        working-directory: minervad
+        run: dart analyze --no-fatal-infos lib/services/desktop_launcher.dart
+      - name: Compile the full daemon to check IPC integration
+        working-directory: minervad
+        run: dart compile kernel bin/minervad.dart -o /tmp/minervad-check.dill
+      - name: Test consent and real temporary launcher files
+        run: dart run tests/desktop_launcher_test.dart
 
 # These tests intentionally do not claim QML loading, real PAM/polkit,
 # NetworkManager integration or GUI/hardware verification.

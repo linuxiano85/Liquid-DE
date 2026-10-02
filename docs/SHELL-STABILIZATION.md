@@ -13,8 +13,8 @@ validazione e all'approvazione del merge.
 | Pezzo | Rilievi | Criterio per chiuderlo | Stato |
 |---|---|---|---|
 | 0. Prima serie | R-04/05/06/07/08/10, parte R-26, R-33/34, orari luce notturna | Suite JS, argv senza segreto, limiti notifiche; poi prove native | 22 test locali e CI passati; prove native aperte |
-| 1. Confine root/login | R-01 | Symlink/hardlink e corse sui file non modificano bersagli esterni; letture come chiamante, scritture come greeter; snapshot di autorizzazione separato | In lavorazione |
-| 2. Launcher desktop | R-02 | Un launcher non autorizzato richiede consenso; parser e provenienza controllati anche nel servizio | Da correggere |
+| 1. Confine root/login | R-01 | Symlink/hardlink e corse sui file non modificano bersagli esterni; letture come chiamante, scritture come greeter; snapshot di autorizzazione separato | Patch e CI passate; integrazione nativa aperta |
+| 2. Launcher desktop | R-02 | Conferma monouso legata a client, percorso canonico e contenuto; modifica, annullamento, scadenza e replay bloccati | Patch in verifica; dialogo nativo da provare |
 | 3. Segreti Wi-Fi | R-03 | Credenziale assente da argv, memoria diagnostica e coda; SecretAgent e cancellazione verificati | Da correggere |
 | 4. Autenticazione e IPC | R-12/15/17/18/19 | Nessun replay di credenziali, buffer pulito, cancellazione e conversazioni multiple corrette | Da correggere |
 | 5. Impostazioni e comandi | R-13/14/24/27 | Schema, risposta di salvataggio, coda/timeout e rollback verificati | Da correggere |
@@ -41,3 +41,12 @@ configurazione sicura della login.
 Per i comandi e i controlli di integrazione consultare
 `tests/README-shell-regressions.md`. Gli esiti dei nuovi test di permessi devono
 essere registrati prima di dichiarare completato il pezzo 1.
+
+Il pezzo 2 chiede consenso a ogni apertura da percorso `.desktop`, senza
+memorizzare fiducia permanente né cambiare i permessi del file. Il dialogo
+condiviso IPC mostra il percorso risolto e il comando effettivo come testo
+semplice, rendendo visibili i caratteri di controllo/bidi. Il servizio verifica
+il contenuto approvato e lancia la copia già mostrata. I messaggi del consenso
+non passano nella coda offline. `launch_app` per le voci installate del menu è
+un percorso distinto, non modificato da questa correzione. Non è una sandbox
+contro processi dello stesso UID, che possono già avviare programmi.

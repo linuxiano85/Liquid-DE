@@ -451,8 +451,111 @@ QtObject {
     /// Lancia un file .desktop da un percorso qualsiasi: i launcher messi a
     /// mano sulla scrivania. Il demone lo legge e ne esegue il comando.
     function launchDesktop(path) {
-        return send({ "action": "launch_desktop", "path": path });
+        ipc._cancelLauncher();
+        ipc._launcherSerial++;
+        ipc._launcherCurrent = String(ipc._launcherSerial);
+        if (!ipc._showLauncher({ "path": path, "request": ipc._launcherCurrent })) {
+            ipc._launcherCurrent = "";
+            return false;
+        }
+        if (!ipc._launcherSendNow({ "action": "prepare_desktop", "path": path,
+                                   "request": ipc._launcherCurrent })) {
+            ipc._showLauncher({ "path": path, "error": "Il demone non è connesso: riprova dopo la riconnessione." });
+            ipc._launcherCurrent = "";
+            return false;
+        }
+        ipc._launcherWait.restart();
+        return true;
     }
+
+    property int _launcherSerial: 0
+    property string _launcherCurrent: ""
+    property var _launcherWindow: null
+    property var _launcherWait: Timer {
+        interval: 10000
+        onTriggered: {
+            ipc._launcherCurrent = "";
+            ipc._showLauncher({ "error": "Il demone non ha risposto: riapri il launcher." });
+        }
+    }
+
+    // Consent must never go through the offline queue, including cancel/approve.
+    function _launcherSendNow(payload) {
+        if (!ipc.connected || !ipc._vivo) return false;
+        try {
+            ipc._scrivi(JSON.stringify(payload) + "\n");
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function _showLauncher(data) {
+        if (!ipc._launcherWindow) {
+            var component = Qt.createComponent(Qt.resolvedUrl("../ui/LauncherConsent.qml"));
+            if (component.status !== Component.Ready) {
+                console.warn("[MINERVA][IPC] Dialogo launcher non disponibile:", component.errorString());
+                return false;
+            }
+            ipc._launcherWindow = component.createObject(ipc);
+            if (!ipc._launcherWindow) return false;
+            ipc._launcherWindow.accepted.connect(function(token, path, request) {
+                if (request !== ipc._launcherCurrent) return;
+                if (!ipc._launcherSendNow({ "action": "launch_desktop", "path": path,
+                                          "token": token, "request": request })) {
+                    ipc._launcherCurrent = "";
+                    ipc._showLauncher({ "path": path, "error": "Connessione persa: nessun avvio accodato." });
+                } else {
+                    ipc._launcherWait.stop();
+                }
+            });
+            ipc._launcherWindow.dismissed.connect(function(token, path, request) {
+                if (token !== "")
+                    ipc._launcherSendNow({ "action": "cancel_desktop", "path": path,
+                                          "token": token, "request": request });
+                if (request === ipc._launcherCurrent) {
+                    ipc._launcherCurrent = "";
+                    ipc._launcherWait.stop();
+                }
+            });
+        }
+        ipc._launcherWindow.italiano = Strings.lang === "it";
+        ipc._launcherWindow.apri(data);
+        return true;
+    }
+
+    function _cancelLauncher() {
+        if (ipc._launcherWindow && ipc._launcherWindow.visible)
+            ipc._launcherWindow.chiudi();
+        ipc._launcherCurrent = "";
+        ipc._launcherWait.stop();
+    }
+
+    function _launcherPrepared(data) {
+        if (!data) return;
+        if (ipc._launcherCurrent === "" || !ipc.connected || data.request !== ipc._launcherCurrent) {
+            if (data.token)
+                ipc._launcherSendNow({ "action": "cancel_desktop", "path": data.path,
+                                      "token": data.token, "request": data.request });
+            return;
+        }
+        ipc._launcherWait.stop();
+        if (!ipc._showLauncher(data)) {
+            if (data.token)
+                ipc._launcherSendNow({ "action": "cancel_desktop", "path": data.path,
+                                      "token": data.token, "request": data.request });
+            ipc._launcherCurrent = "";
+        }
+    }
+
+    function _launcherResult(data) {
+        if (!data || ipc._launcherCurrent === "" || data.request !== ipc._launcherCurrent) return;
+        ipc._launcherWait.stop();
+        ipc._launcherCurrent = "";
+        if (data.error) ipc._showLauncher(data);
+    }
+
+    onConnectedChanged: if (!connected) ipc._cancelLauncher()
 
     function updateFixedApps(appIds) {
         return send({ "action": "update_fixed_apps", "apps": appIds });
@@ -1965,6 +2068,12 @@ QtObject {
             case "plugin_terminated":
                 ipc.pluginTerminato(String((msg.payload || {}).name || "?"),
                                     Number((msg.payload || {}).exitCode || 0));
+                break;
+            case "desktop_launch_prepared":
+                ipc._launcherPrepared(msg.payload);
+                break;
+            case "desktop_launch_result":
+                ipc._launcherResult(msg.payload);
                 break;
             // ── Una richiesta che non è andata ───────────────────────────
             //

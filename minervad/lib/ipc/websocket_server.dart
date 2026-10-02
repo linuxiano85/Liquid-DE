@@ -12,6 +12,7 @@ import '../services/manutenzione/setaccio.dart';
 import '../core/settings_api.dart';
 import '../providers/compositor_provider.dart';
 import '../services/app_scanner.dart';
+import '../services/desktop_launcher.dart';
 import '../services/vetro.dart';
 import '../services/process_service.dart';
 import '../services/icon_resolver.dart';
@@ -143,6 +144,10 @@ class WebSocketServer {
   final SettingsApi _settingsApi;
   final CompositorProvider _compositorProvider;
   final AppScanner _appScanner;
+  late final DesktopLauncher _desktopLauncher = DesktopLauncher(
+    parse: (path, content) => _appScanner.parseContent(path, content, launcherOnly: true),
+    commandFor: (app) => app.needsTerminal ? dentroUnTerminale(app.exec) : app.exec,
+  );
   final IconResolver _iconResolver;
   final AppUsageTracker _appUsageTracker;
   final KeybindService _keybindService;
@@ -1000,6 +1005,7 @@ class WebSocketServer {
   }
 
   void _removeClient(WebSocketClientConnection client) {
+    _desktopLauncher.forget(client);
     _clients.remove(client);
     client.close();
     print('[MINERVA][IPC][INFO] Client disconnesso (Totale connessi: ${_clients.length})');
@@ -1171,6 +1177,48 @@ class WebSocketServer {
   /// ragione precisa: il cancello, la zona dell'identificativo e la rete
   /// che prende le eccezioni valgono per TUTTE le azioni, e devono stare
   /// fuori — dove non si possano dimenticare aggiungendone una nuova.
+  Future<void> _launcherRequest(WebSocketClientConnection client, String action,
+      Map<String, dynamic> msg) async {
+    final request = msg['request'] is String ? msg['request'] as String : '';
+    final path = msg['path'] is String ? msg['path'] as String : '';
+    final event = action == 'prepare_desktop'
+        ? 'desktop_launch_prepared' : 'desktop_launch_result';
+    try {
+      if (request.isEmpty || request.length > 80) {
+        throw DesktopLaunchError('Identificativo della richiesta non valido.');
+      }
+      if (action == 'prepare_desktop') {
+        final preview = await _desktopLauncher.prepare(client, path);
+        if (!_clients.contains(client)) {
+          _desktopLauncher.forget(client);
+          return;
+        }
+        client.send({'event': event, 'payload': {...preview, 'request': request}});
+        return;
+      }
+      final token = msg['token'];
+      if (token is! String || token.isEmpty || token.length > 128) {
+        throw DesktopLaunchError('Questo launcher richiede una conferma esplicita.');
+      }
+      if (action == 'cancel_desktop') {
+        _desktopLauncher.cancel(client, token);
+        return;
+      }
+      final launch = await _desktopLauncher.approve(client, path, token);
+      if (!_clients.contains(client)) return;
+      await Process.start('sh', ['-c', launch.command], mode: ProcessStartMode.detached);
+      client.send({'event': event, 'payload': {'request': request, 'path': path, 'ok': true}});
+      await _appUsageTracker.recordLaunch(launch.app.id);
+      _aTutti({'event': 'all_apps', 'payload': _allAppsPayload});
+    } catch (error) {
+      // No token in diagnostics. No launch on parse/consent/file errors.
+      if (_clients.contains(client)) {
+        client.send({'event': event, 'payload': {'request': request,
+          'path': path, 'error': error.toString(), 'ok': false}});
+      }
+    }
+  }
+
   Future<void> _eseguiAzione(WebSocketClientConnection client, Object? action,
       Map<String, dynamic> msg) async {
     switch (action) {
@@ -1261,29 +1309,10 @@ class WebSocketServer {
           }
         }
         break;
+      case 'prepare_desktop':
       case 'launch_desktop':
-        // Un file .desktop preso da un percorso qualsiasi — un launcher
-        // sulla scrivania — lanciato come un programma qualunque. Senza
-        // questa strada il doppio clic su un launcher della scrivania lo
-        // aprirebbe come testo.
-        final path = msg['path'];
-        if (path is String && path.isNotEmpty) {
-          final app = await _appScanner.parseFromPath(path);
-          if (app != null && app.exec.isNotEmpty) {
-            final comando = app.needsTerminal
-                ? dentroUnTerminale(app.exec)
-                : app.exec;
-            print('[MINERVA][IPC][INFO] Lancio .desktop: $comando '
-                '(da $path)');
-            await Process.start('sh', ['-c', comando],
-                mode: ProcessStartMode.detached);
-            await _appUsageTracker.recordLaunch(app.id);
-            _aTutti({'event': 'all_apps', 'payload': _allAppsPayload});
-          } else {
-            print('[MINERVA][IPC][WARN] .desktop illeggibile o senza '
-                'comando: $path');
-          }
-        }
+      case 'cancel_desktop':
+        await _launcherRequest(client, action as String, msg);
         break;
       case 'update_fixed_apps':
         final apps = msg['apps'];
