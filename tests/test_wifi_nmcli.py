@@ -67,8 +67,8 @@ settings = dbus.Dictionary({
 }, signature='sa{sv}')
 agent.GetSecrets(settings, dbus.ObjectPath(getattr(self, 'test_connection_path', '/org/freedesktop/NetworkManager/Settings/1')),
                  '802-11-wireless-security', dbus.Array([], signature='s'), dbus.UInt32(1),
-                 reply_handler=lambda secrets: setattr(self, 'captured_secret', str(secrets['802-11-wireless-security']['psk'])),
-                 error_handler=lambda error: setattr(self, 'captured_error', str(error)))
+                 reply_handler=lambda secrets, target=self: setattr(target, 'captured_secret', str(secrets['802-11-wireless-security']['psk'])),
+                 error_handler=lambda error, target=self: setattr(target, 'captured_error', str(error)))
 '''
         self.mock.AddMethod(dbusmock.MOCK_IFACE, 'RequestSecret', '', '', request)
         self.mock.AddMethod(dbusmock.MOCK_IFACE, 'CapturedSecret', '', 'ss',
@@ -77,7 +77,7 @@ agent.GetSecrets(settings, dbus.ObjectPath(getattr(self, 'test_connection_path',
     def env(self, secret):
         # The secret is fictitious and placed in the test driver's environment only.
         # Production does not use an environment variable to transfer credentials.
-        return dict(os.environ, TEST_WIFI_SECRET=secret, LC_ALL='C')
+        return dict(os.environ, TEST_WIFI_SECRET=secret, LC_ALL='C', WIFI_PROBE_DEBUG='1')
 
     def assert_probe(self, text):
         result = json.loads(text)
@@ -122,7 +122,7 @@ objects['/org/freedesktop'].test_connection_path = str(args[0])
             if time.monotonic() >= until:
                 p.kill(); out, err = p.communicate(timeout=5)
                 agents = dbus.Interface(self.bus.get_object(MANAGER, AGENTS), dbusmock.MOCK_IFACE)
-                self.fail('SecretAgent registration timed out: ' + str(agents.GetCalls()) + ' / ' + out + ' / ' + err)
+                self.fail('SecretAgent registration timed out: ' + str(agents.GetCalls()) + ' / manager calls: ' + str([call[1] for call in self.manager_mock.GetCalls()]) + ' / ' + out + ' / ' + err)
             time.sleep(.02)
         self.mock.RequestSecret()
         out, err = p.communicate(timeout=15)
