@@ -86,7 +86,9 @@ that UID before registering a SecretAgent. Everything stays on the private
 bus; no host NetworkManager calls are made.
 
 Two integration tests exercise real nmcli/readline: device wifi connect and
-SecretAgent GetSecrets, including replacement of a prefilled credential,
+SecretAgent GetSecrets through device connect. nmcli 1.46 wifi-connect does
+not itself create a SecretAgent; device-connect tests the masked common.c
+conversation used by recent wifi-connect releases, including replacement of a prefilled credential,
 spaces, quotes and shell metacharacters. They inspect /proc argv while the
 client is alive, exact credentials delivered over the mock bus, and output
 for accidental echo. All credentials and APs are fictitious. The test driver
@@ -103,3 +105,9 @@ credentials. An interrupted nmcli client does not promise rollback of an
 activation already submitted to NetworkManager. 802.1X configuration with
 multiple credentials/certificates is outside this patch. Control characters
 in passwords are explicitly rejected rather than interpreted by readline.
+
+Compatibility remains open for replacing an incorrect cached secret with
+nmcli versions older than 1.49.3: wifi-connect can skip its generic prompt
+when a saved secret exists and has no SecretAgent retry path. This patch
+must remain a draft until that case and modern nmcli wifi-connect are verified
+or a profile activation path is added. Passing pipe tests does not close it.

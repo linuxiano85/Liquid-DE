@@ -113,9 +113,10 @@ agent.GetSecrets(settings, dbus.ObjectPath(getattr(self, 'test_connection_path',
         # Hold activation in progress. The test server, as the real NM owner,
         # asks the client's production SecretAgent after its enable callback.
         self.manager_mock.AddMethod(MANAGER, 'ActivateConnection', 'ooo', 'o', """
-ret = self.activate_connection(self, args[0], args[1], args[2])
+connection = '/org/freedesktop/NetworkManager/Settings/Existing'
+ret = self.activate_connection(self, connection, args[1], args[2])
 objects[ret].Set('org.freedesktop.NetworkManager.Connection.Active', 'State', dbus.UInt32(1))
-objects['/org/freedesktop'].test_connection_path = str(args[0])
+objects['/org/freedesktop'].test_connection_path = connection
 """)
         p = subprocess.Popen(['node', str(ROOT / 'tests/wifi-nmcli-probe.mjs'), '--agent'],
                              env=self.env(secret), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
