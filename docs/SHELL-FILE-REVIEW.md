@@ -66,3 +66,29 @@ Il Wi-Fi precedente ha 89 test passati in Actions 37001460841 sul commit
 
 Prossimo pezzo: correlazione e proprietà delle conversazioni nel servizio
 login, poi classificazione delle altre richieste accodabili. R-12 è parziale.
+
+## Passata 4b: proprietario e richieste greetd
+
+- `services/greetd_service.dart`: esaminato integralmente; il buffer è ora
+  per socket, una sola richiesta resta in attesa, connect/flush/EOF/timeout
+  e chiusura completano il chiamante senza riportare dati grezzi negli errori.
+  Il protocollo ufficiale ha una risposta per richiesta: più domande PAM
+  richiedono più scambi, non più risposte spontanee alla stessa richiesta.
+- `services/greetd_conversation.dart`: nuovo coordinatore con proprietario
+  della conversazione, stato di autenticazione e barriera di annullamento.
+  Un altro client non può sostituire il proprietario né rispondere/avviare/
+  annullare la sua sessione. La disconnessione sopprime le risposte e pulisce
+  la sessione; dopo un guasto si richiede un reset confermato. Un avvio già
+  riuscito non viene annullato all'uscita prevista del greeter.
+- `ipc/websocket_server.dart`: dispatch e rimozione client delegano al
+  coordinatore, senza assegnare la conversazione all'ultimo mittente.
+- `greeter/Greeter.qml`: cambio utente attende l'annullamento; la risposta
+  deve riferirsi a greeter_cancel per far ripartire la conversazione.
+  Guasti di trasporto/rifiuti non valgono come conferme di annullamento.
+
+59 regressioni JS locali passate. Aggiunti 16 test Dart: dieci sul coordinatore
+con trasporto controllabile e sei sul trasporto reale tramite socket Unix
+privati. Compilazione, analisi e test Dart sono richiesti dalla CI della PR.
+PAM/greetd e QML nativi restano da verificare. Il proprietario è un confine
+fra client della Shell, non una sandbox contro processi dello stesso UID.
+Fonti del protocollo: kennylevinsen/greetd, greetd/src/server.rs e greetd_ipc.

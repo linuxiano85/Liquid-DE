@@ -16,7 +16,7 @@ validazione e all'approvazione del merge.
 | 1. Confine root/login | R-01 | Symlink/hardlink e corse sui file non modificano bersagli esterni; letture come chiamante, scritture come greeter; snapshot di autorizzazione separato | Patch e CI passate; integrazione nativa aperta |
 | 2. Launcher desktop | R-02 | Conferma monouso legata a client, percorso canonico e contenuto; modifica, annullamento, scadenza e replay bloccati | Patch e CI passate; dialogo nativo da provare |
 | 3. Segreti Wi-Fi | R-03 | Credenziale assente da argv, diagnostica e coda; input nmcli e cancellazione del client verificati | Patch e CI passate (89 test); NetworkManager/radio nativi da provare |
-| 4. Autenticazione e IPC | R-12/15/17/18/19 | Nessun replay di credenziali, buffer pulito, cancellazione e conversazioni multiple corrette | 4a: login offline e socket obsoleti corretti, CI in verifica; resto aperto |
+| 4. Autenticazione e IPC | R-12/15/17/18/19 | Nessun replay di credenziali, buffer pulito, cancellazione e conversazioni multiple corrette | 4a: 99 test CI passati. 4b: proprietà/concorrenza greetd in verifica; resto aperto |
 | 5. Impostazioni e comandi | R-13/14/24/27 | Schema, risposta di salvataggio, coda/timeout e rollback verificati | Da correggere |
 | 6. Notifiche residue | R-09/11 | Replacement, close, timeout e transient conformi; nessuna azione obsoleta | Da correggere |
 | 7. Bluetooth | R-20/21/22/23 | Messaggi strutturati, PIN e annullamento; successo soltanto dopo connessione reale | Da correggere |
@@ -87,3 +87,11 @@ R-12 NON è interamente chiuso: la coda delle altre azioni (account, pairing,
 impostazioni e operazioni) deve ancora essere classificata. Restano aperti
 correlazione delle risposte greetd, proprietà della conversazione fra client
 e passaggi concorrenti sul demone. I test JS non provano PAM né caricano Qt.
+
+Il pezzo 4b assegna un proprietario alla conversazione greetd, correla ogni
+risposta alla richiesta effettiva, serializza l'annullamento e pulisce i
+buffer a ogni riconnessione. Il trasporto ha timeout e chiusura espliciti;
+il cambio utente attende cancel. I test includono socket Unix temporanei,
+ma non sostituiscono una login PAM reale. R-12 resta aperto per le altre
+categorie della coda; polkit/blocco e gli altri rilievi del pezzo 4 restano
+nel piano. Non si dichiara l'assenza assoluta di errori.

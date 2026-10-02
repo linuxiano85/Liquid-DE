@@ -92,6 +92,11 @@ jobs:
         run: dart compile kernel bin/minervad.dart -o /tmp/minervad-check.dill
       - name: Test consent and real temporary launcher files
         run: dart run tests/desktop_launcher_test.dart
+      - name: Analyze login transport and ownership
+        working-directory: minervad
+        run: dart analyze lib/services/greetd_service.dart lib/services/greetd_conversation.dart
+      - name: Test login ownership and real temporary Unix sockets
+        run: dart run tests/greetd_conversation_test.dart
 
 # These tests intentionally do not claim QML loading, real PAM/polkit,
 # NetworkManager integration or GUI/hardware verification.

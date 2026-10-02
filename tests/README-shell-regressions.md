@@ -125,3 +125,21 @@ no credential or session command may replay, the field must clear, and
 Enter must start a fresh cancellation/retry after reconnection. Test user
 selection while disconnected and verify the greeter never exits because
 of a late success. Server-side concurrent conversations remain open.
+
+## greetd ownership and transport
+
+Run `dart run tests/greetd_conversation_test.dart`. It checks cross-client
+ownership, cancellation while a reply is pending, disconnect cleanup,
+authentication state, malformed input, duplicate submissions and start/exit.
+Six additional cases within the same runner use actual temporary Unix
+sockets for fragmentation, partial frames across reconnect, timeout, close,
+malformed JSON and unsolicited replies. No users, PAM rules or display
+manager services are changed. CI analyzes both services and compiles the
+whole daemon before running this suite.
+
+Native acceptance: wrong password then retry, change user while PAM is
+working, cancel during multi-factor auth, disconnect/reconnect minervad,
+and successful login into a disposable session. Verify no stale success
+exits the greeter and no other IPC client receives a PAM prompt. Transport
+failure must require a fresh attempt. Same-UID hostile processes remain
+outside this ownership guarantee.

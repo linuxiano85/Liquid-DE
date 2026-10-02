@@ -531,11 +531,16 @@ Item {
 
         function onGreeterMessage(m) {
             if (greeter.canalePerso) return;
+            if (m.transport_error === true || m.request_rejected === true) {
+                greeter.perdiCanale();
+                return;
+            }
             // Prima di tutto il resto: se stavamo annullando, questa è la
             // risposta all'annullamento. Non è un accesso riuscito, non è un
             // errore da mostrare, non è niente — è solo il permesso di
             // ricominciare.
             if (greeter.annullando) {
+                if (m.request_action !== "greeter_cancel") return;
                 greeter.annullando = false;
                 greeter.comincia();
                 return;
@@ -638,6 +643,10 @@ Item {
 
     /// Chiude la sessione rimasta aperta e poi ne comincia una nuova.
     function annullaERicomincia() {
+        if (greeter.avviato) return;
+        riprova.stop();
+        campo.text = "";
+        greeter.domanda = "";
         if (!greeter.utente)
             return;
         if (greeter.finto) {
@@ -1188,9 +1197,9 @@ Item {
                         onClicked: {
                             if (index === greeter.utenteScelto)
                                 return;
-                            greeter.annulla();
+                            if (greeter.avviato) return;
                             greeter.utenteScelto = index;
-                            greeter.comincia();
+                            greeter.annullaERicomincia();
                         }
                     }
                 }

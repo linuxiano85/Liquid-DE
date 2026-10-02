@@ -497,7 +497,7 @@ test('Retired socket callbacks cannot close or authenticate the live socket', ()
 const greeterSource = source('minerva-shell/greeter/Greeter.qml');
 function loginFixture() {
     const greeter = { finto: false, it: false, informato: true, utente: { nome: 'demo' },
-        domanda: 'Password:', inCorso: false, avviato: true, annullando: true,
+        domanda: 'Password:', inCorso: false, avviato: false, annullando: true,
         erroriMax: 4, erroriDiFila: 0, canalePerso: false };
     const campo = { text: 'fictitious-login-secret' }, riprova = { stopped: false, stop() { this.stopped = true; } };
     const sent = [], Core = { Ipc: { connected: false, greeterRespond: s => { sent.push(s); return false; }, greeterCancel: () => false } };
@@ -547,7 +547,24 @@ test('Explicit retry after reconnect waits for cancellation before creating a se
     f.greeter.annullaERicomincia();
     assert.equal(cancels, 1); assert.equal(creates, 0);
     assert.equal(f.greeter.canalePerso, false); assert.equal(f.greeter.annullando, true);
-    new Function('greeter', 'm', body(greeterSource, 'function onGreeterMessage('))(f.greeter, { type: 'success' });
+    new Function('greeter', 'm', body(greeterSource, 'function onGreeterMessage('))(f.greeter, { type: 'success', request_action: 'greeter_cancel' });
     assert.equal(creates, 1); assert.equal(f.greeter.annullando, false);
     assert.equal(f.greeter.avviato, false);
+});
+
+test('A success for an earlier request cannot acknowledge login cancellation', () => {
+    const f = loginFixture(); f.greeter.annullando = true;
+    f.greeter.comincia = () => { throw new Error('old success acknowledged cancel'); };
+    new Function('greeter', 'm', body(greeterSource, 'function onGreeterMessage('))(f.greeter,
+        { type: 'success', request_action: 'greeter_respond' });
+    assert.equal(f.greeter.annullando, true);
+});
+test('Login transport and ownership errors cannot acknowledge cancellation', () => {
+    for (const flag of ['transport_error', 'request_rejected']) {
+        const f = loginFixture();
+        f.greeter.comincia = () => { throw new Error('failure restarted login'); };
+        new Function('greeter', 'm', body(greeterSource, 'function onGreeterMessage('))(f.greeter,
+            { type: 'error', [flag]: true });
+        assert.equal(f.greeter.canalePerso, true); assert.equal(f.campo.text, '');
+    }
 });
