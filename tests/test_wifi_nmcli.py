@@ -83,7 +83,7 @@ agent.GetSecrets(settings, dbus.ObjectPath(getattr(self, 'test_connection_path',
         result = json.loads(text)
         self.assertEqual(result['writes'], 1)
         self.assertTrue(result['secretCleared'])
-        for name in ['argvHasSecret', 'cmdlineHasSecret', 'outputHasSecret']:
+        for name in ['argvHasSecret', 'cmdlineHasSecret', 'envHasSecret', 'outputHasSecret']:
             self.assertFalse(result[name], name)
         return result
 
@@ -107,6 +107,9 @@ agent.GetSecrets(settings, dbus.ObjectPath(getattr(self, 'test_connection_path',
         settings['802-11-wireless-security'] = dbus.Dictionary({
             'key-mgmt': dbus.String('wpa-psk'), 'psk': dbus.String('old-prefill')}, signature='sv')
         profile.Update(settings)
+        connection_mock = dbus.Interface(self.bus.get_object(MANAGER, conn), dbusmock.MOCK_IFACE)
+        connection_mock.AddMethod(MANAGER + '.Settings.Connection', 'Update2', 'a{sa{sv}}ua{sv}', 'a{sv}',
+                                  "self.ConnectionUpdate(self, args[0]); ret = dbus.Dictionary({}, signature='sv')")
         # Hold activation in progress. The test server, as the real NM owner,
         # asks the client's production SecretAgent after its enable callback.
         self.manager_mock.AddMethod(MANAGER, 'ActivateConnection', 'ooo', 'o', """

@@ -8,13 +8,16 @@ const secret = process.env.TEST_WIFI_SECRET;
 if (!secret || !process.env.DBUS_SYSTEM_BUS_ADDRESS) throw new Error('Private bus and fictitious secret required');
 if (!f.page.connect('Audit_Test_AP', secret, true)) throw new Error('Connection rejected');
 const argv = f.connector.command;
-const child = spawn(argv[0], argv.slice(1), { stdio: ['pipe', 'pipe', 'pipe'] });
-let output = '', errors = '', writes = 0, cmdlineHasSecret = false;
+const clientEnv = { ...process.env };
+delete clientEnv.TEST_WIFI_SECRET; delete clientEnv.WIFI_PROBE_DEBUG;
+const child = spawn(argv[0], argv.slice(1), { env: clientEnv, stdio: ['pipe', 'pipe', 'pipe'] });
+let output = '', errors = '', writes = 0, cmdlineHasSecret = false, envHasSecret = false;
 let finishAgent;
 const timeout = setTimeout(() => child.kill('SIGKILL'), 10000);
 f.connector.write = data => {
     const pidArgs = fs.readFileSync(`/proc/${child.pid}/cmdline`);
     cmdlineHasSecret ||= pidArgs.includes(Buffer.from(secret));
+    envHasSecret ||= fs.readFileSync(`/proc/${child.pid}/environ`).includes(Buffer.from(secret));
     writes++;
     child.stdin.end(data);
     if (process.argv.includes('--agent')) finishAgent = setTimeout(() => child.kill('SIGTERM'), 1000);
@@ -26,7 +29,7 @@ child.on('error', err => { throw err; });
 child.on('close', (code, signal) => {
     clearTimeout(timeout); clearTimeout(finishAgent);
     console.log(JSON.stringify({ code, signal, writes, secretCleared: f.page._wifiSecret === '',
-        argvHasSecret: JSON.stringify(argv).includes(secret), cmdlineHasSecret,
+        argvHasSecret: JSON.stringify(argv).includes(secret), cmdlineHasSecret, envHasSecret,
         outputHasSecret: (output + errors).includes(secret),
         debug: process.env.WIFI_PROBE_DEBUG ? (output + errors).replaceAll(secret, '[REDACTED]') : undefined }));
 });
