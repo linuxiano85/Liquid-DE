@@ -45,7 +45,13 @@ for name in daemon.ListNames():
             with open('/proc/%d/cmdline' % pid, 'rb') as f:
                 command = f.read().split(b'\\0')[0]
             if command.endswith(b'/nmcli') or command == b'nmcli':
-                self.agent_owner = str(name)
+                try:
+                    xml = dbus.Interface(bus.get_object(name, '/org/freedesktop/NetworkManager/SecretAgent'),
+                                         'org.freedesktop.DBus.Introspectable').Introspect(timeout=1)
+                    if 'org.freedesktop.NetworkManager.SecretAgent' in str(xml):
+                        self.agent_owner = str(name)
+                except dbus.DBusException:
+                    pass
         except OSError:
             pass
 '''
@@ -81,7 +87,7 @@ agent.GetSecrets(settings, dbus.ObjectPath(getattr(self, 'test_connection_path',
 
     def assert_probe(self, text):
         result = json.loads(text)
-        self.assertEqual(result['writes'], 1)
+        self.assertEqual(result['writes'], 1, str(result))
         self.assertTrue(result['secretCleared'])
         for name in ['argvHasSecret', 'cmdlineHasSecret', 'envHasSecret', 'outputHasSecret']:
             self.assertFalse(result[name], name)
@@ -131,9 +137,9 @@ objects['/org/freedesktop'].test_connection_path = connection
         self.mock.RequestSecret()
         out, err = p.communicate(timeout=15)
         self.assertEqual(p.returncode, 0, err)
-        self.assert_probe(out)
         captured, error = self.mock.CapturedSecret()
-        self.assertEqual(str(error), '')
+        self.assertEqual(str(error), '', out)
+        self.assert_probe(out)
         self.assertEqual(str(captured), secret)
 
 
