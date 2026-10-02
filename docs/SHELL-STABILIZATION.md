@@ -14,8 +14,8 @@ validazione e all'approvazione del merge.
 |---|---|---|---|
 | 0. Prima serie | R-04/05/06/07/08/10, parte R-26, R-33/34, orari luce notturna | Suite JS, argv senza segreto, limiti notifiche; poi prove native | 22 test locali e CI passati; prove native aperte |
 | 1. Confine root/login | R-01 | Symlink/hardlink e corse sui file non modificano bersagli esterni; letture come chiamante, scritture come greeter; snapshot di autorizzazione separato | Patch e CI passate; integrazione nativa aperta |
-| 2. Launcher desktop | R-02 | Conferma monouso legata a client, percorso canonico e contenuto; modifica, annullamento, scadenza e replay bloccati | Patch in verifica; dialogo nativo da provare |
-| 3. Segreti Wi-Fi | R-03 | Credenziale assente da argv, memoria diagnostica e coda; SecretAgent e cancellazione verificati | Da correggere |
+| 2. Launcher desktop | R-02 | Conferma monouso legata a client, percorso canonico e contenuto; modifica, annullamento, scadenza e replay bloccati | Patch e CI passate; dialogo nativo da provare |
+| 3. Segreti Wi-Fi | R-03 | Credenziale assente da argv, diagnostica e coda; input nmcli e cancellazione del client verificati | Patch in verifica; NetworkManager/radio nativi da provare |
 | 4. Autenticazione e IPC | R-12/15/17/18/19 | Nessun replay di credenziali, buffer pulito, cancellazione e conversazioni multiple corrette | Da correggere |
 | 5. Impostazioni e comandi | R-13/14/24/27 | Schema, risposta di salvataggio, coda/timeout e rollback verificati | Da correggere |
 | 6. Notifiche residue | R-09/11 | Replacement, close, timeout e transient conformi; nessuna azione obsoleta | Da correggere |
@@ -50,3 +50,20 @@ il contenuto approvato e lancia la copia già mostrata. I messaggi del consenso
 non passano nella coda offline. `launch_app` per le voci installate del menu è
 un percorso distinto, non modificato da questa correzione. Non è una sandbox
 contro processi dello stesso UID, che possono già avviare programmi.
+
+Il pezzo 3 sostituisce Core.Exec con un processo dedicato per la connessione
+Wi-Fi. La password non compare in argv, ambiente, ultimo comando o coda.
+`nmcli --ask` la riceve una volta su stdin, solo dopo un prompt Wi-Fi noto;
+la copia pendente è rimossa dopo invio/errore/timeout/chiusura della pagina.
+Non conservare output grezzo nei messaggi di errore. Le password con tasti di
+controllo vengono rifiutate perché readline li interpreta come operazioni di
+editing. Il prefisso Ctrl-U elimina il valore eventualmente precompilato dal
+SecretAgent di nmcli. Rivelazione solo mentre premuto; Annulla/Esc svuotano il
+campo. Terminare nmcli interrompe il client locale, non garantisce il rollback
+di un'attivazione già consegnata a NetworkManager.
+
+La CI prova il vero nmcli/readline/SecretAgent con NetworkManager simulato su
+un bus privato, senza avviare un servizio di rete reale. Restano native le
+prove di associazione/DHCP, credenziale errata, profili salvati, radio e QML.
+La pagina mantiene il supporto esistente per PSK/WEP; configurazione completa
+802.1X con identità/certificati resta fuori da questa correzione.

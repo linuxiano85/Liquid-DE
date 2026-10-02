@@ -6,7 +6,7 @@ on:
       - 'minerva-shell/**'
       - 'minervad/**'
       - 'tests/desktop_launcher_test.dart'
-      - 'tests/shell-regressions.mjs'
+      - 'tests/**'
       - 'tests/test_greeter_state.py'
       - 'scripts/minerva-greetd'
       - 'scripts/minerva-greeter-state.py'
@@ -17,7 +17,7 @@ on:
       - 'minerva-shell/**'
       - 'minervad/**'
       - 'tests/desktop_launcher_test.dart'
-      - 'tests/shell-regressions.mjs'
+      - 'tests/**'
       - 'tests/test_greeter_state.py'
       - 'scripts/minerva-greetd'
       - 'scripts/minerva-greeter-state.py'
@@ -38,6 +38,28 @@ jobs:
           node-version: '22'
       - name: Test production JS bodies and generated commands
         run: node --test tests/shell-regressions.mjs
+
+  wifi-credentials:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare nmcli client without installing or starting NetworkManager
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-dbusmock libnm0
+          nmcli_test_tools=$(mktemp -d)
+          cd "$nmcli_test_tools"
+          apt-get download network-manager
+          dpkg-deb -x ./*.deb client
+          echo "$nmcli_test_tools/client/usr/bin" >> "$GITHUB_PATH"
+      - name: Check Wi-Fi test syntax
+        run: python3 -m py_compile tests/test_wifi_nmcli.py
+      - name: Test real nmcli pipes and SecretAgent on a private bus
+        run: /usr/bin/python3 tests/test_wifi_nmcli.py
 
   greeter-filesystem:
     runs-on: ubuntu-latest

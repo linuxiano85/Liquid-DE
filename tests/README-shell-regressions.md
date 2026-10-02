@@ -64,3 +64,38 @@ the Shell on its supported Quickshell version and verify:
 The changes use Quickshell `Process.started`, `write()` and `stdinEnabled`.
 The password stream is closed after queuing its single line. Native PAM,
 polkit, greetd, Bluetooth and monitor integration still require system testing.
+
+## Wi-Fi credentials (piece 3)
+
+`node --test tests/shell-regressions.mjs` also executes the Wi-Fi functions
+from Network.qml: no secrets in argv or queued commands; recognized prompts
+only; one response; stale completion, failure/start/timeout cleanup; dialog
+clear and press-to-reveal. This still does not load QML.
+
+The CI `wifi-credentials` job extracts nmcli from Ubuntu's network-manager
+package without installing or starting its daemon. Python dbusmock creates a
+private system bus and simulated AP/NetworkManager. Run with a real nmcli,
+Node and system Python's dbusmock installed:
+
+```sh
+/usr/bin/python3 tests/test_wifi_nmcli.py
+```
+
+Two integration tests exercise real nmcli/readline: device wifi connect and
+SecretAgent GetSecrets, including replacement of a prefilled credential,
+spaces, quotes and shell metacharacters. They inspect /proc argv while the
+client is alive, exact credentials delivered over the mock bus, and output
+for accidental echo. All credentials and APs are fictitious. The test driver
+alone supplies its fake credential through an environment variable;
+production credentials are never placed in environment variables.
+
+Before native acceptance, load Network.qml in Quickshell and verify open,
+known PSK, new PSK, incorrect saved/input secret, WEP where supported, nmcli
+absent, timeout, closing the page during a prompt, radio-off and repeated
+clicks. Observe actual NetworkManager device state and DHCP rather than only
+an exit message. Check no secret appears in /proc command lines, application
+logs, UI errors or deferred IPC; inspect secrets only with disposable test
+credentials. An interrupted nmcli client does not promise rollback of an
+activation already submitted to NetworkManager. 802.1X configuration with
+multiple credentials/certificates is outside this patch. Control characters
+in passwords are explicitly rejected rather than interpreted by readline.

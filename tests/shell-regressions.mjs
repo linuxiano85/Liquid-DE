@@ -6,29 +6,13 @@ import path from 'node:path';
 import { spawnSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
+import { body } from './qml-body.mjs';
+import { wifiFixture } from './wifi-harness.mjs';
 
 // Execute the bodies from the production QML, rather than a second parser.
 // This validates JS and generated shell commands, not QML loading or Qt signals.
 const root = process.env.SHELL_SOURCE_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = name => fs.readFileSync(path.join(root, name), 'utf8');
-function body(text, marker) {
-    const at = text.indexOf(marker);
-    if (at < 0) throw new Error(`Missing source marker ${marker}`);
-    const first = text.indexOf('{', at);
-    let depth = 0, quote = '', comment = '';
-    for (let i = first; i < text.length; i++) {
-        const c = text[i], n = text[i + 1];
-        if (comment === 'line') { if (c === '\n') comment = ''; }
-        else if (comment === 'block') { if (c === '*' && n === '/') { comment = ''; i++; } }
-        else if (quote) { if (c === '\\') i++; else if (c === quote) quote = ''; }
-        else if ('\"\'`'.includes(c)) quote = c;
-        else if (c === '/' && n === '/') { comment = 'line'; i++; }
-        else if (c === '/' && n === '*') { comment = 'block'; i++; }
-        else if (c === '{') depth++;
-        else if (c === '}' && --depth === 0) return text.slice(first, i + 1);
-    }
-    throw new Error(`Unclosed source body ${marker}`);
-}
 function optional(text, marker) { try { return body(text, marker); } catch { return null; } }
 const network = source('minerva-shell/settings/sections/Network.qml');
 const notifSource = source('minerva-shell/core/Notifications.qml');
@@ -292,4 +276,118 @@ test('Launcher text cannot conceal controls or interpret markup', () => {
     const colors = source('minerva-shell/theme/Colors.qml');
     for (const name of new Set([...consentSource.matchAll(/Theme\.Colors\.(\w+)/g)].map(m => m[1])))
         assert.match(colors, new RegExp(`property color ${name}\\b`));
+});
+
+// Wi-Fi credentials bypass Core.Exec and its diagnostic/command queue.
+test('Wi-Fi secret is absent from argv and waits for a recognized prompt', () => {
+    const { page, connector } = wifiFixture();
+    const secret = '  quote"$`\\end  ';
+    assert.equal(page.connect('AP: $(touch /tmp/never)', secret, true), true);
+    assert.equal(connector.command.at(-1), 'AP: $(touch /tmp/never)');
+    assert.ok(connector.command.includes('--ask'));
+    assert.ok(!connector.command.includes('password'));
+    assert.ok(!JSON.stringify(connector.command).includes(secret));
+    assert.equal(connector.writes.length, 0);
+    page.wifiOutput('Username (802-1x.identity): ');
+    assert.equal(connector.writes.length, 0);
+    page.wifiOutput('\nPass'); page.wifiOutput('word: ');
+    assert.deepEqual(connector.writes, ['\u0015' + secret + '\n']);
+    assert.equal(page._wifiSecret, ''); assert.equal(connector.stdinEnabled, false);
+    page.wifiOutput('\nPassword: ');
+    assert.equal(connector.writes.length, 1);
+});
+test('Wi-Fi recognizes current SecretAgent PSK and WEP prompts across chunks', () => {
+    for (const key of ['psk', 'wep-key0', 'wep-key3']) {
+        const { page, connector } = wifiFixture();
+        page.connect('Home', 'testpassword', true);
+        for (const c of `Network needs a credential\nPassword (802-11-wireless-security.${key}): `)
+            page.wifiOutput(c);
+        assert.deepEqual(connector.writes, ['\u0015testpassword\n']);
+    }
+});
+test('Wi-Fi without a password uses no interactive pipe or ask option', () => {
+    const { page, connector } = wifiFixture();
+    page.connect('Known', '', true);
+    assert.equal(page._provaSenzaPassword, true);
+    assert.equal(connector.stdinEnabled, false);
+    assert.ok(!connector.command.includes('--ask'));
+    page.wifiOutput('Password: ');
+    assert.equal(connector.writes.length, 0);
+});
+test('Wi-Fi control keys and overlong secrets cannot become Readline commands', () => {
+    for (const secret of ['a\nb', 'a\rb', 'a\0b', 'a\tb', 'a\x1bb', 'a\x7fb', 'a'.repeat(1025)]) {
+        const { page, connector } = wifiFixture();
+        assert.equal(page.connect('AP', secret, true), false);
+        assert.deepEqual(connector.command, []); assert.equal(page._wifiSecret, '');
+    }
+});
+test('Wi-Fi rejects overlapping attempts instead of mismatching queued SSIDs', () => {
+    const { page, connector } = wifiFixture();
+    page.connect('First', 'firstsecret', true);
+    assert.equal(page.connect('Second', 'secondsecret', true), false);
+    assert.equal(page.collegando, 'First'); assert.equal(page._wifiSecret, 'firstsecret');
+    assert.equal(connector.command.at(-1), 'First');
+});
+test('Wi-Fi cancellation clears pending credentials, closes input and kills only its client', () => {
+    const f = wifiFixture();
+    f.page.connect('Home', 'secret', true);
+    f.passwordInput.text = 'anothersecret'; f.connectDialog.visible = true;
+    f.page.stopWifi();
+    assert.equal(f.page._wifiSecret, ''); assert.equal(f.page._wifiPrompt, '');
+    assert.equal(f.connector.stdinEnabled, false); assert.deepEqual(f.connector.signals, [9]);
+    assert.equal(f.page.collegando, ''); assert.equal(f.passwordInput.text, '');
+    assert.equal(f.connectDialog.visible, false);
+    f.page.wifiOutput('Password: '); assert.equal(f.connector.writes.length, 0);
+});
+test('Wi-Fi delayed completion cannot finish a newer attempt after cancellation', () => {
+    const { page, connector } = wifiFixture();
+    page.connect('First', 'firstsecret', true); const oldEpoch = connector.epoch;
+    page.stopWifi(); connector.running = false;
+    page.connect('Second', 'secondsecret', true);
+    page.completeWifi(0, oldEpoch);
+    assert.equal(page.collegando, 'Second'); assert.equal(page._wifiSecret, 'secondsecret');
+});
+test('Wi-Fi failure categories never echo raw nmcli diagnostics in the interface', () => {
+    const { page, connector } = wifiFixture();
+    page.connect('First', 'fictitioussecret', true);
+    page.wifiError('Error: password rejected: fictitioussecret <b>SSID</b>');
+    page.completeWifi(4, connector.epoch);
+    assert.equal(page._wifiFailure, ''); assert.equal(page._wifiSecret, '');
+    assert.equal(page.error, 'The password was not accepted.');
+});
+test('Wi-Fi missing saved secret opens a cleared dialog for the attempted SSID', () => {
+    const { page, connector, connectDialog, passwordInput } = wifiFixture();
+    passwordInput.text = 'oldsecret';
+    page.connect('Home', '', true);
+    page.wifiError('Secrets were required, but not provided');
+    page.completeWifi(4, connector.epoch);
+    assert.equal(connectDialog.visible, true); assert.equal(connectDialog.ssid, 'Home');
+    assert.equal(passwordInput.text, '');
+});
+test('Wi-Fi submit clears the visible password before starting; repeated submit is ignored', () => {
+    const f = wifiFixture();
+    f.connectDialog.open('Home'); f.passwordInput.text = 'testsecret';
+    f.connectDialog.submit();
+    assert.equal(f.passwordInput.text, ''); assert.equal(f.connectDialog.ssid, '');
+    assert.equal(f.page._wifiSecret, 'testsecret');
+    f.connectDialog.submit(); assert.equal(f.connector.command.at(-1), 'Home');
+});
+test('Wi-Fi deadline and failed start clear the credential without leaving the UI busy', () => {
+    for (const marker of ['id: wifiDeadline', 'id: wifiFailedStart']) {
+        const f = wifiFixture(); f.page.connect('Home', 'testsecret', true);
+        f.connector.running = false;
+        const handler = body(network.slice(network.indexOf(marker)), 'onTriggered:');
+        new Function('page', 'connector', handler)(f.page, f.connector);
+        assert.equal(f.page._wifiSecret, ''); assert.equal(f.page.collegando, '');
+        assert.equal(f.connector.stdinEnabled, false); assert.ok(f.page.error.length > 0);
+    }
+});
+test('Wi-Fi UI reveals only while pressed and external text uses PlainText', () => {
+    assert.match(network, /echoMode:\s*revealMouse\.pressed/);
+    assert.doesNotMatch(network, /echoMode:\s*revealMouse\.containsMouse/);
+    assert.match(network, /text: connectDialog\.ssid\s+textFormat: Text\.PlainText/);
+    assert.match(network, /text: page\.error\s+textFormat: Text\.PlainText/);
+    assert.match(network, /text: page\.wired\s+textFormat: Text\.PlainText/);
+    assert.match(network, /id: netName\s+textFormat: Text\.PlainText/);
+    assert.match(network, /Component\.onDestruction: page\.stopWifi\(\)/);
 });
