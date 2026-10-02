@@ -21,7 +21,7 @@ QtObject {
     property var items: []
 
     /// Ricevute e non ancora viste dall'utente.
-    property int unread: 0
+    readonly property int unread: notifications._contaNonLette()
 
     /// Oltre questo numero le più vecchie vengono scartate: una cronologia
     /// illimitata non serve a nessuno e cresce per sempre.
@@ -41,14 +41,10 @@ QtObject {
             "body": corpo,
             "urgency": 1,
             "timeout": 6000,
-            "time": Date.now()
+            "time": Date.now(),
+            "read": false
         };
-        var copy = notifications.items.slice();
-        copy.push(item);
-        while (copy.length > notifications.capacity)
-            copy.shift();
-        notifications.items = copy;
-        notifications.unread++;
+        notifications._aggiungi(item);
         if (!notifications.inSilenzio)
             notifications.arrived(item);
     }
@@ -155,20 +151,49 @@ QtObject {
     }
 
     function markAllRead() {
-        notifications.unread = 0;
+        notifications.items = notifications.items.map(function(item) {
+            return Object.assign({}, item, { "read": true });
+        });
     }
 
     function clear() {
+        var prima = notifications.items;
         notifications.items = [];
-        notifications.unread = 0;
+        for (var i = 0; i < prima.length; i++)
+            notifications._chiudi(prima[i]);
     }
 
     function remove(index) {
         if (index < 0 || index >= notifications.items.length)
             return;
         var copy = notifications.items.slice();
-        copy.splice(index, 1);
+        var tolta = copy.splice(index, 1)[0];
         notifications.items = copy;
+        notifications._chiudi(tolta);
+    }
+
+    function _contaNonLette() {
+        return notifications.items.filter(function(item) { return !item.read; }).length;
+    }
+
+    function _aggiungi(item) {
+        var copy = notifications.items.slice();
+        copy.push(item);
+        while (copy.length > notifications.capacity)
+            notifications._chiudi(copy.shift());
+        notifications.items = copy;
+    }
+
+    // Togliere una copia JavaScript non chiude la notifica tracked di DBus.
+    function _chiudi(item) {
+        if (!item) return;
+        var notif = item.notif;
+        item.notif = null;
+        item.azioni = [];
+        if (!notif) return;
+        try { notif.dismiss(); } catch (e) {
+            // Il mittente può avere già chiuso l'oggetto.
+        }
     }
 
     /// Silenzio: le notifiche continuano ad arrivare e a essere registrate,
@@ -222,12 +247,11 @@ QtObject {
 
     function _perIlBlocco() {
         var modo = notifications.bloccoMostra;
-        var nuove = notifications.unread > 0
-                    ? notifications.items.slice(-notifications.unread) : [];
+        var nuove = notifications.items.filter(function(item) { return !item.read; });
         if (modo === "niente" || nuove.length === 0)
             return { "modo": modo, "gruppi": [], "voci": [] };
         var gruppi = [];
-        var dove = {};
+        var dove = Object.create(null);
         for (var i = nuove.length - 1; i >= 0; i--) {
             var app = String(nuove[i].appName || "Sistema");
             if (dove[app] === undefined) {
@@ -310,6 +334,7 @@ QtObject {
                 "urgency": notif.urgency || 0,
                 "timeout": notif.expireTimeout > 0 ? notif.expireTimeout : 5000,
                 "time": Date.now(),
+                "read": false,
                 // L'oggetto vero, per invocare le azioni. Le `actions` non si
                 // copiano in una lista nostra: sono oggetti di Quickshell con
                 // un metodo `invoke()`, e una copia perderebbe proprio quello.
@@ -320,13 +345,7 @@ QtObject {
                 "file": notifications.fileDi(notif)
             };
 
-            var copy = notifications.items.slice();
-            copy.push(item);
-            while (copy.length > notifications.capacity)
-                copy.shift();
-            notifications.items = copy;
-
-            notifications.unread++;
+            notifications._aggiungi(item);
 
             if (!notifications.inSilenzio)
                 notifications.arrived(item);

@@ -42,11 +42,16 @@ Page {
         id: query
         onDone: function(out) {
             page.scanning = false;
+            page.wired = "";
             var nets = [];
-            var seen = {};
+            var seen = Object.create(null);
             var lines = out.split("\n");
             for (var i = 0; i < lines.length; i++) {
                 var p = lines[i].split("\t");
+                if (lines[i].indexOf("NET\t") === 0)
+                    p = ["NET"].concat(page.campiNmcli(lines[i].substring(4)));
+                else if (lines[i].indexOf("WIRED\t") === 0)
+                    p = ["WIRED"].concat(page.campiNmcli(lines[i].substring(6)));
                 if (p.length < 2)
                     continue;
                 if (p[0] === "WIFI") {
@@ -59,7 +64,8 @@ Page {
                     continue;
                 }
                 if (p[0] === "WIRED") {
-                    page.wired = p[1] || "";
+                    if (p[1] === "ethernet" && p[2] === "connected")
+                        page.wired = p[3] || "";
                     continue;
                 }
                 if (p[0] !== "NET" || !p[1])
@@ -82,7 +88,7 @@ Page {
                 // Adesso le righe si FONDONO: il segnale migliore di tutte, e
                 // «connesso» se lo dice almeno una.
                 var ssid = p[1];
-                var attiva = p[4] === "yes";
+                var attiva = p[4] === "*";
                 var forza = parseInt(p[2] || "0");
                 if (seen[ssid] !== undefined) {
                     var g = nets[seen[ssid]];
@@ -106,6 +112,27 @@ Page {
         }
     }
 
+    // Il formato terse di nmcli usa : come separatore e \ come escape.
+    // Si decodifica prima di interpretare i campi: un SSID può contenerli.
+    function campiNmcli(riga) {
+        var campi = [];
+        var campo = "";
+        for (var i = 0; i < riga.length; i++) {
+            var c = riga.charAt(i);
+            if (c === "\\" && i + 1 < riga.length
+                    && (riga.charAt(i + 1) === ":" || riga.charAt(i + 1) === "\\")) {
+                campo += riga.charAt(++i);
+            } else if (c === ":") {
+                campi.push(campo);
+                campo = "";
+            } else {
+                campo += c;
+            }
+        }
+        campi.push(campo);
+        return campi;
+    }
+
     /// `soloLettura`: legge l'elenco che NetworkManager ha già, senza fargli
     /// rifare la scansione. `nmcli device wifi list` di suo riscansiona se
     /// l'ultima ha più di trenta secondi, e il giro ogni quindici secondi
@@ -121,11 +148,11 @@ Page {
         query.sh(
             "export LC_ALL=C; " +
             "printf 'WIFI\\t%s\\n' \"$(nmcli radio wifi 2>/dev/null)\"; " +
-            "printf 'WIRED\\t%s\\n' \"$(nmcli -t -f TYPE,STATE,CONNECTION device status 2>/dev/null " +
-            "| awk -F: '$1==\"ethernet\" && $2==\"connected\" {print $3}')\"; " +
+            "nmcli -t -f TYPE,STATE,CONNECTION device status 2>/dev/null " +
+            "| sed 's/^/WIRED\\t/'; " +
             "nmcli -t -f SSID,SIGNAL,SECURITY,IN-USE device wifi list" +
             (soloLettura ? " --rescan no" : "") + " 2>/dev/null " +
-            "| awk -F: 'NF>=3 {print \"NET\\t\" $1 \"\\t\" $2 \"\\t\" $3 \"\\t\" ($4==\"*\" ? \"yes\" : \"\")}'");
+            "| sed 's/^/NET\\t/'");
     }
 
     function rescan() {

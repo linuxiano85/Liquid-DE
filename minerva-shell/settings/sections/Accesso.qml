@@ -695,6 +695,11 @@ Page {
                     onClicked: {
                         if (page.comandoGreetd !== "")
                             scrivi.running = true;
+                        else {
+                            page.esito = page.it ? "Il servizio di configurazione della login non è installato."
+                                                 : "The login configuration service is not installed.";
+                            page.esitoGrave = true;
+                        }
                     }
                 }
             }
@@ -733,11 +738,9 @@ Page {
 
     Core.Exec {
         id: doveSta
-        Component.onCompleted: doveSta.shArgs(
+        Component.onCompleted: doveSta.sh(
             '[ -x /usr/local/bin/minerva-greetd ] '
-            + '&& { printf %s /usr/local/bin/minerva-greetd; exit 0; }; '
-            + 'printf %s "$1"',
-            [Quickshell.shellDir + "/../scripts/minerva-greetd"]);
+            + '&& printf %s /usr/local/bin/minerva-greetd');
         onDone: function (out) { page.comandoGreetd = out; }
     }
 

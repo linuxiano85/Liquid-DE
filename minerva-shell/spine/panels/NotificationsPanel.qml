@@ -145,6 +145,7 @@ Item {
 
                 Text {
                     width: parent.width
+                    textFormat: Text.PlainText
                     text: note.modelData.appName || ""
                     elide: Text.ElideRight
                     color: note.urgencyTone
@@ -156,6 +157,7 @@ Item {
 
                 Text {
                     width: parent.width
+                    textFormat: Text.PlainText
                     text: note.modelData.summary || ""
                     elide: Text.ElideRight
                     visible: text !== ""
@@ -167,6 +169,7 @@ Item {
 
                 Text {
                     width: parent.width
+                    textFormat: Text.PlainText
                     text: note.modelData.body || ""
                     visible: text !== ""
                     wrapMode: Text.WordWrap

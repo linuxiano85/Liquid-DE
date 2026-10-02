@@ -163,13 +163,18 @@ QtObject {
     // ── Il profilo di energia ────────────────────────────────────────────
 
     property string _profiloPrima: ""
+    property bool _leggendoProfilo: false
 
     property var _leggi: Core.Exec {
-        onDone: function (out) {
+        onCompleted: function (code, out, error) {
+            gioco._leggendoProfilo = false;
+            if (code !== 0 || !gioco.prestazioni)
+                return;
             var p = String(out).trim();
-            if (p !== "")
-                gioco._profiloPrima = p;
-            gioco._scrivi.fireSh("powerprofilesctl set performance");
+            if (["power-saver", "balanced", "performance"].indexOf(p) < 0)
+                return;
+            gioco._profiloPrima = p;
+            gioco._scrivi.start(["powerprofilesctl", "set", "performance"]);
         }
     }
 
@@ -179,16 +184,18 @@ QtObject {
         // Si legge prima di scrivere, sempre: rimettere «bilanciato» a chi
         // aveva scelto «risparmio energetico» è cambiargli le impostazioni
         // senza dirglielo.
-        if (gioco._profiloPrima === "")
+        if (gioco._profiloPrima === "" && !gioco._leggendoProfilo) {
+            gioco._leggendoProfilo = true;
             gioco._leggi.sh("powerprofilesctl get 2>/dev/null");
-        else
-            gioco._scrivi.fireSh("powerprofilesctl set performance");
+        } else if (gioco._profiloPrima !== "") {
+            gioco._scrivi.start(["powerprofilesctl", "set", "performance"]);
+        }
     }
 
     function rimettiProfilo() {
         if (gioco._profiloPrima === "")
             return;
-        gioco._scrivi.fireShArgs("powerprofilesctl set \"$1\"", [gioco._profiloPrima]);
+        gioco._scrivi.start(["powerprofilesctl", "set", gioco._profiloPrima]);
         gioco._profiloPrima = "";
     }
 }

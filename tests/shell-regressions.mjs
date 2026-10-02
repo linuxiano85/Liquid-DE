@@ -1,0 +1,229 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync, spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { once } from 'node:events';
+
+// Execute the bodies from the production QML, rather than a second parser.
+// This validates JS and generated shell commands, not QML loading or Qt signals.
+const root = process.env.SHELL_SOURCE_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const source = name => fs.readFileSync(path.join(root, name), 'utf8');
+function body(text, marker) {
+    const at = text.indexOf(marker);
+    if (at < 0) throw new Error(`Missing source marker ${marker}`);
+    const first = text.indexOf('{', at);
+    let depth = 0, quote = '', comment = '';
+    for (let i = first; i < text.length; i++) {
+        const c = text[i], n = text[i + 1];
+        if (comment === 'line') { if (c === '\n') comment = ''; }
+        else if (comment === 'block') { if (c === '*' && n === '/') { comment = ''; i++; } }
+        else if (quote) { if (c === '\\') i++; else if (c === quote) quote = ''; }
+        else if ('\"\'`'.includes(c)) quote = c;
+        else if (c === '/' && n === '/') { comment = 'line'; i++; }
+        else if (c === '/' && n === '*') { comment = 'block'; i++; }
+        else if (c === '{') depth++;
+        else if (c === '}' && --depth === 0) return text.slice(first, i + 1);
+    }
+    throw new Error(`Unclosed source body ${marker}`);
+}
+function optional(text, marker) { try { return body(text, marker); } catch { return null; } }
+const network = source('minerva-shell/settings/sections/Network.qml');
+const notifSource = source('minerva-shell/core/Notifications.qml');
+const gameSource = source('minerva-shell/core/Gioco.qml');
+const userSource = source('minerva-shell/settings/sections/Utente.qml');
+
+function scan(wifi, wired = '') {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-nmcli-'));
+    try {
+        fs.writeFileSync(path.join(dir, 'nmcli'), '#!/bin/sh\ncase "$*" in\n "radio wifi") printf "enabled\\n";;\n *"device status"*) printf "%s\\n" "$TEST_WIRED";;\n *"device wifi list"*) printf "%s\\n" "$TEST_WIFI";;\n *) exit 7;;\nesac\n', { mode: 0o755 });
+        let command;
+        const page = { networks: [], wired: 'old', scanning: true };
+        const parser = optional(network, 'function campiNmcli(');
+        if (parser) page.campiNmcli = new Function('riga', parser);
+        new Function('soloLettura', 'page', 'query', body(network, 'function refresh('))(true, page, { sh: s => command = s });
+        const r = spawnSync('sh', ['-c', command], { encoding: 'utf8', env: { ...process.env, PATH: dir + ':' + process.env.PATH, TEST_WIFI: wifi, TEST_WIRED: wired } });
+        assert.equal(r.status, 0, r.stderr);
+        new Function('out', 'page', body(network, 'onDone: function(out)'))(r.stdout, page);
+        return page;
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+for (const ssid of ['constructor', '__proto__', 'toString']) {
+    test(`Wi-Fi SSID ${ssid} cannot break refresh`, () => {
+        assert.equal(scan(`${ssid}:90:WPA2:*`).networks[0].ssid, ssid);
+    });
+}
+test('Wi-Fi decodes colons/backslashes/tabs without moving signal or active state', () => {
+    const p = scan('Garage\\:AP:82:WPA2:*\nFolder\\\\AP:40:--:\nTab\tAP:35:WPA2:', 'ethernet:connected:Office\\:LAN\nwifi:connected:Garage\\:AP');
+    assert.deepEqual(p.networks.map(n => [n.ssid, n.signal, n.active]), [['Garage:AP', 82, true], ['Folder\\AP', 40, false], ['Tab\tAP', 35, false]]);
+    assert.equal(p.wired, 'Office:LAN');
+});
+test('Wi-Fi merges the active AP and strongest signal, and clears disconnected wired state', () => {
+    const p = scan('Home:97:WPA2:\nHome:65:WPA2:*');
+    assert.equal(p.networks.length, 1);
+    assert.equal(p.networks[0].signal, 97);
+    assert.equal(p.networks[0].active, true);
+    assert.equal(p.wired, '');
+});
+
+function notifications() {
+    const n = { items: [], capacity: 60, inSilenzio: true, bloccoMostra: 'tutto', fileDi: () => '', _diPosta: () => false };
+    for (const name of ['_contaNonLette', '_chiudi', '_aggiungi', 'markAllRead', 'clear', '_perIlBlocco']) {
+        const b = optional(notifSource, `function ${name}(`);
+        if (b) n[name] = new Function('notifications', 'item', b).bind(null, n);
+    }
+    const counter = optional(notifSource, 'function _contaNonLette(');
+    if (counter) Object.defineProperty(n, 'unread', { get: () => n._contaNonLette() });
+    else n.unread = 0;
+    n.remove = i => new Function('index', 'notifications', body(notifSource, 'function remove('))(i, n);
+    n.receive = x => new Function('notif', 'notifications', body(notifSource, 'onNotification: function(notif)'))(x, n);
+    return n;
+}
+function fixture(id, live, appName = 'Mail') {
+    const n = { id, appName, summary: `Message ${id}`, body: 'demo', actions: [], expireTimeout: 5000,
+        dismiss() { this.tracked = false; live.delete(this.id); } };
+    live.set(id, n);
+    return n;
+}
+test('1,000 notifications retain at most 60 live objects and clear closes all of them', () => {
+    const n = notifications(), live = new Map();
+    for (let i = 0; i < 1000; i++) n.receive(fixture(i, live));
+    assert.equal(n.items.length, 60);
+    assert.equal(n.unread, 60);
+    assert.equal(live.size, 60);
+    n.clear();
+    assert.equal(live.size, 0);
+    assert.equal(n.unread, 0);
+});
+test('Removing the newest unread message cannot export an older read message to the lock', () => {
+    const n = notifications(), live = new Map();
+    n.receive(fixture(1, live)); n.markAllRead(); n.receive(fixture(2, live)); n.remove(1);
+    assert.equal(n.unread, 0);
+    assert.deepEqual(n._perIlBlocco().voci, []);
+    assert.equal(live.size, 1);
+});
+test('Lock notification grouping accepts inherited object names and counts by app', () => {
+    const n = notifications(), live = new Map();
+    for (let i = 0; i < 2; i++) n.receive(fixture(i, live, 'constructor'));
+    n.receive(fixture(2, live, '__proto__'));
+    assert.deepEqual(n._perIlBlocco().gruppi.map(g => [g.app, g.quante]), [['__proto__', 1], ['constructor', 2]]);
+});
+test('Invalid removal leaves notifications and read state untouched', () => {
+    const n = notifications(), live = new Map(); n.receive(fixture(1, live));
+    n.remove(-1); n.remove(9);
+    assert.equal(n.items.length, 1); assert.equal(n.unread, 1); assert.equal(live.size, 1);
+});
+test('Lock privacy modes do not export message bodies outside tutto', () => {
+    const n = notifications(), live = new Map(); n.receive(fixture(1, live));
+    n.bloccoMostra = 'numero'; assert.deepEqual(n._perIlBlocco().voci, []);
+    n.bloccoMostra = 'niente'; assert.deepEqual(n._perIlBlocco().gruppi, []);
+});
+
+function profile(code, output, enabled) {
+    const calls = [], g = { prestazioni: enabled, _leggendoProfilo: true, _profiloPrima: '', _scrivi: { start: a => calls.push(a), fireSh: a => calls.push(a) } };
+    const completed = optional(gameSource, 'onCompleted: function (code, out, error)');
+    if (completed) new Function('code', 'out', 'error', 'gioco', completed)(code, output, '', g);
+    else new Function('out', 'gioco', body(gameSource, 'onDone: function (out)'))(output, g);
+    return { calls, g };
+}
+test('Late profile read after the game ends cannot activate performance', () => {
+    assert.deepEqual(profile(0, 'power-saver', false).calls, []);
+});
+test('Failed or malformed profile read cannot change power policy', () => {
+    assert.deepEqual(profile(1, '', true).calls, []);
+    assert.deepEqual(profile(0, 'unexpected-output', true).calls, []);
+});
+test('Valid profile read applies performance and restores the original profile through the queue', () => {
+    const { calls, g } = profile(0, 'power-saver', true);
+    new Function('gioco', body(gameSource, 'function rimettiProfilo('))(g);
+    assert.deepEqual(calls, [['powerprofilesctl', 'set', 'performance'], ['powerprofilesctl', 'set', 'power-saver']]);
+    assert.equal(g._profiloPrima, '');
+});
+
+function change(secret) {
+    const page = { passwordPronta: true, io: { nome: 'demo' }, passoPassword: 'aperta', comandoUtente: '/usr/local/bin/liquid-de-utente', it: true, racconta() {} };
+    const cambio = { running: false }, nuova = { text: secret };
+    new Function('page', 'cambio', 'nuova', body(userSource, 'function cambiaPassword('))(page, cambio, nuova);
+    return { page, cambio };
+}
+test('Password change never embeds a secret in argv or environment', () => {
+    const secret = 'DEMO-password-42!';
+    const { cambio } = change(secret);
+    assert.deepEqual(cambio.command, ['pkexec', '/usr/local/bin/liquid-de-utente', 'password', 'demo']);
+    assert.ok(!JSON.stringify(cambio.command).includes(secret));
+});
+test('Password is sent once on stdin, then the pending copy and write channel are closed', () => {
+    const { page, cambio } = change('DEMO-password-42!'); const sent = [];
+    cambio.write = s => sent.push(s);
+    new Function('page', 'cambio', body(userSource, 'onStarted:'))(page, cambio);
+    assert.deepEqual(sent, ['DEMO-password-42!\n']);
+    assert.equal(page._passwordDaInviare, ''); assert.equal(cambio.stdinEnabled, false);
+});
+test('Password change rejects line delimiters and NUL', () => {
+    for (const bad of ['pass\nword', 'pass\rword', 'pass\0word']) assert.equal(change(bad).cambio.command, undefined);
+});
+test('A helper that fails to start clears the pending password and reports failure', () => {
+    const { page, cambio } = change('DEMO-password-42!'); const errors = [];
+    page.racconta = (...args) => errors.push(args);
+    new Function('running', 'page', 'cambio', body(userSource, 'onRunningChanged:'))(false, page, cambio);
+    assert.equal(page._passwordDaInviare, ''); assert.equal(cambio.stdinEnabled, false);
+    assert.equal(errors.length, 1); assert.equal(errors[0][1], true);
+});
+test('A failed password helper cannot be mistaken for success because output contains fatto', () => {
+    let closed = 0; const results = [];
+    const page = { it: true, chiudiPassword: () => closed++, racconta: (...a) => results.push(a) };
+    const done = new Function('code', 'out', 'err', 'page', body(userSource, 'function completaCambioPassword('));
+    done(1, 'non fatto', 'Policy denied', page); assert.equal(closed, 0); assert.equal(results[0][1], true);
+    done(0, 'fatto\n', '', page); assert.equal(closed, 1);
+});
+test('A real child receives a fake password through stdin while its /proc argv contains no secret', { timeout: 5000 }, async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-password-'));
+    let child;
+    try {
+        const secret = 'DEMO-password-42!', { page, cambio } = change(secret);
+        const helper = path.join(dir, 'pkexec');
+        const record = path.join(dir, 'argv');
+        // /proc/self also works when the parent and /proc use different PID namespaces.
+        fs.writeFileSync(helper, '#!/usr/bin/env python3\nimport os, sys\nwith open(os.environ["TEST_ARGV_RECORD"], "wb") as f:\n    f.write(open("/proc/self/cmdline", "rb").read())\nsys.stdout.write(sys.stdin.readline().rstrip("\\n"))\n', { mode: 0o755 });
+        child = spawn(helper, cambio.command.slice(1), { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, TEST_ARGV_RECORD: record } });
+        const finished = new Promise(resolve => child.on('close', resolve));
+        await once(child, 'spawn');
+        let out = ''; child.stdout.on('data', x => out += x);
+        cambio.write = s => child.stdin.write(s);
+        new Function('page', 'cambio', body(userSource, 'onStarted:'))(page, cambio);
+        child.stdin.end(); assert.equal(await finished, 0); assert.equal(out, secret);
+        const argv = fs.readFileSync(record, 'utf8');
+        assert.ok(argv.includes('password\0demo'));
+        assert.ok(!argv.includes(secret));
+    } finally { child?.kill(); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+test('Privileged account/login helpers never fall back to mutable scripts in the project directory', () => {
+    for (const file of ['Utente', 'Accesso']) {
+        const text = source(`minerva-shell/settings/sections/${file}.qml`);
+        const query = text.slice(text.indexOf('id: doveSta'), text.indexOf('onDone:', text.indexOf('id: doveSta')));
+        assert.ok(!query.includes('Quickshell.shellDir'), `${file}: mutable privileged fallback`);
+    }
+});
+test('External notification text is explicitly PlainText in popup, history and lock', () => {
+    for (const [file, expr] of [
+        ['spine/Toasts.qml', /text: toast\.(?:appName|summary|body)/g],
+        ['spine/panels/NotificationsPanel.qml', /text: note\.modelData\.(?:appName|summary|body)/g],
+        ['blocco/Notifiche.qml', /text: (?:scheda\.modelData\.app|pannello\.completo \? scheda\.modelData\.(?:titolo|testo)|pannello\.completo \? "" : pannello\._quante)/g],
+    ]) {
+        const text = source('minerva-shell/' + file); const matches = [...text.matchAll(expr)];
+        assert.ok(matches.length >= 3);
+        for (const m of matches) assert.match(text.slice(Math.max(0, m.index - 100), m.index), /textFormat: Text\.PlainText\s+$/);
+    }
+});
+test('Night light schedule refreshes immediately and handles midnight boundaries', () => {
+    const text = source('minerva-shell/core/LuceNotturna.qml');
+    assert.match(text, /onOraInizioChanged: luce\.aggiornaOrario\(\)/);
+    assert.match(text, /onOraFineChanged: luce\.aggiornaOrario\(\)/);
+    const update = new Function('luce', 'Date', body(text, 'function aggiornaOrario('));
+    for (const [hour, from, to, expected] of [[22,21,7,true],[6,21,7,true],[7,21,7,false],[12,9,17,true],[12,12,12,false]]) {
+        const luce = { oraInizio: from, oraFine: to };
+        update(luce, class { getHours() { return hour; } }); assert.equal(luce.dentroLOrario, expected);
+    }
+});

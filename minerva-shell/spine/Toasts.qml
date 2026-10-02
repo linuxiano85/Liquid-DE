@@ -189,6 +189,7 @@ PanelWindow {
 
                     Text {
                         width: parent.width
+                        textFormat: Text.PlainText
                         text: toast.appName
                         elide: Text.ElideRight
                         color: toast.tone
@@ -200,6 +201,7 @@ PanelWindow {
 
                     Text {
                         width: parent.width
+                        textFormat: Text.PlainText
                         text: toast.summary
                         visible: text !== ""
                         elide: Text.ElideRight
@@ -211,6 +213,7 @@ PanelWindow {
 
                     Text {
                         width: parent.width
+                        textFormat: Text.PlainText
                         text: toast.body
                         visible: text !== ""
                         wrapMode: Text.WordWrap

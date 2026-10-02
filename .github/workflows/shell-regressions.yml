@@ -1,0 +1,33 @@
+name: Shell regressions
+
+on:
+  pull_request:
+    paths:
+      - 'minerva-shell/**'
+      - 'tests/shell-regressions.mjs'
+      - '.github/workflows/shell-regressions.yml'
+  push:
+    branches: [principale, 'codex/shell-*']
+    paths:
+      - 'minerva-shell/**'
+      - 'tests/shell-regressions.mjs'
+      - '.github/workflows/shell-regressions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shell-logic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test production JS bodies and generated commands
+        run: node --test tests/shell-regressions.mjs
+
+# These tests intentionally do not claim QML loading, real PAM/polkit,
+# NetworkManager integration or GUI/hardware verification.

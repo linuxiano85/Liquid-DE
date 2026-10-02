@@ -46,14 +46,19 @@ QtObject {
         running: true
         repeat: true
         triggeredOnStart: true
-        onTriggered: {
-            var h = new Date().getHours();
-            var a = luce.oraInizio;
-            var b = luce.oraFine;
-            luce.dentroLOrario = a === b ? false
-                : (a < b ? (h >= a && h < b) : (h >= a || h < b));
-        }
+        onTriggered: luce.aggiornaOrario()
     }
+
+    function aggiornaOrario() {
+        var h = new Date().getHours();
+        var a = luce.oraInizio;
+        var b = luce.oraFine;
+        luce.dentroLOrario = a === b ? false
+            : (a < b ? (h >= a && h < b) : (h >= a || h < b));
+    }
+
+    onOraInizioChanged: luce.aggiornaOrario()
+    onOraFineChanged: luce.aggiornaOrario()
 
     // ── I tre moltiplicatori ─────────────────────────────────────────────
 

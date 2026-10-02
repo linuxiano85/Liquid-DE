@@ -166,6 +166,7 @@ Item {
                             anchors.left: parent.left
                             anchors.right: quando.left
                             anchors.rightMargin: Theme.Effects.space2
+                            textFormat: Text.PlainText
                             text: scheda.modelData.app
                             elide: Text.ElideRight
                             color: Qt.alpha(Theme.Colors._bianco, pannello.completo ? 0.62 : 0.95)
@@ -191,6 +192,7 @@ Item {
                     Text {
                         width: parent.width
                         visible: !pannello.completo
+                        textFormat: Text.PlainText
                         text: pannello.completo ? "" : pannello._quante(scheda.modelData)
                         color: Qt.alpha(Theme.Colors._bianco, 0.70)
                         font.family: Theme.Typography.fontDisplay
@@ -199,6 +201,7 @@ Item {
                     Text {
                         width: parent.width
                         visible: pannello.completo && text !== ""
+                        textFormat: Text.PlainText
                         text: pannello.completo ? scheda.modelData.titolo : ""
                         elide: Text.ElideRight
                         color: Theme.Colors._bianco
@@ -209,6 +212,7 @@ Item {
                     Text {
                         width: parent.width
                         visible: pannello.completo && text !== ""
+                        textFormat: Text.PlainText
                         text: pannello.completo ? scheda.modelData.testo : ""
                         wrapMode: Text.Wrap
                         maximumLineCount: 2
