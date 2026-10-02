@@ -250,6 +250,8 @@ installa_file() {
     # Con una copia in `/usr/local/bin`, root esegue codice di root. È lo
     # stesso ragionamento con cui `greeter.qml` è finito in `/usr/local/share`.
     install -m755 "$ROOT/scripts/minerva-greetd" /usr/local/bin/minerva-greetd
+    install -m644 "$ROOT/scripts/minerva-greeter-state.py" \
+        /usr/local/lib/minerva/minerva-greeter-state.py
 
     # ── E adesso lo si DIMOSTRA ───────────────────────────────────────────
     #
@@ -274,45 +276,25 @@ installa_file() {
 # Il demone scrive le sue impostazioni. Sotto /etc non può (ed è giusto), e
 # nella casa di `greeter` non conviene: il pacchetto greetd la crea senza
 # garanzie su dove. Se ne fa una apposta.
+# Il coordinatore installato non ripiega su codice della cartella del progetto.
+# Quando si installa dal sorgente si sta già eseguendo questo script come root;
+# soltanto in quel caso il modulo è quello accanto al sorgente.
+stato_sicuro() {
+    case "$SELF" in
+        /usr/local/bin/minerva-greetd)
+            MODULO_STATO=/usr/local/lib/minerva/minerva-greeter-state.py ;;
+        *) MODULO_STATO="$ROOT/scripts/minerva-greeter-state.py" ;;
+    esac
+    [ -f "$MODULO_STATO" ] || muori "Modulo di sicurezza della login assente: reinstalla Liquid DE."
+    command -v python3 >/dev/null 2>&1 || muori "La configurazione sicura della login richiede python3."
+    python3 -I "$MODULO_STATO" "$@"
+}
+
 prepara_stato() {
     getent passwd greeter >/dev/null 2>&1 || muori \
         "L'utente «greeter» non esiste: installa prima il pacchetto greetd."
-    mkdir -p "$STATO" "$STATO/cache"
-    chown -R greeter:greeter "$STATO"
-    chmod 700 "$STATO"
-
-    # ── Dove finisce quello che la schermata dice ──────────────────────────
-    #
-    # Da nessuna parte, fino al 5 agosto 2026. L'`exec-once` di Hyprland
-    # eredita un'uscita che è `/dev/null`: il demone e la shell del greeter ci
-    # scrivevano dentro tutto, errori compresi. Quando la schermata non ha
-    # fatto entrare non c'era una riga da leggere da nessuna parte — e la causa
-    # (una porta occupata) era scritta proprio in quelle righe buttate via.
-    #
-    # È la stessa lezione già imparata per il demone della sessione, e qui vale
-    # doppio: una sessione che non parte la si guarda da dentro un'altra
-    # sessione, un ACCESSO che non funziona no.
-    #
-    # In /var/log e non in $STATO perché $STATO è 700 di `greeter`: il registro
-    # di un accesso andato storto deve poterlo leggere chi sta cercando di
-    # capire, senza diventare amministratore.
-    # ── I registri del greeter non sono di tutti ──────────────────────────
-    #
-    # Erano 755 con i file a 644: leggibili da chiunque abbia un account su
-    # questo computer. Dentro ci finiscono i tentativi di accesso falliti
-    # («pam_authenticate: AUTH_ERR»), l'elenco delle sessioni installate e
-    # tutto quello che Hyprland e Qt decidono di scrivere — che non lo
-    # decidiamo noi, ed è il motivo vero per chiuderli: non si può sapere in
-    # anticipo cosa ci finirà dentro dopo un aggiornamento.
-    #
-    # 0750 di `greeter`: li leggono `greeter` e root. Da una sessione normale
-    # ci vuole `sudo`, e va bene così — il registro che serve tutti i giorni
-    # (quello di com'è andata la sessione) sta in casa tua e resta leggibile.
-    mkdir -p "$REGISTRI"
-    chown greeter:greeter "$REGISTRI"
-    chmod 750 "$REGISTRI"
-    # E i file già scritti, che conservano i permessi vecchi.
-    find "$REGISTRI" -type f -exec chmod 640 {} + 2>/dev/null || true
+    stato_sicuro prepare "$STATO" "$REGISTRI" || muori \
+        "Directory della login non sicure o non preparabili; nessun file esterno viene modificato."
 }
 
 # ── Il servizio PAM del greeter ────────────────────────────────────────────
@@ -343,121 +325,24 @@ FINE_PAM
 # Stanno nel demone dell'utente, in casa sua, dove il greeter non entra. Si
 # copiano SOLO le chiavi `greeter.*`: tutto il resto sono fatti di chi ha la
 # sessione, e un greeter non ha motivo di conoscerli.
+CONFIG_STAGE=""
+IMPOSTAZIONI_CONFIG=""
+
 copia_impostazioni() {
     CHI="${SUDO_USER:-${PKEXEC_UID:-}}"
     [ -n "${PKEXEC_UID:-}" ] && CHI=$(getent passwd "$PKEXEC_UID" | cut -d: -f1)
-    [ -n "$CHI" ] || return 0
+    [ -n "$CHI" ] || { grigio "nessun utente chiamante: conservo lo snapshot amministrativo"; return 0; }
 
-    CASA=$(getent passwd "$CHI" | cut -d: -f6)
-    # Quelle di Liquid DE; di Minerva se Liquid DE non ne ha ancora.
-    SORGENTE="$CASA/.config/liquid-de/settings.json"
-    [ -r "$SORGENTE" ] || SORGENTE="$CASA/.config/minerva/settings.json"
-    [ -r "$SORGENTE" ] || { grigio "nessuna impostazione da copiare"; return 0; }
-
-    if ! command -v python3 >/dev/null 2>&1; then
-        grigio "python3 assente: la schermata userà i valori di fabbrica"
-        return 0
-    fi
-
-    # Il filtro sta in un file temporaneo e non in un heredoc dentro un `||`:
-    # mescolare i due rende la riga illeggibile e, come si è visto, nemmeno
-    # valida per la shell.
-    ESTRATTORE=$(mktemp)
-    cat > "$ESTRATTORE" <<'FINE_PYTHON'
-import json, sys
-try:
-    dentro = json.load(open(sys.argv[1]))
-except Exception:
-    sys.exit(1)
-# Oltre alla sezione sua, la schermata prende tre cose dalla sessione, e
-# solo quelle: il METEO (dove, e se è acceso — lo mostra sotto l'ora), la
-# TASTIERA e il TOUCHPAD (la disposizione dei tasti e il tocco che clicca:
-# senza, sotto il nostro compositore la password si scriverebbe su una
-# tastiera americana). Niente altro esce dalla casa di chi accede.
-def parte(sezione, chiavi):
-    d = dentro.get(sezione, {})
-    return {k: d[k] for k in chiavi if k in d}
-fuori = {
-    "greeter": dentro.get("greeter", {}),
-    "weather": parte("weather", ["enabled", "name", "lat", "lon"]),
-    "input": parte("input", ["layout", "naturalScroll", "tapToClick",
-                             "disableWhileTyping", "sensitivity",
-                             "repeatRate", "repeatDelay"]),
-}
-json.dump(fuori, open(sys.argv[2], "w"), indent=2, ensure_ascii=False)
-FINE_PYTHON
-
-    if python3 "$ESTRATTORE" "$SORGENTE" "$STATO/settings.json" 2>/dev/null; then
-        chown greeter:greeter "$STATO/settings.json" 2>/dev/null || true
-        verde "impostazioni della schermata copiate"
-        copia_sfondo
+    # /run è amministrativa. La directory 0700 impedisce di sostituire lo
+    # snapshot fra l'importazione e la scrittura di /etc/greetd.
+    CONFIG_STAGE=$(mktemp -d /run/minerva-greetd.XXXXXXXX) || muori "Staging della login non disponibile."
+    trap 'rm -rf -- "$CONFIG_STAGE"' 0
+    trap 'exit 1' HUP INT TERM
+    IMPOSTAZIONI_CONFIG="$CONFIG_STAGE/settings.json"
+    if stato_sicuro copy "$STATO" "$CHI" > "$IMPOSTAZIONI_CONFIG"; then
+        verde "impostazioni e sfondo della schermata copiati senza privilegi root"
     else
-        grigio "impostazioni illeggibili: userà i valori di fabbrica"
-    fi
-    rm -f "$ESTRATTORE"
-}
-
-# ── Lo sfondo non è un percorso: è un FILE da portarsi dietro ──────────────
-#
-# Giacomo, 6 settembre 2026: «il cambio sfondo della login non fa comparire lo
-# sfondo ma nero, però il resto funziona».
-#
-# Il resto funziona perché sono numeri e interruttori, e un numero si copia.
-# Lo sfondo invece è un percorso, e quel percorso porta dentro `/home/giacomo`,
-# che è `drwx------`: il greeter gira come utente «greeter» e in casa di
-# nessuno entra. L'immagine non si legge, e resta il nero.
-#
-# È lo stesso muro del ritratto utente — e lì la cosa funziona proprio perché
-# il ritratto viene COPIATO in una cartella di sistema. Qui si fa uguale: si
-# porta il file accanto alle impostazioni, e nelle impostazioni si scrive dove
-# è finito.
-#
-# Il nome è sempre lo stesso a meno dell'estensione, così una scelta nuova
-# sostituisce la vecchia invece di accumularsi: qui dentro finirebbero le
-# fotografie di tutti i cambi d'idea.
-copia_sfondo() {
-    SCELTO=$(python3 - "$STATO/settings.json" <<'FINE_PYTHON' 2>/dev/null || true
-import json, sys
-try:
-    d = json.load(open(sys.argv[1]))
-except Exception:
-    sys.exit(0)
-print(str(d.get("greeter", {}).get("wallpaper", "") or ""))
-FINE_PYTHON
-    )
-
-    # Le copie di prima se ne vanno comunque: se lo sfondo è stato tolto, o
-    # scambiato con l'aurora, non deve restare in giro l'immagine di ieri.
-    rm -f "$STATO"/sfondo.* 2>/dev/null || true
-
-    [ -n "$SCELTO" ] || return 0
-    SCELTO=${SCELTO#file://}
-    if [ ! -r "$SCELTO" ]; then
-        grigio "lo sfondo della schermata non si legge: $SCELTO"
-        return 0
-    fi
-
-    EST=${SCELTO##*.}
-    case "$EST" in
-        jpg|jpeg|png|webp|bmp|avif|jxl) : ;;
-        *) EST=img ;;
-    esac
-    DENTRO="$STATO/sfondo.$EST"
-
-    if cp -- "$SCELTO" "$DENTRO" 2>/dev/null; then
-        chown greeter:greeter "$DENTRO" 2>/dev/null || true
-        chmod 644 "$DENTRO" 2>/dev/null || true
-        python3 - "$STATO/settings.json" "$DENTRO" <<'FINE_PYTHON' 2>/dev/null || true
-import json, sys
-via = sys.argv[1]
-d = json.load(open(via))
-d.setdefault("greeter", {})["wallpaper"] = sys.argv[2]
-json.dump(d, open(via, "w"), indent=2, ensure_ascii=False)
-FINE_PYTHON
-        chown greeter:greeter "$STATO/settings.json" 2>/dev/null || true
-        verde "sfondo della schermata copiato ($(basename "$SCELTO"))"
-    else
-        grigio "lo sfondo non si è potuto copiare: la schermata resterà scura"
+        muori "Impostazioni non copiate: la configurazione precedente non viene riscritta."
     fi
 }
 
@@ -465,6 +350,9 @@ FINE_PYTHON
 
 scrivi_config() {
     mkdir -p "$CONF"
+    if [ -n "$IMPOSTAZIONI_CONFIG" ]; then
+        stato_sicuro save-config "$CONF" "$IMPOSTAZIONI_CONFIG" || muori "Snapshot della login non salvato."
+    fi
 
     # ── La tastiera deve essere quella giusta ──────────────────────────────
     #
@@ -487,12 +375,10 @@ scrivi_config() {
     # Adesso: la disposizione scelta nelle impostazioni (copiata poco sopra
     # in «$STATO/settings.json»), poi quella del sistema, e «us» solo se
     # nessuno dei due dice niente.
-    LAYOUT=""
-    if [ -r "$STATO/settings.json" ] && command -v python3 >/dev/null 2>&1; then
-        LAYOUT=$(python3 -c 'import json,sys
-try: print(json.load(open(sys.argv[1])).get("input", {}).get("layout", ""))
-except Exception: pass' "$STATO/settings.json" 2>/dev/null)
-    fi
+    # Non leggere da root settings.json controllato dal greeter: potrebbe
+    # puntare a un altro file o alterare l'accesso automatico. Lo snapshot è
+    # amministrativo, validato per fd e prodotto dai dati del chiamante.
+    LAYOUT=$(stato_sicuro read-config "$CONF" layout) || muori "Snapshot della tastiera non valido."
     if [ -z "$LAYOUT" ] && command -v localectl >/dev/null 2>&1; then
         LAYOUT=$(localectl status 2>/dev/null | sed -n 's/^[[:space:]]*X11 Layout:[[:space:]]*\([^,[:space:]]*\).*/\1/p' | head -1)
     fi
@@ -526,21 +412,7 @@ except Exception: pass' "$STATO/settings.json" 2>/dev/null)
     # prende lo schermo, perché è il suo mestiere.
     CAMBIA="${2:-true}"
 
-    AUTOLOGIN=""
-    if [ -r "$STATO/settings.json" ] && command -v python3 >/dev/null 2>&1; then
-        LETTORE=$(mktemp)
-        cat > "$LETTORE" <<'FINE_PYTHON'
-import json, sys
-try:
-    g = json.load(open(sys.argv[1])).get("greeter", {})
-except Exception:
-    sys.exit(0)
-if g.get("autologin") is True and g.get("user"):
-    print("%s\t%s" % (g["user"], g.get("session", "minerva")))
-FINE_PYTHON
-        AUTOLOGIN=$(python3 "$LETTORE" "$STATO/settings.json" 2>/dev/null || true)
-        rm -f "$LETTORE"
-    fi
+    AUTOLOGIN=$(stato_sicuro read-config "$CONF" autologin) || muori "Snapshot dell'accesso automatico non valido."
 
     # ── Il comando dell'accesso automatico ─────────────────────────────────
     #
@@ -977,8 +849,9 @@ case "$AZIONE" in
     # Questa azione copia le impostazioni e lo sfondo, e basta. Non tocca
     # niente di ciò che decide COME si entra: se sbaglia, si sbaglia un colore.
     aspetto)
-        [ -d "$STATO" ] || muori \
-            "la schermata di accesso non è ancora installata: prima «installa»"
+        [ -d "$STATO" ] && [ ! -L "$STATO" ] || muori \
+            "la schermata di accesso non è ancora installata o la directory non è sicura"
+        prepara_stato
         copia_impostazioni
         printf '\n'
         grigio "Si vede al prossimo accesso. Per guardarla adesso:"

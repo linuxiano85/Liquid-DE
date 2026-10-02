@@ -5,12 +5,18 @@ on:
     paths:
       - 'minerva-shell/**'
       - 'tests/shell-regressions.mjs'
+      - 'tests/test_greeter_state.py'
+      - 'scripts/minerva-greetd'
+      - 'scripts/minerva-greeter-state.py'
       - '.github/workflows/shell-regressions.yml'
   push:
     branches: [principale, 'codex/shell-*']
     paths:
       - 'minerva-shell/**'
       - 'tests/shell-regressions.mjs'
+      - 'tests/test_greeter_state.py'
+      - 'scripts/minerva-greetd'
+      - 'scripts/minerva-greeter-state.py'
       - '.github/workflows/shell-regressions.yml'
   workflow_dispatch:
 
@@ -28,6 +34,18 @@ jobs:
           node-version: '22'
       - name: Test production JS bodies and generated commands
         run: node --test tests/shell-regressions.mjs
+
+  greeter-filesystem:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse login coordinator and compile its Python helper
+        run: |
+          sh -n scripts/minerva-greetd
+          python3 -m py_compile scripts/minerva-greeter-state.py
+      - name: Test real UID transitions and temporary greeter files
+        run: sudo env REQUIRE_GREETER_PRIVILEGES=1 python3 tests/test_greeter_state.py
 
 # These tests intentionally do not claim QML loading, real PAM/polkit,
 # NetworkManager integration or GUI/hardware verification.
