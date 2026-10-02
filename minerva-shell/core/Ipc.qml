@@ -239,7 +239,17 @@ QtObject {
     property var _coda: []
     readonly property int _codaMax: 32
 
+    // Le conversazioni della login valgono solo sul canale corrente.
+    // greeter_info è una lettura iniziale, non una richiesta di autenticazione.
+    function _loginAction(payload) {
+        return payload && typeof payload.action === "string"
+            && payload.action.indexOf("greeter_") === 0
+            && payload.action !== "greeter_info";
+    }
+
     function send(payload) {
+        if (ipc._loginAction(payload) && (!ipc._aperto || !ipc._salutato || !ipc._vivo))
+            return false;
         // Non basta che il socket sia aperto: finché non ci si è salutati il
         // demone butta via tutto. Si accoda, e la coda parte col saluto.
         if (!ipc._aperto || !ipc._salutato) {
@@ -284,8 +294,10 @@ QtObject {
             return;
         var c = ipc._coda;
         ipc._coda = [];
-        for (var i = 0; i < c.length; i++)
+        for (var i = 0; i < c.length; i++) {
+            if (ipc._loginAction(c[i])) continue;
             ipc._scrivi(JSON.stringify(c[i]) + "\n");
+        }
         console.log("[MINERVA][IPC] Spediti", c.length, "messaggi rimasti in coda.");
     }
 
@@ -1871,6 +1883,7 @@ QtObject {
         // `Socket` non ce l'ha — o è connesso o no — quindi il momento in cui
         // si è provato davvero sono due: quando riesce, e quando fallisce.
         onError: function(quale) {
+            if (ipc._vivo !== socket) return;
             ipc._haProvato = true;
             ipc._aperto = false;
             // Un tentativo fallito è un motivo per riprovare. Senza questa
@@ -1884,6 +1897,7 @@ QtObject {
         }
 
         onConnectionStateChanged: {
+            if (ipc._vivo !== socket) return;
             if (socket.connected) {
                 ipc._haProvato = true;
                 ipc._aperto = true;
@@ -1950,6 +1964,7 @@ QtObject {
 
         /// Un messaggio intero, già senza a-capo: lo passa il `SplitParser`.
         function leggi(message) {
+            if (ipc._vivo !== socket) return;
             var msg;
             try {
                 msg = JSON.parse(message);

@@ -113,3 +113,15 @@ up --ask, which supplies a SecretAgent on older nmcli releases too. No secret
 is passed to the lookup; failures and late replies cannot start activation.
 Multiple matching profiles/adapters, modern nmcli and real radio/DHCP remain
 native acceptance cases.
+
+## Login transport regressions
+
+The JS suite also executes real IPC/greeter function bodies for offline
+credential rejection, legacy queue filtering, retired socket callbacks,
+field/state cleanup, late replies and explicit retry after reconnection.
+It does not run Qt signals or PAM. Native acceptance must interrupt the
+minervad connection while typing, awaiting PAM and starting a session:
+no credential or session command may replay, the field must clear, and
+Enter must start a fresh cancellation/retry after reconnection. Test user
+selection while disconnected and verify the greeter never exits because
+of a late success. Server-side concurrent conversations remain open.

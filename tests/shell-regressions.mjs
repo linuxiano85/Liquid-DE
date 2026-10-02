@@ -449,3 +449,105 @@ test('Wi-Fi profile lookup matches literal SSID and supports both nmcli type nam
             }
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+function greeterTransport(online = false) {
+    const sent = [], ipc = { _aperto: online, _salutato: online, _vivo: online ? {} : null,
+        _coda: [], _codaMax: 32, _scrivi: s => sent.push(JSON.parse(s)) };
+    for (const name of ['_loginAction', 'send', '_svuotaCoda']) {
+        const code = optional(ipcSource, `function ${name}(`);
+        if (code) ipc[name] = new Function('ipc', 'payload', code).bind(null, ipc);
+    }
+    return { ipc, sent };
+}
+test('Offline login messages never enter the queue or replay after reconnect', () => {
+    const { ipc, sent } = greeterTransport();
+    for (const action of ['greeter_create_session', 'greeter_respond', 'greeter_start', 'greeter_cancel'])
+        assert.equal(ipc.send({ action, response: 'fictitious-login-secret' }), false);
+    assert.deepEqual(ipc._coda, []);
+    ipc._aperto = ipc._salutato = true; ipc._vivo = {};
+    ipc._svuotaCoda(); assert.deepEqual(sent, []);
+});
+test('Login rejects a missing socket and still sends once on a live channel', () => {
+    const { ipc, sent } = greeterTransport(true);
+    ipc._vivo = null;
+    assert.equal(ipc.send({ action: 'greeter_respond', response: 'fake' }), false);
+    assert.deepEqual(sent, []); assert.deepEqual(ipc._coda, []);
+    ipc._vivo = {};
+    assert.equal(ipc.send({ action: 'greeter_respond', response: 'fake' }), true);
+    assert.deepEqual(sent, [{ action: 'greeter_respond', response: 'fake' }]);
+});
+test('Queue drain discards legacy login entries while preserving startup reads', () => {
+    const { ipc, sent } = greeterTransport(true);
+    ipc._coda = [{ action: 'greeter_respond', response: 'old' }, { action: 'greeter_info' }, { action: 'get_windows' }];
+    ipc._svuotaCoda();
+    assert.deepEqual(sent, [{ action: 'greeter_info' }, { action: 'get_windows' }]);
+    assert.deepEqual(ipc._coda, []);
+});
+test('Retired socket callbacks cannot close or authenticate the live socket', () => {
+    for (const marker of ['onError: function(quale)', 'onConnectionStateChanged:', 'function leggi(']) {
+        const ipc = { _vivo: {}, _aperto: true, _salutato: true, _haProvato: false };
+        const socket = { connected: false };
+        const timer = { running: false, start() { throw new Error('retired socket restarted timer'); } };
+        const code = body(ipcSource.slice(ipcSource.indexOf('property Component _stampo:')), marker);
+        new Function('ipc', 'socket', 'reconnectTimer', 'message', code)(ipc, socket, timer, '{"event":"ciao","payload":{"ok":true}}');
+        assert.equal(ipc._aperto, true); assert.equal(ipc._salutato, true); assert.equal(ipc._haProvato, false);
+    }
+});
+
+const greeterSource = source('minerva-shell/greeter/Greeter.qml');
+function loginFixture() {
+    const greeter = { finto: false, it: false, informato: true, utente: { nome: 'demo' },
+        domanda: 'Password:', inCorso: false, avviato: true, annullando: true,
+        erroriMax: 4, erroriDiFila: 0, canalePerso: false };
+    const campo = { text: 'fictitious-login-secret' }, riprova = { stopped: false, stop() { this.stopped = true; } };
+    const sent = [], Core = { Ipc: { connected: false, greeterRespond: s => { sent.push(s); return false; }, greeterCancel: () => false } };
+    for (const name of ['perdiCanale', 'rispondi', 'annullaERicomincia', 'comincia']) {
+        const code = optional(greeterSource, `function ${name}(`);
+        if (code) greeter[name] = new Function('greeter', 'campo', 'riprova', 'Core', 'testo', code).bind(null, greeter, campo, riprova, Core);
+    }
+    return { greeter, campo, riprova, Core, sent };
+}
+test('Login channel loss clears the field, cancels retry and resets pending state', () => {
+    const f = loginFixture();
+    f.greeter.perdiCanale();
+    assert.equal(f.campo.text, ''); assert.equal(f.riprova.stopped, true);
+    assert.equal(f.greeter.domanda, ''); assert.equal(f.greeter.inCorso, false);
+    assert.equal(f.greeter.avviato, false); assert.equal(f.greeter.annullando, false);
+    assert.equal(f.greeter.canalePerso, true); assert.ok(f.greeter.erroriDiFila > f.greeter.erroriMax);
+});
+test('Rejected login response clears input and does not leave the UI waiting', () => {
+    const f = loginFixture(); f.greeter.rispondi(f.campo.text);
+    assert.equal(f.campo.text, ''); assert.equal(f.greeter.inCorso, false);
+    assert.equal(f.greeter.canalePerso, true); assert.equal(f.sent.length, 1);
+});
+test('Late login success cannot finish or restart a disconnected conversation', () => {
+    const f = loginFixture(); f.greeter.canalePerso = true;
+    f.greeter.finito = f.greeter.comincia = () => { throw new Error('late login response accepted'); };
+    new Function('greeter', 'm', body(greeterSource, 'function onGreeterMessage('))(f.greeter, { type: 'success' });
+    assert.equal(f.greeter.canalePerso, true);
+});
+test('Retry while still offline does not leave login stuck cancelling', () => {
+    const f = loginFixture(); f.greeter.annullaERicomincia();
+    assert.equal(f.greeter.annullando, false); assert.equal(f.greeter.inCorso, false);
+    assert.equal(f.greeter.canalePerso, true);
+});
+
+test('Changing selection after connection loss cannot bypass explicit retry', () => {
+    const f = loginFixture(); f.greeter.canalePerso = true;
+    f.Core.Ipc.greeterCreateSession = () => { throw new Error('unexpected restart'); };
+    f.greeter.comincia();
+    assert.equal(f.greeter.inCorso, false); assert.equal(f.greeter.canalePerso, true);
+    assert.ok(f.greeter.erroriDiFila > f.greeter.erroriMax);
+});
+test('Explicit retry after reconnect waits for cancellation before creating a session', () => {
+    const f = loginFixture(); f.greeter.canalePerso = true; f.Core.Ipc.connected = true;
+    let cancels = 0, creates = 0;
+    f.Core.Ipc.greeterCancel = () => { cancels++; return true; };
+    f.Core.Ipc.greeterCreateSession = () => { creates++; return true; };
+    f.greeter.annullaERicomincia();
+    assert.equal(cancels, 1); assert.equal(creates, 0);
+    assert.equal(f.greeter.canalePerso, false); assert.equal(f.greeter.annullando, true);
+    new Function('greeter', 'm', body(greeterSource, 'function onGreeterMessage('))(f.greeter, { type: 'success' });
+    assert.equal(creates, 1); assert.equal(f.greeter.annullando, false);
+    assert.equal(f.greeter.avviato, false);
+});
