@@ -14,12 +14,14 @@ Impostazioni e servizi necessari alla Shell inclusi. Stato della PR #2.
 | `minervad/lib/services/system_state_service.dart` | Percorso `_leggiRete` e `setWifi`, non revisione integrale del file | Nomi nmcli non decodificati dagli escape e trim distruttivo dei bordi, confermati dal sorgente: residuo R-05. Stato radio ottimistico/riscontro del comando: pezzo 5. |
 | `minervad/lib/ipc/websocket_server.dart` | Dispatch radio Wi-Fi, non revisione integrale del file | La credenziale della pagina non passa per IPC; revisione del replay delle altre conversazioni R-12 ancora aperta. |
 
-Ulteriore limite confermato dal sorgente ufficiale: nmcli 1.46 wifi-connect
-non crea un SecretAgent e può ignorare il nuovo input quando un profilo ha
-una password già salvata. Sostituzione di un segreto errato su queste versioni
-resta da correggere/verificare; il test SecretAgent usa device-connect e
-verifica la conversazione mascherata, non quella combinazione wifi-connect.
-La PR resta in bozza. Le versioni recenti creano l'agente nel percorso Wi-Fi.
+Il caso dei profili con password già salvata usa ora l'UUID trovato tramite
+confronto letterale dell'SSID, senza eliminare spazi o interpretare escape.
+L'attivazione `connection up --ask` crea il SecretAgent anche con nmcli 1.46;
+il test usa questo stesso percorso e sostituisce il valore precompilato.
+La ricerca è di sola lettura, senza credenziali. Errori/UUID non validi e
+risposte successive all'annullamento non avviano alcuna connessione.
+La nuova correzione e le sue regressioni devono passare la CI prima della
+chiusura della passata; QML e rete reali restano da verificare.
 
 Limiti residui di Network.qml: errori di scansione/disconnessione soppressi,
 prima interfaccia selezionata senza scelta nel caso di più schede, SSID con

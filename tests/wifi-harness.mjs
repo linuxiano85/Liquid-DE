@@ -16,9 +16,12 @@ export function wifiFixture() {
     const wifiDeadline = timer(), wifiFailedStart = timer();
     const passwordInput = { text: '', forceActiveFocus() {} };
     const connectDialog = { visible: false, ssid: '', opened: [] };
-    const names = ['page', 'connector', 'wifiDeadline', 'wifiFailedStart', 'connectDialog', 'passwordInput'];
-    const values = [page, connector, wifiDeadline, wifiFailedStart, connectDialog, passwordInput];
-    const args = { connect: ['ssid', 'password', 'protetta'], wifiOutput: ['data'], wifiError: ['data'],
+    const wifiLookup = { busy: false, epoch: -1, command: [],
+        start(argv) { this.command = argv; page.profileLookedUp(0, '', this.epoch); } };
+    const names = ['wifiLookup', 'page', 'connector', 'wifiDeadline', 'wifiFailedStart', 'connectDialog', 'passwordInput'];
+    const values = [wifiLookup, page, connector, wifiDeadline, wifiFailedStart, connectDialog, passwordInput];
+    const args = { profileLookedUp: ['code', 'out', 'epoch'], startWifiCommand: ['uuid'],
+        wifiProfileCommand: ['ssid'], connect: ['ssid', 'password', 'protetta'], wifiOutput: ['data'], wifiError: ['data'],
         completeWifi: ['code', 'epoch'], stopWifi: [], mancaLaPassword: ['testo'] };
     for (const [name, params] of Object.entries(args)) {
         const fn = new Function(...names, ...params, body(wifiSource, `function ${name}(`));
@@ -29,5 +32,5 @@ export function wifiFixture() {
         const fn = new Function(...names, ...params, body(dialogSource, `function ${name}(`));
         connectDialog[name] = (...call) => fn(...values, ...call);
     }
-    return { page, connector, wifiDeadline, wifiFailedStart, connectDialog, passwordInput };
+    return { page, connector, wifiLookup, wifiDeadline, wifiFailedStart, connectDialog, passwordInput };
 }

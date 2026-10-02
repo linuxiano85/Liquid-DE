@@ -1,20 +1,21 @@
 // Run real nmcli on a private test bus, with production QML JS around its pipes.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import { wifiFixture } from './wifi-harness.mjs';
 
 const f = wifiFixture();
 const secret = process.env.TEST_WIFI_SECRET;
 if (!secret || !process.env.DBUS_SYSTEM_BUS_ADDRESS) throw new Error('Private bus and fictitious secret required');
-if (!f.page.connect('Audit_Test_AP', secret, true)) throw new Error('Connection rejected');
-// nmcli 1.46's wifi-connect predates its SecretAgent integration. Its
-// device-connect command uses the same masked common.c conversation that
-// recent wifi-connect versions use. Test that real conversation separately.
-const argv = process.argv.includes('--agent')
-    ? ['env', 'LC_ALL=C', 'nmcli', '--colors', 'no', '--wait', '45', '--ask', 'device', 'connect', 'wlan_test']
-    : f.connector.command;
 const clientEnv = { ...process.env };
 delete clientEnv.TEST_WIFI_SECRET; delete clientEnv.WIFI_PROBE_DEBUG;
+f.wifiLookup.start = argv => {
+    const r = spawnSync(argv[0], argv.slice(1), { env: clientEnv, encoding: 'utf8', timeout: 15000 });
+    if (r.error) throw r.error;
+    f.page.profileLookedUp(r.status, r.stdout, f.wifiLookup.epoch);
+};
+if (!f.page.connect('Audit_Test_AP', secret, true)) throw new Error('Connection rejected');
+if (f.connector.command.length === 0) throw new Error('Profile lookup failed');
+const argv = f.connector.command;
 const child = spawn(argv[0], argv.slice(1), { env: clientEnv, stdio: ['pipe', 'pipe', 'pipe'] });
 let output = '', errors = '', writes = 0, cmdlineHasSecret = false, envHasSecret = false;
 let finishAgent;

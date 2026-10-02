@@ -248,6 +248,8 @@ Page {
             ? (page.it ? "La rete non si vede più." : "The network is no longer visible.")
             : failure === "timeout"
             ? (page.it ? "La rete non ha risposto in tempo." : "The network did not answer in time.")
+            : failure === "lookup"
+            ? (page.it ? "Impossibile leggere i profili di rete." : "Cannot read network profiles.")
             : failure === "start"
             ? (page.it ? "Impossibile avviare nmcli." : "Cannot start nmcli.")
             : (page.it ? "Connessione non riuscita." : "Connection failed.");
@@ -315,14 +317,57 @@ Page {
         return /secrets were required|no secrets|password/i.test(testo);
     }
 
-    // --ask usa l'input del SecretAgent di nmcli; rispondiamo soltanto al
-    // prompt Wi-Fi riconosciuto, una volta. Nessun wrapper contiene segreti.
+    // Il profilo salvato si attiva per UUID: connection up crea il
+    // SecretAgent anche nelle versioni in cui wifi connect non lo fa.
+    Core.Exec {
+        id: wifiLookup
+        property int epoch: -1
+        timeoutMs: 15000
+        onCompleted: function(code, out, err) {
+            page.profileLookedUp(code, out, wifiLookup.epoch);
+        }
+    }
+
+    function profileLookedUp(code, out, epoch) {
+        if (epoch !== page._wifiEpoch || page.collegando === "") return;
+        var uuid = String(out).trim();
+        if (code !== 0 || (uuid !== "" && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(uuid))) {
+            page._wifiFailure = "lookup";
+            page.completeWifi(-1, epoch);
+            return;
+        }
+        page.startWifiCommand(uuid);
+    }
+
+    function startWifiCommand(uuid) {
+        var argv = ["env", "LC_ALL=C", "nmcli", "--colors", "no", "--wait", "45"];
+        if (page._wifiSecret !== "") argv.push("--ask");
+        argv = argv.concat(uuid !== "" ? ["connection", "up", "uuid", uuid]
+                                      : ["device", "wifi", "connect", page.collegando]);
+        connector.stdinEnabled = page._wifiSecret !== "";
+        connector.epoch = page._wifiEpoch;
+        connector.command = argv;
+        connector.running = true;
+        wifiFailedStart.restart();
+    }
+
+    // Ricerca senza segreti: i valori esterni sono argomenti, mai codice.
+    // --escape no conserva due punti, backslash e spazi del vero SSID.
+    function wifiProfileCommand(ssid) {
+        return ["env", "LC_ALL=C", "sh", "-c",
+            'list=$(timeout -k 1 5 nmcli -t -f UUID,TYPE connection show) || exit 1; '
+            + 'printf "%s\\n" "$list" | while IFS=: read -r uuid type; do '
+            + 'case "$type" in wifi|802-11-wireless) ;; *) continue;; esac; '
+            + 'name=$(timeout -k 1 5 nmcli --escape no -g 802-11-wireless.ssid connection show uuid "$uuid") || exit 1; '
+            + 'if [ "$name" = "$1" ]; then printf "%s\\n" "$uuid"; exit 0; fi; done',
+            "sh", ssid];
+    }
+
     function connect(ssid, password, protetta) {
-        if (page.collegando !== "" || connector.running || !page.wifiOn) return false;
+        if (page.collegando !== "" || connector.running || wifiLookup.busy || !page.wifiOn) return false;
         if (typeof ssid !== "string" || ssid === "" || /[\u0000\r\n]/.test(ssid)) return false;
         var secret = password === undefined ? "" : String(password);
-        // Readline interpreta tasti di controllo. Non trasformare una
-        // credenziale in comandi del suo editor né inviare più risposte.
+        // Readline interpreta i tasti di controllo; una sola risposta.
         if (/[\u0000-\u001f\u007f]/.test(secret) || secret.length > 1024) {
             page.error = page.it ? "La password contiene caratteri non supportati."
                                  : "The password contains unsupported characters.";
@@ -334,16 +379,14 @@ Page {
         page._wifiSecret = secret;
         page._wifiPrompt = "";
         page._wifiFailure = "";
-        var argv = ["env", "LC_ALL=C", "nmcli", "--colors", "no", "--wait", "45"];
-        if (secret !== "") argv.push("--ask");
-        argv = argv.concat(["device", "wifi", "connect", ssid]);
-        connector.stdinEnabled = secret !== "";
         page._wifiEpoch++;
-        connector.epoch = page._wifiEpoch;
-        connector.command = argv;
-        connector.running = true;
         wifiDeadline.restart();
-        wifiFailedStart.restart();
+        if (secret !== "") {
+            wifiLookup.epoch = page._wifiEpoch;
+            wifiLookup.start(page.wifiProfileCommand(ssid));
+        } else {
+            page.startWifiCommand("");
+        }
         return true;
     }
 

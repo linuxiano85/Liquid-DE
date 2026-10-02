@@ -399,3 +399,53 @@ test('Wi-Fi accepts a real masked prefilled SecretAgent prompt and replaces its 
     assert.deepEqual(connector.writes, ['\u0015newpassword\n']);
     assert.equal(page._wifiSecret, '');
 });
+
+test('Wi-Fi saved profile uses UUID activation and clears the cached prompt before replacement', () => {
+    const f = wifiFixture(), uuid = '12345678-abcd-1234-abcd-123456789012';
+    f.wifiLookup.start = function(argv) {
+        this.command = argv;
+        f.page.profileLookedUp(0, uuid + '\n', this.epoch);
+    };
+    f.page.connect('Home', 'newsecret', true);
+    assert.deepEqual(f.connector.command.slice(-4), ['connection', 'up', 'uuid', uuid]);
+    assert.ok(f.connector.command.includes('--ask'));
+    assert.ok(!JSON.stringify(f.wifiLookup.command).includes('newsecret'));
+    f.page.wifiOutput('Password (802-11-wireless-security.psk): ***********');
+    assert.deepEqual(f.connector.writes, ['\u0015newsecret\n']);
+});
+test('Wi-Fi failed or malformed profile lookup cannot launch or retain a secret', () => {
+    for (const [code, out] of [[1, ''], [0, 'not-a-uuid'], [0, '12345678-abcd-1234-abcd-123456789012\nextra']]) {
+        const f = wifiFixture();
+        f.wifiLookup.start = function() { f.page.profileLookedUp(code, out, this.epoch); };
+        f.page.connect('Home', 'newsecret', true);
+        assert.deepEqual(f.connector.command, []);
+        assert.equal(f.page._wifiSecret, ''); assert.equal(f.page.collegando, '');
+        assert.equal(f.page.error, 'Cannot read network profiles.');
+    }
+});
+test('Wi-Fi canceled profile lookup cannot start a late activation', () => {
+    const f = wifiFixture();
+    f.wifiLookup.start = function() {};
+    f.page.connect('Home', 'newsecret', true);
+    const epoch = f.wifiLookup.epoch;
+    f.page.stopWifi();
+    f.page.profileLookedUp(0, '12345678-abcd-1234-abcd-123456789012', epoch);
+    assert.deepEqual(f.connector.command, []); assert.equal(f.page._wifiSecret, '');
+});
+test('Wi-Fi profile lookup matches literal SSID and supports both nmcli type names', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'shell-wifi-profile-'));
+    const uuid = '12345678-abcd-1234-abcd-123456789012';
+    try {
+        fs.writeFileSync(path.join(dir, 'nmcli'), '#!/bin/sh\ncase "$*" in\n "-t -f UUID,TYPE connection show") printf "%s:%s\\n" "$TEST_UUID" "$TEST_TYPE";;\n "--escape no -g 802-11-wireless.ssid connection show uuid $TEST_UUID") printf "%s\\n" "$TEST_SSID";;\n *) exit 7;;\nesac\n', { mode: 0o755 });
+        for (const type of ['wifi', '802-11-wireless'])
+            for (const ssid of ['  A:P\\folder  ', 'quotes" $() &; foo', '__proto__']) {
+                const argv = wifiFixture().page.wifiProfileCommand(ssid);
+                const env = { ...process.env, PATH: dir + ':' + process.env.PATH, TEST_UUID: uuid, TEST_TYPE: type, TEST_SSID: ssid };
+                const r = spawnSync(argv[0], argv.slice(1), { env, encoding: 'utf8' });
+                assert.equal(r.status, 0, r.stderr); assert.equal(r.stdout, uuid + '\n');
+                const different = wifiFixture().page.wifiProfileCommand(ssid + ' other');
+                const missing = spawnSync(different[0], different.slice(1), { env, encoding: 'utf8' });
+                assert.equal(missing.status, 0, missing.stderr); assert.equal(missing.stdout, '');
+            }
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

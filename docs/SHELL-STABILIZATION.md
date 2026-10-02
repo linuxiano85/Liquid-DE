@@ -67,3 +67,9 @@ un bus privato, senza avviare un servizio di rete reale. Restano native le
 prove di associazione/DHCP, credenziale errata, profili salvati, radio e QML.
 La pagina mantiene il supporto esistente per PSK/WEP; configurazione completa
 802.1X con identità/certificati resta fuori da questa correzione.
+
+Per sostituire la password di un profilo salvato, il pezzo 3 confronta l'SSID
+letterale e attiva il relativo UUID con `connection up --ask`. Non confonde
+il nome del profilo con quello della rete. Le query sono di sola lettura e
+non ricevono segreti; UUID non validi, errori e risposte tardive bloccano
+l'avvio. Il test del SecretAgent segue questo percorso anche con nmcli 1.46.
