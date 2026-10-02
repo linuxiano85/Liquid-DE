@@ -193,8 +193,9 @@ class GreetdService {
       socket.add(GreetdFramer.encode(message));
       await socket.flush();
     } catch (_) {
-      if (generation == _generation && identical(_pending, pending))
+      if (generation == _generation && identical(_pending, pending)) {
         _fail('Impossibile comunicare con greetd');
+      }
     }
   }
 

@@ -33,20 +33,27 @@ class GreetdConversation<T extends Object> {
       return;
     }
     if (_busy) {
-      if (action == 'greeter_cancel' && _pendingAction != 'greeter_start') _cancel = true;
-      else _reject(client, 'Richiesta di accesso già in corso');
+      if (action == 'greeter_cancel' && _pendingAction != 'greeter_start') {
+        _cancel = true;
+      } else {
+        _reject(client, 'Richiesta di accesso già in corso');
+      }
       return;
     }
     Map<String, dynamic>? request;
     switch (action) {
       case 'greeter_create_session':
         if (!['idle', 'failed'].contains(_state) ||
-            message['username'] is! String || (message['username'] as String).isEmpty) break;
+            message['username'] is! String || (message['username'] as String).isEmpty) {
+          break;
+        }
         request = {'type': 'create_session', 'username': message['username']};
         break;
       case 'greeter_respond':
         if (_state != 'prompt' || _owner == null ||
-            (message['response'] != null && message['response'] is! String)) break;
+            (message['response'] != null && message['response'] is! String)) {
+          break;
+        }
         request = {'type': 'post_auth_message_response'};
         if (message['response'] != null) request['response'] = message['response'];
         break;
@@ -54,7 +61,9 @@ class GreetdConversation<T extends Object> {
         if (_state != 'authenticated' || _owner == null) break;
         final cmd = message['cmd'], env = message['env'] ?? <String>[];
         if (cmd is! List || cmd.isEmpty || cmd.any((v) => v is! String) ||
-            env is! List || env.any((v) => v is! String)) break;
+            env is! List || env.any((v) => v is! String)) {
+          break;
+        }
         request = {'type': 'start_session', 'cmd': List<String>.from(cmd),
           'env': List<String>.from(env)};
         break;

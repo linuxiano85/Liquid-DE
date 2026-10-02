@@ -92,3 +92,8 @@ privati. Compilazione, analisi e test Dart sono richiesti dalla CI della PR.
 PAM/greetd e QML nativi restano da verificare. Il proprietario è un confine
 fra client della Shell, non una sandbox contro processi dello stesso UID.
 Fonti del protocollo: kennylevinsen/greetd, greetd/src/server.rs e greetd_ipc.
+
+Esito 4b: Actions 37047076712, commit b56aaf4, 117 test passati senza skip e
+demone compilato. L'analisi ha segnalato sei rilievi informativi sulle graffe:
+corretti nella revisione seguente; il controllo dei servizi greetd ora usa
+--fatal-infos. L'esito dell'ultima revisione è registrato nella PR e nel rapporto.
