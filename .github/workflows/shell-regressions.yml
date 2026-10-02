@@ -59,7 +59,7 @@ jobs:
       - name: Check Wi-Fi test syntax
         run: python3 -m py_compile tests/test_wifi_nmcli.py
       - name: Test real nmcli pipes and SecretAgent on a private bus
-        run: /usr/bin/python3 tests/test_wifi_nmcli.py
+        run: sudo env "PATH=$PATH" /usr/bin/python3 tests/test_wifi_nmcli.py
 
   greeter-filesystem:
     runs-on: ubuntu-latest

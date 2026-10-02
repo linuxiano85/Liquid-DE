@@ -7,9 +7,7 @@ const f = wifiFixture();
 const secret = process.env.TEST_WIFI_SECRET;
 if (!secret || !process.env.DBUS_SYSTEM_BUS_ADDRESS) throw new Error('Private bus and fictitious secret required');
 if (!f.page.connect('Audit_Test_AP', secret, true)) throw new Error('Connection rejected');
-const argv = process.argv.includes('--agent')
-    ? ['env', 'LC_ALL=C', 'nmcli', '--colors', 'no', '--ask', 'agent', 'secret']
-    : f.connector.command;
+const argv = f.connector.command;
 const child = spawn(argv[0], argv.slice(1), { stdio: ['pipe', 'pipe', 'pipe'] });
 let output = '', errors = '', writes = 0, cmdlineHasSecret = false;
 let finishAgent;

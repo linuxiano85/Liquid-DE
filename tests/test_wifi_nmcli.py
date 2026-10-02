@@ -65,7 +65,7 @@ settings = dbus.Dictionary({
  '802-11-wireless-security': dbus.Dictionary({'key-mgmt': dbus.String('wpa-psk'),
                                             'psk': dbus.String('old-prefill')}, signature='sv')
 }, signature='sa{sv}')
-agent.GetSecrets(settings, dbus.ObjectPath('/org/freedesktop/NetworkManager/Settings/1'),
+agent.GetSecrets(settings, dbus.ObjectPath(getattr(self, 'test_connection_path', '/org/freedesktop/NetworkManager/Settings/1')),
                  '802-11-wireless-security', dbus.Array([], signature='s'), dbus.UInt32(1),
                  reply_handler=lambda secrets: setattr(self, 'captured_secret', str(secrets['802-11-wireless-security']['psk'])),
                  error_handler=lambda error: setattr(self, 'captured_error', str(error)))
@@ -77,7 +77,7 @@ agent.GetSecrets(settings, dbus.ObjectPath('/org/freedesktop/NetworkManager/Sett
     def env(self, secret):
         # The secret is fictitious and placed in the test driver's environment only.
         # Production does not use an environment variable to transfer credentials.
-        return dict(os.environ, TEST_WIFI_SECRET=secret, LC_ALL='C', WIFI_PROBE_DEBUG='1')
+        return dict(os.environ, TEST_WIFI_SECRET=secret, LC_ALL='C')
 
     def assert_probe(self, text):
         result = json.loads(text)
@@ -98,11 +98,27 @@ agent.GetSecrets(settings, dbus.ObjectPath('/org/freedesktop/NetworkManager/Sett
 
     def test_secret_agent_actual_nmcli_replaces_prefill_and_returns_exact_secret(self):
         secret = '  replacement"$`\\test  '
+        dev = '/org/freedesktop/NetworkManager/Devices/mock_WiFi'
+        conn = self.mock.AddWiFiConnection(dev, 'Existing', 'Audit_Test_AP', 'wpa-psk')
+        profile = dbus.Interface(self.bus.get_object(MANAGER, conn), MANAGER + '.Settings.Connection')
+        settings = profile.GetSettings()
+        settings['802-11-wireless'] = dbus.Dictionary({
+            'ssid': dbus.ByteArray(b'Audit_Test_AP'), 'mode': dbus.String('infrastructure')}, signature='sv')
+        settings['802-11-wireless-security'] = dbus.Dictionary({
+            'key-mgmt': dbus.String('wpa-psk'), 'psk': dbus.String('old-prefill')}, signature='sv')
+        profile.Update(settings)
+        # Hold activation in progress. The test server, as the real NM owner,
+        # asks the client's production SecretAgent after its enable callback.
+        self.manager_mock.AddMethod(MANAGER, 'ActivateConnection', 'ooo', 'o', """
+ret = self.activate_connection(self, args[0], args[1], args[2])
+objects[ret].Set('org.freedesktop.NetworkManager.Connection.Active', 'State', dbus.UInt32(1))
+objects['/org/freedesktop'].test_connection_path = str(args[0])
+""")
         p = subprocess.Popen(['node', str(ROOT / 'tests/wifi-nmcli-probe.mjs'), '--agent'],
                              env=self.env(secret), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         self.addCleanup(lambda: p.kill() if p.poll() is None else None)
         until = time.monotonic() + 5
-        while not self.mock.AgentOwner():
+        while not self.mock.AgentOwner() or not self.manager_mock.GetMethodCalls('ActivateConnection'):
             if time.monotonic() >= until:
                 p.kill(); out, err = p.communicate(timeout=5)
                 agents = dbus.Interface(self.bus.get_object(MANAGER, AGENTS), dbusmock.MOCK_IFACE)

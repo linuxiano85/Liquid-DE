@@ -78,8 +78,12 @@ private system bus and simulated AP/NetworkManager. Run with a real nmcli,
 Node and system Python's dbusmock installed:
 
 ```sh
-/usr/bin/python3 tests/test_wifi_nmcli.py
+sudo env "PATH=$PATH" /usr/bin/python3 tests/test_wifi_nmcli.py
 ```
+
+The simulated NetworkManager bus owner runs as root because libnm verifies
+that UID before registering a SecretAgent. Everything stays on the private
+bus; no host NetworkManager calls are made.
 
 Two integration tests exercise real nmcli/readline: device wifi connect and
 SecretAgent GetSecrets, including replacement of a prefilled credential,
