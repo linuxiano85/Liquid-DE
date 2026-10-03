@@ -1,106 +1,149 @@
 # Prove grafiche e PAM della Shell
 
+## Ultimo esito verificato — passata 4d, 3 ottobre 2026
+
+Commit `fff4c054455885bf4a22e808ed129165e426b01d`,
+[Actions 37124990189](https://github.com/linuxiano85/Liquid-DE/actions/runs/37124990189):
+**cinque job riusciti, 129 regressioni, cinque scenari grafici/PAM e venti
+ripetizioni aggiuntive**. Nessun fallimento ignorato o test saltato.
+Le regressioni sono 59 JS, 22 Python greeter, 18 Dart launcher, 16 Dart
+greetd, 2 nmcli e 12 nuove prove del helper PAM. Analisi Dart senza rilievi,
+intero demone compilato; helper C compilato con `-Wall -Wextra -Werror`.
+Anche la prima run della correzione, 37124839077, passa tutti i job,
+quattro scenari nativi e venti ripetizioni.
+
 ## Ambiente e punto d'ingresso
 
 Job `native-graphics-pam` di `.github/workflows/shell-regressions.yml`:
 runner Ubuntu 24.04, contenitore Arch Linux usa e getta, Quickshell 0.3.1,
-Qt 6, Xvfb a 1360×768 e Mesa con rendering OpenGL software. Le versioni
-installate sono conservate in `native-results/versions.txt` e nel log dei
-pacchetti. I font Adwaita e Noto sono installati per il test finale.
+Qt 6.11.2, PAM 1.7.3, Mesa 26.2.4, Xvfb a 1360×768 con rendering OpenGL
+software. Le versioni sono in `native-results/versions.txt`; font Adwaita
+e Noto installati. Le schermate sono catture reali, non immagini generate.
 
 Il comando è `LIQUID_NATIVE_CI=1 bash tests/native/run.sh`, esclusivamente
 nel contenitore preparato dal job. Il runner rifiuta l'avvio senza questa
-variabile e senza `/.dockerenv`. Crea l'account fittizio `liquidci` e due
-configurazioni PAM interne al contenitore. Non va eseguito su un sistema
-personale. Il flag è un controllo contro errori d'uso, non una sandbox.
+variabile e senza `/.dockerenv`. Crea l'account fittizio `liquidci` e servizi
+PAM interni al contenitore. Non va eseguito su un sistema personale.
+Il flag è un controllo contro errori d'uso, non una sandbox.
 
-Il test copia il proprio punto d'ingresso nella cartella `minerva-shell`
-per rispettare il confine degli import Quickshell. Carica i componenti reali
-`Greeter.qml` e `Blocco.qml`, inclusi shader e dipendenze QML. Non sostituisce
-il componente PAM con un mock. La configurazione normale è una copia di
-`config/pam/liquid-de`, con `pam_unix` e `pam_faillock`; quella guasta fa
-riferimento a un modulo inesistente. Quickshell gira come utente non root.
+Il test copia il punto d'ingresso nella cartella `minerva-shell` per
+rispettare il confine degli import Quickshell. Carica `Greeter.qml` e
+`Blocco.qml` reali, inclusi shader e dipendenze QML. Quickshell e il helper
+PAM girano come utente non root. Il servizio normale è una copia di
+`config/pam/liquid-de`, con `pam_unix` e `pam_faillock` veri. I moduli
+controllati servono soltanto a provocare errori, richieste aggiuntive e stalli.
+
+## Stallo riprodotto e correzione
+
+Le prime run 37101843474 e 37102153213 mostravano una verifica PAM che non
+terminava. Il commit `360014c` ha esteso le ripetizioni: nella run fallita
+[37123810816](https://github.com/linuxiano85/Liquid-DE/actions/runs/37123810816),
+GDB ha acquisito due stack del figlio bloccato con questa catena:
+
+```text
+__lll_lock_wait_private (libc)
+... (__syslog_chk)
+pam_vsyslog / pam_syslog (libpam)
+pam_sm_authenticate (pam_unix)
+pam_authenticate
+quickshell
+```
+
+L'attesa è quindi localizzata dentro libc durante il logging di pam_unix.
+La traccia è coerente con mutex ereditati dal processo Qt multithread dopo
+`fork()` senza `exec()`. Lo stesso meccanismo è segnalato nella issue
+upstream [Quickshell #964](https://github.com/quickshell-mirror/quickshell/issues/964).
+La traccia non identifica il mutex interno preciso; non si attribuisce il
+problema a wlroots o alla GPU.
+
+`Blocco.qml` ora usa `Quickshell.Io.Process` per eseguire il piccolo
+`minerva-pam`, senza usare `PamContext`. L'esecuzione separata avvia PAM in
+un processo nuovo, rimuovendo il percorso che ereditava i mutex grafici.
+Non introduce un fork di Quickshell né cambia il fork wlroots.
+
+Il helper:
+
+- gira con UID/GID dell'utente, senza setuid; ricava il nome dall'UID reale,
+  non dalle variabili USER/LOGNAME;
+- riceve la password via stdin fino a EOF, con limite di 4096 byte;
+  rifiuta input vuoto, NUL incorporati e dimensioni superiori;
+- richiede un servizio PAM presente, regolare, root-owned e non scrivibile
+  da gruppo/altri; rifiuta percorsi e non usa il fallback implicito `other`;
+- risponde a una sola richiesta nascosta; richieste aggiuntive o visibili
+  falliscono come metodo non supportato, senza reinviare la password;
+- restituisce soltanto token fissi e codici di uscita: nessuna credenziale,
+  nome account o messaggio PAM grezzo nell'output del helper;
+- disabilita i core dump, pulisce il proprio buffer e termina alla morte
+  del chiamante; ha inoltre una scadenza autonoma di 65 secondi.
+
+Il QML accetta successo soltanto con uscita normale, codice 0 e token
+esatto `ok\n`. La scadenza grafica resta di 60 secondi: uccide la verifica,
+attende l'uscita e poi permette un nuovo tentativo. Una risposta tardiva
+non sblocca e una verifica precedente non si sovrappone alla successiva.
+
+## Installazione
+
+Meson compila `compositore/src/minerva-pam.c` e il normale script di build
+lo prepara insieme agli altri eseguibili. `scripts/install-minerva.sh`
+include la dipendenza PAM e installa per rinomina il helper root-owned
+in `/usr/local/bin/minerva-pam`, permessi 0755, senza setuid.
+Dopo aggiornamento occorre eseguire l'installatore: la sola copia dei QML
+non installa il nuovo eseguibile. `minerva-blocca` segnala l'assenza del
+helper prima di richiedere il blocco dello schermo.
+
+Il test CI compila e installa direttamente il helper nel contenitore.
+Non equivale a una reinstallazione completa del desktop né a una nuova
+build del compositore/wlroots sulla macchina di destinazione.
 
 ## Casi verificati
 
-- Caricamento/rendering del greeter e del blocco, campo password mascherato.
-- Greeter in anteprima: dati utente/sessione simulati, invio senza avvio
-  di sessione e pulizia della risposta.
-- Password vuota: nessuna autenticazione avviata.
-- Password errata: rifiuto PAM reale, blocco mantenuto e campo pulito.
-- Invio duplicato: una sola operazione e un solo errore conteggiato.
-- Password corretta dopo la pausa: un solo segnale di sblocco, contatore
-  azzerato e campo pulito prima di consegnare lo sblocco.
-- Modulo PAM guasto: nessuno sblocco, diagnostica di sistema conservata,
-  nessun incremento del contatore delle password errate.
-- Percorso da tastiera: eventi X11 tramite xdotool, digitazione e Invio
-  per password errata e corretta; il test non ripristina artificialmente
-  il focus del campo fra i due tentativi.
+1. **Percorso normale:** rendering di greeter e blocco, campo mascherato;
+   greeter in anteprima incapace di avviare una sessione; password vuota
+   ignorata, password errata respinta, invio duplicato ignorato, password
+   corretta dopo la pausa con un solo segnale di sblocco e campo pulito.
+2. **Modulo PAM assente:** guasto distinto da password errata, nessuno
+   sblocco e nessuna penalità del contatore password.
+3. **Tastiera reale X11:** digitazione e Invio tramite xdotool, errore e
+   retry senza ripristinare artificialmente il focus del campo.
+4. **Modulo PAM bloccante:** verifica del timer di produzione a 60 secondi,
+   poi accelerato a 1,2 secondi soltanto nel test. Nessuno sblocco; processo
+   fermato, messaggio di retry, campo pulito e successiva autenticazione
+   pam_unix riuscita sullo stesso componente.
+5. **Helper non avviabile:** errore esplicito, nessuno sblocco o penalità;
+   dopo ripristino del comando, autentica sullo stesso componente.
 
-I log devono contenere i quattro marcatori di successo; timeout, errori QML e
-fallimenti delle asserzioni rendono il job fallito. Le schermate PNG e i log
-sono scaricabili dall'artefatto `native-graphics-pam` della run Actions.
-Contengono soltanto l'account e i dati fittizi del test.
+Il percorso normale viene ripetuto altre venti volte per run. Tutti i
+marcatori sono obbligatori; timeout, errori QML e asserzioni fallite fanno
+fallire il job. GDB raccoglie stack dopo 12 secondi nel solo contenitore
+con capacità SYS_PTRACE, usando soltanto credenziali fittizie.
 
-## Difetti riprodotti e corretti
+Le dodici prove dirette del helper verificano inoltre password reale,
+identità da UID anche con USER/LOGNAME falsi, Unicode/newline/metacaratteri,
+limiti di input, NUL, servizio mancante/traversal, proprietà e permessi dei
+file PAM, modulo assente, prompt multipli/visibili, PAM_MAXTRIES, assenza
+del segreto da argv/ambiente e terminazione alla morte del processo padre.
 
-La run 37101542308 riproduce entrambi sul codice precedente alla correzione:
-
-1. Il successo PAM emetteva `sbloccato` lasciando la password nel campo.
-   Ora il campo viene svuotato su ogni completamento, prima del segnale,
-   e anche quando `pam.start()` fallisce. Questo non promette azzeramento
-   sicuro di tutte le copie della stringa nella memoria del runtime.
-2. Quickshell emette `error` e poi `completed(PamResult.Error)`: il secondo
-   handler sovrascriveva la diagnostica con “Password sbagliata” e applicava
-   la penalità dei tentativi. Ora distingue il guasto e conserva il motivo.
-
-3. La verifica non aveva una scadenza: uno stallo PAM lasciava il campo
-   disabilitato indefinitamente. Un timer di 60 secondi ora annulla soltanto
-   l'autenticazione, svuota il campo e rende possibile un nuovo tentativo.
-   Il test carica un modulo PAM C che si ferma in `pause()` senza creare
-   figli; accelera il timer a 1,2 secondi nel solo test, verifica l'assenza
-   di sblocco e poi autentica davvero con pam_unix sullo stesso componente.
-
-## Anomalia intermittente da seguire
-
-Le run 37101843474 e 37102153213 hanno rilevato uno stallo del subprocesso
-PAM. Nel secondo caso Quickshell registra l'invio della risposta; il
-subprocesso non registra il suo consumo e, dopo 30 secondi, il contesto è
-ancora `active=true, responseRequired=true`. Non è dimostrata la causa:
-non si attribuisce il difetto a wlroots, alla GPU o a PAM senza prove.
-
-La run successiva 37102325724 ha passato cinque ripetizioni consecutive
-oltre ai tre scenari principali. Questo non chiude l'anomalia intermittente.
-La CI mantiene cinque ripetizioni e non ignora un fallimento seguito da
-successo. Dopo 12 secondi di attesa raccoglie stack tramite GDB nel solo
-contenitore (capacità SYS_PTRACE); le credenziali sono tutte fittizie.
-La nuova scadenza mitiga il blocco permanente, non dimostra la correzione
-alla radice del subprocesso. Non introdurre un fork di Quickshell senza
-aver isolato ulteriormente il problema.
+Restano valide le correzioni della passata 4c: campo cancellato prima dello
+sblocco, distinzione tra guasto e password errata e recupero dopo timeout.
+Svuotare il campo non garantisce azzeramento di tutte le copie in memoria
+nel runtime Qt/QML.
 
 ## Limiti espliciti
 
+La rimozione del percorso fork-only e due run verdi con venti ripetizioni
+ciascuna sono evidenza della correzione, non una garanzia di assenza di
+ogni possibile stallo in qualunque modulo PAM.
+
 Il greeter è renderizzato in anteprima: non è una prova end-to-end di
-minervad → greetd → PAM → apertura della sessione. Il componente di blocco
-usa PAM reale, ma è ospitato in una normale finestra di test X11, non nel
-protocollo di blocco sicuro Wayland. Non dimostra resistenza alla chiusura
-forzata del locker, cambio VT, crash del compositore o altri monitor.
+minervad → greetd → PAM → apertura della sessione. Il blocco usa PAM vero
+in una finestra X11 di test, non nel protocollo di blocco sicuro Wayland.
+Restano da provare sul sistema di destinazione cambio VT, crash, chiusura
+forzata del locker, più monitor, scaling, layout tastiera, sospensione e
+ripresa, prestazioni e fluidità sulla GPU.
 
-Restano da provare sul sistema di destinazione: sessione greetd completa,
-blocco Wayland sicuro, autenticazione multi-fattore/impronta, layout tastiera
-multipli, scaling, più monitor, sospensione e ripresa, prestazioni e fluidità
-sulla GPU. Le impostazioni e il resto della Shell non sono renderizzati da
-questo test. Nel contenitore manca PipeWire: il relativo errore di connessione
+R-17 resta aperto: conversazioni MFA/impronta complete non implementate;
+si mantiene la politica esistente `pam_authenticate`, senza aggiungere
+`pam_acct_mgmt`. I prompt non supportati falliscono senza sbloccare.
+Le Impostazioni e il resto della Shell non sono renderizzati da questo
+harness. Nel contenitore manca PipeWire: il relativo errore di connessione
 è un limite dell'ambiente e l'audio non viene dichiarato verificato.
-
-
-## Esito dell'ultima revisione verificata
-
-Commit `bb0644c0372f66dcd610e98fd9a0fedc309fd576`,
-[Actions 37102502767](https://github.com/linuxiano85/Liquid-DE/actions/runs/37102502767):
-tutti e cinque i job riusciti. Le 117 regressioni esistenti restano verdi
-(59 JS, 22 Python greeter, 18 Dart launcher, 16 Dart greetd, 2 nmcli),
-oltre a quattro scenari nativi e cinque ripetizioni del caso password.
-Analisi Dart senza rilievi e intero demone compilato. Le quattro schermate
-finali sono state aperte e ispezionate a 1360×768. Nessuna misura di FPS.
-La documentazione successiva non cambia i sorgenti verificati.

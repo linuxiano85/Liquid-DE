@@ -115,3 +115,29 @@ resta aperto. Resta da isolare uno stallo intermittente del subprocesso
 PAM, osservato due volte; le ripetizioni e il recupero non equivalgono a
 una sua correzione alla radice. Dettagli, comandi, run e limiti in
 [NATIVE-GRAPHICS-PAM.md](NATIVE-GRAPHICS-PAM.md). Nessuna modifica a wlroots.
+
+
+## Passata 4d: stallo PAM isolato e helper eseguito con exec
+
+- compositore/src/minerva-pam.c: nuovo helper non privilegiato, buffer
+  limitato su stdin, identità da UID, servizio PAM verificato, una sola
+  risposta nascosta, token fissi e uscita alla morte del chiamante.
+- minerva-shell/blocco/Blocco.qml: PamContext sostituito da Process;
+  successo con codice/status/token concordi, errore di avvio gestito,
+  timeout seguito da attesa dell'uscita prima del retry.
+- compositore/meson.build e costruisci.sh: aggiunta soltanto compilazione,
+  controllo dipendenze e preparazione del nuovo eseguibile; non riesaminati
+  integralmente gli altri componenti del compositore.
+- scripts/install-minerva.sh e minerva-blocca: dipendenza PAM esplicita,
+  installazione root-owned senza setuid in /usr/local/bin e preflight.
+- config/pam/liquid-de: aggiornati i commenti; politica auth invariata.
+- tests/native: 12 prove dirette con libpam reale/moduli di guasto controllati,
+  cinque scenari QML, venti ripetizioni, stack di processo su stallo.
+- workflow Shell: trigger estesi ai nuovi sorgenti e alla configurazione PAM.
+
+Prima della correzione, run 37123810816: due stack del figlio in attesa
+libc durante syslog/pam_unix. Dopo, run 37124839077 e 37124990189 verdi.
+Ultimo codice fff4c054455885bf4a22e808ed129165e426b01d: 129 regressioni
+e cinque scenari nativi più venti ripetizioni. Nessuna modifica a wlroots.
+MFA/policy account, sessione greetd completa, blocco sicuro Wayland e
+matrice hardware restano aperti; nessuna promessa di zero errori.
