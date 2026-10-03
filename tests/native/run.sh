@@ -12,6 +12,8 @@ useradd -m liquidci
 printf '%s\n' 'liquidci:Liquid-CI-only-42!' | chpasswd
 install -m 644 config/pam/liquid-de /etc/pam.d/liquid-ci
 printf '%s\n' 'auth required /missing/liquid-ci-pam-module.so' > /etc/pam.d/liquid-ci-broken
+gcc -shared -fPIC -Wall -Wextra -Werror tests/native/pam_stall.c -o /tmp/liquid-ci-pam-stall.so
+printf '%s\n' 'auth required /tmp/liquid-ci-pam-stall.so' > /etc/pam.d/liquid-ci-stall
 mkdir -p /tmp/liquid-native-runtime
 chown liquidci:liquidci /tmp/liquid-native-runtime "$output"
 chmod 700 /tmp/liquid-native-runtime
@@ -22,11 +24,11 @@ xvfb_pid=$!
 trap 'kill "$xvfb_pid" 2>/dev/null || true' EXIT
 for i in $(seq 1 50); do [[ -S /tmp/.X11-unix/X99 ]] && break; sleep .1; done
 run_case() {
-    local broken=$1 config=$2 log=$3 keyboard=${4:-0}
+    local broken=$1 config=$2 log=$3 keyboard=${4:-0} stalled=${5:-0}
     runuser -u liquidci -- env DISPLAY=:99 XDG_RUNTIME_DIR=/tmp/liquid-native-runtime \
         QT_QPA_PLATFORM=xcb QSG_RHI_BACKEND=opengl LIBGL_ALWAYS_SOFTWARE=1 \
         QT_LOGGING_RULES='quickshell.service.pam.debug=true' \
-        MINERVA_PAM="$config" NATIVE_BROKEN="$broken" NATIVE_KEYBOARD="$keyboard" NATIVE_OUTPUT="$output" \
+        MINERVA_PAM="$config" NATIVE_BROKEN="$broken" NATIVE_KEYBOARD="$keyboard" NATIVE_STALL="$stalled" NATIVE_OUTPUT="$output" \
         dbus-run-session -- timeout 45 qs -p "$repo/minerva-shell/native-ci.qml" > "$output/$log" 2>&1 &
     local runner=$!
     (
@@ -50,6 +52,7 @@ status=0
 run_case 0 liquid-ci graphics-pam.log || status=1
 run_case 1 liquid-ci-broken pam-error.log || status=1
 run_case 0 liquid-ci keyboard-pam.log 1 || status=1
+run_case 0 liquid-ci-stall pam-timeout.log 0 1 || status=1
 # A previous run stalled once while waiting for the first PAM response.
 # Keep a short repetition gate; a later success must not hide a failed run.
 for attempt in 1 2 3 4 5; do
@@ -59,11 +62,12 @@ for attempt in 1 2 3 4 5; do
     if ! grep -q NATIVE_GRAPHICS_PAM_PASSED "$output/$repeated" \
         || grep -q NATIVE_FAIL "$output/$repeated"; then status=1; break; fi
 done
-cat "$output/graphics-pam.log" "$output/pam-error.log" "$output/keyboard-pam.log"
+cat "$output/graphics-pam.log" "$output/pam-error.log" "$output/keyboard-pam.log" "$output/pam-timeout.log"
 grep -q NATIVE_GRAPHICS_PAM_PASSED "$output/graphics-pam.log" || status=1
 grep -q NATIVE_PAM_ERROR_PASSED "$output/pam-error.log" || status=1
 grep -q NATIVE_KEYBOARD_PAM_PASSED "$output/keyboard-pam.log" || status=1
-if grep -E 'NATIVE_FAIL|TypeError:|ReferenceError:|is not a type|Cannot assign to non-existent property' "$output/graphics-pam.log" "$output/pam-error.log" "$output/keyboard-pam.log"; then status=1; fi
+grep -q NATIVE_PAM_TIMEOUT_PASSED "$output/pam-timeout.log" || status=1
+if grep -E 'NATIVE_FAIL|TypeError:|ReferenceError:|is not a type|Cannot assign to non-existent property' "$output/graphics-pam.log" "$output/pam-error.log" "$output/keyboard-pam.log" "$output/pam-timeout.log"; then status=1; fi
 python - <<'PY'
 import base64,pathlib
 for p in pathlib.Path('native-results').glob('*.png'):

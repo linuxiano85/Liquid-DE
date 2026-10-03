@@ -12,16 +12,23 @@ ShellRoot {
     property int unlocked: 0
     property bool broken: Quickshell.env("NATIVE_BROKEN") === "1"
     property bool keyboard: Quickshell.env("NATIVE_KEYBOARD") === "1"
+    property bool stalled: Quickshell.env("NATIVE_STALL") === "1"
+    property bool recovered: false
     property bool keysDone: false
     property var field: null
     property int captures: 0
-    function pamState() {
+    function pamContext() {
         for (var i = 0; i < lock.data.length; i++) {
             var object = lock.data[i];
             if (typeof object.respond === "function" && object.responseRequired !== undefined)
-                return "active=" + object.active + ", responseRequired=" + object.responseRequired;
+                return object;
         }
-        return "context unavailable";
+        return null;
+    }
+    function pamState() {
+        var context = pamContext();
+        return context ? "active=" + context.active + ", responseRequired=" + context.responseRequired
+                       : "context unavailable";
     }
     function check(value, name) {
         if (!value) throw new Error(name);
@@ -110,6 +117,15 @@ ShellRoot {
                     test.check(test.field !== null && test.field.echoMode === TextInput.Password, "production-lock-loaded-masked");
                     test.field.text = ""; lock.prova();
                     test.check(!lock.inCorso && test.unlocked === 0, "empty-password-does-not-authenticate");
+                    if (test.stalled) {
+                        // Accelerate the real production timer only in this
+                        // dedicated blocking-module test.
+                        var deadline = null;
+                        for (var n = 0; n < lock.data.length; n++)
+                            if (lock.data[n].objectName === "pamDeadline") deadline = lock.data[n];
+                        test.check(deadline !== null && deadline.interval === 60000, "production-pam-deadline-present");
+                        deadline.interval = 1200;
+                    }
                     if (test.keyboard) {
                         test.sendKeys("wrong-ci-password");
                         test.stage = 30;
@@ -123,6 +139,18 @@ ShellRoot {
                     test.stage = 4;
                 } else if (test.stage === 4 && !lock.inCorso) {
                     test.check(test.unlocked === 0 && test.field.text === "", "failure-keeps-lock-and-clears-input");
+                    if (test.stalled && !test.recovered) {
+                        test.check(!test.pamContext().active && lock.errori === 0 && !lock.inPausa,
+                            "stalled-pam-aborted-without-unlock-or-password-penalty");
+                        test.check(lock.avviso.indexOf("La verifica non risponde") === 0,
+                            "stalled-pam-shows-retry-message");
+                        test.snapshot("lock-pam-timeout");
+                        test.pamContext().config = "liquid-ci";
+                        for (var j = 0; j < lock.data.length; j++)
+                            if (lock.data[j].objectName === "pamDeadline") lock.data[j].interval = 60000;
+                        test.recovered = true;
+                        test.stage = 5; return;
+                    }
                     if (test.broken) {
                         test.check(lock.avviso.indexOf("Cannot verify:") === 0 || lock.avviso.indexOf("Non riesco a verificare:") === 0,
                             "pam-system-error-is-not-wrong-password");
@@ -149,7 +177,8 @@ ShellRoot {
                 } else if (test.stage === 6 && !lock.inCorso) {
                     test.check(test.unlocked === 1 && lock.errori === 0, "real-pam-correct-password-unlocks-once");
                     test.check(test.field.text === "", "success-clears-password-field");
-                    console.log(test.keyboard ? "NATIVE_KEYBOARD_PAM_PASSED" : "NATIVE_GRAPHICS_PAM_PASSED"); Qt.quit();
+                    console.log(test.stalled ? "NATIVE_PAM_TIMEOUT_PASSED"
+                        : test.keyboard ? "NATIVE_KEYBOARD_PAM_PASSED" : "NATIVE_GRAPHICS_PAM_PASSED"); Qt.quit();
                 } else if (test.stage === 7 && test.captures === 0) {
                     console.log("NATIVE_PAM_ERROR_PASSED"); Qt.quit();
                 }

@@ -111,7 +111,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install native graphical and authentication runtime
-        run: pacman -Syu --noconfirm --needed quickshell xorg-server-xvfb mesa qt6-svg qt6-5compat qt6-multimedia ttf-dejavu adwaita-fonts noto-fonts xdotool dbus python shadow util-linux procps-ng gdb
+        run: pacman -Syu --noconfirm --needed quickshell xorg-server-xvfb mesa qt6-svg qt6-5compat qt6-multimedia ttf-dejavu adwaita-fonts noto-fonts xdotool dbus python shadow util-linux procps-ng gdb gcc
       - name: Run real QML and PAM in disposable container
         env:
           LIQUID_NATIVE_CI: '1'

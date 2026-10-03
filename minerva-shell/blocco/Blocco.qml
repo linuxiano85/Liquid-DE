@@ -92,6 +92,22 @@ Item {
         onTriggered: blocco.inPausa = false
     }
 
+    // Un modulo o un subprocesso PAM bloccato non deve lasciare il campo
+    // disabilitato per sempre. Si annulla solo la verifica, mai il blocco.
+    Timer {
+        id: limitePam
+        objectName: "pamDeadline"
+        interval: 60000
+        onTriggered: {
+            pam.abort();
+            campo.text = "";
+            blocco.inCorso = false;
+            blocco.avviso = blocco.it
+                ? "La verifica non risponde. Riprova."
+                : "Authentication is not responding. Try again.";
+        }
+    }
+
     PamContext {
         id: pam
         // `config` è il NOME del file dentro /etc/pam.d, non un percorso.
@@ -102,6 +118,7 @@ Item {
         user: blocco.utente
 
         onCompleted: function (result) {
+            limitePam.stop();
             blocco.inCorso = false;
             // Anche il successo deve eliminare la risposta dal campo prima
             // di emettere sbloccato: il componente può restare in memoria.
@@ -155,7 +172,9 @@ Item {
             return;
         blocco.avviso = "";
         blocco.inCorso = true;
+        limitePam.restart();
         if (!pam.start()) {
+            limitePam.stop();
             blocco.inCorso = false;
             campo.text = "";
             blocco.avviso = blocco.it
