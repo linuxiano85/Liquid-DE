@@ -60,6 +60,7 @@ import "viewer"
 import "monitor"
 import "custodia"
 import "manutenzione"
+import "fucina"
 import "terminale"
 
 ShellRoot {
@@ -241,6 +242,21 @@ ShellRoot {
         }
     }
 
+    // La Fucina (30 settembre 2026): kernel su misura. Nell'ospite e non in
+    // un processo suo per la ragione scritta in cima a questo file: una
+    // finestra in più qui costa 5 MB, un processo in più 70. La compilazione
+    // non vive qui ma nel demone, quindi chiudere la finestra non la ferma.
+    Loader {
+        id: fucinaL
+        active: false
+        sourceComponent: Component {
+            Fucina {
+                dormiente: prontaFucina.dormiente
+                onRequestClose: prontaFucina.chiudi()
+            }
+        }
+    }
+
     // Il Terminale (15 settembre 2026). Una finestra con le schede: aprire
     // «un altro terminale» è una scheda in più nella stessa, non un altro
     // processo — e `addTab` con una cartella o `esegui://cmd` la apre lì.
@@ -315,6 +331,14 @@ ShellRoot {
     }
 
     Core.TenutaPronta {
+        id: prontaFucina
+        nome: "fucina"
+        esceDaSola: false
+        laFinestra: fucinaL.item
+        onSpenta: fucinaL.active = false
+    }
+
+    Core.TenutaPronta {
         id: prontaTerminale
         nome: "terminale"
         esceDaSola: false
@@ -373,6 +397,10 @@ ShellRoot {
         case "manutenzione":
             manutenzioneL.active = true;
             prontaManutenzione.risveglia();
+            break;
+        case "fucina":
+            fucinaL.active = true;
+            prontaFucina.risveglia();
             break;
         default:
             return false;
@@ -453,7 +481,7 @@ ShellRoot {
         // si dimentica, quindi c'è una guardia in `scripts/prove.sh` che
         // conta i `Loader` e verifica che siano tutti nominati.
         var caricatori = [calcolatrice, editor, anteprima, attivita, custodiaL,
-                          manutenzioneL, terminaleL];
+                          manutenzioneL, terminaleL, fucinaL];
         for (var i = 0; i < caricatori.length; i++) {
             if (caricatori[i].active)
                 return;
@@ -472,6 +500,11 @@ ShellRoot {
     Connections { target: prontaAttivita;     function onSpenta() { app._valutaSeRestare(); } }
     Connections { target: prontaCustodia;     function onSpenta() { app._valutaSeRestare(); } }
     Connections { target: prontaManutenzione; function onSpenta() { app._valutaSeRestare(); } }
+    Connections { target: prontaFucina;       function onSpenta() { app._valutaSeRestare(); } }
+    // Il Terminale era rimasto fuori da questo elenco: chiuso per ultimo,
+    // lasciava l'ospite acceso senza finestre. Trovato il 30 settembre 2026
+    // aggiungendo la Fucina, contando le righe accanto.
+    Connections { target: prontaTerminale;    function onSpenta() { app._valutaSeRestare(); } }
 
     // ── Comandi dall'esterno ─────────────────────────────────────────────
 

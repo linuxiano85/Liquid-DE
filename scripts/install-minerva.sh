@@ -119,6 +119,14 @@ else
     exit 1
 fi
 
+# Liquid non è ancora un pacchetto pacman: dichiarare le dipendenze dirette
+# anche quando erano già presenti, altrimenti possono risultare "orfane".
+sudo pacman -D --asexplicit -- "${PKGS[@]}"
+MANIFESTO=$(mktemp)
+printf '%s\n' "${PKGS[@]}" > "$MANIFESTO"
+sudo install -Dm644 "$MANIFESTO" /usr/local/share/liquid-de/required-packages.txt
+rm -f -- "$MANIFESTO"
+
 # Compilare prima di configurare la sessione: gli errori devono essere visibili.
 c_head "Compositore Minerva e prove automatiche"
 "$MINERVA_DIR/compositore/costruisci.sh" || {
@@ -403,7 +411,7 @@ mkdir -p "$ICONE"
 # menu non esiste, e infatti l'MP3 continuava ad aprirlo un'altra cosa.
 for app in minerva-files minerva-settings minerva-monitor minerva-viewer \
            minerva-editor minerva-calcolatrice minerva-media minerva-custodia \
-           minerva-manutenzione minerva-terminale; do
+           minerva-manutenzione minerva-terminale minerva-fucina; do
     # Un collegamento e non una copia: il file nel progetto resta l'unico da
     # correggere, e una modifica vale subito senza reinstallare niente.
     ln -sf "$MINERVA_DIR/scripts/$app" "$CARTELLA_BIN/$app"

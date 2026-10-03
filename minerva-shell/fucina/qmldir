@@ -1,0 +1,10 @@
+module fucina
+Fucina          1.0 Fucina.qml
+PaginaMacchina  1.0 PaginaMacchina.qml
+PaginaModuli    1.0 PaginaModuli.qml
+PaginaCompila   1.0 PaginaCompila.qml
+PaginaKernel    1.0 PaginaKernel.qml
+Pulsante        1.0 Pulsante.qml
+Spunta          1.0 Spunta.qml
+Etichetta       1.0 Etichetta.qml
+Diario          1.0 Diario.qml

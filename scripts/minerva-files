@@ -51,36 +51,47 @@ case "$TARGET" in
         ;;
 esac
 
-# ── 3. Aperto? Allora una scheda in più ─────────────────────────────────────
-#
-# `ping` risponde solo se c'è un gestore file vivo su QUESTA configurazione.
-# Chiedere a lui invece di avviarne un altro è tutta la differenza fra venti
-# schede in una finestra e venti finestre.
-if qs ipc -p "$CONFIG" call files ping >/dev/null 2>&1; then
-    [ -n "$NUOVA" ] && exec qs ipc -p "$CONFIG" call files finestra "$TARGET" >/dev/null
-    exec qs ipc -p "$CONFIG" call files open "$TARGET" >/dev/null
+# Serialize cold starts and preload requests. The lock must not be inherited
+# by the detached Quickshell process, or subsequent clicks would block forever.
+RUNTIME="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+[ -d "$RUNTIME" ] && [ "$(stat -c '%u:%a' -- "$RUNTIME")" = "$(id -u):700" ] || {
+    echo "minerva-files: directory runtime privata non disponibile" >&2; exit 1;
+}
+KEY=$(printf '%s' "$CONFIG" | sha256sum | cut -c1-24)
+LOCK="$RUNTIME/liquid-files-$(id -u)-$KEY.lock"
+exec 9> "$LOCK"
+flock -w 12 9 || { echo "minerva-files: un altro avvio non termina" >&2; exit 1; }
+SOLO_PREPARA=no
+[ "${MINERVA_FILES_DORMIENTE:-0}" = 1 ] && SOLO_PREPARA=si
+ipc_files() {
+    timeout -k 1 2 qs ipc -p "$CONFIG" call files "$@" 9>&-
+}
+apri_files() {
+    [ "$SOLO_PREPARA" = si ] && return 0
+    if [ "${1:-}" = avviato ]; then ipc_files avvia "$TARGET" >/dev/null; return $?; fi
+    if [ -n "$NUOVA" ]; then ipc_files finestra "$TARGET" >/dev/null
+    else ipc_files open "$TARGET" >/dev/null; fi
+}
+if ipc_files ping >/dev/null 2>&1; then
+    apri_files && exit 0
 fi
 
-# ── 3-bis. Una finestra in più, nello stesso processo ───────────────────────
-#
-# «Nuova finestra» (Ctrl+Maiusc+N, la dock) passava di qui come tutti gli
-# altri e diventava una scheda (PC di prova, 29 settembre 2026, K1). Sul PC
-# di prova la cura era un secondo processo; qui la finestra in più la fa
-# nascere il gestore file aperto (`files finestra`, vedi `filemanager.qml`):
-# stesso risultato, pochi megabyte invece di un'app intera. Se il gestore
-# file non è aperto, `--nuova-finestra` è semplicemente il primo avvio.
-
-# ── 4. Altrimenti si parte ──────────────────────────────────────────────────
-#
-# `-d` stacca dal terminale: chi ci lancia da un file `.desktop` o da una shell
-# non deve restare appeso ad aspettare che la finestra si chiuda.
-# `-n` è la rete contro due lanci nello stesso istante: il secondo si accorge
-# del primo ed esce invece di aprire una finestra gemella.
 MINERVA_FILES_PATH="$TARGET"
 export MINERVA_FILES_PATH
-# L'ambiente comune delle nostre app: disegnano col processore invece che
-# con la scheda video. Il perché, i numeri e cosa si perde stanno tutti
-# in `scripts/minerva-ambiente-app`.
 . "$ROOT/scripts/minerva-ambiente-app"
-
-minerva_avvia_app file qs -d -n -p "$CONFIG"
+# A stale user systemd connection must not make the app impossible to launch.
+if ! timeout -k 1 10 sh -c ' . "$1"; shift; minerva_avvia_app "$@" ' sh \
+        "$ROOT/scripts/minerva-ambiente-app" file qs -d -n -p "$CONFIG" 9>&-; then
+    timeout -k 1 10 qs -d -n -p "$CONFIG" 9>&- || exit $?
+fi
+# -n can report success because another instance is still starting. Always
+# deliver an explicit open after readiness, so a preload cannot swallow it.
+FINE=$(( $(date +%s) + 10 ))
+while [ "$(date +%s)" -lt "$FINE" ]; do
+    if ipc_files ping >/dev/null 2>&1; then
+        apri_files avviato && exit 0
+    fi
+    sleep .1
+done
+echo "minerva-files: il processo non risponde entro il limite; controllare il registro Quickshell. Nessun processo viene terminato automaticamente." >&2
+exit 1
