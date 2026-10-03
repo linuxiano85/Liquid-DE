@@ -25,6 +25,7 @@ run_case() {
     local broken=$1 config=$2 log=$3 keyboard=${4:-0}
     runuser -u liquidci -- env DISPLAY=:99 XDG_RUNTIME_DIR=/tmp/liquid-native-runtime \
         QT_QPA_PLATFORM=xcb QSG_RHI_BACKEND=opengl LIBGL_ALWAYS_SOFTWARE=1 \
+        QT_LOGGING_RULES='quickshell.service.pam.debug=true' \
         MINERVA_PAM="$config" NATIVE_BROKEN="$broken" NATIVE_KEYBOARD="$keyboard" NATIVE_OUTPUT="$output" \
         dbus-run-session -- timeout 45 qs -p "$repo/minerva-shell/native-ci.qml" > "$output/$log" 2>&1
 }

@@ -15,6 +15,14 @@ ShellRoot {
     property bool keysDone: false
     property var field: null
     property int captures: 0
+    function pamState() {
+        for (var i = 0; i < lock.data.length; i++) {
+            var object = lock.data[i];
+            if (typeof object.respond === "function" && object.responseRequired !== undefined)
+                return "active=" + object.active + ", responseRequired=" + object.responseRequired;
+        }
+        return "context unavailable";
+    }
     function check(value, name) {
         if (!value) throw new Error(name);
         console.log("NATIVE_CHECK " + name);
@@ -76,7 +84,8 @@ ShellRoot {
         onTriggered: {
             try {
                 test.ticks++;
-                if (test.ticks > 200) throw new Error("native test timed out at stage " + test.stage);
+                if (test.ticks > 200) throw new Error("native test timed out at stage " + test.stage
+                    + "; " + test.pamState());
                 if (test.stage === 0) {
                     Core.Strings.requestedLanguage = "it";
                     Core.Ipc.settings = {greeter: {meteo: false, stato: false, lato: "sinistra"}};
