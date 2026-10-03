@@ -22,19 +22,21 @@ xvfb_pid=$!
 trap 'kill "$xvfb_pid" 2>/dev/null || true' EXIT
 for i in $(seq 1 50); do [[ -S /tmp/.X11-unix/X99 ]] && break; sleep .1; done
 run_case() {
-    local broken=$1 config=$2 log=$3
+    local broken=$1 config=$2 log=$3 keyboard=${4:-0}
     runuser -u liquidci -- env DISPLAY=:99 XDG_RUNTIME_DIR=/tmp/liquid-native-runtime \
         QT_QPA_PLATFORM=xcb QSG_RHI_BACKEND=opengl LIBGL_ALWAYS_SOFTWARE=1 \
-        MINERVA_PAM="$config" NATIVE_BROKEN="$broken" NATIVE_OUTPUT="$output" \
+        MINERVA_PAM="$config" NATIVE_BROKEN="$broken" NATIVE_KEYBOARD="$keyboard" NATIVE_OUTPUT="$output" \
         dbus-run-session -- timeout 45 qs -p "$repo/minerva-shell/native-ci.qml" > "$output/$log" 2>&1
 }
 status=0
 run_case 0 liquid-ci graphics-pam.log || status=1
 run_case 1 liquid-ci-broken pam-error.log || status=1
-cat "$output/graphics-pam.log" "$output/pam-error.log"
+run_case 0 liquid-ci keyboard-pam.log 1 || status=1
+cat "$output/graphics-pam.log" "$output/pam-error.log" "$output/keyboard-pam.log"
 grep -q NATIVE_GRAPHICS_PAM_PASSED "$output/graphics-pam.log" || status=1
 grep -q NATIVE_PAM_ERROR_PASSED "$output/pam-error.log" || status=1
-if grep -E 'NATIVE_FAIL|TypeError:|ReferenceError:|is not a type|Cannot assign to non-existent property' "$output/graphics-pam.log" "$output/pam-error.log"; then status=1; fi
+grep -q NATIVE_KEYBOARD_PAM_PASSED "$output/keyboard-pam.log" || status=1
+if grep -E 'NATIVE_FAIL|TypeError:|ReferenceError:|is not a type|Cannot assign to non-existent property' "$output/graphics-pam.log" "$output/pam-error.log" "$output/keyboard-pam.log"; then status=1; fi
 python - <<'PY'
 import base64,pathlib
 for p in pathlib.Path('native-results').glob('*.png'):

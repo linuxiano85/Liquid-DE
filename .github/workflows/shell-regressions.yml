@@ -98,8 +98,9 @@ jobs:
       - name: Test login ownership and real temporary Unix sockets
         run: dart run tests/greetd_conversation_test.dart
 
-# These tests intentionally do not claim QML loading, real PAM/polkit,
-# NetworkManager integration or GUI/hardware verification.
+# The preceding jobs cover logic and isolated services. The native job below
+# adds production QML rendering and real PAM, but not a secure Wayland lock
+# or a full greetd session on hardware.
 
   native-graphics-pam:
     runs-on: ubuntu-24.04
@@ -108,7 +109,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install native graphical and authentication runtime
-        run: pacman -Syu --noconfirm --needed quickshell xorg-server-xvfb mesa qt6-svg qt6-5compat qt6-multimedia ttf-dejavu dbus python shadow util-linux
+        run: pacman -Syu --noconfirm --needed quickshell xorg-server-xvfb mesa qt6-svg qt6-5compat qt6-multimedia ttf-dejavu adwaita-fonts noto-fonts xdotool dbus python shadow util-linux
       - name: Run real QML and PAM in disposable container
         env:
           LIQUID_NATIVE_CI: '1'

@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import "../../minerva-shell/greeter" as Login
 import "../../minerva-shell/blocco" as Lock
 import "../../minerva-shell/core" as Core
@@ -10,6 +11,8 @@ ShellRoot {
     property int ticks: 0
     property int unlocked: 0
     property bool broken: Quickshell.env("NATIVE_BROKEN") === "1"
+    property bool keyboard: Quickshell.env("NATIVE_KEYBOARD") === "1"
+    property bool keysDone: false
     property var field: null
     property int captures: 0
     function check(value, name) {
@@ -27,11 +30,28 @@ ShellRoot {
     function snapshot(name) {
         captures++;
         var ok = canvas.grabToImage(function(result) {
-            if (!result.saveToFile(Quickshell.env("NATIVE_OUTPUT") + "/" + name + ".png"))
+            if (!result.saveToFile(Quickshell.env("NATIVE_OUTPUT") + "/"
+                    + (test.keyboard ? "keyboard-" : "") + name + ".png"))
                 console.log("NATIVE_FAIL screenshot " + name);
             captures--;
         });
         check(ok, "capture-started-" + name);
+    }
+    function sendKeys(password) {
+        keysDone = false;
+        keys.command = ["sh", "-c",
+            "set -eu; wid=$(xdotool search --onlyvisible --name '^Liquid native authentication tests$' | head -n 1); "
+            + "test -n \"$wid\"; xdotool windowfocus --sync \"$wid\"; "
+            + "xdotool type --clearmodifiers --delay 5 -- \"$1\"; xdotool key Return",
+            "native-keys", password];
+        keys.running = true;
+    }
+    Process {
+        id: keys
+        onExited: function(code, status) {
+            if (code !== 0) { console.log("NATIVE_FAIL keyboard driver"); Qt.quit(); }
+            test.keysDone = true;
+        }
     }
     FloatingWindow {
         id: window
@@ -58,6 +78,7 @@ ShellRoot {
                 test.ticks++;
                 if (test.ticks > 200) throw new Error("native test timed out at stage " + test.stage);
                 if (test.stage === 0) {
+                    Core.Strings.requestedLanguage = "it";
                     Core.Ipc.settings = {greeter: {meteo: false, stato: false, lato: "sinistra"}};
                     Core.Ipc.greeterInfoReceived({greetd: false, avviatore: false,
                         utenti: [{nome: "liquidci", nomeCompleto: "Liquid CI"}],
@@ -80,9 +101,16 @@ ShellRoot {
                     test.check(test.field !== null && test.field.echoMode === TextInput.Password, "production-lock-loaded-masked");
                     test.field.text = ""; lock.prova();
                     test.check(!lock.inCorso && test.unlocked === 0, "empty-password-does-not-authenticate");
-                    test.field.text = "wrong-ci-password";
-                    lock.prova(); lock.prova();
-                    test.check(lock.inCorso, "pam-started-duplicate-submit-ignored");
+                    if (test.keyboard) {
+                        test.sendKeys("wrong-ci-password");
+                        test.stage = 30;
+                    } else {
+                        test.field.text = "wrong-ci-password";
+                        lock.prova(); lock.prova();
+                        test.check(lock.inCorso, "pam-started-duplicate-submit-ignored");
+                        test.stage = 4;
+                    }
+                } else if (test.stage === 30 && test.keysDone) {
                     test.stage = 4;
                 } else if (test.stage === 4 && !lock.inCorso) {
                     test.check(test.unlocked === 0 && test.field.text === "", "failure-keeps-lock-and-clears-input");
@@ -98,12 +126,21 @@ ShellRoot {
                     test.snapshot("lock-wrong-password");
                     test.stage = 5;
                 } else if (test.stage === 5 && !lock.inPausa && test.captures === 0) {
-                    test.field.text = "Liquid-CI-only-42!";
-                    lock.prova(); test.stage = 6;
+                    if (test.keyboard) {
+                        // Deliberately do not force focus: a retry must work
+                        // when the disabled password field becomes enabled.
+                        test.sendKeys("Liquid-CI-only-42!");
+                        test.stage = 50;
+                    } else {
+                        test.field.text = "Liquid-CI-only-42!";
+                        lock.prova(); test.stage = 6;
+                    }
+                } else if (test.stage === 50 && test.keysDone) {
+                    test.stage = 6;
                 } else if (test.stage === 6 && !lock.inCorso) {
                     test.check(test.unlocked === 1 && lock.errori === 0, "real-pam-correct-password-unlocks-once");
                     test.check(test.field.text === "", "success-clears-password-field");
-                    console.log("NATIVE_GRAPHICS_PAM_PASSED"); Qt.quit();
+                    console.log(test.keyboard ? "NATIVE_KEYBOARD_PAM_PASSED" : "NATIVE_GRAPHICS_PAM_PASSED"); Qt.quit();
                 } else if (test.stage === 7 && test.captures === 0) {
                     console.log("NATIVE_PAM_ERROR_PASSED"); Qt.quit();
                 }
