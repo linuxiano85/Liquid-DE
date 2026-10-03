@@ -97,3 +97,21 @@ Esito 4b: Actions 37047076712, commit b56aaf4, 117 test passati senza skip e
 demone compilato. L'analisi ha segnalato sei rilievi informativi sulle graffe:
 corretti nella revisione seguente; il controllo dei servizi greetd ora usa
 --fatal-infos. L'esito dell'ultima revisione è registrato nella PR e nel rapporto.
+
+
+## Passata 4c: QML e PAM nativi del blocco
+
+Caricati Greeter e Blocco reali in Quickshell su Xvfb/Mesa, con account
+usa e getta e lo stack PAM del progetto. Riprodotti e corretti password
+rimasta nel campo dopo successo e diagnostica PAM sovrascritta da un errore
+password. Aggiunta scadenza di 60 secondi con annullamento della sola
+verifica e nuovo tentativo; il blocco resta attivo. Test dedicato con modulo
+PAM bloccante, senza bypass di autenticazione.
+
+Test tastiera con digitazione e Invio, errore e retry senza ripristino
+artificiale del focus. Il greeter resta in modalità anteprima: nessuna
+sessione greetd completa è stata avviata. R-17 (più credenziali/policy)
+resta aperto. Resta da isolare uno stallo intermittente del subprocesso
+PAM, osservato due volte; le ripetizioni e il recupero non equivalgono a
+una sua correzione alla radice. Dettagli, comandi, run e limiti in
+[NATIVE-GRAPHICS-PAM.md](NATIVE-GRAPHICS-PAM.md). Nessuna modifica a wlroots.
