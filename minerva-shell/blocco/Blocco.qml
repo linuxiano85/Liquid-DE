@@ -103,17 +103,27 @@ Item {
 
         onCompleted: function (result) {
             blocco.inCorso = false;
+            // Anche il successo deve eliminare la risposta dal campo prima
+            // di emettere sbloccato: il componente può restare in memoria.
+            campo.text = "";
             if (result === PamResult.Success) {
                 blocco.errori = 0;
                 blocco.avviso = "";
                 blocco.sbloccato();
                 return;
             }
+            // PamContext emette error prima di completed(Error). Conservare
+            // il motivo del guasto, senza contarne uno come password errata.
+            if (result === PamResult.Error) {
+                if (blocco.avviso === "")
+                    blocco.avviso = blocco.it ? "Non riesco a verificare: errore PAM"
+                                             : "Cannot verify: PAM error";
+                return;
+            }
             blocco.errori++;
             blocco.inPausa = blocco.pausa > 0;
             if (blocco.inPausa)
                 attesa.restart();
-            campo.text = "";
             blocco.avviso = result === PamResult.MaxTries
                 ? (blocco.it ? "Troppi tentativi. Aspetta un momento."
                              : "Too many attempts. Wait a moment.")
@@ -122,7 +132,6 @@ Item {
         }
 
         onError: function (e) {
-            blocco.inCorso = false;
             // Qui NON si dice «password sbagliata»: non lo sappiamo. Un errore
             // di PAM è un guasto — file di configurazione assente, permessi —
             // e confonderlo con una password sbagliata manda chi guarda a
@@ -148,6 +157,7 @@ Item {
         blocco.inCorso = true;
         if (!pam.start()) {
             blocco.inCorso = false;
+            campo.text = "";
             blocco.avviso = blocco.it
                 ? "PAM non risponde: il blocco non può verificare la password."
                 : "PAM is not answering: this lock cannot check the password.";

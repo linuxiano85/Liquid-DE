@@ -89,7 +89,10 @@ ShellRoot {
                     if (test.broken) {
                         test.check(lock.avviso.indexOf("Cannot verify:") === 0 || lock.avviso.indexOf("Non riesco a verificare:") === 0,
                             "pam-system-error-is-not-wrong-password");
-                        console.log("NATIVE_PAM_ERROR_PASSED"); Qt.quit(); return;
+                        test.check(lock.errori === 0 && !lock.inPausa,
+                            "pam-system-error-does-not-penalize-password");
+                        test.snapshot("lock-pam-error");
+                        test.stage = 7; return;
                     }
                     test.check(lock.errori === 1 && lock.avviso !== "", "wrong-password-rejected-once");
                     test.snapshot("lock-wrong-password");
@@ -101,6 +104,8 @@ ShellRoot {
                     test.check(test.unlocked === 1 && lock.errori === 0, "real-pam-correct-password-unlocks-once");
                     test.check(test.field.text === "", "success-clears-password-field");
                     console.log("NATIVE_GRAPHICS_PAM_PASSED"); Qt.quit();
+                } else if (test.stage === 7 && test.captures === 0) {
+                    console.log("NATIVE_PAM_ERROR_PASSED"); Qt.quit();
                 }
             } catch (error) { console.log("NATIVE_FAIL " + error); Qt.quit(); }
         }
