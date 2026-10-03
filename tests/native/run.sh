@@ -55,7 +55,7 @@ run_case 0 liquid-ci keyboard-pam.log 1 || status=1
 run_case 0 liquid-ci-stall pam-timeout.log 0 1 || status=1
 # A previous run stalled once while waiting for the first PAM response.
 # Keep a short repetition gate; a later success must not hide a failed run.
-for attempt in 1 2 3 4 5; do
+for attempt in $(seq 1 20); do
     repeated="repeat-$attempt.log"
     run_case 0 liquid-ci "$repeated" || status=1
     cat "$output/$repeated"
