@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
-import Quickshell.Services.Pam
 
 import "../theme" as Theme
 import "../core" as Core
@@ -22,15 +21,11 @@ import "." as Schermo
 //
 // ── Chi verifica la password ───────────────────────────────────────────────
 //
-// PAM, direttamente. NON greetd: greetd apre sessioni nuove, e qui la sessione
-// c'è già ed è quella di chi sta guardando. Chiedere a greetd vorrebbe dire
-// aprirne una seconda per poi buttarla via — cioè fidarsi che vada tutto bene
-// in una strada che non porta da nessuna parte.
-//
-// Il file di configurazione è `/etc/pam.d/liquid-de`, e se non c'è si ripiega su
-// quello di hyprlock — che su Arch esiste sempre ed è due righe: `auth include
-// login`. Il ripiego non è pigrizia: è che un blocco schermo che non riesce a
-// verificare NIENTE è un blocco schermo che non si apre più.
+// minerva-pam verifica l'utente della sessione tramite PAM, in un processo
+// avviato con exec: non eredita i mutex dei thread grafici come PamContext.
+// La password passa soltanto nello stdin, chiuso subito dopo l'invio.
+// Il servizio è liquid-de (o MINERVA_PAM esplicito); un servizio mancante
+// causa un errore, senza ripiego su altre politiche di autenticazione.
 Item {
     id: blocco
 
@@ -99,88 +94,81 @@ Item {
         objectName: "pamDeadline"
         interval: 60000
         onTriggered: {
-            pam.abort();
+            pam.scaduto = true;
             campo.text = "";
-            blocco.inCorso = false;
-            blocco.avviso = blocco.it
-                ? "La verifica non risponde. Riprova."
-                : "Authentication is not responding. Try again.";
+            pam.stdinEnabled = false;
+            // Aspettare exited prima di consentire un nuovo tentativo:
+            // un esito tardivo non deve poter sbloccare o sovrapporsi.
+            pam.signal(9);
         }
     }
 
-    PamContext {
-        id: pam
-        // `config` è il NOME del file dentro /etc/pam.d, non un percorso.
-        // Lo sceglie `scripts/minerva-blocca`, che prima va a vedere quale
-        // esiste: il nostro se c'è, quello di hyprlock se no. Se non ne
-        // trovasse nessuno non ci lancerebbe nemmeno.
-        config: Quickshell.env("MINERVA_PAM") || "liquid-de"
-        user: blocco.utente
-
-        onCompleted: function (result) {
-            limitePam.stop();
-            blocco.inCorso = false;
-            // Anche il successo deve eliminare la risposta dal campo prima
-            // di emettere sbloccato: il componente può restare in memoria.
-            campo.text = "";
-            if (result === PamResult.Success) {
-                blocco.errori = 0;
-                blocco.avviso = "";
-                blocco.sbloccato();
-                return;
-            }
-            // PamContext emette error prima di completed(Error). Conservare
-            // il motivo del guasto, senza contarne uno come password errata.
-            if (result === PamResult.Error) {
-                if (blocco.avviso === "")
-                    blocco.avviso = blocco.it ? "Non riesco a verificare: errore PAM"
-                                             : "Cannot verify: PAM error";
-                return;
-            }
+    function esitoPam(code, status, reply) {
+        limitePam.stop();
+        campo.text = "";
+        blocco.inCorso = false;
+        if (pam.scaduto) {
+            blocco.avviso = blocco.it ? "La verifica non risponde. Riprova."
+                                     : "Authentication is not responding. Try again.";
+            return;
+        }
+        if (status === 0 && code === 0 && reply === "ok\n") {
+            blocco.errori = 0;
+            blocco.avviso = "";
+            blocco.sbloccato();
+            return;
+        }
+        if (status === 0 && ((code === 1 && reply === "denied\n")
+                         || (code === 2 && reply === "maxtries\n"))) {
             blocco.errori++;
             blocco.inPausa = blocco.pausa > 0;
-            if (blocco.inPausa)
-                attesa.restart();
-            blocco.avviso = result === PamResult.MaxTries
-                ? (blocco.it ? "Troppi tentativi. Aspetta un momento."
-                             : "Too many attempts. Wait a moment.")
+            if (blocco.inPausa) attesa.restart();
+            blocco.avviso = code === 2
+                ? (blocco.it ? "Troppi tentativi. Aspetta un momento." : "Too many attempts. Wait a moment.")
                 : (blocco.it ? "Password sbagliata" : "Wrong password");
             scossa.restart();
+            return;
         }
+        blocco.avviso = (blocco.it ? "Non riesco a verificare: " : "Cannot verify: ")
+            + (code === 4 && reply === "unsupported\n"
+                ? (blocco.it ? "metodo PAM non supportato" : "unsupported PAM method")
+                : (blocco.it ? "errore del servizio PAM" : "PAM service error"));
+    }
 
-        onError: function (e) {
-            // Qui NON si dice «password sbagliata»: non lo sappiamo. Un errore
-            // di PAM è un guasto — file di configurazione assente, permessi —
-            // e confonderlo con una password sbagliata manda chi guarda a
-            // ridigitare all'infinito una password giusta.
-            blocco.avviso = (blocco.it ? "Non riesco a verificare: " : "Cannot verify: ")
-                            + PamError.toString(e);
+    Process {
+        id: pam
+        objectName: "pamWorker"
+        property string config: Quickshell.env("MINERVA_PAM") || "liquid-de"
+        property bool avviato: false
+        property bool scaduto: false
+        command: ["/usr/local/bin/minerva-pam", config]
+        onStarted: {
+            pam.avviato = true;
+            if (pam.scaduto) { pam.signal(9); return; }
+            pam.write(campo.text);
+            pam.stdinEnabled = false;
+            campo.text = "";
         }
-
-        // `responseRequired` è una PROPRIETÀ, non un segnale: il gestore è
-        // `onResponseRequiredChanged`. Scritto come `onResponseRequired`, QML
-        // rifiuta di caricare il file — e per una schermata di blocco «non si
-        // carica» vuol dire che il tasto Super+L non fa niente.
-        onResponseRequiredChanged: {
-            if (pam.responseRequired)
-                pam.respond(campo.text);
+        stdout: StdioCollector { id: rispostaPam }
+        onExited: function(code, status) {
+            if (blocco.inCorso) blocco.esitoPam(code, status, rispostaPam.text);
+        }
+        onRunningChanged: {
+            if (!pam.running && !pam.avviato && blocco.inCorso)
+                blocco.esitoPam(3, 0, "error\n");
         }
     }
 
     function prova() {
-        if (blocco.inCorso || blocco.inPausa || campo.text === "")
+        if (blocco.inCorso || blocco.inPausa || pam.running || campo.text === "")
             return;
         blocco.avviso = "";
         blocco.inCorso = true;
+        pam.avviato = false;
+        pam.scaduto = false;
+        pam.stdinEnabled = true;
         limitePam.restart();
-        if (!pam.start()) {
-            limitePam.stop();
-            blocco.inCorso = false;
-            campo.text = "";
-            blocco.avviso = blocco.it
-                ? "PAM non risponde: il blocco non può verificare la password."
-                : "PAM is not answering: this lock cannot check the password.";
-        }
+        pam.running = true;
     }
 
     // ── Lo sfondo ────────────────────────────────────────────────────────

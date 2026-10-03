@@ -153,6 +153,10 @@ executable('minerva-cattura',
 # l'unico posto del progetto che compila C — ma non è parte del compositore:
 # è un programmino a sé, come `minerva-cattura`. Il perché sta in cima a
 # `src/minerva-pty.c`.
+# PAM runs after exec in a small unprivileged process, isolated from Qt threads.
+executable('minerva-pam', files('src/minerva-pam.c'),
+  dependencies: [cc.find_library('pam', required: true)], install: true)
+
 executable('minerva-pty',
   files('src/minerva-pty.c'),
   dependencies: [cc.find_library('util', required: false)],

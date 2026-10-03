@@ -30,7 +30,7 @@ PKGS=(
     # compila più di serie (vedi compositore/costruisci.sh).
     vulkan-icd-loader
     libxcb xcb-util-wm xcb-util-errors xcb-util-renderutil xorg-xwayland
-    cairo pango systemd glib2
+    cairo pango systemd glib2 pam
     desktop-file-utils libpulse qt6-5compat
     # Custodia, dispositivi e strumenti invocati dai servizi/applicazioni.
     git rsync libsecret udisks2 upower python
@@ -125,6 +125,10 @@ c_head "Compositore Minerva e prove automatiche"
     c_err "Build/verifica del compositore fallita."
     exit 1
 }
+# Percorso fisso usato dal blocco: eseguibile root-owned, senza setuid.
+# La rinomina permette l'aggiornamento anche con una verifica ancora in corso.
+sudo install -Dm755 "$CARTELLA_BIN/minerva-pam" /usr/local/bin/minerva-pam.new
+sudo mv -f /usr/local/bin/minerva-pam.new /usr/local/bin/minerva-pam
 c_head "Dipendenze del backend"
 (cd "$MINERVA_DIR/minervad" && dart pub get) || exit 1
 
@@ -560,7 +564,7 @@ for bin in qs dart cliphist wl-copy brightnessctl nmcli pactl bluetoothctl alacr
     fi
 done
 
-for bin in minerva-wayland minerva-cattura minerva-pty minerva-polkit; do
+for bin in minerva-wayland minerva-cattura minerva-pty minerva-pam minerva-polkit; do
     if [ -x "$CARTELLA_BIN/$bin" ]; then
         c_ok "$bin"
     else

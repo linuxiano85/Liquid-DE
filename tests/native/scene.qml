@@ -20,14 +20,14 @@ ShellRoot {
     function pamContext() {
         for (var i = 0; i < lock.data.length; i++) {
             var object = lock.data[i];
-            if (typeof object.respond === "function" && object.responseRequired !== undefined)
+            if (object.objectName === "pamWorker")
                 return object;
         }
         return null;
     }
     function pamState() {
         var context = pamContext();
-        return context ? "active=" + context.active + ", responseRequired=" + context.responseRequired
+        return context ? "running=" + context.running + ", pid=" + context.processId
                        : "context unavailable";
     }
     function check(value, name) {
@@ -140,7 +140,7 @@ ShellRoot {
                 } else if (test.stage === 4 && !lock.inCorso) {
                     test.check(test.unlocked === 0 && test.field.text === "", "failure-keeps-lock-and-clears-input");
                     if (test.stalled && !test.recovered) {
-                        test.check(!test.pamContext().active && lock.errori === 0 && !lock.inPausa,
+                        test.check(!test.pamContext().running && lock.errori === 0 && !lock.inPausa,
                             "stalled-pam-aborted-without-unlock-or-password-penalty");
                         test.check(lock.avviso.indexOf("La verifica non risponde") === 0,
                             "stalled-pam-shows-retry-message");

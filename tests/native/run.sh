@@ -10,10 +10,14 @@ sed 's|../../minerva-shell/|./|g' tests/native/scene.qml > minerva-shell/native-
 mkdir -p "$output"
 useradd -m liquidci
 printf '%s\n' 'liquidci:Liquid-CI-only-42!' | chpasswd
+gcc -std=c11 -Wall -Wextra -Werror -O2 compositore/src/minerva-pam.c -lpam -o /tmp/minerva-pam
+install -Dm755 /tmp/minerva-pam /usr/local/bin/minerva-pam
 install -m 644 config/pam/liquid-de /etc/pam.d/liquid-ci
 printf '%s\n' 'auth required /missing/liquid-ci-pam-module.so' > /etc/pam.d/liquid-ci-broken
 gcc -shared -fPIC -Wall -Wextra -Werror tests/native/pam_stall.c -o /tmp/liquid-ci-pam-stall.so
 printf '%s\n' 'auth required /tmp/liquid-ci-pam-stall.so' > /etc/pam.d/liquid-ci-stall
+gcc -shared -fPIC -Wall -Wextra -Werror tests/native/pam_conversation.c -lpam -o /tmp/liquid-ci-pam-conversation.so
+python tests/native/test_pam_helper.py 2>&1 | tee "$output/helper-tests.log"
 mkdir -p /tmp/liquid-native-runtime
 chown liquidci:liquidci /tmp/liquid-native-runtime "$output"
 chmod 700 /tmp/liquid-native-runtime
@@ -34,7 +38,7 @@ run_case() {
     (
         sleep 12
         if kill -0 "$runner" 2>/dev/null; then
-            for child in $(pgrep -u liquidci -x 'quickshell|qs'); do
+            for child in $(pgrep -u liquidci -x 'quickshell|qs|minerva-pam'); do
                 echo "PAM_DIAGNOSTIC pid=$child"
                 timeout 8 gdb -q -batch -ex 'set pagination off' \
                     -ex 'thread apply all bt 12' -p "$child" || true

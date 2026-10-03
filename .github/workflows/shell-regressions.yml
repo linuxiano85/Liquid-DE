@@ -10,6 +10,12 @@ on:
       - 'tests/test_greeter_state.py'
       - 'scripts/minerva-greetd'
       - 'scripts/minerva-greeter-state.py'
+      - 'scripts/minerva-blocca'
+      - 'scripts/install-minerva.sh'
+      - 'compositore/src/minerva-pam.c'
+      - 'compositore/meson.build'
+      - 'compositore/costruisci.sh'
+      - 'config/pam/**'
       - '.github/workflows/shell-regressions.yml'
   push:
     branches: [principale, 'codex/shell-*']
@@ -21,6 +27,12 @@ on:
       - 'tests/test_greeter_state.py'
       - 'scripts/minerva-greetd'
       - 'scripts/minerva-greeter-state.py'
+      - 'scripts/minerva-blocca'
+      - 'scripts/install-minerva.sh'
+      - 'compositore/src/minerva-pam.c'
+      - 'compositore/meson.build'
+      - 'compositore/costruisci.sh'
+      - 'config/pam/**'
       - '.github/workflows/shell-regressions.yml'
   workflow_dispatch:
 
