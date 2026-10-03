@@ -33,6 +33,15 @@ status=0
 run_case 0 liquid-ci graphics-pam.log || status=1
 run_case 1 liquid-ci-broken pam-error.log || status=1
 run_case 0 liquid-ci keyboard-pam.log 1 || status=1
+# A previous run stalled once while waiting for the first PAM response.
+# Keep a short repetition gate; a later success must not hide a failed run.
+for attempt in 1 2 3 4 5; do
+    repeated="repeat-$attempt.log"
+    run_case 0 liquid-ci "$repeated" || status=1
+    cat "$output/$repeated"
+    if ! grep -q NATIVE_GRAPHICS_PAM_PASSED "$output/$repeated" \
+        || grep -q NATIVE_FAIL "$output/$repeated"; then status=1; break; fi
+done
 cat "$output/graphics-pam.log" "$output/pam-error.log" "$output/keyboard-pam.log"
 grep -q NATIVE_GRAPHICS_PAM_PASSED "$output/graphics-pam.log" || status=1
 grep -q NATIVE_PAM_ERROR_PASSED "$output/pam-error.log" || status=1
