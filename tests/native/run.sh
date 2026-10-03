@@ -27,7 +27,24 @@ run_case() {
         QT_QPA_PLATFORM=xcb QSG_RHI_BACKEND=opengl LIBGL_ALWAYS_SOFTWARE=1 \
         QT_LOGGING_RULES='quickshell.service.pam.debug=true' \
         MINERVA_PAM="$config" NATIVE_BROKEN="$broken" NATIVE_KEYBOARD="$keyboard" NATIVE_OUTPUT="$output" \
-        dbus-run-session -- timeout 45 qs -p "$repo/minerva-shell/native-ci.qml" > "$output/$log" 2>&1
+        dbus-run-session -- timeout 45 qs -p "$repo/minerva-shell/native-ci.qml" > "$output/$log" 2>&1 &
+    local runner=$!
+    (
+        sleep 12
+        if kill -0 "$runner" 2>/dev/null; then
+            for child in $(pgrep -u liquidci -x 'quickshell|qs'); do
+                echo "PAM_DIAGNOSTIC pid=$child"
+                timeout 8 gdb -q -batch -ex 'set pagination off' \
+                    -ex 'thread apply all bt 12' -p "$child" || true
+            done
+        fi
+    ) > "$output/$log-stacks.txt" 2>&1 &
+    local monitor=$! result=0
+    wait "$runner" || result=$?
+    kill "$monitor" 2>/dev/null || true
+    wait "$monitor" 2>/dev/null || true
+    if [[ -s "$output/$log-stacks.txt" ]]; then cat "$output/$log-stacks.txt"; fi
+    return "$result"
 }
 status=0
 run_case 0 liquid-ci graphics-pam.log || status=1

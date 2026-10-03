@@ -105,11 +105,13 @@ jobs:
   native-graphics-pam:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    container: archlinux:base
+    container:
+      image: archlinux:base
+      options: --cap-add=SYS_PTRACE
     steps:
       - uses: actions/checkout@v4
       - name: Install native graphical and authentication runtime
-        run: pacman -Syu --noconfirm --needed quickshell xorg-server-xvfb mesa qt6-svg qt6-5compat qt6-multimedia ttf-dejavu adwaita-fonts noto-fonts xdotool dbus python shadow util-linux
+        run: pacman -Syu --noconfirm --needed quickshell xorg-server-xvfb mesa qt6-svg qt6-5compat qt6-multimedia ttf-dejavu adwaita-fonts noto-fonts xdotool dbus python shadow util-linux procps-ng gdb
       - name: Run real QML and PAM in disposable container
         env:
           LIQUID_NATIVE_CI: '1'
