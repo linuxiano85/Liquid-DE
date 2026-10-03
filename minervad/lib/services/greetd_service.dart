@@ -102,167 +102,118 @@ class GreetdProtocolError implements Exception {
   String toString() => 'GreetdProtocolError: $messaggio';
 }
 
-/// Il servizio vero: apre il socket, manda le richieste, racconta le risposte.
-///
-/// Non interpreta niente. Le risposte di greetd (`success`, `error`,
-/// `auth_message`) arrivano così come sono a chi ascolta, perché è la shell a
-/// dover decidere cosa mostrare — e perché un servizio che «semplifica» un
-/// protocollo con un numero di giri non prevedibile finisce per inventarsi
-/// degli stati che il protocollo non ha.
+/// Una richiesta sul filo corrisponde a una risposta, anche quando PAM
+/// richiede più giri. Il chiamante deve rispondere a ogni auth_message.
+/// I messaggi e i guasti non contengono mai il payload inviato.
 class GreetdService {
+  GreetdService({this.responseTimeout = const Duration(seconds: 45)});
+  final Duration responseTimeout;
   Socket? _socket;
-  final GreetdFramer _framer = GreetdFramer();
-  final StreamController<Map<String, dynamic>> _risposte =
-      StreamController<Map<String, dynamic>>.broadcast();
+  Completer<Map<String, dynamic>>? _pending;
+  int _generation = 0;
+  bool _closed = false;
+  void Function()? onDisconnect;
 
-  /// Le risposte di greetd, una per messaggio completo.
-  Stream<Map<String, dynamic>> get risposte => _risposte.stream;
-
-  /// Dove sta il socket. `null` se non siamo dentro un greeter: è così che si
-  /// sa che questo demone non ha nessuno con cui parlare, e va detto invece di
-  /// provare a connettersi a un percorso vuoto.
   static String? get percorsoSocket {
     final p = Platform.environment['GREETD_SOCK'];
-    return (p == null || p.isEmpty) ? null : p;
+    return p == null || p.isEmpty ? null : p;
   }
-
-  /// Il percorso che questo servizio userà davvero.
-  ///
-  /// Esiste separato da `percorsoSocket` per una ragione sola: l'ambiente di
-  /// un processo Dart è di sola lettura, quindi una prova non può fingere di
-  /// essere dentro un greeter impostando `GREETD_SOCK`. Ridefinendo QUESTO si
-  /// prova tutto il resto — inquadramento, letture a pezzi, guasti — sul
-  /// codice vero, cambiando solo da dove arriva il percorso.
   String? get socketDaUsare => percorsoSocket;
-
   bool get connesso => _socket != null;
 
-  /// Se abbiamo già detto che questo processo non è un greeter.
-  ///
-  /// ── Perché una volta sola ─────────────────────────────────────────────
-  ///
-  /// Perché non è un guasto: è una condizione **strutturale e permanente**.
-  /// Il demone della sessione non sarà mai un greeter, e ogni volta che
-  /// qualcuno gli chiede di parlare con greetd escono tre righe di registro —
-  /// l'avviso, l'errore, e l'errore rimandato al client.
-  ///
-  /// Nel registro di una sessione vera del 1º settembre 2026 quelle tre righe
-  /// comparivano **settantacinque volte**: duecentoventicinque righe che
-  /// dicono la stessa cosa. Il costo non è lo spazio — è che un registro fatto
-  /// per il 90% di rumore non lo legge più nessuno, e gli errori veri ci
-  /// affogano dentro. Questo progetto quel prezzo l'ha già pagato: vedi gli
-  /// errori buttati in `/dev/null`.
-  ///
-  /// Il client la risposta continua a riceverla: quello che si toglie è la
-  /// ripetizione sul registro, non l'informazione.
-  bool _dettoCheNonSiamoUnGreeter = false;
+  static Map<String, dynamic> failure(String text) => {
+    'type': 'error', 'error_type': 'error', 'description': text,
+    'transport_error': true,
+  };
 
-  /// Si connette, se non lo è già. Restituisce false se non c'è greetd.
-  Future<bool> connetti() async {
-    if (_socket != null) return true;
-
-    final percorso = socketDaUsare;
-    if (percorso == null) {
-      if (!_dettoCheNonSiamoUnGreeter) {
-        _dettoCheNonSiamoUnGreeter = true;
-        print('[MINERVA][GREETD][WARN] GREETD_SOCK non è impostata: '
-            'questo processo non è un greeter. Le richieste di accesso '
-            'riceveranno un errore, e questa riga non si ripete.');
-      }
-      return false;
-    }
-
+  Future<Map<String, dynamic>> request(Map<String, dynamic> message) async {
+    if (_closed) return failure('Canale greetd chiuso');
+    if (_pending != null) throw StateError('Richiesta greetd già in corso');
+    final pending = Completer<Map<String, dynamic>>();
+    _pending = pending;
+    final generation = _generation;
+    final timer = Timer(responseTimeout, () => _fail('Tempo di risposta greetd scaduto'));
+    // _send gestisce anche connect/flush falliti; nessun Future dimenticato.
+    unawaited(_send(message, pending, generation));
     try {
-      final s = await Socket.connect(
-          InternetAddress(percorso, type: InternetAddressType.unix), 0);
-      _socket = s;
-      s.listen(
-        _arrivati,
-        onError: (e) => _guasto('Errore di lettura: $e'),
-        onDone: () => _guasto('greetd ha chiuso la connessione'),
-        cancelOnError: true,
-      );
-      print('[MINERVA][GREETD][OK] Connesso a $percorso');
-      return true;
-    } catch (e) {
-      print('[MINERVA][GREETD][ERRORE] Non riesco a connettermi a $percorso: $e');
-      return false;
+      return await pending.future;
+    } finally {
+      timer.cancel();
     }
   }
 
-  void _arrivati(List<int> pezzo) {
+  Future<void> _send(Map<String, dynamic> message,
+      Completer<Map<String, dynamic>> pending, int generation) async {
     try {
-      for (final m in _framer.aggiungi(pezzo)) {
-        _risposte.add(m);
+      var socket = _socket;
+      if (socket == null) {
+        final path = socketDaUsare;
+        if (path == null) {
+          _fail('Nessuna connessione a greetd');
+          return;
+        }
+        socket = await Socket.connect(
+          InternetAddress(path, type: InternetAddressType.unix), 0,
+          timeout: const Duration(seconds: 5));
+        if (_closed || generation != _generation || !identical(_pending, pending)) {
+          socket.destroy();
+          return;
+        }
+        _socket = socket;
+        // Il buffer appartiene al socket: i byte parziali muoiono con esso.
+        final framer = GreetdFramer();
+        final current = socket;
+        socket.listen((bytes) {
+          if (!identical(_socket, current)) return;
+          try {
+            final messages = framer.aggiungi(bytes);
+            if (messages.isEmpty) return;
+            if (messages.length != 1 || _pending == null || framer.inAttesa != 0) {
+              _fail('Risposta greetd inattesa');
+              return;
+            }
+            final reply = messages.single;
+            if (!['success', 'error', 'auth_message'].contains(reply['type'])) {
+              _fail('Tipo di risposta greetd non valido');
+              return;
+            }
+            final waiting = _pending!;
+            _pending = null;
+            waiting.complete(reply);
+          } catch (_) {
+            _fail('Risposta greetd illeggibile');
+          }
+        }, onError: (_) {
+          if (identical(_socket, current)) _fail('Errore di lettura greetd');
+        }, onDone: () {
+          if (identical(_socket, current)) _fail('greetd ha chiuso la connessione');
+        }, cancelOnError: true);
       }
-    } on GreetdProtocolError catch (e) {
-      _guasto(e.messaggio);
-    } catch (e) {
-      _guasto('Messaggio illeggibile: $e');
+      if (_closed || generation != _generation || !identical(_pending, pending)) return;
+      socket.add(GreetdFramer.encode(message));
+      await socket.flush();
+    } catch (_) {
+      if (generation == _generation && identical(_pending, pending)) {
+        _fail('Impossibile comunicare con greetd');
+      }
     }
   }
 
-  /// Un guasto del canale si racconta con la STESSA forma di un errore di
-  /// greetd. Chi ascolta ha già il codice per mostrarlo, e soprattutto non
-  /// resta ad aspettare per sempre una risposta che non arriverà: davanti a
-  /// una schermata di accesso, «non succede niente» è il peggiore dei modi di
-  /// fallire.
-  void _guasto(String descrizione, {bool zitto = false}) {
-    if (!zitto) print('[MINERVA][GREETD][ERRORE] $descrizione');
-    _risposte.add({
-      'type': 'error',
-      'error_type': 'error',
-      'description': descrizione,
-    });
-    _socket?.destroy();
+  void _fail(String description) {
+    _generation++;
+    final socket = _socket;
     _socket = null;
+    socket?.destroy();
+    final waiting = _pending;
+    _pending = null;
+    if (waiting != null && !waiting.isCompleted) waiting.complete(failure(description));
+    onDisconnect?.call();
   }
-
-  Future<void> _manda(Map<String, dynamic> messaggio) async {
-    if (!await connetti()) {
-      // `zitto` quando siamo fuori da un greeter: la ragione sta su
-      // `_dettoCheNonSiamoUnGreeter`. Il client riceve la risposta lo stesso.
-      _guasto('Nessuna connessione a greetd',
-          zitto: socketDaUsare == null);
-      return;
-    }
-    _socket!.add(GreetdFramer.encode(messaggio));
-    await _socket!.flush();
-  }
-
-  /// Comincia il tentativo di accesso per un utente.
-  Future<void> creaSessione(String utente) =>
-      _manda({'type': 'create_session', 'username': utente});
-
-  /// Risponde a una domanda di PAM. `null` per i messaggi che non chiedono
-  /// niente (`info`, `error`): la pagina di manuale dice che vanno comunque
-  /// confermati, ma senza risposta.
-  /// Il `?` davanti a `risposta` toglie la voce quando è nulla, invece di
-  /// metterla vuota: sono due cose diverse per PAM, e una stringa vuota può
-  /// essere presa per una password sbagliata.
-  Future<void> rispondi(String? risposta) => _manda({
-        'type': 'post_auth_message_response',
-        'response': ?risposta,
-      });
-
-  /// Chiede di aprire la sessione.
-  ///
-  /// ATTENZIONE, ed è la cosa meno ovvia di tutto il protocollo: la sessione
-  /// parte **quando il greeter finisce**. Dopo un `success` a questa richiesta
-  /// il nostro processo deve chiudersi, altrimenti si resta a guardare una
-  /// schermata di accesso che ha già accettato la password.
-  Future<void> avviaSessione(List<String> comando, List<String> ambiente) =>
-      _manda({'type': 'start_session', 'cmd': comando, 'env': ambiente});
-
-  /// Annulla il tentativo in corso. Va mandato anche quando si torna indietro
-  /// a scegliere un altro utente: greetd tiene UNA sessione in configurazione,
-  /// e cominciarne un'altra senza chiudere la prima è un errore.
-  Future<void> annulla() => _manda({'type': 'cancel_session'});
 
   Future<void> chiudi() async {
-    await _socket?.close();
-    _socket?.destroy();
-    _socket = null;
-    await _risposte.close();
+    if (_closed) return;
+    _closed = true;
+    onDisconnect = null;
+    _fail('Canale greetd chiuso');
   }
 }

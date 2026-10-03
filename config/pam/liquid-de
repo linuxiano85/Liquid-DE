@@ -1,13 +1,13 @@
 # Minerva — blocco schermo.
 #
 # Lo installa `scripts/install-minerva.sh` in /etc/pam.d/liquid-de.
-# Lo usa `minerva-shell/blocco/Blocco.qml` attraverso `PamContext`.
+# Lo usa `minerva-shell/blocco/Blocco.qml` attraverso il helper non privilegiato `minerva-pam`.
 #
 # ── Solo righe «auth» (e una «account» per scaramanzia) ────────────────────
 #
-# Il `PamContext` di Quickshell chiama `pam_authenticate` e nient'altro:
-# verificato con `nm -D /usr/bin/quickshell`, che elenca pam_authenticate,
-# pam_end, pam_start_confdir e pam_strerror. Nessun `pam_acct_mgmt`.
+# Il helper `minerva-pam` chiama `pam_authenticate` e nient'altro.
+# La policy conserva il comportamento precedente di PamContext:
+# Nessun `pam_acct_mgmt`: la gestione account resta una verifica separata.
 #
 # ── nodelay, su TUTTI E DUE i moduli ──────────────────────────────────────
 #
@@ -90,7 +90,7 @@ auth      [success=1 default=bad]  pam_unix.so      try_first_pass nodelay
 auth      [default=die]            pam_faillock.so  authfail deny=25 unlock_time=120 nodelay
 auth      required                 pam_faillock.so  authsucc deny=25 unlock_time=120 nodelay
 
-# Inerte oggi (Quickshell non chiede `pam_acct_mgmt`) e costa zero. Se un
+# Inerte oggi (il helper non chiede `pam_acct_mgmt`). Se un
 # domani lo chiedesse, senza questa riga verrebbe rifiutata la password
 # GIUSTA, a schermo bloccato.
 account   required                 pam_unix.so

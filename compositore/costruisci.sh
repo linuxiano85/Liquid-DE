@@ -65,7 +65,7 @@ esac
 meson compile -C "$BUILD"
 meson test -C "$BUILD" --print-errorlogs
 
-for nome in minerva-wayland minerva-cattura minerva-pty; do
+for nome in minerva-wayland minerva-cattura minerva-pty minerva-pam; do
     [ -x "$BUILD/$nome" ] || { echo "Manca $nome nella build" >&2; exit 1; }
     LIBRERIE=$(ldd "$BUILD/$nome")
     if printf '%s\n' "$LIBRERIE" | grep -Eq 'not found|lib(wlroots|scenefx)'; then
@@ -86,10 +86,10 @@ done
 mkdir -p "$DOVE"
 STAGING=$(mktemp -d "$DOVE/.minerva-install.XXXXXX")
 trap 'rm -rf -- "$STAGING"' EXIT HUP INT TERM
-for nome in minerva-wayland minerva-cattura minerva-pty; do
+for nome in minerva-wayland minerva-cattura minerva-pty minerva-pam; do
     install -m755 "$BUILD/$nome" "$STAGING/$nome"
 done
-for nome in minerva-wayland minerva-cattura minerva-pty; do
+for nome in minerva-wayland minerva-cattura minerva-pty minerva-pam; do
     if [ -f "$DOVE/$nome" ]; then
         cp "$DOVE/$nome" "$STAGING/$nome.precedente"
         mv -f "$STAGING/$nome.precedente" "$DOVE/$nome.precedente"

@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Io
 import "../../theme" as Theme
 import "../../core" as Core
 import "../../ui" as Ui
@@ -42,11 +43,16 @@ Page {
         id: query
         onDone: function(out) {
             page.scanning = false;
+            page.wired = "";
             var nets = [];
-            var seen = {};
+            var seen = Object.create(null);
             var lines = out.split("\n");
             for (var i = 0; i < lines.length; i++) {
                 var p = lines[i].split("\t");
+                if (lines[i].indexOf("NET\t") === 0)
+                    p = ["NET"].concat(page.campiNmcli(lines[i].substring(4)));
+                else if (lines[i].indexOf("WIRED\t") === 0)
+                    p = ["WIRED"].concat(page.campiNmcli(lines[i].substring(6)));
                 if (p.length < 2)
                     continue;
                 if (p[0] === "WIFI") {
@@ -59,7 +65,8 @@ Page {
                     continue;
                 }
                 if (p[0] === "WIRED") {
-                    page.wired = p[1] || "";
+                    if (p[1] === "ethernet" && p[2] === "connected")
+                        page.wired = p[3] || "";
                     continue;
                 }
                 if (p[0] !== "NET" || !p[1])
@@ -82,7 +89,7 @@ Page {
                 // Adesso le righe si FONDONO: il segnale migliore di tutte, e
                 // «connesso» se lo dice almeno una.
                 var ssid = p[1];
-                var attiva = p[4] === "yes";
+                var attiva = p[4] === "*";
                 var forza = parseInt(p[2] || "0");
                 if (seen[ssid] !== undefined) {
                     var g = nets[seen[ssid]];
@@ -106,6 +113,27 @@ Page {
         }
     }
 
+    // Il formato terse di nmcli usa : come separatore e \ come escape.
+    // Si decodifica prima di interpretare i campi: un SSID può contenerli.
+    function campiNmcli(riga) {
+        var campi = [];
+        var campo = "";
+        for (var i = 0; i < riga.length; i++) {
+            var c = riga.charAt(i);
+            if (c === "\\" && i + 1 < riga.length
+                    && (riga.charAt(i + 1) === ":" || riga.charAt(i + 1) === "\\")) {
+                campo += riga.charAt(++i);
+            } else if (c === ":") {
+                campi.push(campo);
+                campo = "";
+            } else {
+                campo += c;
+            }
+        }
+        campi.push(campo);
+        return campi;
+    }
+
     /// `soloLettura`: legge l'elenco che NetworkManager ha già, senza fargli
     /// rifare la scansione. `nmcli device wifi list` di suo riscansiona se
     /// l'ultima ha più di trenta secondi, e il giro ogni quindici secondi
@@ -121,11 +149,11 @@ Page {
         query.sh(
             "export LC_ALL=C; " +
             "printf 'WIFI\\t%s\\n' \"$(nmcli radio wifi 2>/dev/null)\"; " +
-            "printf 'WIRED\\t%s\\n' \"$(nmcli -t -f TYPE,STATE,CONNECTION device status 2>/dev/null " +
-            "| awk -F: '$1==\"ethernet\" && $2==\"connected\" {print $3}')\"; " +
+            "nmcli -t -f TYPE,STATE,CONNECTION device status 2>/dev/null " +
+            "| sed 's/^/WIRED\\t/'; " +
             "nmcli -t -f SSID,SIGNAL,SECURITY,IN-USE device wifi list" +
             (soloLettura ? " --rescan no" : "") + " 2>/dev/null " +
-            "| awk -F: 'NF>=3 {print \"NET\\t\" $1 \"\\t\" $2 \"\\t\" $3 \"\\t\" ($4==\"*\" ? \"yes\" : \"\")}'");
+            "| sed 's/^/NET\\t/'");
     }
 
     function rescan() {
@@ -167,67 +195,206 @@ Page {
     /// protetta: se fallisce perché la password manca, la si chiede allora.
     property bool _provaSenzaPassword: false
 
-    Core.Exec {
+    // Il segreto non passa per Core.Exec: niente argv, lastCommand o coda.
+    property string _wifiSecret: ""
+    property string _wifiPrompt: ""
+    property string _wifiFailure: ""
+    property int _wifiEpoch: 0
+
+    function wifiOutput(data) {
+        if (page.collegando === "" || page._wifiSecret === "") return;
+        // nmcli 1.46 chiede Password:; le versioni recenti usano il proprio
+        // SecretAgent con l'identificatore della proprietà. Non rispondere
+        // a prompt per identità, certificati o altre credenziali.
+        page._wifiPrompt = (page._wifiPrompt + String(data)).slice(-2048);
+        if (!/(^|[\r\n])(?:Password: |[^\r\n]*\(802-11-wireless-security\.(?:psk|wep-key[0-3])\): )[\*\u2022]*$/.test(page._wifiPrompt)) return;
+        // Cancella l'eventuale valore precompilato da readline.
+        connector.write("\u0015" + page._wifiSecret + "\n");
+        page._wifiSecret = "";
+        page._wifiPrompt = "";
+        connector.stdinEnabled = false;
+    }
+
+    function wifiError(data) {
+        // Conservare solo una categoria, mai l'uscita completa del processo.
+        var t = String(data);
+        if (page.mancaLaPassword(t)) page._wifiFailure = "secrets";
+        else if (/no network with ssid/i.test(t)) page._wifiFailure = "missing";
+        else if (/timeout|timed out/i.test(t)) page._wifiFailure = "timeout";
+    }
+
+    function completeWifi(code, epoch) {
+        if (page.collegando === "" || epoch !== page._wifiEpoch) return;
+        wifiDeadline.stop();
+        wifiFailedStart.stop();
+        var ssid = page.collegando;
+        var senza = page._provaSenzaPassword;
+        var failure = page._wifiFailure;
+        page._wifiSecret = "";
+        page._wifiPrompt = "";
+        page._wifiFailure = "";
+        connector.stdinEnabled = false;
+        page.collegando = "";
+        page._provaSenzaPassword = false;
+        page.refresh(true);
+        if (code === 0) return;
+        if (senza && failure === "secrets" && page.wifiOn) {
+            connectDialog.open(ssid);
+            return;
+        }
+        page.error = failure === "secrets"
+            ? (page.it ? "La password non è stata accettata." : "The password was not accepted.")
+            : failure === "missing"
+            ? (page.it ? "La rete non si vede più." : "The network is no longer visible.")
+            : failure === "timeout"
+            ? (page.it ? "La rete non ha risposto in tempo." : "The network did not answer in time.")
+            : failure === "lookup"
+            ? (page.it ? "Impossibile leggere i profili di rete." : "Cannot read network profiles.")
+            : failure === "start"
+            ? (page.it ? "Impossibile avviare nmcli." : "Cannot start nmcli.")
+            : (page.it ? "Connessione non riuscita." : "Connection failed.");
+    }
+
+    function stopWifi() {
+        page._wifiEpoch++;
+        // Interrompe il client locale. Non promette di annullare una
+        // attivazione già consegnata a NetworkManager.
+        wifiDeadline.stop();
+        wifiFailedStart.stop();
+        page._wifiSecret = "";
+        page._wifiPrompt = "";
+        page._wifiFailure = "";
+        page.collegando = "";
+        page._provaSenzaPassword = false;
+        connector.stdinEnabled = false;
+        if (connector.running) connector.signal(9);
+        connectDialog.cancel();
+    }
+
+    Process {
         id: connector
-        // `nmcli --wait 45` più il tempo di partire: il tetto di serie
-        // (30 s) lo avrebbe ucciso a metà di un collegamento lento.
-        timeoutMs: 60000
-        onCompleted: function(codice, uscita, errore) {
-            var ssid = page.collegando;
-            var senza = page._provaSenzaPassword;
-            page.collegando = "";
-            page._provaSenzaPassword = false;
-            page.refresh(true);
-            if (codice === 0)
-                return;
-            var testo = uscita + "\n" + errore;
-            if (senza && page.mancaLaPassword(testo)) {
-                connectDialog.open(ssid);
-                return;
-            }
-            page.error = page.spiegaErrore(testo);
+        property int epoch: -1
+        stdout: SplitParser {
+            splitMarker: ""
+            onRead: function(data) { page.wifiOutput(data); }
+        }
+        stderr: SplitParser {
+            onRead: function(data) { page.wifiError(data); }
+        }
+        onStarted: wifiFailedStart.stop()
+        onExited: function(code) {
+            var epoch = connector.epoch;
+            Qt.callLater(function() { page.completeWifi(code, epoch); });
         }
     }
+
+    Timer {
+        id: wifiFailedStart
+        interval: 25
+        onTriggered: {
+            if (page.collegando !== "" && !connector.running) {
+                page._wifiFailure = "start";
+                page.completeWifi(-1, page._wifiEpoch);
+            }
+        }
+    }
+    Timer {
+        id: wifiDeadline
+        interval: 60000
+        onTriggered: {
+            page._wifiFailure = "timeout";
+            page._wifiSecret = "";
+            page._wifiPrompt = "";
+            connector.stdinEnabled = false;
+            if (connector.running) connector.signal(9);
+            else page.completeWifi(-1, page._wifiEpoch);
+        }
+    }
+    onWifiOnChanged: if (!page.wifiOn) page.stopWifi()
+    Component.onDestruction: page.stopWifi()
 
     function mancaLaPassword(testo) {
         return /secrets were required|no secrets|password/i.test(testo);
     }
 
-    /// L'errore di nmcli in parole che servono a decidere cosa fare.
-    function spiegaErrore(testo) {
-        var t = String(testo || "");
-        if (page.mancaLaPassword(t))
-            return page.it ? "La password non è giusta." : "The password is not right.";
-        if (/no network with ssid/i.test(t))
-            return page.it ? "La rete non si vede più: forse è troppo lontana."
-                           : "The network is no longer visible: it may be too far.";
-        if (/timeout|timed out/i.test(t))
-            return page.it ? "La rete non ha risposto in tempo." : "The network did not answer in time.";
-        var righe = t.split("\n").filter(function(r) { return r.trim() !== ""; });
-        var ultima = righe.length ? righe[righe.length - 1].replace(/^Error:\s*/, "") : "";
-        return (page.it ? "Non si è collegato" : "Could not connect")
-               + (ultima !== "" ? ": " + ultima : ".");
+    // Il profilo salvato si attiva per UUID: connection up crea il
+    // SecretAgent anche nelle versioni in cui wifi connect non lo fa.
+    Core.Exec {
+        id: wifiLookup
+        property int epoch: -1
+        timeoutMs: 15000
+        onCompleted: function(code, out, err) {
+            page.profileLookedUp(code, out, wifiLookup.epoch);
+        }
     }
 
-    /// Senza shell: l'SSID lo sceglie chi ha messo su la rete, e non va mai
-    /// dentro una riga di `sh` (la regola è scritta in `core/Exec.qml`).
-    /// `env LC_ALL=C` perché gli errori vanno riconosciuti in inglese: in
-    /// italiano nmcli li traduce, e `mancaLaPassword` non li troverebbe.
+    function profileLookedUp(code, out, epoch) {
+        if (epoch !== page._wifiEpoch || page.collegando === "") return;
+        var uuid = String(out).trim();
+        if (code !== 0 || (uuid !== "" && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(uuid))) {
+            page._wifiFailure = "lookup";
+            page.completeWifi(-1, epoch);
+            return;
+        }
+        page.startWifiCommand(uuid);
+    }
+
+    function startWifiCommand(uuid) {
+        var argv = ["env", "LC_ALL=C", "nmcli", "--colors", "no", "--wait", "45"];
+        if (page._wifiSecret !== "") argv.push("--ask");
+        argv = argv.concat(uuid !== "" ? ["connection", "up", "uuid", uuid]
+                                      : ["device", "wifi", "connect", page.collegando]);
+        connector.stdinEnabled = page._wifiSecret !== "";
+        connector.epoch = page._wifiEpoch;
+        connector.command = argv;
+        connector.running = true;
+        wifiFailedStart.restart();
+    }
+
+    // Ricerca senza segreti: i valori esterni sono argomenti, mai codice.
+    // --escape no conserva due punti, backslash e spazi del vero SSID.
+    function wifiProfileCommand(ssid) {
+        return ["env", "LC_ALL=C", "sh", "-c",
+            'list=$(timeout -k 1 5 nmcli -t -f UUID,TYPE connection show) || exit 1; '
+            + 'printf "%s\\n" "$list" | while IFS=: read -r uuid type; do '
+            + 'case "$type" in wifi|802-11-wireless) ;; *) continue;; esac; '
+            + 'name=$(timeout -k 1 5 nmcli --escape no -g 802-11-wireless.ssid connection show uuid "$uuid") || exit 1; '
+            + 'if [ "$name" = "$1" ]; then printf "%s\\n" "$uuid"; exit 0; fi; done',
+            "sh", ssid];
+    }
+
     function connect(ssid, password, protetta) {
+        if (page.collegando !== "" || connector.running || wifiLookup.busy || !page.wifiOn) return false;
+        if (typeof ssid !== "string" || ssid === "" || /[\u0000\r\n]/.test(ssid)) return false;
+        var secret = password === undefined ? "" : String(password);
+        // Readline interpreta i tasti di controllo; una sola risposta.
+        if (/[\u0000-\u001f\u007f]/.test(secret) || secret.length > 1024) {
+            page.error = page.it ? "La password contiene caratteri non supportati."
+                                 : "The password contains unsupported characters.";
+            return false;
+        }
         page.error = "";
         page.collegando = ssid;
-        page._provaSenzaPassword = (!password || password === "") && protetta === true;
-        var argv = ["env", "LC_ALL=C", "nmcli", "--wait", "45",
-                    "device", "wifi", "connect", ssid];
-        if (password && password !== "")
-            argv = argv.concat(["password", password]);
-        connector.start(argv);
+        page._provaSenzaPassword = secret === "" && protetta === true;
+        page._wifiSecret = secret;
+        page._wifiPrompt = "";
+        page._wifiFailure = "";
+        page._wifiEpoch++;
+        wifiDeadline.restart();
+        if (secret !== "") {
+            wifiLookup.epoch = page._wifiEpoch;
+            wifiLookup.start(page.wifiProfileCommand(ssid));
+        } else {
+            page.startWifiCommand("");
+        }
+        return true;
     }
 
     /// Si stacca la SCHEDA, non la connessione per nome: il nome della
     /// connessione non è per forza l'SSID («Casa 1», dopo un secondo
     /// collegamento), e `connection down <ssid>` falliva in silenzio.
     function disconnect() {
+        page.stopWifi();
         page.error = "";
         action.fireSh(
             "d=$(nmcli -t -f DEVICE,TYPE device status 2>/dev/null " +
@@ -246,6 +413,7 @@ Page {
     // sistema da sé non ha modo di avvisare le altre, perché non sa che
     // esistono. Il demone sì.
     function setWifi(on) {
+        if (!on) page.stopWifi();
         Core.SystemState.setWifi(on);
         rescanTimer.restart();
     }
@@ -270,6 +438,7 @@ Page {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: page.wired
+                textFormat: Text.PlainText
                 color: Theme.Colors.text
                 font.family: Theme.Typography.fontDisplay
                 font.weight: Theme.Typography.weightRegular
@@ -361,6 +530,7 @@ Page {
             visible: page.error !== ""
             wrapMode: Text.WordWrap
             text: page.error
+            textFormat: Text.PlainText
             color: Theme.Colors.danger
             font.family: Theme.Typography.fontDisplay
             font.weight: Theme.Typography.weightRegular
@@ -409,6 +579,7 @@ Page {
 
                 Text {
                     id: netName
+                    textFormat: Text.PlainText
                     anchors.left: bars.right
                     anchors.leftMargin: Theme.Effects.space3
                     anchors.right: netLock.left
@@ -514,14 +685,25 @@ Page {
             passwordInput.forceActiveFocus();
         }
 
-        function submit() {
+        function cancel() {
+            passwordInput.text = "";
+            connectDialog.ssid = "";
             connectDialog.visible = false;
-            page.connect(connectDialog.ssid, passwordInput.text);
         }
+
+        function submit() {
+            if (!connectDialog.visible) return;
+            var secret = passwordInput.text;
+            var target = connectDialog.ssid;
+            connectDialog.cancel();
+            page.connect(target, secret, true);
+        }
+
+        onVisibleChanged: if (!visible) passwordInput.text = "";
 
         MouseArea {
             anchors.fill: parent
-            onClicked: connectDialog.visible = false
+            onClicked: connectDialog.cancel()
         }
 
         Rectangle {
@@ -543,6 +725,7 @@ Page {
                 anchors.margins: Theme.Effects.space4
                 elide: Text.ElideRight
                 text: connectDialog.ssid
+                textFormat: Text.PlainText
                 color: Theme.Colors.text
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeMD
@@ -586,7 +769,7 @@ Page {
                     anchors.rightMargin: Theme.Effects.space3
                     verticalAlignment: TextInput.AlignVCenter
                     clip: true
-                    echoMode: revealMouse.containsMouse ? TextInput.Normal
+                    echoMode: revealMouse.pressed ? TextInput.Normal
                                                         : TextInput.Password
                     color: Theme.Colors.text
                     selectionColor: Qt.alpha(Theme.Colors.accent, 0.4)
@@ -595,7 +778,7 @@ Page {
                     font.pixelSize: Theme.Typography.sizeMD
 
                     onAccepted: connectDialog.submit()
-                    Keys.onEscapePressed: connectDialog.visible = false
+                    Keys.onEscapePressed: connectDialog.cancel()
                 }
 
                 // Occhio per rivelare: tenerlo premuto mostra la password.
@@ -606,7 +789,7 @@ Page {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 16; height: 16
                     name: "search"
-                    color: revealMouse.containsMouse ? Theme.Colors.accent
+                    color: revealMouse.pressed ? Theme.Colors.accent
                                                      : Theme.Colors.textFaint
 
                     MouseArea {
@@ -665,7 +848,7 @@ Page {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 if (dlgBtn.modelData.id === "cancel")
-                                    connectDialog.visible = false;
+                                    connectDialog.cancel();
                                 else
                                     connectDialog.submit();
                             }

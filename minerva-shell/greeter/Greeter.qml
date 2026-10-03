@@ -208,6 +208,22 @@ Item {
     // `annullando` è vero, la prossima risposta È quella dell'annullamento,
     // qualunque parola porti, e non vuol dire niente altro.
     property bool annullando: false
+    property bool canalePerso: false
+
+    function perdiCanale() {
+        riprova.stop();
+        campo.text = "";
+        greeter.domanda = "";
+        greeter.inCorso = false;
+        greeter.avviato = false;
+        greeter.annullando = false;
+        greeter.canalePerso = true;
+        greeter.erroriDiFila = greeter.erroriMax + 1;
+        greeter.avvisoGrave = true;
+        greeter.avviso = greeter.it
+            ? "Collegamento alla login interrotto. Premi Invio per riprovare."
+            : "Login connection interrupted. Press Enter to try again.";
+    }
 
     /// Vero quando la schermata ha smesso di ritentare per conto suo.
     readonly property bool arreso: greeter.erroriDiFila > greeter.erroriMax
@@ -227,6 +243,10 @@ Item {
     // ── Il giro ──────────────────────────────────────────────────────────
 
     function comincia() {
+        if (greeter.canalePerso) {
+            greeter.perdiCanale();
+            return;
+        }
         if (!greeter.utente)
             return;
         greeter.domanda = "";
@@ -243,12 +263,14 @@ Item {
             campo.forceActiveFocus();
             return;
         }
-        Core.Ipc.greeterCreateSession(greeter.utente.nome);
+        if (!Core.Ipc.greeterCreateSession(greeter.utente.nome))
+            greeter.perdiCanale();
     }
 
     function rispondi(testo) {
         if (greeter.inCorso || greeter.domanda === "")
             return;
+        campo.text = "";
         greeter.inCorso = true;
         greeter.avviso = "";
         if (greeter.finto) {
@@ -259,7 +281,8 @@ Item {
             greeter.avvisoGrave = false;
             return;
         }
-        Core.Ipc.greeterRespond(testo);
+        if (!Core.Ipc.greeterRespond(testo))
+            greeter.perdiCanale();
     }
 
     /// Torna indietro pulito. Va fatto anche solo cambiando utente: greetd
@@ -394,8 +417,9 @@ Item {
         // quello che aggiungiamo può diventare un motivo per non entrare.**
         // Un registro in più vale molto meno di un computer che si apre.
         greeter.ricorda(greeter.sessione, greeter.utente);
-        Core.Ipc.greeterStart(greeter.comandoDiAvvio(greeter.sessione),
-                              greeter.ambienteSessione(greeter.sessione));
+        if (!Core.Ipc.greeterStart(greeter.comandoDiAvvio(greeter.sessione),
+                                  greeter.ambienteSessione(greeter.sessione)))
+            greeter.perdiCanale();
     }
 
     /// Quale voce risulta già scelta quando la schermata si apre.
@@ -478,6 +502,11 @@ Item {
     Connections {
         target: Core.Ipc
 
+        function onConnectedChanged() {
+            if (!Core.Ipc.connected && greeter.informato && !greeter.finto)
+                greeter.perdiCanale();
+        }
+
         function onGreeterInfoReceived(info) {
             greeter.informato = true;
             greeter.utenti = info.utenti || [];
@@ -497,15 +526,21 @@ Item {
                 }
             }
 
-            greeter.comincia();
+            if (!greeter.canalePerso) greeter.comincia();
         }
 
         function onGreeterMessage(m) {
+            if (greeter.canalePerso) return;
+            if (m.transport_error === true || m.request_rejected === true) {
+                greeter.perdiCanale();
+                return;
+            }
             // Prima di tutto il resto: se stavamo annullando, questa è la
             // risposta all'annullamento. Non è un accesso riuscito, non è un
             // errore da mostrare, non è niente — è solo il permesso di
             // ricominciare.
             if (greeter.annullando) {
+                if (m.request_action !== "greeter_cancel") return;
                 greeter.annullando = false;
                 greeter.comincia();
                 return;
@@ -529,8 +564,9 @@ Item {
                     // sarebbe una risposta, e PAM può prenderla per sbagliata.
                     greeter.avviso = (m.auth_message || "").trim();
                     greeter.avvisoGrave = tipo === "error";
-                    Core.Ipc.greeterRespond(undefined);
                     greeter.inCorso = true;
+                    if (!Core.Ipc.greeterRespond(undefined))
+                        greeter.perdiCanale();
                 }
                 break;
 
@@ -607,6 +643,10 @@ Item {
 
     /// Chiude la sessione rimasta aperta e poi ne comincia una nuova.
     function annullaERicomincia() {
+        if (greeter.avviato) return;
+        riprova.stop();
+        campo.text = "";
+        greeter.domanda = "";
         if (!greeter.utente)
             return;
         if (greeter.finto) {
@@ -616,9 +656,15 @@ Item {
         // `inCorso` resta vero: fra l'annullamento e la domanda nuova non c'è
         // niente da scrivere, e un campo acceso in cui la risposta finirebbe
         // nel vuoto è peggio di un campo spento.
+        if (!Core.Ipc.connected) {
+            greeter.perdiCanale();
+            return;
+        }
+        greeter.canalePerso = false;
         greeter.inCorso = true;
         greeter.annullando = true;
-        Core.Ipc.greeterCancel();
+        if (!Core.Ipc.greeterCancel())
+            greeter.perdiCanale();
     }
 
     Component.onCompleted: Core.Ipc.greeterInfo()
@@ -1151,9 +1197,9 @@ Item {
                         onClicked: {
                             if (index === greeter.utenteScelto)
                                 return;
-                            greeter.annulla();
+                            if (greeter.avviato) return;
                             greeter.utenteScelto = index;
-                            greeter.comincia();
+                            greeter.annullaERicomincia();
                         }
                     }
                 }

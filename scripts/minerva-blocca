@@ -13,10 +13,9 @@
 #
 # Quindi:
 #
-#  1. **Deve esistere un file PAM.** `/etc/pam.d/liquid-de`, e se non c'è si
-#     usa quello di hyprlock, che su Arch c'è sempre. Se non c'è nemmeno
-#     quello NON si blocca, e lo si dice: meglio uno schermo non bloccato di
-#     uno bloccato per sempre.
+#  1. **Devono esistere servizio PAM e helper.** L'installatore fornisce
+#     `/etc/pam.d/liquid-de` e `/usr/local/bin/minerva-pam`; senza questi
+#     prerequisiti NON si blocca, e si segnala l'installazione incompleta.
 #  2. **Uno solo alla volta.** `--no-duplicate` di quickshell: un secondo
 #     blocco sopra il primo raddoppierebbe le superfici e nessuna delle due
 #     saprebbe più chi sblocca.
@@ -46,6 +45,13 @@ if [ "${1:-}" = "--quale-pam" ]; then
     exit $?
 fi
 
+if [ ! -x /usr/local/bin/minerva-pam ]; then
+    echo "[MINERVA][BLOCCO] Manca /usr/local/bin/minerva-pam: reinstalla Liquid DE prima di bloccare." >&2
+    "$ROOT/scripts/minerva-compositore" messaggio 8000 \
+        "Liquid DE non può bloccare: manca minerva-pam, reinstalla Liquid DE" >/dev/null 2>&1
+    exit 1
+fi
+
 if ! PAM="$(quale_pam)"; then
     echo "[MINERVA][BLOCCO] Nessun file PAM utilizzabile: NON blocco." >&2
     echo "[MINERVA][BLOCCO] Reinstalla con: scripts/install-minerva.sh" >&2
@@ -54,9 +60,7 @@ if ! PAM="$(quale_pam)"; then
     exit 1
 fi
 
-if [ "$PAM" != minerva ]; then
-    echo "[MINERVA][BLOCCO] /etc/pam.d/liquid-de non c'è: uso «$PAM»." >&2
-fi
+echo "[MINERVA][BLOCCO] Servizio PAM: $PAM." >&2
 export MINERVA_PAM="$PAM"
 
 # ── Con la scheda video, non col processore ─────────────────────────────────

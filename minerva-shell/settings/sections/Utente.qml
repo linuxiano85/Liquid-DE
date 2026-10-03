@@ -431,12 +431,8 @@ Page {
     //
     // Perché `config/polkit/org.liquidde.utente.policy` chiede `auth_self_keep`:
     // la conferma vale qualche minuto, quindi il cambio vero che segue non la
-    // ridomanda. Senza quel file installato — cioè lanciando Minerva dalla
-    // cartella del progetto senza `scripts/install-minerva.sh` — si ricade
-    // sull'azione generica di `pkexec`, che è `auth_admin` e non ricorda
-    // niente: la password viene chiesta due volte, ed è quella di un
-    // amministratore. Funziona, chiede solo di più, e la pagina lo dice invece
-    // di lasciarlo indovinare.
+    // ridomanda. Il programma va installato con la sua policy: la pagina
+    // non esegue come root uno script modificabile nella cartella del progetto.
 
     /// Dove sta il programma che fa il lavoro. Quello installato per primo:
     /// è l'unico percorso che la regola di polkit può nominare.
@@ -445,11 +441,9 @@ Page {
 
     Core.Exec {
         id: doveSta
-        Component.onCompleted: doveSta.shArgs(
+        Component.onCompleted: doveSta.sh(
             '[ -x /usr/local/bin/liquid-de-utente ] '
-            + '&& { printf %s /usr/local/bin/liquid-de-utente; exit 0; }; '
-            + 'printf %s "$1"',
-            [Quickshell.shellDir + "/../scripts/minerva-utente"]);
+            + '&& printf %s /usr/local/bin/liquid-de-utente');
         onDone: function (out) {
             page.comandoUtente = out;
             page.installato = (out === "/usr/local/bin/liquid-de-utente");
@@ -484,8 +478,8 @@ Page {
                     : "You do not type the current one here: the system asks for it in its own dialog, and it never reaches us.";
                 if (!page.installato)
                     t += page.it
-                        ? " Finché Minerva non è installata (scripts/install-minerva.sh) la chiede due volte, e chiede quella di un amministratore."
-                        : " Until Minerva is installed (scripts/install-minerva.sh) it asks twice, and asks for an administrator's one.";
+                        ? " Il servizio per cambiare la password non è installato: completa l'installazione di Liquid DE."
+                        : " The password change service is not installed: complete the Liquid DE installation.";
                 return t;
             }
         }
@@ -518,7 +512,7 @@ Page {
                 id: chiediMouse
                 anchors.fill: parent
                 hoverEnabled: true
-                enabled: page.passoPassword === "chiusa"
+                enabled: page.passoPassword === "chiusa" && page.installato
                 cursorShape: Qt.PointingHandCursor
                 onClicked: page.chiediConferma()
             }
@@ -820,33 +814,62 @@ Page {
     }
 
     function cambiaPassword() {
-        if (!page.passwordPronta || !page.io || page.passoPassword !== "aperta")
+        if (!page.passwordPronta || !page.io || page.passoPassword !== "aperta" || cambio.running)
             return;
+        if (/[\r\n\u0000]/.test(nuova.text)) {
+            page.racconta(page.it ? "La password contiene un carattere non valido."
+                                  : "The password contains an invalid character.", true);
+            return;
+        }
         page.racconta(page.it ? "Sto cambiando la password…"
                               : "Changing the password…");
-        // La password va su STDIN, non fra gli argomenti: la riga di comando
-        // di un processo la può leggere chiunque, in `/proc`. Vedi
-        // `scripts/minerva-utente`.
-        cambio.command = ["sh", "-c",
-            'printf "%s\\n" "$1" | pkexec "$2" password "$3" 2>&1',
-            "sh", nuova.text, page.comandoUtente, page.io.nome];
+        // Nessun wrapper sh con la password in $1: anche gli argv del wrapper
+        // sarebbero leggibili. Il segreto passa direttamente su stdin.
+        page._passwordDaInviare = nuova.text;
+        cambio.stdinEnabled = true;
+        cambio.command = ["pkexec", page.comandoUtente, "password", page.io.nome];
         cambio.running = true;
+    }
+
+    property string _passwordDaInviare: ""
+
+    function completaCambioPassword(code, out, err) {
+        page._passwordDaInviare = "";
+        if (code === 0 && out.trim() === "fatto") {
+            page.racconta(page.it ? "Password cambiata." : "Password changed.");
+            page.chiudiPassword();
+        } else {
+            var t = err.trim() || out.trim();
+            page.racconta(t === ""
+                ? (code === 126 ? (page.it ? "Annullato." : "Cancelled.")
+                                : (page.it ? "Cambio password non riuscito." : "Password change failed."))
+                : t, true);
+        }
     }
 
     Process {
         id: cambio
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var t = text.trim();
-                if (t.indexOf("fatto") !== -1) {
-                    page.racconta(page.it ? "Password cambiata."
-                                          : "Password changed.");
-                    page.chiudiPassword();
-                } else {
-                    page.racconta(t === ""
-                        ? (page.it ? "Annullato." : "Cancelled.") : t, true);
-                }
+        onStarted: {
+            cambio.write(page._passwordDaInviare + "\n");
+            page._passwordDaInviare = "";
+            cambio.stdinEnabled = false;
+        }
+        onRunningChanged: {
+            if (!running && page._passwordDaInviare !== "") {
+                page._passwordDaInviare = "";
+                cambio.stdinEnabled = false;
+                page.racconta(page.it ? "Impossibile avviare il cambio password."
+                                      : "Cannot start the password change.", true);
             }
+        }
+        stdout: StdioCollector {
+            id: uscitaCambio
+        }
+        stderr: StdioCollector { id: erroreCambio }
+        onExited: function(code) {
+            Qt.callLater(function() {
+                page.completaCambioPassword(code, uscitaCambio.text, erroreCambio.text);
+            });
         }
     }
 }

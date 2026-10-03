@@ -466,8 +466,8 @@ Item {
             icons.apriCartella(voce.path);
             return;
         }
-        // Un launcher non si «apre»: si lancia. Il demone legge il .desktop
-        // e ne esegue il comando, come per le voci del menu.
+        // Il percorso da solo non autorizza un comando: IPC prepara la copia
+        // e mostra la conferma; il demone verifica quella copia prima del lancio.
         if (icons.isLauncher(voce.name)) {
             Core.Ipc.launchDesktop(voce.path);
             return;

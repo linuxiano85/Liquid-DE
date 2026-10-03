@@ -12,6 +12,7 @@ import '../services/manutenzione/setaccio.dart';
 import '../core/settings_api.dart';
 import '../providers/compositor_provider.dart';
 import '../services/app_scanner.dart';
+import '../services/desktop_launcher.dart';
 import '../services/vetro.dart';
 import '../services/process_service.dart';
 import '../services/icon_resolver.dart';
@@ -24,6 +25,7 @@ import '../services/system_state_service.dart';
 import '../services/mime_service.dart';
 import '../services/finestre_service.dart';
 import '../services/greetd_service.dart';
+import '../services/greetd_conversation.dart';
 import '../services/accesso_service.dart';
 import '../services/gestori_accesso_service.dart';
 import '../services/radice_service.dart';
@@ -143,6 +145,10 @@ class WebSocketServer {
   final SettingsApi _settingsApi;
   final CompositorProvider _compositorProvider;
   final AppScanner _appScanner;
+  late final DesktopLauncher _desktopLauncher = DesktopLauncher(
+    parse: (path, content) => _appScanner.parseContent(path, content, launcherOnly: true),
+    commandFor: (app) => app.needsTerminal ? dentroUnTerminale(app.exec) : app.exec,
+  );
   final IconResolver _iconResolver;
   final AppUsageTracker _appUsageTracker;
   final KeybindService _keybindService;
@@ -309,8 +315,13 @@ class WebSocketServer {
   /// prima: in una sessione normale `GREETD_SOCK` non esiste, e un servizio
   /// che prova a connettersi a ogni avvio scriverebbe un avviso nel registro
   /// di ogni demone che gira sul computer.
-  GreetdService? _greetd;
-  StreamSubscription? _greetdSub;
+  late final _greetdConversation = GreetdConversation<WebSocketClientConnection>(
+    GreetdService(),
+    (client, reply) {
+      if (_clients.contains(client))
+        client.send({'event': 'greeter_message', 'payload': reply});
+    },
+  );
 
   // ── Tre risposte che si ricalcolavano da capo ogni volta ────────────────
   //
@@ -328,144 +339,9 @@ class WebSocketServer {
   final _categorieRicordate =
       RicordaUnPo<List<dynamic>>(const Duration(seconds: 30));
 
-  /// Chi ha chiesto di parlare con greetd. Le risposte vanno lì e basta: sono
-  /// una conversazione, non uno stato del sistema, e mandarle a tutti
-  /// significherebbe mandare i messaggi di PAM anche a chi non li ha chiesti.
-  WebSocketClientConnection? _ilGreeter;
-
-  /// Passa una richiesta a greetd e fa in modo che le sue risposte tornino a
-  /// chi l'ha fatta.
-  ///
-  /// Le risposte NON si aspettano qui dentro: il protocollo non è a domanda e
-  /// risposta. A una `create_session` greetd può rispondere con una domanda,
-  /// poi con un'altra, poi con un esito — «there are no limits on the number
-  /// and type of messages», dice la pagina di manuale. Chi aspettasse UNA
-  /// risposta per ogni richiesta si bloccherebbe al secondo giro. Quindi si
-  /// manda e basta, e tutto ciò che arriva viene inoltrato.
   Future<void> _greetdRichiesta(
-      WebSocketClientConnection client, String azione, Map msg) async {
-    _ilGreeter = client;
-
-    final g = _greetd ??= GreetdService();
-    _greetdSub ??= g.risposte.listen((r) {
-      // Gli errori si SCRIVONO, oltre a spedirli. Il 10 agosto 2026 la
-      // schermata è finita a ritentare in tondo e il registro non diceva
-      // perché: si vedeva solo l'effetto, un tremito che non finiva. Il tipo
-      // e la descrizione bastano a distinguere «password sbagliata» da
-      // «greetd non parla più», e non contengono niente di segreto — la
-      // risposta dell'utente non passa mai di qui.
-      if (r['type'] == 'error') {
-        // ── Tranne quella che non è greetd a dire ────────────────────
-        //
-        // «Nessuna connessione a greetd» non arriva da greetd: la fabbrica
-        // `GreetdService` quando questo processo non è un greeter, cioè
-        // sempre, in ogni sessione normale. Scriverla qui vuol dire una terza
-        // riga identica alle altre due, e in una sessione vera del 1º
-        // settembre 2026 se ne contavano settantacinque copie.
-        //
-        // Il client la riceve lo stesso — è lui che deve saperlo. Quello che
-        // non serve a nessuno è ripeterla sul registro: un registro fatto di
-        // rumore non lo legge più nessuno, e gli errori veri ci affogano.
-        final soloRumore = r['description'] == 'Nessuna connessione a greetd';
-        if (!soloRumore) {
-          print('[MINERVA][GREETD][WARN] greetd risponde errore '
-              '(${r['error_type']}): ${r['description']}');
-        }
-        // ── Un errore che NON è un guasto ─────────────────────────────
-        //
-        // greetd fa la conversazione con PAM dentro un processo figlio, e
-        // quando `pam_authenticate` fallisce quel figlio esce. Il
-        // `cancel_session` che la schermata manda subito dopo arriva quindi a
-        // un morto, e greetd risponde «unable to send message: Connection
-        // refused» invece di «sì».
-        //
-        // È la risposta NORMALE a una password sbagliata, e la schermata la
-        // gestisce (vedi `annullando` in `greeter/Greeter.qml`). Ma nel
-        // registro sta accanto a un errore vero e si legge come un secondo
-        // guasto: il 16 agosto 2026 ci ho perso mezz'ora a chiedermi cosa
-        // fosse. Un registro che spaventa per una cosa normale è un registro
-        // che si smette di leggere.
-        if ('${r['description']}'.contains('unable to send message')) {
-          print('[MINERVA][GREETD][INFO] …ed è normale: è la risposta '
-              "all'annullamento di una sessione il cui aiutante di PAM era "
-              'già uscito. La schermata sa gestirla e riparte da capo.');
-        }
-      }
-      _ilGreeter?.send({'event': 'greeter_message', 'payload': r});
-    });
-
-    switch (azione) {
-      // ── L'annullamento NON si nasconde qui dentro ────────────────────
-      //
-      // Per un giro, questa riga mandava un `cancel_session` muto prima di
-      // ogni `create_session`: greetd non chiude la sessione quando la
-      // password è sbagliata, e senza annullarla il tentativo successivo
-      // riceve «a session is already being configured».
-      //
-      // Era la cosa giusta fatta nel posto sbagliato. Per nascondere la
-      // risposta dell'annullamento bisognava CONTARE le risposte in arrivo, e
-      // il conto si sfasa al primo imprevisto: il 10 agosto 2026 la risposta
-      // ingoiata è stata quella sbagliata, la schermata ha letto il `success`
-      // dell'annullamento come «password accettata», ha chiesto di aprire la
-      // sessione — «session is not ready» — ed è uscita, portandosi dietro il
-      // compositore. Giacomo si è ritrovato su un terminale nero.
-      //
-      // L'annullamento adesso lo chiede la schermata, che è l'unica a sapere
-      // in che punto della conversazione si trova, e la risposta le arriva
-      // normalmente. Vedi `annullando` in `greeter/Greeter.qml`.
-      case 'greeter_create_session':
-        final u = msg['username'];
-        if (u is String && u.isNotEmpty) await g.creaSessione(u);
-        break;
-
-      case 'greeter_respond':
-        // `null` e stringa vuota sono due cose diverse: la prima è «questo
-        // messaggio non chiedeva niente», la seconda è una risposta vuota.
-        // Vedi `GreetdService.rispondi`.
-        final r = msg['response'];
-        await g.rispondi(r is String ? r : null);
-        break;
-
-      case 'greeter_start':
-        final cmd = (msg['cmd'] as List?)?.cast<String>() ?? const [];
-        final env = (msg['env'] as List?)?.cast<String>() ?? const [];
-        if (cmd.isEmpty) {
-          client.send({
-            'event': 'greeter_message',
-            'payload': {
-              'type': 'error',
-              'error_type': 'error',
-              'description': 'Nessun comando di sessione',
-            },
-          });
-          return;
-        }
-        // ── La riga che dice cosa si sta avviando ───────────────────────
-        //
-        // Se una sessione non parte, oggi non resta NIENTE: si torna alla
-        // schermata di accesso senza un messaggio, e da fuori sembra che la
-        // password fosse sbagliata. È lo stesso modo di rompersi che
-        // `/usr/local/bin/minerva-session` racconta nei propri commenti.
-        //
-        // Questa riga finisce nel registro del greeter (/var/log/minerva-greeter),
-        // e vale la pena tenerla anche quando tutto funziona: è la differenza
-        // fra un difetto che si vede e uno che si indovina. Il 17 agosto 2026
-        // per capire perché Hyprland e KDE non partivano non c'era una sola
-        // riga da leggere.
-        //
-        // Il comando e l'ambiente NON contengono segreti: sono la riga `Exec=`
-        // di un file leggibile da tutti e quattro variabili `XDG_*`. La
-        // password non passa mai di qui — la manda `greeter_auth`, e non si
-        // registra.
-        print('[MINERVA][GREETD][SESSIONE] avvio: ${cmd.join(' ')}');
-        print('[MINERVA][GREETD][SESSIONE] ambiente: ${env.join(' ')}');
-        await g.avviaSessione(cmd, env);
-        break;
-
-      case 'greeter_cancel':
-        await g.annulla();
-        break;
-    }
+      WebSocketClientConnection client, String action, Map message) async {
+    await _greetdConversation.handle(client, action, message);
   }
 
   /// I candidati arrivano dal servizio con il NOME dell'icona (`gwenview`);
@@ -1000,6 +876,7 @@ class WebSocketServer {
   }
 
   void _removeClient(WebSocketClientConnection client) {
+    _desktopLauncher.forget(client);
     _clients.remove(client);
     client.close();
     print('[MINERVA][IPC][INFO] Client disconnesso (Totale connessi: ${_clients.length})');
@@ -1013,15 +890,9 @@ class WebSocketServer {
     if (_iscrittiProcessi.remove(client)) _processi.disiscrivi();
     if (_iscrittiMacchina.remove(client)) _processi.disiscriviMacchina();
 
-    // Stessa ragione per il greeter: se se ne va, le risposte di PAM non
-    // devono continuare a essere spedite a una connessione morta. E se se n'è
-    // andato con un tentativo di accesso a metà, quel tentativo va annullato —
-    // greetd tiene UNA sessione in configurazione, e lasciarla lì impedisce
-    // al greeter successivo di cominciarne una.
-    if (identical(_ilGreeter, client)) {
-      _ilGreeter = null;
-      _greetd?.annulla();
-    }
+    // Cleanup belongs to the conversation owner; it cannot be stolen by a
+    // new client while a reply or cancellation is still outstanding.
+    unawaited(_greetdConversation.forget(client));
   }
 
   /// Il comando che apre `riga` dentro un terminale.
@@ -1171,6 +1042,48 @@ class WebSocketServer {
   /// ragione precisa: il cancello, la zona dell'identificativo e la rete
   /// che prende le eccezioni valgono per TUTTE le azioni, e devono stare
   /// fuori — dove non si possano dimenticare aggiungendone una nuova.
+  Future<void> _launcherRequest(WebSocketClientConnection client, String action,
+      Map<String, dynamic> msg) async {
+    final request = msg['request'] is String ? msg['request'] as String : '';
+    final path = msg['path'] is String ? msg['path'] as String : '';
+    final event = action == 'prepare_desktop'
+        ? 'desktop_launch_prepared' : 'desktop_launch_result';
+    try {
+      if (request.isEmpty || request.length > 80) {
+        throw DesktopLaunchError('Identificativo della richiesta non valido.');
+      }
+      if (action == 'prepare_desktop') {
+        final preview = await _desktopLauncher.prepare(client, path);
+        if (!_clients.contains(client)) {
+          _desktopLauncher.forget(client);
+          return;
+        }
+        client.send({'event': event, 'payload': {...preview, 'request': request}});
+        return;
+      }
+      final token = msg['token'];
+      if (token is! String || token.isEmpty || token.length > 128) {
+        throw DesktopLaunchError('Questo launcher richiede una conferma esplicita.');
+      }
+      if (action == 'cancel_desktop') {
+        _desktopLauncher.cancel(client, token);
+        return;
+      }
+      final launch = await _desktopLauncher.approve(client, path, token);
+      if (!_clients.contains(client)) return;
+      await Process.start('sh', ['-c', launch.command], mode: ProcessStartMode.detached);
+      client.send({'event': event, 'payload': {'request': request, 'path': path, 'ok': true}});
+      await _appUsageTracker.recordLaunch(launch.app.id);
+      _aTutti({'event': 'all_apps', 'payload': _allAppsPayload});
+    } catch (error) {
+      // No token in diagnostics. No launch on parse/consent/file errors.
+      if (_clients.contains(client)) {
+        client.send({'event': event, 'payload': {'request': request,
+          'path': path, 'error': error.toString(), 'ok': false}});
+      }
+    }
+  }
+
   Future<void> _eseguiAzione(WebSocketClientConnection client, Object? action,
       Map<String, dynamic> msg) async {
     switch (action) {
@@ -1261,29 +1174,10 @@ class WebSocketServer {
           }
         }
         break;
+      case 'prepare_desktop':
       case 'launch_desktop':
-        // Un file .desktop preso da un percorso qualsiasi — un launcher
-        // sulla scrivania — lanciato come un programma qualunque. Senza
-        // questa strada il doppio clic su un launcher della scrivania lo
-        // aprirebbe come testo.
-        final path = msg['path'];
-        if (path is String && path.isNotEmpty) {
-          final app = await _appScanner.parseFromPath(path);
-          if (app != null && app.exec.isNotEmpty) {
-            final comando = app.needsTerminal
-                ? dentroUnTerminale(app.exec)
-                : app.exec;
-            print('[MINERVA][IPC][INFO] Lancio .desktop: $comando '
-                '(da $path)');
-            await Process.start('sh', ['-c', comando],
-                mode: ProcessStartMode.detached);
-            await _appUsageTracker.recordLaunch(app.id);
-            _aTutti({'event': 'all_apps', 'payload': _allAppsPayload});
-          } else {
-            print('[MINERVA][IPC][WARN] .desktop illeggibile o senza '
-                'comando: $path');
-          }
-        }
+      case 'cancel_desktop':
+        await _launcherRequest(client, action as String, msg);
         break;
       case 'update_fixed_apps':
         final apps = msg['apps'];
@@ -3643,8 +3537,7 @@ class WebSocketServer {
     await _transferSubscription?.cancel();
     await _statoFinestreSub?.cancel();
     await _statoMonitorSub?.cancel();
-    await _greetdSub?.cancel();
-    await _greetd?.chiudi();
+    await _greetdConversation.close();
     // Fermare le nuove connessioni prima di chiudere quelle esistenti.
     // La chiusura dei socket può rimuovere client tramite le loro callback.
     await _server?.close();
