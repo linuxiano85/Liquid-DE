@@ -13,6 +13,7 @@ ShellRoot {
     property bool broken: Quickshell.env("NATIVE_BROKEN") === "1"
     property bool keyboard: Quickshell.env("NATIVE_KEYBOARD") === "1"
     property bool stalled: Quickshell.env("NATIVE_STALL") === "1"
+    property bool startupFailure: Quickshell.env("NATIVE_START_FAILURE") === "1"
     property bool recovered: false
     property bool keysDone: false
     property var field: null
@@ -117,6 +118,8 @@ ShellRoot {
                     test.check(test.field !== null && test.field.echoMode === TextInput.Password, "production-lock-loaded-masked");
                     test.field.text = ""; lock.prova();
                     test.check(!lock.inCorso && test.unlocked === 0, "empty-password-does-not-authenticate");
+                    if (test.startupFailure)
+                        test.pamContext().command = ["/missing/liquid-ci-pam-helper"];
                     if (test.stalled) {
                         // Accelerate the real production timer only in this
                         // dedicated blocking-module test.
@@ -139,6 +142,15 @@ ShellRoot {
                     test.stage = 4;
                 } else if (test.stage === 4 && !lock.inCorso) {
                     test.check(test.unlocked === 0 && test.field.text === "", "failure-keeps-lock-and-clears-input");
+                    if (test.startupFailure && !test.recovered) {
+                        test.check(!test.pamContext().running && lock.errori === 0 && !lock.inPausa,
+                            "missing-helper-keeps-lock-without-password-penalty");
+                        test.check(lock.avviso.indexOf("Non riesco a verificare:") === 0,
+                            "missing-helper-shows-service-error");
+                        test.pamContext().command = ["/usr/local/bin/minerva-pam", "liquid-ci"];
+                        test.recovered = true;
+                        test.stage = 5; return;
+                    }
                     if (test.stalled && !test.recovered) {
                         test.check(!test.pamContext().running && lock.errori === 0 && !lock.inPausa,
                             "stalled-pam-aborted-without-unlock-or-password-penalty");
@@ -177,7 +189,8 @@ ShellRoot {
                 } else if (test.stage === 6 && !lock.inCorso) {
                     test.check(test.unlocked === 1 && lock.errori === 0, "real-pam-correct-password-unlocks-once");
                     test.check(test.field.text === "", "success-clears-password-field");
-                    console.log(test.stalled ? "NATIVE_PAM_TIMEOUT_PASSED"
+                    console.log(test.startupFailure ? "NATIVE_PAM_START_FAILURE_PASSED"
+                        : test.stalled ? "NATIVE_PAM_TIMEOUT_PASSED"
                         : test.keyboard ? "NATIVE_KEYBOARD_PAM_PASSED" : "NATIVE_GRAPHICS_PAM_PASSED"); Qt.quit();
                 } else if (test.stage === 7 && test.captures === 0) {
                     console.log("NATIVE_PAM_ERROR_PASSED"); Qt.quit();
