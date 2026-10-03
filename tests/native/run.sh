@@ -4,6 +4,9 @@ set -euo pipefail
 [[ ${LIQUID_NATIVE_CI:-} == 1 && -e /.dockerenv ]] || { echo 'Disposable CI container required'; exit 1; }
 repo=$(pwd)
 output="$repo/native-results"
+# Quickshell confines QML imports to the entry point's directory. Keep the
+# test entry point alongside the production modules in this disposable tree.
+sed 's|../../minerva-shell/|./|g' tests/native/scene.qml > minerva-shell/native-ci.qml
 mkdir -p "$output"
 useradd -m liquidci
 printf '%s\n' 'liquidci:Liquid-CI-only-42!' | chpasswd
@@ -23,7 +26,7 @@ run_case() {
     runuser -u liquidci -- env DISPLAY=:99 XDG_RUNTIME_DIR=/tmp/liquid-native-runtime \
         QT_QPA_PLATFORM=xcb QSG_RHI_BACKEND=opengl LIBGL_ALWAYS_SOFTWARE=1 \
         MINERVA_PAM="$config" NATIVE_BROKEN="$broken" NATIVE_OUTPUT="$output" \
-        dbus-run-session -- timeout 45 qs -p "$repo/tests/native/scene.qml" > "$output/$log" 2>&1
+        dbus-run-session -- timeout 45 qs -p "$repo/minerva-shell/native-ci.qml" > "$output/$log" 2>&1
 }
 status=0
 run_case 0 liquid-ci graphics-pam.log || status=1
