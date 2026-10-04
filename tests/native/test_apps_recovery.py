@@ -8,6 +8,22 @@ import time
 repo = Path.cwd()
 out = repo / 'native-results'
 
+# Test-only observation; production bindings and handlers are unchanged.
+entry = repo / 'minerva-shell/filemanager.qml'
+entry_text = entry.read_text()
+probe = '''
+    IpcHandler {
+        target: "nativeProbe"
+        function stato(): string {
+            return JSON.stringify({sleeping: pronta.dormiente,
+                windowSleeping: manager.dormiente, visible: manager.visible,
+                variable: pronta.variabile,
+                env: Quickshell.env("MINERVA_FILES_DORMIENTE")});
+        }
+    }
+'''
+entry.write_text(entry_text[:entry_text.rfind('}')] + probe + '}\n')
+
 def run(*args, **kw):
     return subprocess.run(args, capture_output=True, text=True, timeout=20, **kw)
 
@@ -41,7 +57,8 @@ def scenario(name, config, env, target, pattern, preload=False):
                 time.sleep(3.5)
                 if window(pattern):
                     subprocess.run(['import', '-window', 'root', str(out / (name + '-failure.png'))], check=True, timeout=10)
-                    raise AssertionError('preload showed a window: ' + str(describe_windows(pattern)))
+                    state = run('qs', 'ipc', '-p', str(entry), 'call', 'nativeProbe', 'stato')
+                    raise AssertionError('preload showed a window: ' + str(describe_windows(pattern)) + state.stdout + state.stderr)
                 opened = run('sh', str(repo / 'scripts/minerva-files'), str(Path.home()))
                 assert opened.returncode == 0, opened.stderr
             until(lambda: window(pattern), name + ': no visible window')

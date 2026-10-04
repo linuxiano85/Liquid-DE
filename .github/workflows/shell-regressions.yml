@@ -153,6 +153,7 @@ jobs:
       - name: Test production Fucina and File Manager windows
         run: |
           useradd -m liquidapps
+          chown liquidapps:liquidapps minerva-shell/filemanager.qml
           mkdir -p native-results /tmp/liquid-apps-runtime
           chown liquidapps:liquidapps native-results /tmp/liquid-apps-runtime
           chmod 700 /tmp/liquid-apps-runtime
