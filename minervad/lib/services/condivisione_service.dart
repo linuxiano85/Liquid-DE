@@ -285,7 +285,7 @@ class CondivisioneService {
 
   static Future<bool> _ceIlComando(String nome) async {
     try {
-      final r = await Process.run('sh', ['-c', 'command -v $nome'])
+      final r = await Process.run('sh', ['-c', 'command -v "\$1"', 'sh', nome])
           .timeout(const Duration(seconds: 2));
       return r.exitCode == 0;
     } catch (_) {

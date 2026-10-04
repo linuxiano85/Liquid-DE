@@ -129,7 +129,7 @@ class AccountService {
 
   Future<bool> _c(String comando) async {
     try {
-      final r = await _esegui('sh', ['-c', 'command -v $comando']);
+      final r = await _esegui('sh', ['-c', 'command -v "\$1"', 'sh', comando]);
       return r.exitCode == 0;
     } catch (_) {
       return false;
