@@ -23,8 +23,10 @@ PanelWindow {
 
     function visibile(value) {
         // Make control/bidi characters visible instead of letting them disguise
-        // a path or command. This changes presentation, never the approved bytes.
-        return String(value || "").replace(/[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,
+        // a path or command: also C1 controls, soft hyphen, zero-width
+        // characters and U+2028/2029 (line breaks that are not "\n").
+        // This changes presentation, never the approved bytes.
+        return String(value || "").replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/g,
             function(c) { return "\\u" + (0x10000 + c.charCodeAt(0)).toString(16).slice(1); });
     }
 

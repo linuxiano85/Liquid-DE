@@ -10,6 +10,7 @@
 # ── Roba compilata ─────────────────────────────────────────────────────
 minervad/build/
 minervad/.dart_tool/
+tests/fucina_suite/.dart_tool/
 
 # ── Le preferenze non stanno qui, e non devono tornarci ────────────────
 #

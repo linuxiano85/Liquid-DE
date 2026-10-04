@@ -150,8 +150,13 @@ Item {
             campo.text = "";
         }
         stdout: StdioCollector { id: rispostaPam }
+        // Un giro dopo, come in Utente.qml: l'uscita del processo può
+        // arrivare prima che il raccoglitore abbia letto l'ultima riga, e una
+        // password giusta diventerebbe «errore del servizio PAM».
         onExited: function(code, status) {
-            if (blocco.inCorso) blocco.esitoPam(code, status, rispostaPam.text);
+            Qt.callLater(function() {
+                if (blocco.inCorso) blocco.esitoPam(code, status, rispostaPam.text);
+            });
         }
         onRunningChanged: {
             if (!pam.running && !pam.avviato && blocco.inCorso)

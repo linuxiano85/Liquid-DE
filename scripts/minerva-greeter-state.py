@@ -88,6 +88,15 @@ def as_user(user, action, timeout=15):
     if pid == 0:
         os.close(read_fd)
         try:
+            # Nothing of root's survives the drop but the reply pipe and
+            # stderr: stdout may be the root-only staging file of minerva-greetd.
+            null = os.open(os.devnull, os.O_RDWR)
+            os.dup2(null, 0)
+            os.dup2(null, 1)
+            if null > 2:
+                os.close(null)
+            os.closerange(3, write_fd)
+            os.closerange(write_fd + 1, os.sysconf("SC_OPEN_MAX"))
             drop_privileges(user)
             result = {"ok": True, "value": action()}
         except BaseException as error:

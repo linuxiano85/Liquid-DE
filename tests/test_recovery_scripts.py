@@ -116,6 +116,7 @@ if args[0] == 'ipc':
 case "$1" in
   -Qtdq) printf 'quickshell\nunused\nlinux-test\n';;
   -Qql) [ "${MISSING_FILES:-0}" = 0 ] || exit 1
+         [ "$3" != gone ] || exit 1
          if [ "${BOOT_FILES:-0}" = 1 ]; then printf '/usr/lib/modules/test/kernel.ko\n';
          else printf '/usr/share/example\n'; fi;;
   -R) printf '%s\n' "$@" > "$CASE_ROOT/removed";;
@@ -140,6 +141,13 @@ esac
 
     def test_only_selected_orphans_removed_without_recursive_flags(self):
         p = self.orphan('unused', 'not-orphan')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual((self.root / 'removed').read_text().splitlines(), ['-R', '--noconfirm', '--', 'unused'])
+
+    def test_uninstalled_name_is_skipped_without_cancelling_the_others(self):
+        # The page lists orphans minutes before the click: one of them may be
+        # gone by then, and `pacman -Qql` fails for a package that is not there.
+        p = self.orphan('gone', 'unused')
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual((self.root / 'removed').read_text().splitlines(), ['-R', '--noconfirm', '--', 'unused'])
 

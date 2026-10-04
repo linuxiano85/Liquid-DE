@@ -360,6 +360,22 @@ voce_limine() {
     printf 'nota: voce di Limine scritta in fondo a %s (copia di prima in %s.fucina-bak).\n' "$CONF" "$CONF"
 }
 
+# Se la configurazione nomina il rilascio come percorso intero: «/6.17-fucina-a»
+# seguito da «/», da uno spazio o dalla fine riga. Con `grep -F` bastava un
+# pezzo, e togliendo «…-fucina-a» la voce di «…-fucina-ab» rimasta lì sembrava
+# la sua: si diceva «limine-entry-tool non l'ha tolta» a kernel già cancellato,
+# e GRUB non si rigenerava.
+nomina_rilascio() {
+    awk -v r="/$2" '{
+        s = $0
+        while ((i = index(s, r)) > 0) {
+            c = substr(s, i + length(r), 1)
+            if (c == "" || c == "/" || c == " " || c == "\t") { trovato = 1; exit }
+            s = substr(s, i + 1)
+        }
+    } END { exit !trovato }' "$1"
+}
+
 togli_voce_limine() {
     REL_L="$1"
     CONF=$(conf_limine)
@@ -368,7 +384,7 @@ togli_voce_limine() {
         # che non c'è è un errore suo, non nostro.
         if [ -n "$CONF" ] && ! grep -Fq -- "$REL_L" "$CONF"; then return 0; fi
         limine-entry-tool --remove-kernel "$REL_L" --quiet >/dev/null 2>&1 || :
-        if [ -n "$CONF" ] && grep -Fq -- "/$REL_L" "$CONF" \
+        if [ -n "$CONF" ] && nomina_rilascio "$CONF" "$REL_L" \
                 && ! grep -Fxq -- "# fucina-inizio $REL_L" "$CONF"; then
             muori "«$REL_L» è tolto, ma limine-entry-tool non ha tolto la sua voce. Prova «sudo limine-entry-tool --remove-kernel $REL_L»."
         fi
@@ -833,17 +849,21 @@ case "$AZIONE" in
             if grep -Fxq -- "$P" "$PROTETTI"; then
                 muori "«$P» serve a Liquid: non verrà rimosso."
             fi
+            # Prima si guarda se è un orfano, poi se ne leggono i file: un
+            # nome che nel frattempo è stato disinstallato (l'elenco della
+            # pagina è di qualche minuto fa) fa fallire `pacman -Qql`, e
+            # annullava la rimozione di tutti gli altri.
+            E_ORFANO=""
+            for O in $ORFANI; do
+                if [ "$P" = "$O" ]; then E_ORFANO=1; fi
+            done
+            if [ -z "$E_ORFANO" ]; then continue; fi
             FILE_PACCHETTO=$(pacman -Qql -- "$P") \
                 || muori "Non riesco a verificare i file di «$P»: nessuna rimozione."
             if printf '%s\n' "$FILE_PACCHETTO" | grep -Eq '^/?(boot/|usr/lib/modules/|usr/lib/systemd/boot/)'; then
                 muori "«$P» contiene componenti di avvio o kernel: non verrà rimosso."
             fi
-            # `if` e non `[ ] && …`: sotto `set -e` una lista che finisce
-            # con un test falso può portarsi via la shell, ed è la trappola
-            # che questo file documenta più in alto.
-            for O in $ORFANI; do
-                if [ "$P" = "$O" ]; then DAVVERO="$DAVVERO $P"; fi
-            done
+            DAVVERO="$DAVVERO $P"
         done
         [ -n "$DAVVERO" ] || { printf 'niente da togliere\n'; exit 0; }
 
@@ -953,6 +973,17 @@ case "$AZIONE" in
         # vecchio con lo stesso nome messo da parte e rimesso al suo posto se
         # qualcosa va storto. I file di /boot con un nome provvisorio e poi
         # un `mv`: in /boot non c'è mai un'immagine a metà.
+        # Anche l'immagine e l'initramfs di un kernel con lo stesso nome si
+        # mettono da parte (copie: /boot è un'altra partizione). Senza, un
+        # initramfs che non si riesce a spostare lasciava il vmlinuz NUOVO
+        # accanto all'initramfs VECCHIO e ai moduli vecchi: una coppia che non
+        # si avvia.
+        for F in "vmlinuz-$REL" "initramfs-$REL.img"; do
+            if [ -f "/boot/$F" ]; then
+                cp -- "/boot/$F" "$SCATOLA/vecchio-$F" \
+                    || muori "non riesco a mettere da parte /boot/$F: il sistema non è stato toccato."
+            fi
+        done
         VECCHI=""
         if [ -e "/usr/lib/modules/$REL" ]; then
             [ ! -L "/usr/lib/modules/$REL" ] || muori "/usr/lib/modules/$REL è un collegamento."
@@ -963,6 +994,14 @@ case "$AZIONE" in
             rm -rf -- "/usr/lib/modules/$REL"
             if [ -n "$VECCHI" ]; then mv -- "$VECCHI" "/usr/lib/modules/$REL"; fi
             rm -f -- "/boot/.vmlinuz-$REL.nuovo" "/boot/.initramfs-$REL.img.nuovo"
+            for F in "vmlinuz-$REL" "initramfs-$REL.img"; do
+                if [ -f "$SCATOLA/vecchio-$F" ]; then
+                    cp -- "$SCATOLA/vecchio-$F" "/boot/.$F.rimesso" \
+                        && mv -f -- "/boot/.$F.rimesso" "/boot/$F" || :
+                else
+                    rm -f -- "/boot/$F"
+                fi
+            done
             muori "$1"
         }
         mv -- "$MOD" "/usr/lib/modules/$REL" || rimetti "non riesco a mettere al loro posto i moduli."

@@ -90,6 +90,19 @@ class LogicTests(unittest.TestCase):
         with self.assertRaises(ChildProcessError):
             os.waitpid(-1, os.WNOHANG)
 
+    def test_worker_keeps_no_root_descriptor_but_its_reply_pipe(self):
+        # minerva-greetd points stdout at a root-only staging file.
+        with tempfile.TemporaryFile() as secret, patch.object(state, "drop_privileges"):
+            def seen():
+                fds = sorted(int(n) for n in os.listdir("/proc/self/fd"))
+                return {"stdout": os.readlink("/proc/self/fd/1"), "open": fds,
+                        "secret": os.path.exists(f"/proc/self/fd/{secret.fileno()}")}
+            got = state.as_user(None, seen)
+        self.assertEqual(got["stdout"], os.devnull)
+        self.assertFalse(got["secret"])
+        # 0, 1, 2, the reply pipe and the fd listdir itself opened.
+        self.assertLessEqual(len(got["open"]), 5)
+
     def test_oversized_export_does_not_leave_an_orphan_image(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -112,6 +125,48 @@ class LogicTests(unittest.TestCase):
         self.assertIn('stato_sicuro read-config "$CONF" autologin', config)
         self.assertNotIn('chown -R greeter', source)
         self.assertIn('install -m644 "$ROOT/scripts/minerva-greeter-state.py"', source)
+
+    def shell_config(self, env, snapshot=False, installa=False):
+        """copia_impostazioni + scrivi_config up to the snapshot step, with stubs."""
+        source = (ROOT / "scripts/minerva-greetd").read_text()
+        copy = source[source.index("copia_impostazioni() {"):source.index("# ── La configurazione")]
+        config = source[source.index("scrivi_config() {"):]
+        config = config[:config.index("    # ── La tastiera deve essere quella giusta")] + "}\n"
+        with tempfile.TemporaryDirectory(prefix="liquid-greetd-shell-") as d:
+            conf = Path(d) / "etc"
+            conf.mkdir()
+            if snapshot:
+                (conf / "minerva-settings.json").write_text("{}")
+            calls = Path(d) / "calls"
+            script = (f'CONF="{conf}"; STATO=/nonexistent\n'
+                      'grigio() { echo "$*" >&2; }\nmuori() { echo "$*" >&2; exit 1; }\n'
+                      f'mktemp() {{ mkdir -p "{d}/stage"; echo "{d}/stage"; }}\n'
+                      # Like the real module: dropping "to root" is refused.
+                      f'stato_sicuro() {{ [ "$1:$3" != copy:root ] || return 1; echo "$1" >> "{calls}"; }}\n'
+                      'CONFIG_STAGE=""; IMPOSTAZIONI_CONFIG=""\n' + copy + config
+                      + ('copia_impostazioni\n' if installa else '') + 'scrivi_config 2\n')
+            p = __import__("subprocess").run(["sh", "-c", script], env=dict(os.environ, **env),
+                                             capture_output=True, text=True, timeout=10)
+            return p, calls.read_text().split() if calls.exists() else []
+
+    def test_root_caller_keeps_admin_snapshot_instead_of_failing(self):
+        env = {"SUDO_USER": "root", "PKEXEC_UID": ""}
+        # `installa` and `configura` copy first, then write.
+        p, calls = self.shell_config(env, snapshot=True, installa=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertNotIn("copy", calls)
+
+    def test_missing_snapshot_is_imported_from_caller_before_writing(self):
+        p, calls = self.shell_config({"SUDO_USER": pwd.getpwuid(os.getuid()).pw_name if os.getuid() else "nobody",
+                                      "PKEXEC_UID": ""})
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(calls, ["copy", "save-config"])
+
+    def test_missing_snapshot_without_caller_is_reported(self):
+        p, calls = self.shell_config({"SUDO_USER": "", "PKEXEC_UID": ""})
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(calls, [])
+        self.assertIn("accesso automatico spento", p.stderr)
 
 
 class PrivilegeTests(unittest.TestCase):

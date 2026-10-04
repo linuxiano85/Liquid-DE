@@ -272,6 +272,8 @@ test('An approved prompt emits exactly its token, path and request, and clears t
 test('Launcher text cannot conceal controls or interpret markup', () => {
     const display = new Function('value', body(consentSource, 'function visibile('));
     assert.equal(display('abc\u202E\n'), 'abc\\u202e\\u000a');
+    // Zero-width and Unicode line separators would otherwise hide or split text.
+    assert.equal(display('a\u200Bb\u2028c\uFEFF\u00AD'), 'a\\u200bb\\u2028c\\ufeff\\u00ad');
     assert.match(consentSource, /textFormat: TextEdit\.PlainText/);
     const colors = source('minerva-shell/theme/Colors.qml');
     for (const name of new Set([...consentSource.matchAll(/Theme\.Colors\.(\w+)/g)].map(m => m[1])))

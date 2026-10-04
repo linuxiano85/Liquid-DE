@@ -331,6 +331,10 @@ IMPOSTAZIONI_CONFIG=""
 copia_impostazioni() {
     CHI="${SUDO_USER:-${PKEXEC_UID:-}}"
     [ -n "${PKEXEC_UID:-}" ] && CHI=$(getent passwd "$PKEXEC_UID" | cut -d: -f1)
+    # `sudo` da una shell di root dà SUDO_USER=root: root non ha impostazioni
+    # della sessione da copiare, e il modulo giustamente rifiuta di «scendere»
+    # a root — che faceva morire `installa` e `configura`.
+    [ "$CHI" != root ] || CHI=""
     [ -n "$CHI" ] || { grigio "nessun utente chiamante: conservo lo snapshot amministrativo"; return 0; }
 
     # /run è amministrativa. La directory 0700 impedisce di sostituire lo
@@ -350,8 +354,17 @@ copia_impostazioni() {
 
 scrivi_config() {
     mkdir -p "$CONF"
+    # `attiva` e `gestore` non copiano le impostazioni: su un'installazione di
+    # prima dello snapshot amministrativo (3 ottobre 2026) non ce n'è, e
+    # l'accesso automatico spariva da /etc/greetd senza una parola. Si copia
+    # adesso, dall'utente che ha chiesto.
+    if [ -z "$IMPOSTAZIONI_CONFIG" ] && [ ! -e "$CONF/minerva-settings.json" ]; then
+        copia_impostazioni
+    fi
     if [ -n "$IMPOSTAZIONI_CONFIG" ]; then
         stato_sicuro save-config "$CONF" "$IMPOSTAZIONI_CONFIG" || muori "Snapshot della login non salvato."
+    elif [ ! -e "$CONF/minerva-settings.json" ]; then
+        grigio "nessuno snapshot delle impostazioni: accesso automatico spento e tastiera di sistema (rilancia «sudo minerva-greetd configura» dalla tua sessione)"
     fi
 
     # ── La tastiera deve essere quella giusta ──────────────────────────────
