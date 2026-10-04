@@ -45,11 +45,12 @@ import "../ui" as Ui
 //
 // ── Cosa fa OGGI, detto in chiaro ──────────────────────────────────────────
 //
-// Guarda e basta. Non c'è un solo pulsante che tolga qualcosa, e non è una
-// dimenticanza: è la prima tappa. Cancellare passa dall'aiutante di root
-// (`scripts/minerva-radice`), che ha un elenco chiuso di verbi, e arriva
-// dopo — con lo stesso registro che si vede già qui a raccontare cosa
-// succede.
+// Guarda, e pulisce solo quello che si sceglie. Le pulizie dell'utente le
+// fa il demone (`minervad/lib/services/manutenzione/pulitore.dart`, con un
+// elenco chiuso di posti); quelle di sistema passano dall'aiutante di root
+// (`scripts/minerva-radice`), che ha un elenco chiuso di verbi. Ogni passo
+// finisce nel registro che si vede qui. (Fino al 4 ottobre questo commento
+// diceva «guarda e basta»: era la prima tappa, ed era rimasto lì.)
 FloatingWindow {
     id: finestra
 

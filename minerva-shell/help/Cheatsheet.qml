@@ -11,7 +11,7 @@ import "../ui" as Ui
 // (o F1), lascia intravedere la scrivania dietro di sé, e mostra ogni
 // combinazione tradotta nella lingua dell'utente.
 //
-// Le voci arrivano dal demone, che legge config/hypr/keybinds.conf: aggiungere
+// Le voci arrivano dal demone, che legge config/scorciatoie.minerva: aggiungere
 // una scorciatoia lì la fa comparire qui, senza toccare questo file.
 PanelWindow {
     id: sheet
