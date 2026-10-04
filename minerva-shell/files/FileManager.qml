@@ -1448,7 +1448,49 @@ FloatingWindow {
         // solo le icone. La finestra si può affiancare a un'altra e diventare
         // stretta: due file di pulsanti che si accavallano sono peggio di due
         // file di icone senza nome.
-        readonly property bool compact: toolbar.width < 880
+        //
+        // Prima la soglia era fissa (880 px), e non sapeva quante voci ci
+        // fossero né che con due schede a destra compaiono «Copia» e
+        // «Sposta»: «Impostazioni» ci finiva sopra (K5, PC di prova). Adesso
+        // si misurano le etichette vere e si confronta con lo spazio che c'è.
+        FontMetrics {
+            id: misuraEtichette
+            font.family: Theme.Typography.fontDisplay
+            font.weight: Theme.Typography.weightRegular
+            font.pixelSize: Theme.Typography.sizeSM
+        }
+        readonly property real larghezzaPiena: {
+            var it = Core.Strings.lang === "it";
+            var voci = manager.toolbarModel || [];
+            var w = 2 * Theme.Effects.space1;
+            for (var i = 0; i < voci.length; i++) {
+                if (i > 0)
+                    w += Theme.Effects.space1;
+                if (voci[i].id === "sep") {
+                    w += 13;
+                    continue;
+                }
+                w += 15 + Theme.Effects.space2 + Theme.Effects.space4
+                     + Math.ceil(misuraEtichette.advanceWidth(it ? (voci[i].it || "")
+                                                                 : (voci[i].en || "")));
+            }
+            return w;
+        }
+        // Copia e Sposta, misurati allo stesso modo e non letti da
+        // `incrocioRow`: la loro etichetta dipende da `compact`, e leggerla
+        // farebbe un anello (stretti → più spazio → larghi → stretti …).
+        readonly property real larghezzaIncrocio: {
+            var it = Core.Strings.lang === "it";
+            var coda = manager.asksWhere ? "…" : "  →";
+            return 2 * (Theme.Effects.space5 + Math.ceil(misuraEtichette.advanceWidth(
+                           (it ? "Sposta" : "Move") + coda)))
+                   + Theme.Effects.space1 + 2 * Theme.Effects.space1;
+        }
+        readonly property bool compact: toolbar.width
+            < manager.isola + toolbar.larghezzaPiena + Theme.Effects.space3
+              + (incrocioRow.visible ? toolbar.larghezzaIncrocio + manager.isola
+                                       + Theme.Effects.space1
+                                     : manager.isola)
 
         Row {
             id: comandiRow
