@@ -101,6 +101,10 @@ struct wobbly {
 	struct ondulazione forma;
 	struct riserva *riserva;
 	bool mostrata;
+	/// Perché l'ultimo disegno non è riuscito: lo legge il registro. Quasi
+	/// sempre è un ripiego voluto (una fence esplicita, un nodo che non è un
+	/// buffer), non un guasto.
+	const char *perche;
 };
 
 // Ogni foglia usa la stessa trasformazione in coordinate della finestra:
@@ -315,9 +319,14 @@ static bool elenco(struct wobbly *w, struct wlr_scene_node *n, int x, int y,
 	// Il blur dello sfondo è sospeso mentre la superficie si deforma.
 	// Non si campiona mai lo schermo, né si inglobano finestre sovrapposte.
 	if (n->type == WLR_SCENE_NODE_RECT && wlr_scene_rect_from_node(n)->minerva_blur) return true;
-	if (n->type != WLR_SCENE_NODE_RECT && n->type != WLR_SCENE_NODE_BUFFER)
+	if (n->type != WLR_SCENE_NODE_RECT && n->type != WLR_SCENE_NODE_BUFFER) {
+		w->perche = "un nodo della scena che non è né buffer né rettangolo";
 		return false;
-	if (*quanti == NODI_MAX) return false;
+	}
+	if (*quanti == NODI_MAX) {
+		w->perche = "troppi pezzi nella finestra";
+		return false;
+	}
 	struct disegno *e = &d[(*quanti)++];
 	*e = (struct disegno){.nodo = n, .x = x, .y = y};
 	if (n->type == WLR_SCENE_NODE_RECT) {
@@ -329,7 +338,10 @@ static bool elenco(struct wobbly *w, struct wlr_scene_node *n, int x, int y,
 	// Il disegno GL diretto non può scavalcare una fence di acquisizione
 	// esplicita: si ripiega sul passaggio di scena nativo, che aspetta e
 	// segnala il rilascio come si deve.
-	if (b->WLR_PRIVATE.wait_timeline) return false;
+	if (b->WLR_PRIVATE.wait_timeline) {
+		w->perche = "il programma usa la sincronizzazione esplicita (fence)";
+		return false;
+	}
 	// ── La barra del titolo non ha più il suo buffer, e va bene così ─────
 	//
 	// Visto in fotografia il 13 settembre 2026: durante il trascinamento la
@@ -456,7 +468,11 @@ bool wobbly_disegna(struct wobbly *w, const struct ondulazione *forma, double sc
 	int bw = ceil((forma->larghezza + 2 * PAD) * scala);
 	int bh = ceil((forma->altezza + 2 * PAD) * scala);
 	// Tetto alle allocazioni per finestra. Il ripiego è la scena normale.
-	if (bw > 8192 || bh > 8192 || (double)bw * bh > 16 * 1024 * 1024) return false;
+	w->perche = NULL;
+	if (bw > 8192 || bh > 8192 || (double)bw * bh > 16 * 1024 * 1024) {
+		w->perche = "finestra troppo grande per la copia";
+		return false;
+	}
 	if (w->swapchain && (w->swapchain->width != bw || w->swapchain->height != bh)) {
 		conserva(w->riserva, w->swapchain); w->swapchain = NULL;
 	}
@@ -466,15 +482,20 @@ bool wobbly_disegna(struct wobbly *w, const struct ondulazione *forma, double sc
 		struct wlr_drm_format fmt = {.format = DRM_FORMAT_ARGB8888,
 			.len = 1, .capacity = 1, .modifiers = &modificatore};
 		w->swapchain = wlr_swapchain_create(w->allocator, bw, bh, &fmt);
-		if (!w->swapchain) return false;
+		if (!w->swapchain) {
+			w->perche = "l'allocatore non dà un buffer ARGB8888 lineare";
+			return false;
+		}
 	}
 	struct disegno d[NODI_MAX] = {0}; int quanti = 0;
 	w->originali->node.enabled = true;
 	bool ok = elenco(w, &w->originali->node, 0, 0, d, &quanti);
 	w->originali->node.enabled = !w->mostrata;
 	struct wlr_buffer *buffer = ok ? wlr_swapchain_acquire(w->swapchain) : NULL;
+	if (ok && !buffer) w->perche = "nessun buffer libero nella swapchain";
 	struct wlr_render_pass *pass = buffer
 		? wlr_renderer_begin_buffer_pass(w->renderer, buffer, NULL) : NULL;
+	if (buffer && !pass) w->perche = "il renderer non apre il passaggio sul buffer";
 	if (pass) {
 		glViewport(0, 0, bw, bh);
 		glDisable(GL_SCISSOR_TEST); glDisable(GL_DEPTH_TEST); glDisable(GL_CULL_FACE);
@@ -482,9 +503,17 @@ bool wobbly_disegna(struct wobbly *w, const struct ondulazione *forma, double sc
 		glClearColor(0, 0, 0, 0); glClear(GL_COLOR_BUFFER_BIT);
 		glEnable(GL_BLEND); glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 		for (int i = 0; i < quanti && ok; i++) ok = dipingi(w, &d[i], bw, bh, scala);
-		if (glGetError() != GL_NO_ERROR) ok = false;
+		if (!ok && !w->perche) w->perche = "un pezzo non si è potuto dipingere (texture)";
+		GLenum errore_gl = glGetError();
+		if (errore_gl != GL_NO_ERROR) {
+			ok = false;
+			if (!w->perche) w->perche = "errore OpenGL durante il disegno";
+		}
 		glUseProgram(0);
-		ok = wlr_render_pass_submit(pass) && ok;
+		if (!wlr_render_pass_submit(pass)) {
+			ok = false;
+			if (!w->perche) w->perche = "il passaggio non è stato consegnato";
+		}
 	} else ok = false;
 	for (int i = 0; i < quanti; i++)
 		if (d[i].propria && d[i].texture) wlr_texture_destroy(d[i].texture);
@@ -512,6 +541,10 @@ bool wobbly_disegna(struct wobbly *w, const struct ondulazione *forma, double sc
 	}
 	if (buffer) wlr_buffer_unlock(buffer);
 	return ok;
+}
+
+const char *wobbly_perche(struct wobbly *w) {
+	return w && w->perche ? w->perche : "motivo non registrato";
 }
 
 bool wobbly_e_proxy(struct wobbly *w, struct wlr_scene_node *nodo) {

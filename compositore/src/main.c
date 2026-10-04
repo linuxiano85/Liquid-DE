@@ -1073,6 +1073,7 @@ struct finestra {
 	/// smappamento per ritirarsi (vedi `chiusura_chiesta`). NULL di solito.
 	struct fantasma *fantasma_pronto;
 	double wobbly_presa_x, wobbly_presa_y;
+	bool wobbly_avvisato;
 	struct timespec molla_ultimo;
 	bool wobbly_fallita;
 	int molla_dx, molla_dy;
@@ -6254,7 +6255,13 @@ static bool molla_applica(struct finestra *f) {
 		f->m->cursore->x, f->m->cursore->y);
 	if (out) scala = out->scale;
 	if (!wobbly_disegna(f->wobbly, &forma, scala)) {
-		wlr_log(WLR_ERROR, "minerva: wobbly non disponibile per questa finestra; scena normale");
+		// Un ripiego, non un errore, e una volta per finestra: sulla GPU vera
+		// (radeonsi) se ne contavano dieci righe ERROR senza un perché (D3).
+		if (!f->wobbly_avvisato) {
+			f->wobbly_avvisato = true;
+			wlr_log(WLR_INFO, "minerva: elastico non disponibile per questa finestra "
+				"(%s): scena normale", wobbly_perche(f->wobbly));
+		}
 		molla_ferma_finestra(f);
 		f->wobbly_fallita = true;
 		return false;

@@ -25,6 +25,8 @@ struct wobbly *wobbly_crea(struct wlr_scene_tree *cornice,
 	struct wlr_renderer *renderer, struct wlr_allocator *allocator,
 	struct wlr_scene_rect *sfocatura);
 bool wobbly_disegna(struct wobbly *w, const struct ondulazione *forma, double scala);
+// Perché l'ultimo `wobbly_disegna` è tornato falso, per il registro.
+const char *wobbly_perche(struct wobbly *w);
 // Dopo `wobbly_disegna`: scala la copia di `sx`×`sy` attorno al punto
 // (`ax`, `ay`, in coordinate della finestra) e la rende trasparente di `alfa`.
 // Serve al respiro delle finestre (nascita, risucchio, ritorno).
