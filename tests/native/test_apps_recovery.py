@@ -14,6 +14,11 @@ def run(*args, **kw):
 def window(pattern):
     return run('xdotool', 'search', '--onlyvisible', '--name', pattern).returncode == 0
 
+def describe_windows(pattern):
+    ids = run('xdotool', 'search', '--onlyvisible', '--name', pattern).stdout.split()
+    return [(wid, run('xdotool', 'getwindowname', wid).stdout,
+             run('xdotool', 'getwindowpid', wid).stdout) for wid in ids]
+
 def until(predicate, description):
     end = time.monotonic() + 15
     while time.monotonic() < end:
@@ -34,7 +39,9 @@ def scenario(name, config, env, target, pattern, preload=False):
             until(lambda: ipc('ping').returncode == 0, name + ': IPC not ready')
             if preload:
                 time.sleep(3.5)
-                assert not window(pattern), 'preload showed a window'
+                if window(pattern):
+                    subprocess.run(['import', '-window', 'root', str(out / (name + '-failure.png'))], check=True, timeout=10)
+                    raise AssertionError('preload showed a window: ' + str(describe_windows(pattern)))
                 opened = run('sh', str(repo / 'scripts/minerva-files'), str(Path.home()))
                 assert opened.returncode == 0, opened.stderr
             until(lambda: window(pattern), name + ': no visible window')
@@ -55,6 +62,7 @@ def scenario(name, config, env, target, pattern, preload=False):
     for error in ('TypeError:', 'ReferenceError:', 'is not a type', 'Cannot assign to non-existent property', 'Failed to load configuration'):
         assert error not in text, f'{name}: {error}\n{text}'
     print(name + ': PASS', flush=True)
+    until(lambda: not window(pattern), name + ': windows survived process shutdown: ' + str(describe_windows(pattern)))
 
 scenario('fucina', 'app.qml', {'MINERVA_APP_APRI': 'fucina'}, 'app', 'Fucina')
 scenario('files-cold', 'filemanager.qml', {}, 'files', 'File')
