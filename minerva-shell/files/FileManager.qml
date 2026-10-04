@@ -842,7 +842,7 @@ FloatingWindow {
     /// «Questa cartella si lascia cambiare?»
     ///
     /// Il menu e la barra già non offrono ciò che non si può fare, ma i
-    /// comandi hanno anche una scorciatoia — Canc, Maiusc+Canc, F2, Ctrl+N —
+    /// comandi hanno anche una scorciatoia — Canc, Maiusc+Canc, F2, Ctrl+Maiusc+N —
     /// e le scorciatoie non passano dal menu. Un solo posto in cui chiederlo,
     /// e una risposta che si legge invece di un tasto che non fa niente.
     // ── La modalità amministratore ───────────────────────────────────────
@@ -1659,8 +1659,8 @@ FloatingWindow {
                 // «Di là» costringe a ricordare quale riquadro è attivo; una
                 // freccia e un lato si leggono senza pensarci.
                 model: [
-                    { "id": "copyOther", "it": "Copia", "en": "Copy", "key": "F5" },
-                    { "id": "moveOther", "it": "Sposta", "en": "Move", "key": "F6" }
+                    { "id": "copyOther", "it": "Copia", "en": "Copy", "key": "F6" },
+                    { "id": "moveOther", "it": "Sposta", "en": "Move", "key": "⇧F6" }
                 ]
 
                 delegate: Rectangle {
@@ -1765,7 +1765,14 @@ FloatingWindow {
     Shortcut { sequence: "Shift+Delete"; enabled: !manager.busy; onActivated: manager.doDeleteForever() }
     Shortcut { sequence: "Ctrl+X"; enabled: !manager.busy; onActivated: manager.doCut() }
     Shortcut { sequence: "Ctrl+V"; enabled: !manager.busy; onActivated: manager.doPaste() }
-    Shortcut { sequence: "Ctrl+N"; enabled: !manager.busy; onActivated: manager.doNewFolder() }
+    // ── Come su Windows (Giacomo, 4 ottobre 2026) ────────────────────────
+    //
+    // Erano nello stile dei gestori a due riquadri: F5 copiava nell'altro
+    // riquadro, Ctrl+N faceva una cartella. Chi arriva da Windows premeva F5
+    // per aggiornare e si ritrovava una copia (J3, PC di prova). Adesso F5
+    // aggiorna, Ctrl+N è una finestra, Ctrl+Maiusc+N una cartella; copiare e
+    // spostare fra riquadri sono F6 e Maiusc+F6.
+    Shortcut { sequence: "Ctrl+Shift+N"; enabled: !manager.busy; onActivated: manager.doNewFolder() }
     Shortcut { sequence: "F2";     enabled: !manager.busy; onActivated: manager.doRename() }
     // Ctrl+F apre la riga di filtro del riquadro attivo. Non si spegne con
     // `busy` come le altre: cercare mentre una copia è in corso è legittimo.
@@ -1775,13 +1782,12 @@ FloatingWindow {
         onActivated: if (manager.current) manager.current.startFilter()
     }
     Shortcut { sequence: "F4";     enabled: !manager.busy; onActivated: manager.openTerminalHere() }
-    Shortcut { sequence: "F5";     enabled: !manager.busy; onActivated: manager.sendToOther(false) }
-    Shortcut { sequence: "F6";     enabled: !manager.busy; onActivated: manager.sendToOther(true) }
+    Shortcut { sequence: "F5";     enabled: !manager.busy; onActivated: if (manager.current) manager.current.reload() }
+    Shortcut { sequence: "F6";     enabled: !manager.busy; onActivated: manager.sendToOther(false) }
+    Shortcut { sequence: "Shift+F6"; enabled: !manager.busy; onActivated: manager.sendToOther(true) }
     Shortcut { sequence: "Delete"; enabled: !manager.busy; onActivated: manager.doTrash() }
     Shortcut { sequence: "Ctrl+T"; enabled: !manager.busy; onActivated: manager.addTab() }
-    // Ctrl+N è già «nuova cartella» qui da prima, e cambiarglielo sotto le
-    // mani a chi lo usa sarebbe peggio di una scorciatoia insolita.
-    Shortcut { sequence: "Ctrl+Shift+N"; enabled: !manager.busy; onActivated: manager.apriNuovaFinestra() }
+    Shortcut { sequence: "Ctrl+N"; enabled: !manager.busy; onActivated: manager.apriNuovaFinestra() }
     Shortcut { sequence: "Ctrl+W"; enabled: !manager.busy; onActivated: manager.closeCurrentTab() }
     Shortcut { sequence: "Alt+Return"; enabled: !manager.busy; onActivated: manager.doProperties() }
     Shortcut {
@@ -2456,10 +2462,10 @@ FloatingWindow {
         if (manager.other && n > 0) {
             items.push({ "separator": true });
             items.push({ "label": (it ? "Copia " : "Copy ") + manager.otherSideName,
-                         "icon": "split", "action": "copyOther", "shortcut": "F5" });
+                         "icon": "split", "action": "copyOther", "shortcut": "F6" });
             if (puoi)
                 items.push({ "label": (it ? "Sposta " : "Move ") + manager.otherSideName,
-                             "icon": "split", "action": "moveOther", "shortcut": "F6" });
+                             "icon": "split", "action": "moveOther", "shortcut": "Maiusc+F6" });
         }
 
         items.push({ "separator": true });
@@ -2472,7 +2478,7 @@ FloatingWindow {
         if (puoi) {
             items.push({ "label": it ? "Nuova cartella" : "New folder",
                          "icon": "plus", "action": "newFolder",
-                         "shortcut": "Ctrl+N" });
+                         "shortcut": "Ctrl+Maiusc+N" });
             items.push({ "label": it ? "Nuovo documento" : "New document",
                          "icon": "document", "action": "newFile" });
         }
