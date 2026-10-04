@@ -53,6 +53,10 @@ class IndiceAlias {
   int get regole =>
       _jolly.length + _perBus.values.fold(0, (s, l) => s + l.length);
 
+  /// Le regole che il kernel dichiara, anche quelle non tenute per
+  /// `soloBus`: è il numero che la pagina Macchina mostra.
+  int regoleLette = 0;
+
   IndiceAlias();
 
   /// Costruito dai tre file di `/usr/lib/modules/<rilascio>/`. Uno che manca
@@ -102,6 +106,7 @@ class IndiceAlias {
     // spazi: se una riga ne ha più di tre pezzi, non è una riga che capiamo.
     final pezzi = riga.trim().split(_spazi);
     if (pezzi.length != 3 || pezzi[0] != 'alias') return;
+    regoleLette++;
     final modello = pezzi[1];
     final bus = _bus(modello);
     if (bus != null && soloBus != null && !soloBus.contains(bus)) return;

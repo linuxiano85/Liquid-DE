@@ -162,6 +162,7 @@ kernel/drivers/acpi/battery.ko
     test('le regole degli altri bus non si tengono, i jolly sì', () {
       final i = IndiceAlias.daTesti(alias: testo, soloBus: {'pci'});
       expect(i.regole, 2);
+      expect(i.regoleLette, 3, reason: 'la pagina Macchina mostra tutte quelle del kernel');
       expect(i.moduliPer('pci:v00008086d000015BCsv0sd0bc02sc00i00'), {'e1000e'});
       expect(i.moduliPer('usb:v046Dp0001d0dc0dsc0dp0ic0isc0ip0in0'), isEmpty);
       expect(i.moduliPer('acpi:PNP0C0A:'), {'battery'});

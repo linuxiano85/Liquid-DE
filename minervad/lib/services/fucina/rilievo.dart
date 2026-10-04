@@ -213,7 +213,7 @@ class Rilevatore {
       avvio: avvio,
       modprobed: diario,
       configPartenza: partenza,
-      indiceRegole: indice.regole,
+      indiceRegole: indice.regoleLette,
       avvisi: avvisi,
     );
   }
