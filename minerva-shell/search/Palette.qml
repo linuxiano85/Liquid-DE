@@ -25,7 +25,11 @@ import "../ui" as Ui
 // I prefissi non vanno imparati: chi scrive solo il nome di un'app trova
 // l'app, ed è il novanta per cento dei casi.
 PanelWindow {
-    id: palette
+    // `tavola` e non `palette`: dentro i delegati (Rectangle) «palette» è la
+    // proprietà di serie di Qt (`Item.palette`), e `palette.selected` o
+    // `palette.activate()` finivano lì — la selezione e il clic non
+    // funzionavano (F1, PC di prova).
+    id: tavola
 
     signal requestClose()
 
@@ -39,10 +43,10 @@ PanelWindow {
     color: "transparent"
 
     function close() {
-        if (!palette.visible)
+        if (!tavola.visible)
             return;
-        palette.visible = false;
-        palette.requestClose();
+        tavola.visible = false;
+        tavola.requestClose();
     }
 
     // ── Modello dei risultati ────────────────────────────────────────────
@@ -106,8 +110,8 @@ PanelWindow {
         for (var i = 0; i < apps.length; i++)
             v.push({ "app": apps[i], "nome": (apps[i].name || "").toLowerCase() });
         v.sort(function(a, b) { return a.nome.localeCompare(b.nome); });
-        palette.ordinati = v;
-        palette.rebuild();
+        tavola.ordinati = v;
+        tavola.rebuild();
     }
 
     Component.onCompleted: {
@@ -117,10 +121,10 @@ PanelWindow {
 
     Connections {
         target: Core.Ipc
-        function onAllAppsReceived() { palette.riordina(); }
+        function onAllAppsReceived() { tavola.riordina(); }
     }
 
-    onQueryChanged: { palette.selected = 0; rebuild(); }
+    onQueryChanged: { tavola.selected = 0; rebuild(); }
 
     /// Valuta un'espressione aritmetica. Accetta solo cifre e operatori: la
     /// stringa finisce in un valutatore, e tutto ciò che non è un calcolo non
@@ -139,12 +143,12 @@ PanelWindow {
     }
 
     function rebuild() {
-        var q = palette.query.trim();
+        var q = tavola.query.trim();
         var out = [];
 
         // ── Calcolo ──────────────────────────────────────────────────────
         if (q.indexOf("=") === 0) {
-            var value = palette.evaluate(q.substring(1));
+            var value = tavola.evaluate(q.substring(1));
             if (value !== null) {
                 out.push({
                     "kind": "math", "icon": "plus",
@@ -155,7 +159,7 @@ PanelWindow {
                     "payload": String(value)
                 });
             }
-            palette.results = out;
+            tavola.results = out;
             return;
         }
 
@@ -172,7 +176,7 @@ PanelWindow {
                     "payload": cmd
                 });
             }
-            palette.results = out;
+            tavola.results = out;
             return;
         }
 
@@ -186,7 +190,7 @@ PanelWindow {
         // quello che si è scritto viene prima di chi lo contiene a metà — è
         // quasi sempre quello che si cerca — e i due gruppi si riempiono in
         // un giro solo, ognuno già alfabetico.
-        var v = palette.ordinati;
+        var v = tavola.ordinati;
         var testa = [];
         var coda = [];
         for (var i = 0; i < v.length; i++) {
@@ -221,8 +225,8 @@ PanelWindow {
         // voce di sistema in cima gli farebbe premere Invio sulla cosa
         // sbagliata.
         if (needle !== "") {
-            for (var k = 0; k < palette.commands.length; k++) {
-                var c = palette.commands[k];
+            for (var k = 0; k < tavola.commands.length; k++) {
+                var c = tavola.commands[k];
                 var label = (it ? c.it : c.en);
                 if (c.keys.indexOf(needle) === -1
                         && label.toLowerCase().indexOf(needle) === -1)
@@ -236,11 +240,11 @@ PanelWindow {
             }
         }
 
-        palette.results = out;
+        tavola.results = out;
     }
 
     function activate(index) {
-        var r = palette.results[index];
+        var r = tavola.results[index];
         if (!r)
             return;
 
@@ -251,32 +255,32 @@ PanelWindow {
         case "shell":
             // Qui la riga È il comando: l'hai scritta tu apposta, preceduta
             // da «>». È l'unico punto di Minerva in cui questo è voluto.
-            palette.run(["sh", "-c", r.payload]);
+            tavola.run(["sh", "-c", r.payload]);
             break;
         case "math":
             // Il risultato passa come argomento, non incollato nella riga:
             // vedi `Core.Exec.shArgs` per il perché.
-            palette.run(["sh", "-c", "printf %s \"$1\" | wl-copy",
+            tavola.run(["sh", "-c", "printf %s \"$1\" | wl-copy",
                          "sh", String(r.payload)]);
             break;
         case "command":
-            palette.commandRequested(r.payload);
+            tavola.commandRequested(r.payload);
             break;
         }
-        palette.close();
+        tavola.close();
     }
 
-    /// Le azioni che la shell deve eseguire per conto della palette. Non le
+    /// Le azioni che la shell deve eseguire per conto della tavola. Non le
     /// esegue qui: aprire il pannello impostazioni è compito della shell, che
     /// è l'unica a sapere se è già aperto.
     signal commandRequested(string id)
 
     function move(delta) {
-        if (palette.results.length === 0)
+        if (tavola.results.length === 0)
             return;
-        palette.selected = Math.max(0, Math.min(palette.results.length - 1,
-                                                palette.selected + delta));
-        list.positionViewAtIndex(palette.selected, ListView.Contain);
+        tavola.selected = Math.max(0, Math.min(tavola.results.length - 1,
+                                                tavola.selected + delta));
+        list.positionViewAtIndex(tavola.selected, ListView.Contain);
     }
 
     // ── Sfondo ───────────────────────────────────────────────────────────
@@ -287,7 +291,7 @@ PanelWindow {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: palette.close()
+            onClicked: tavola.close()
         }
     }
 
@@ -296,16 +300,16 @@ PanelWindow {
     Rectangle {
         id: card
 
-        width: Math.min(640, palette.width - Theme.Effects.space6 * 2)
+        width: Math.min(640, tavola.width - Theme.Effects.space6 * 2)
         // Cresce con i risultati e si ferma: una scheda che salta da 80 a 600
         // pixel a ogni tasto premuto è illeggibile.
         height: Math.min(field.height + list.contentHeight + Theme.Effects.space2 * 2,
-                         palette.height * 0.62)
+                         tavola.height * 0.62)
 
         anchors.horizontalCenter: parent.horizontalCenter
         // Non centrata: un po' sopra la metà. È dove cade lo sguardo, e lascia
         // spazio all'elenco che cresce verso il basso.
-        y: Math.round(palette.height * 0.18)
+        y: Math.round(tavola.height * 0.18)
 
         radius: Theme.Effects.radiusMD
         color: Theme.Colors.panel
@@ -351,8 +355,8 @@ PanelWindow {
                 anchors.leftMargin: Theme.Effects.space4
                 anchors.verticalCenter: parent.verticalCenter
                 width: 20; height: 20
-                name: palette.query.indexOf("=") === 0 ? "plus"
-                    : palette.query.indexOf(">") === 0 ? "terminal"
+                name: tavola.query.indexOf("=") === 0 ? "plus"
+                    : tavola.query.indexOf(">") === 0 ? "terminal"
                     : "search"
                 color: Theme.Colors.accent
             }
@@ -376,17 +380,17 @@ PanelWindow {
                 font.weight: Theme.Typography.weightRegular
                 font.pixelSize: Theme.Typography.sizeLG
 
-                onTextChanged: palette.query = text
+                onTextChanged: tavola.query = text
 
-                Keys.onDownPressed: palette.move(1)
-                Keys.onUpPressed: palette.move(-1)
-                Keys.onReturnPressed: palette.activate(palette.selected)
-                Keys.onEnterPressed: palette.activate(palette.selected)
+                Keys.onDownPressed: tavola.move(1)
+                Keys.onUpPressed: tavola.move(-1)
+                Keys.onReturnPressed: tavola.activate(tavola.selected)
+                Keys.onEnterPressed: tavola.activate(tavola.selected)
                 Keys.onEscapePressed: {
                     if (text !== "")
                         text = "";
                     else
-                        palette.close();
+                        tavola.close();
                 }
 
                 Text {
@@ -410,7 +414,7 @@ PanelWindow {
                 anchors.rightMargin: Theme.Effects.space3
                 height: 1
                 color: Theme.Colors.edge
-                visible: palette.results.length > 0
+                visible: tavola.results.length > 0
             }
         }
 
@@ -434,8 +438,8 @@ PanelWindow {
             anchors.margins: Theme.Effects.space2
             clip: true
             spacing: 1
-            model: palette.results
-            currentIndex: palette.selected
+            model: tavola.results
+            currentIndex: tavola.selected
             boundsBehavior: Flickable.StopAtBounds
 
             delegate: Rectangle {
@@ -443,7 +447,7 @@ PanelWindow {
                 required property var modelData
                 required property int index
 
-                readonly property bool current: index === palette.selected
+                readonly property bool current: index === tavola.selected
 
                 width: ListView.view.width
                 height: 52
@@ -557,8 +561,8 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onEntered: palette.selected = row.index
-                    onClicked: palette.activate(row.index)
+                    onEntered: tavola.selected = row.index
+                    onClicked: tavola.activate(row.index)
                 }
             }
         }
@@ -569,7 +573,7 @@ PanelWindow {
             anchors.top: field.bottom
             anchors.topMargin: Theme.Effects.space5
             anchors.horizontalCenter: parent.horizontalCenter
-            visible: palette.results.length === 0 && palette.query.trim() !== ""
+            visible: tavola.results.length === 0 && tavola.query.trim() !== ""
             text: Core.Strings.t("noResults")
             color: Theme.Colors.textFaint
             font.family: Theme.Typography.fontDisplay

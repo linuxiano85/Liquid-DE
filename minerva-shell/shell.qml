@@ -2499,6 +2499,18 @@ ShellRoot {
         onPressed: root.toggleCheatsheet()
     }
 
+    // La palette di ricerca: c'era, e non la apriva niente (J5, PC di prova).
+    // Super+R come «Esegui» su Windows. Ripremuto, la chiude.
+    Core.Scorciatoia {
+        name: "cerca"
+        onPressed: {
+            if (paletteLoader.active && paletteLoader.item)
+                paletteLoader.item.close();
+            else
+                root.openPalette();
+        }
+    }
+
     // Super tenuto premuto: i tasti compaiono sulla scrivania finché non lo
     // lasci (il compositore annuncia «tasti», e «tasti-via» al rilascio).
     Core.Scorciatoia {

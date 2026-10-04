@@ -99,6 +99,9 @@ $mod L -> avvia: "$minerva/scripts/minerva-blocca"
 @ Aprire un posto | Tutti i tasti
 $mod K -> minerva: cheatsheet
 
+@ Aprire un posto | Cerca: programmi, conti con «=», comandi con «>»
+$mod R -> minerva: cerca
+
 
 # ───────────────────────────────────────────────────────────────────────────
 #  LA FINESTRA
