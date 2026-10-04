@@ -22,7 +22,8 @@ Shell/PAM già presenti in `principale` (f8f5e2e).
   directory non prova che i suoi discendenti siano inattivi.
 - File: avvii serializzati, IPC e avvio limitati nel tempo, consegna della
   richiesta dopo la disponibilità del processo, fallback se lo scope systemd
-  fallisce. Il precaricamento non apre finestre e non assorbe il primo clic.
+  fallisce. La risposta IPC deve confermare esplicitamente la richiesta, anche
+  quando Quickshell restituisce successo con un target assente. Il precaricamento non apre finestre e non assorbe il primo clic.
 
 ## Verifica
 
@@ -34,8 +35,9 @@ usano GNU patch e file reali. La prova del contenitore initramfs richiede cpio.
 
 `python3 tests/test_recovery_scripts.py` verifica concorrenza, IPC bloccato e
 protezione degli orfani con comandi isolati: non rimuove pacchetti reali.
-La CI compila il demone completo e avvia Fucina e File in Quickshell su Xvfb,
-conservando immagini e registri. Restano attive le prove native Shell/PAM.
+La CI compila il demone completo e avvia Fucina e File in Quickshell su Wayland/Sway headless,
+conservando immagini e registri. Il test di File richiede layer-shell: su X11
+la creazione dei menu può restare incompleta e non costituisce una prova valida. Restano attive le prove native Shell/PAM.
 
 Non equivalgono a una compilazione completa e avvio del kernel sul PC reale,
 né dimostrano la causa del precedente schermo nero. Per quella diagnosi servono

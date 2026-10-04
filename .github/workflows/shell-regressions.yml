@@ -152,6 +152,9 @@ jobs:
         run: pacman -Syu --noconfirm --needed quickshell sway grim mesa qt6-svg qt6-5compat qt6-multimedia qt6-websockets qt6-wayland ttf-dejavu adwaita-fonts noto-fonts dbus python shadow util-linux
       - name: Test production Fucina and File Manager windows
         run: |
+          # Headless Sway needs no privileged scheduler capability; Docker
+          # cannot execute the Arch binary with capabilities outside its set.
+          if [ -n "$(getcap /usr/bin/sway)" ]; then setcap -r /usr/bin/sway; fi
           useradd -m liquidapps
           mkdir -p native-results /tmp/liquid-apps-runtime
           chown liquidapps:liquidapps native-results /tmp/liquid-apps-runtime
