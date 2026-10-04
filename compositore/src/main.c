@@ -503,6 +503,9 @@ struct minerva {
 	/// Quanti programmi hanno chiesto «non spegnere lo schermo adesso».
 	/// Un video a schermo intero è il caso per cui il protocollo esiste.
 	int inibitori;
+	/// Il gestore del protocollo, per rileggere gli inibitori vivi e le loro
+	/// superfici. Vedi `inibitori_visibili`.
+	struct wlr_idle_inhibit_manager_v1 *inibizione;
 	struct wl_listener inibitore_nuovo;
 
 	// ── Il blocco schermo ────────────────────────────────────────────
@@ -545,6 +548,9 @@ struct minerva {
 	/// così, alla prima prova: la seconda commit della superficie del blocco
 	/// arrivava un istante dopo la prima e spegneva la sessione annidata.
 	bool locked_inviato;
+	/// Quando si è rilanciato l'ultima volta `minerva-blocca` da bloccati e
+	/// senza serratura (ms monotoni). Vedi `blocco_rilancia`.
+	uint64_t blocco_rilanciato_ms;
 	struct wlr_scene_tree *piano_blocco;
 	/// Il rettangolo nero sotto le superfici del blocco: si vede quando il
 	/// client del blocco è morto e non c'è più niente da disegnare.
@@ -862,6 +868,8 @@ struct appoggiata {
 
 	struct wl_listener commit;
 	struct wl_listener distrutta;
+	/// I menù del pannello: arrivano da qui, non da `menu_nuovo` (vedi lì).
+	struct wl_listener nuovo_menu;
 };
 
 // ── Le finestre X11 che dicono «non toccarmi» ────────────────────────────
@@ -1197,6 +1205,8 @@ static void disponi(struct minerva *m, struct wlr_output *out);
 static void annuncia(struct minerva *m, const char *che, struct finestra *f);
 static bool finestra_visibile(struct finestra *f);
 static void freno_aggiorna(struct minerva *m);
+static bool inibitori_visibili(struct minerva *m,
+		const struct wlr_idle_inhibitor_v1 *escluso);
 static bool schermo_intero_visibile(struct minerva *m);
 static pid_t finestra_pid(struct finestra *f);
 // Il confine fra «finestra» e «xdg-shell». Vedi il blocco che le definisce.
@@ -1236,6 +1246,7 @@ struct fantasma;
 static void fantasma_scarta(struct fantasma *g);
 static void fantasmi_fotogramma(struct minerva *m);
 static void proteggi_sonno(void *data);
+static void blocco_rilancia(struct minerva *m);
 
 // ── Il fuoco ──────────────────────────────────────────────────────────────
 //
@@ -1659,6 +1670,23 @@ static void schermo_distrutto(struct wl_listener *l, void *dati) {
 	wl_list_remove(&s->output_commit.link);
 	wl_list_remove(&s->distrutto.link);
 	wl_list_remove(&s->link);
+
+	// ── I pannelli di questo schermo se ne vanno con lui ─────────────────
+	//
+	// wlroots non ascolta la distruzione dello schermo per le superfici
+	// layer-shell: tocca al compositore. Senza, `a->out` e `ls->output`
+	// restavano puntatori a uno schermo liberato. Staccato l'HDMI, al primo
+	// commit il pannello orfano veniva disposto su un riquadro vuoto, cioè
+	// in (0,0) sopra lo schermo principale; e al ricollegamento, se il nuovo
+	// schermo riusava lo stesso indirizzo (succede), `disponi` contava due
+	// barre e due zone riservate. Distrutta, il cliente riceve `closed` e ne
+	// crea una nuova sullo schermo giusto. 30 settembre 2026.
+	struct appoggiata *a, *a_dopo;
+	wl_list_for_each_safe(a, a_dopo, &m->appoggiate, link) {
+		if (a->out == s->out)
+			wlr_layer_surface_v1_destroy(a->ls);
+	}
+
 	free(s);
     if (m->canale) wl_event_loop_add_idle(m->loop, monitor_recover, m);
 	blocco_verifica_presentazione(m);
@@ -2165,6 +2193,17 @@ static void appoggiata_commit(struct wl_listener *l, void *dati) {
 		return;
 	}
 
+	// ── Il piano si può cambiare dopo la nascita ─────────────────────────
+	//
+	// `set_layer` è lecito in qualunque momento, ma il nodo restava nel piano
+	// scelto alla creazione: un pannello che passa da `top` a `overlay` per
+	// coprire uno schermo intero restava sotto la finestra. Si sposta il
+	// nodo — i suoi menù, figli suoi, lo seguono. 30 settembre 2026.
+	if (a->ls->current.committed & WLR_LAYER_SURFACE_V1_STATE_LAYER) {
+		wlr_scene_node_reparent(&a->scena->tree->node,
+			a->m->piano[a->ls->current.layer]);
+	}
+
 	// Il fondo sfocato segue la misura del pannello, che cambia quando cambia
 	// lo schermo o quando la shell si ridispone.
 	appoggiata_sfocatura(a);
@@ -2218,6 +2257,7 @@ static void appoggiata_distrutta(struct wl_listener *l, void *dati) {
 	struct wlr_output *out = a->out;
 	wl_list_remove(&a->commit.link);
 	wl_list_remove(&a->distrutta.link);
+	wl_list_remove(&a->nuovo_menu.link);
 	wl_list_remove(&a->link);
 	free(a);
 	// Lo spazio che teneva torna disponibile: senza questa riga, chiudere un
@@ -2230,6 +2270,17 @@ static void appoggiata_distrutta(struct wl_listener *l, void *dati) {
 	puntatore_ricalcola(m);
 }
 
+static void menu_appendi(struct minerva *m, struct wlr_xdg_popup *popup,
+		struct wlr_scene_tree *genitore);
+
+// Un menù del pannello, con il genitore ormai deciso: `get_popup` di
+// layer-shell. È la seconda metà della strada che `menu_nuovo` lascia cadere
+// quando il popup nasce orfano.
+static void appoggiata_menu(struct wl_listener *l, void *dati) {
+	struct appoggiata *a = wl_container_of(l, a, nuovo_menu);
+	menu_appendi(a->m, dati, a->scena->tree);
+}
+
 static void appoggiata_nuova(struct wl_listener *l, void *dati) {
 	struct minerva *m = wl_container_of(l, m, appoggiata_nuova);
 	struct wlr_layer_surface_v1 *ls = dati;
@@ -2239,9 +2290,26 @@ static void appoggiata_nuova(struct wl_listener *l, void *dati) {
 	// Il protocollo permette al cliente di lasciare `output` vuoto e di
 	// affidarsi al compositore. Senza questa riga la superficie resta senza
 	// schermo e non compare mai — un altro modo silenzioso di non funzionare.
+	//
+	// ── E non per forza quello in (0,0) ──────────────────────────────────
+	//
+	// Portatile chiuso con l'eDP spento e il monitor esterno a `1920 0` (la
+	// sua posizione di sempre accanto al portatile): in (0,0) non c'è nessuno
+	// schermo, e ogni notifica o lanciatore senza `output` veniva distrutto
+	// appena nato. Prima quello sotto il puntatore, poi il primo acceso.
+	// 30 settembre 2026.
 	if (ls->output == NULL) {
-		struct wlr_output *primo =
-			wlr_output_layout_output_at(m->schermi, 0, 0);
+		struct wlr_output *primo = wlr_output_layout_output_at(m->schermi,
+			m->cursore->x, m->cursore->y);
+		if (primo == NULL) {
+			struct schermo *sc;
+			wl_list_for_each(sc, &m->schermi_elenco, link) {
+				if (sc->out->enabled) {
+					primo = sc->out;
+					break;
+				}
+			}
+		}
 		if (primo == NULL) {
 			wlr_layer_surface_v1_destroy(ls);
 			return;
@@ -2256,7 +2324,6 @@ static void appoggiata_nuova(struct wl_listener *l, void *dati) {
 	a->m = m;
 	a->ls = ls;
 	a->out = ls->output;
-	wl_list_insert(&m->appoggiate, &a->link);
 
 	// Il piano lo dice il cliente, e va rispettato: la dock chiede «bottom»,
 	// la barra «top», il blocco schermo «overlay». Metterli tutti insieme
@@ -2264,9 +2331,13 @@ static void appoggiata_nuova(struct wl_listener *l, void *dati) {
 	struct wlr_scene_tree *piano = m->piano[ls->pending.layer];
 	a->scena = wlr_scene_layer_surface_v1_create(piano, ls);
 	if (a->scena == NULL) {
+		// Qui prima `a` era GIÀ nell'elenco: liberarlo lasciava un nodo
+		// morto in `m->appoggiate`, letto alla prossima `disponi`. Si
+		// inserisce solo dopo, a creazione riuscita. 30 settembre 2026.
 		free(a);
 		return;
 	}
+	wl_list_insert(&m->appoggiate, &a->link);
 	a->scena->tree->node.data = a;
 	ls->data = a;
 
@@ -2274,6 +2345,8 @@ static void appoggiata_nuova(struct wl_listener *l, void *dati) {
 	wl_signal_add(&ls->surface->events.commit, &a->commit);
 	a->distrutta.notify = appoggiata_distrutta;
 	wl_signal_add(&ls->events.destroy, &a->distrutta);
+	a->nuovo_menu.notify = appoggiata_menu;
+	wl_signal_add(&ls->events.new_popup, &a->nuovo_menu);
 
 	wlr_log(WLR_INFO, "minerva: superficie appoggiata «%s» sul piano %d",
 		ls->namespace ? ls->namespace : "?", ls->pending.layer);
@@ -2356,9 +2429,24 @@ static bool finestra_vuole_ingrandita(struct finestra *f) {
 	return f->toplevel->requested.maximized;
 }
 
+// ── A una finestra xdg non ancora pronta non si scrive niente ──────────────
+//
+// Ogni `wlr_xdg_toplevel_set_*` prepara una configure, e wlroots pretende con
+// un `assert` che la superficie sia inizializzata. Non lo è prima del primo
+// commit, e SMETTE di esserlo quando il programma si smappa con un buffer
+// nullo — restando però nel nostro elenco, con indirizzo e posto nella dock.
+// Un clic sulla dock (`fuoco 0x…`), o `fuoco pid:N` sulla finestra appena
+// creata, e il compositore si fermava con tutta la sessione. Riprodotti
+// tutti e due il 30 settembre 2026. X11 non ha questo stato.
+static bool finestra_configurabile(struct finestra *f) {
+	return f->razza == FINESTRA_X11 || f->toplevel->base->initialized;
+}
+
 /// «Sei tu quella attiva»: è il segno che fa accendere il bordo ai programmi
 /// che se lo disegnano da soli.
 static void finestra_di_attiva(struct finestra *f, bool si) {
+	if (!finestra_configurabile(f))
+		return;
 	if (f->razza == FINESTRA_X11) {
 		wlr_xwayland_surface_activate(f->xsup, si);
 		// ── E in più, l'ordine dentro X ──────────────────────────────────
@@ -2387,6 +2475,8 @@ static void finestra_di_attiva(struct finestra *f, bool si) {
 ///
 /// `x, y` sono l'angolo del PROGRAMMA, barra del titolo esclusa.
 static void finestra_di_geometria(struct finestra *f, int x, int y, int w, int h) {
+	if (!finestra_configurabile(f))
+		return;
 	if (f->razza == FINESTRA_X11) {
 		wlr_xwayland_surface_configure(f->xsup, (int16_t)x, (int16_t)y,
 			(uint16_t)(w > 0 ? w : 0), (uint16_t)(h > 0 ? h : 0));
@@ -2398,6 +2488,8 @@ static void finestra_di_geometria(struct finestra *f, int x, int y, int w, int h
 }
 
 static void finestra_di_ingrandita(struct finestra *f, bool si) {
+	if (!finestra_configurabile(f))
+		return;
 	if (f->razza == FINESTRA_X11) {
 		// X11 distingue «largo quanto lo schermo» da «alto quanto lo
 		// schermo»: sono due stati separati, e ingrandito vuol dire tutti e
@@ -2445,6 +2537,8 @@ static void finestra_massimo(struct finestra *f, int *w, int *h) {
 }
 
 static void finestra_di_schermo_intero(struct finestra *f, bool si) {
+	if (!finestra_configurabile(f))
+		return;
 	if (f->razza == FINESTRA_X11) {
 		wlr_xwayland_surface_set_fullscreen(f->xsup, si);
 		return;
@@ -3155,9 +3249,10 @@ static bool finestra_visibile(struct finestra *f) {
 
 static void finestra_mostra_o_nascondi(struct finestra *f) {
 	wlr_scene_node_set_enabled(&f->cornice->node, finestra_visibile(f));
-	// Un film ridotto, o lasciato su un'altra scrivania, non frena più.
-	if (f->schermo_intero)
-		freno_aggiorna(f->m);
+	// Un film ridotto, o lasciato su un'altra scrivania, non frena più — e
+	// nemmeno il suo inibitore, se ne ha uno (`inibitori_visibili`): per
+	// questo si riguarda sempre, non solo per lo schermo intero.
+	freno_aggiorna(f->m);
 }
 
 static void finestra_riduci(struct finestra *f, bool si) {
@@ -3821,11 +3916,41 @@ static void presa_inizia(struct finestra *f, int come, uint32_t bordi) {
 		f->agganciata = false;
 }
 
+// ── Una presa chiesta dal programma vale solo col tasto giù ─────────────────
+//
+// `xdg_toplevel.move/resize` porta il numero di serie della pressione che l'ha
+// provocata, e sta al compositore controllarlo. Qui non lo si guardava: un
+// programma qualunque poteva chiederlo quando voleva, prendersi fuoco e primo
+// piano, e far seguire il puntatore alla sua finestra fino al clic dopo.
+// Il serie deve essere quello dell'unico tasto giù, e il puntatore deve stare
+// su questa finestra — sulla sua superficie O su una sua sottosuperficie: le
+// barre di libdecor sono sottosuperfici, e pretendere la principale le
+// avrebbe rese immobili. X11 il serie non ce l'ha: basta il tasto giù.
+// 30 settembre 2026.
+static bool presa_lecita(struct finestra *f, const uint32_t *serie) {
+	struct wlr_seat *seat = f->m->seat;
+	if (serie == NULL)
+		return seat->pointer_state.button_count > 0;
+	if (!wlr_seat_validate_pointer_grab_serial(seat, NULL, *serie))
+		return false;
+	struct wlr_surface *sotto = seat->pointer_state.focused_surface;
+	return sotto != NULL
+		&& wlr_surface_get_root_surface(sotto) == finestra_superficie(f);
+}
+
 static void chiede_sposta(struct wl_listener *l, void *dati) {
-	(void)dati;
 	struct finestra *f = wl_container_of(l, f, chiede_sposta);
+	const struct wlr_xdg_toplevel_move_event *e =
+		f->razza == FINESTRA_XDG ? dati : NULL;
+	if (!presa_lecita(f, e != NULL ? &e->serial : NULL))
+		return;
 	fuoco_finestra(f->m, f);
 	presa_inizia(f, PRESA_SPOSTA, 0);
+	// `presa_inizia` rifiuta lo schermo intero: senza questa riga il resto
+	// partiva lo stesso — l'elastico su una finestra che non si muove, e
+	// `presa_stacca` sulla presa di un'ALTRA finestra, se ce n'era una.
+	if (f->m->presa_di != f)
+		return;
 	f->m->presa_mossa = true;
 	presa_stacca(f->m, f);
 	// ── Anche chi si disegna la barra da solo trema ──────────────────
@@ -3845,15 +3970,22 @@ static void chiede_ridimensiona(struct wl_listener *l, void *dati) {
 	// che sia l'altra non dà nessun errore: dà dei lati sbagliati, cioè una
 	// finestra che si allunga dalla parte opposta a quella che si tira.
 	uint32_t bordi;
+	const uint32_t *serie = NULL;
 	if (f->razza == FINESTRA_X11) {
 		const struct wlr_xwayland_resize_event *e = dati;
 		bordi = e->edges;
 	} else {
 		const struct wlr_xdg_toplevel_resize_event *e = dati;
 		bordi = e->edges;
+		serie = &e->serial;
 	}
+	// Vedi `presa_lecita`.
+	if (!presa_lecita(f, serie))
+		return;
 	fuoco_finestra(f->m, f);
 	presa_inizia(f, PRESA_RIDIMENSIONA, bordi);
+	if (f->m->presa_di != f)
+		return;
 	f->m->presa_mossa = true;
 }
 
@@ -3886,6 +4018,7 @@ struct menu {
 	struct wlr_scene_tree *albero;
 	struct wl_listener commit;
 	struct wl_listener distrutto;
+	struct wl_listener riposiziona;
 };
 
 /// L'albero della scena a cui appendere un menù, dato il suo genitore.
@@ -3927,18 +4060,24 @@ static struct wlr_scene_tree *albero_del_genitore(struct wlr_surface *genitore) 
 /// Il riquadro va dato nelle coordinate del GENITORE, non dello schermo: da
 /// qui la sottrazione. Darlo in coordinate assolute non dà errore — dà menù
 /// che si ribaltano quando non serve e escono quando servirebbe.
-static void menu_commit(struct wl_listener *l, void *dati) {
-	(void)dati;
-	struct menu *mn = wl_container_of(l, mn, commit);
-	if (!mn->popup->base->initial_commit)
-		return;
-
+//
+// ── Lo schermo si sceglie dal punto d'ancoraggio ─────────────────────────
+//
+// Non dall'origine del genitore: una finestra spostata in parte oltre il
+// bordo sinistro ha l'origine FUORI da ogni schermo, `output_at` rispondeva
+// NULL e il menù non veniva vincolato affatto — si apriva mezzo fuori. Il
+// punto a cui il menù è attaccato (il centro del rettangolo d'ancoraggio) è
+// dove l'utente ha cliccato, quindi sta su uno schermo. 30 settembre 2026.
+static void menu_vincola(struct menu *mn) {
 	int gx = 0, gy = 0;
 	if (mn->albero->node.parent != NULL)
 		wlr_scene_node_coords(&mn->albero->node.parent->node, &gx, &gy);
 
+	const struct wlr_box *anc = &mn->popup->scheduled.rules.anchor_rect;
 	struct wlr_output *out = wlr_output_layout_output_at(mn->m->schermi,
-		gx, gy);
+		gx + anc->x + anc->width / 2.0, gy + anc->y + anc->height / 2.0);
+	if (out == NULL)
+		out = wlr_output_layout_output_at(mn->m->schermi, gx, gy);
 	if (out == NULL)
 		return;
 	struct wlr_box b;
@@ -3948,20 +4087,69 @@ static void menu_commit(struct wl_listener *l, void *dati) {
 	wlr_xdg_popup_unconstrain_from_box(mn->popup, &b);
 }
 
+static void menu_commit(struct wl_listener *l, void *dati) {
+	(void)dati;
+	struct menu *mn = wl_container_of(l, mn, commit);
+	if (!mn->popup->base->initial_commit)
+		return;
+	menu_vincola(mn);
+}
+
+// ── E di nuovo a ogni `reposition` ───────────────────────────────────────
+//
+// Un menù può chiedere di spostarsi DOPO essere comparso (`xdg_popup.
+// reposition`: le tendine GTK4 che crescono, i suggerimenti che seguono il
+// testo). wlroots ricalcola la geometria dal nuovo posizionatore e basta:
+// senza rifare il vincolo qui, il menù spostato usciva dallo schermo anche
+// se il primo era stato ribaltato bene.
+static void menu_riposiziona(struct wl_listener *l, void *dati) {
+	(void)dati;
+	struct menu *mn = wl_container_of(l, mn, riposiziona);
+	menu_vincola(mn);
+}
+
 static void menu_distrutto(struct wl_listener *l, void *dati) {
 	(void)dati;
 	struct menu *mn = wl_container_of(l, mn, distrutto);
 	wl_list_remove(&mn->commit.link);
 	wl_list_remove(&mn->distrutto.link);
+	wl_list_remove(&mn->riposiziona.link);
+	// Il ponte all'indietro si stacca: la `wlr_xdg_surface` può vivere più
+	// del suo ruolo di popup, e un sottomenù nato dopo troverebbe qui un
+	// `menu` già liberato (`albero_del_genitore`).
+	mn->popup->base->data = NULL;
 	// L'albero della scena lo distrugge wlroots insieme alla superficie.
 	free(mn);
 }
+
+// Appende un menù alla scena sotto `genitore`. È il corpo comune delle due
+// strade da cui un menù arriva: `menu_nuovo` (genitore xdg) e
+// `appoggiata_menu` (genitore pannello della shell).
+static void menu_appendi(struct minerva *m, struct wlr_xdg_popup *popup,
+		struct wlr_scene_tree *genitore);
 
 static void menu_nuovo(struct wl_listener *l, void *dati) {
 	struct minerva *m = wl_container_of(l, m, menu_nuovo);
 	struct wlr_xdg_popup *popup = dati;
 
-	struct wlr_scene_tree *genitore = albero_del_genitore(popup->parent);
+	// ── Un menù può nascere SENZA genitore ───────────────────────────────
+	//
+	// wlroots annuncia il popup appena creato, e `xdg_surface.get_popup`
+	// accetta un genitore nullo: è proprio la strada dei menù dei pannelli
+	// layer-shell (gtk-layer-shell, Qt), che creano il popup orfano e solo
+	// DOPO lo attaccano con `zwlr_layer_surface_v1.get_popup`. Qui si passava
+	// NULL a `albero_del_genitore`, che leggeva `surface->role` di un
+	// puntatore nullo: il compositore cadeva, con tutta la sessione, per il
+	// menù di una barra — o per un client qualunque che lo facesse apposta.
+	// Riprodotto il 30 settembre 2026. Il genitore arriverà da
+	// `ls->events.new_popup`, vedi `appoggiata_menu`.
+	if (popup->parent == NULL)
+		return;
+	menu_appendi(m, popup, albero_del_genitore(popup->parent));
+}
+
+static void menu_appendi(struct minerva *m, struct wlr_xdg_popup *popup,
+		struct wlr_scene_tree *genitore) {
 	if (m->traccia_menu)
 		fprintf(stderr, "minerva-wayland: menù nuovo, genitore %s\n",
 			genitore != NULL ? "trovato" : "NON TROVATO");
@@ -3992,8 +4180,13 @@ static void menu_nuovo(struct wl_listener *l, void *dati) {
 
 	mn->commit.notify = menu_commit;
 	wl_signal_add(&popup->base->surface->events.commit, &mn->commit);
+	// Sulla distruzione del POPUP, non della `xdg_surface`: il ruolo muore
+	// prima (e a volte da solo), e wlroots pretende con un `assert` che
+	// all'uscita di `destroy_xdg_popup` nessuno ascolti più `reposition`.
 	mn->distrutto.notify = menu_distrutto;
-	wl_signal_add(&popup->base->events.destroy, &mn->distrutto);
+	wl_signal_add(&popup->events.destroy, &mn->distrutto);
+	mn->riposiziona.notify = menu_riposiziona;
+	wl_signal_add(&popup->events.reposition, &mn->riposiziona);
 	if (m->traccia_menu)
 		fprintf(stderr, "minerva-wayland: menù appeso alla scena\n");
 }
@@ -5340,7 +5533,7 @@ static int inattivo_scatta(void *dati) {
 	// si conta. Non si SOSPENDE il conto — lo si azzera: uscendo dal video
 	// è giusto ripartire dai cinque minuti pieni, non dai trenta secondi
 	// che restavano.
-	if (m->inibitori > 0 || schermo_intero_visibile(m)) {
+	if (inibitori_visibili(m, NULL) || schermo_intero_visibile(m)) {
 		inattivo_riparti(m);
 		return 0;
 	}
@@ -5421,8 +5614,45 @@ static bool inattivo_imposta(struct minerva *m, const char *argomenti) {
 // niente è peggio di uno che manca: chi guarda il codice lo dà per fatto.
 struct inibitore {
 	struct minerva *m;
+	struct wlr_idle_inhibitor_v1 *inib;
 	struct wl_listener distrutto;
 };
+
+// ── Frena solo chi si VEDE ───────────────────────────────────────────────
+//
+// Il protocollo è chiaro: l'inibitore vale finché la sua superficie è
+// visibile. Qui si contavano tutti, e un player ridotto a icona, una scheda
+// dimenticata su un'altra scrivania — o un programma qualunque che lo fa
+// apposta — tenevano lo schermo acceso e SBLOCCATO per sempre. «Visibile» è
+// quello che dice la scena: una superficie mappata con almeno uno schermo
+// acceso in `current_outputs` NON sospeso. Attenzione al «sospeso»: quando
+// una superficie sparisce (ridotta, su un'altra scrivania, coperta, sotto
+// la tenda del blocco) la scena non le manda `leave` — lascia gli schermi
+// in elenco e li marca `suspended`, per non rimandare enter/leave quando
+// ricompare. Guardare solo se l'elenco è vuoto non distingueva niente:
+// provato il 1º ottobre 2026 con una finestra ridotta che frenava ancora.
+// È la stessa regola di `visible()` in `wlr_minerva_timing.c`. `escluso` è
+// l'inibitore che sta morendo: durante il suo `destroy` wlroots lo tiene
+// ancora nell'elenco. 30 settembre 2026.
+static bool inibitori_visibili(struct minerva *m,
+		const struct wlr_idle_inhibitor_v1 *escluso) {
+	if (m->inibizione == NULL)
+		return false;
+	struct wlr_idle_inhibitor_v1 *i;
+	wl_list_for_each(i, &m->inibizione->inhibitors, link) {
+		if (i == escluso || !i->surface->mapped)
+			continue;
+		// `suspended` sta nella parte `WLR_PRIVATE`: wlroots non promette di
+		// tenerlo, ma il fork è fermo a una revisione (vedi `wobbly.c`, che
+		// fa lo stesso) e il nostro `wlr_minerva_timing.c` lo legge uguale.
+		struct wlr_surface_output *so;
+		wl_list_for_each(so, &i->surface->current_outputs, link) {
+			if (!so->WLR_PRIVATE.suspended && so->output->enabled)
+				return true;
+		}
+	}
+	return false;
+}
 
 // ── E lo schermo intero frena da solo ────────────────────────────────────
 //
@@ -5449,7 +5679,7 @@ static bool schermo_intero_visibile(struct minerva *m) {
 static void freno_aggiorna(struct minerva *m) {
 	if (m->inattivita != NULL)
 		wlr_idle_notifier_v1_set_inhibited(m->inattivita,
-			m->inibitori > 0 || schermo_intero_visibile(m));
+			inibitori_visibili(m, NULL) || schermo_intero_visibile(m));
 }
 
 static void inibitore_distrutto(struct wl_listener *l, void *dati) {
@@ -5458,7 +5688,10 @@ static void inibitore_distrutto(struct wl_listener *l, void *dati) {
 	struct minerva *m = i->m;
 	if (m->inibitori > 0)
 		m->inibitori--;
-	freno_aggiorna(m);
+	// Non `freno_aggiorna`: quello conterebbe anche questo, ancora in elenco.
+	if (m->inattivita != NULL)
+		wlr_idle_notifier_v1_set_inhibited(m->inattivita,
+			inibitori_visibili(m, i->inib) || schermo_intero_visibile(m));
 	wl_list_remove(&i->distrutto.link);
 	free(i);
 	// Uscendo dal video il conto riparte da capo, non da dov'era.
@@ -5474,6 +5707,7 @@ static void inibitore_nuovo(struct wl_listener *l, void *dati) {
 	if (i == NULL)
 		return;
 	i->m = m;
+	i->inib = inib;
 	i->distrutto.notify = inibitore_distrutto;
 	wl_signal_add(&inib->events.destroy, &i->distrutto);
 	m->inibitori++;
@@ -5486,6 +5720,8 @@ static void tastiera_tasto(struct wl_listener *l, void *dati) {
 	struct wlr_keyboard_key_event *e = dati;
 
 	attivita(m);
+	if (e->state == WL_KEYBOARD_KEY_STATE_PRESSED)
+		blocco_rilancia(m);
 
 	// ── Il rilascio di un tasto già mangiato si mangia anche lui ─────────
 	//
@@ -7262,6 +7498,18 @@ static void cursore_premuto(struct wl_listener *l, void *dati) {
 	// che leggeva lo stesso contatore.
 	attivita(m);
 
+	// ── Da bloccati, il clic va a chi è DAVVERO sotto ────────────────────
+	//
+	// `wlr_seat_pointer_notify_button` consegna a chi ha il fuoco del
+	// puntatore, e il fuoco si ricalcola solo col movimento. Da bloccati è la
+	// differenza fra un clic sulla schermata del blocco e un clic nella
+	// finestra nascosta sotto: si ricalcola prima di consegnare. Vedi
+	// `serratura_nuova`, 30 settembre 2026.
+	if (m->bloccato)
+		cursore_aggiorna(m, e->time_msec);
+	if (e->state == WL_POINTER_BUTTON_STATE_PRESSED)
+		blocco_rilancia(m);
+
 	if (e->state == WL_POINTER_BUTTON_STATE_RELEASED) {
 		cursore_rilasciato(m, e);
 		// ── Il rilascio arriva SEMPRE ────────────────────────────────────
@@ -7512,6 +7760,11 @@ static void cursore_rotella(struct wl_listener *l, void *dati) {
 	m->rotella_v120 = 0;
 	m->rotella_libera = 0.0;
 
+	// Come per i clic (`cursore_premuto`): da bloccati la rotellina non deve
+	// far scorrere la pagina nascosta sotto la tenda.
+	if (m->bloccato)
+		cursore_aggiorna(m, e->time_msec);
+
 	wlr_seat_pointer_notify_axis(m->seat, e->time_msec, e->orientation,
 		e->delta, e->delta_discrete, e->source, e->relative_direction);
 }
@@ -7731,9 +7984,12 @@ static struct finestra *finestra_da_indirizzo(struct minerva *m,
 		pid_t voluto = (pid_t)atoi(testo + 4);
 		if (voluto <= 0)
 			return NULL;
+		// Solo fra quelle mappate: una finestra appena creata e non ancora
+		// committata ha già il suo pid, ma nessuno stato da ricevere (vedi
+		// `finestra_configurabile`). Non è ancora «quella più in alto».
 		struct finestra *g;
 		wl_list_for_each(g, &m->finestre_elenco, link) {
-			if (finestra_pid(g) == voluto)
+			if (g->mappata_ora && finestra_pid(g) == voluto)
 				return g;
 		}
 		return NULL;
@@ -7746,10 +8002,12 @@ static struct finestra *finestra_da_indirizzo(struct minerva *m,
 	if (numero == 0)
 		return NULL;
 
+	// Una finestra smappata resta nell'elenco (e in `finestre`, per la dock)
+	// ma un ordine a lei non ha niente da fare: vedi `finestra_configurabile`.
 	struct finestra *f;
 	wl_list_for_each(f, &m->finestre_elenco, link) {
 		if ((unsigned long long)(uintptr_t)f == numero)
-			return f;
+			return f->mappata_ora ? f : NULL;
 	}
 	return NULL;
 }
@@ -7788,29 +8046,70 @@ static struct finestra *finestra_attiva(struct minerva *m) {
 //
 // I byte di continuazione di UTF-8 cominciano tutti per `10`: si arretra
 // finché non se ne trova uno che non è di continuazione, e si taglia lì.
+// ── E i byte che non sono UTF-8 non passano ─────────────────────────────
+//
+// Il taglio qui sopra non bastava: un titolo può essere UTF-8 NON VALIDO già
+// all'origine. wlroots conserva `WM_NAME` di tipo STRING — Latin-1, quello dei
+// programmi X11 vecchi e di Wine — così com'è. Un titolo con «è» in Latin-1
+// è il byte 0xE8 da solo: ogni annuncio e ogni `finestre` facevano cadere la
+// lettura del demone (vedi sopra), che si riconnetteva e ricadeva, per
+// sempre. Un carattere si copia solo se è una sequenza valida intera; ogni
+// byte che non lo è diventa «?». 30 settembre 2026.
+static size_t utf8_lunghezza_valida(const unsigned char *p) {
+	const unsigned char c = p[0];
+	size_t k;
+	unsigned char min2 = 0x80, max2 = 0xBF;
+	if (c >= 0xC2 && c <= 0xDF) k = 2;
+	else if (c >= 0xE0 && c <= 0xEF) {
+		k = 3;
+		if (c == 0xE0) min2 = 0xA0;         // niente forme troppo lunghe
+		if (c == 0xED) max2 = 0x9F;         // niente surrogati
+	} else if (c >= 0xF0 && c <= 0xF4) {
+		k = 4;
+		if (c == 0xF0) min2 = 0x90;
+		if (c == 0xF4) max2 = 0x8F;         // niente oltre U+10FFFF
+	} else
+		return 0;
+	if (p[1] < min2 || p[1] > max2)
+		return 0;
+	for (size_t i = 2; i < k; i++)
+		if (p[i] < 0x80 || p[i] > 0xBF)     // anche il '\0' finisce qui
+			return 0;
+	return k;
+}
+
 static void json_stringa(char *fuori, size_t n, const char *dentro) {
 	size_t o = 0;
 	if (n == 0)
 		return;
-	for (const char *p = dentro != NULL ? dentro : ""; *p != '\0'; p++) {
-		unsigned char c = (unsigned char)*p;
-		if (o + 3 >= n) {
-			// Non ci sta più: si torna indietro fino all'inizio
-			// dell'ultimo carattere cominciato, e lo si butta intero.
-			while (o > 0 && (((unsigned char)fuori[o - 1]) & 0xC0) == 0x80)
-				o--;
-			if (o > 0 && (((unsigned char)fuori[o - 1]) & 0x80) != 0)
-				o--;
+	const unsigned char *p = (const unsigned char *)(dentro != NULL ? dentro : "");
+	while (*p != '\0') {
+		const unsigned char c = *p;
+		// Quanti byte scrive questo giro: un carattere intero, mai mezzo —
+		// se non ci sta si smette PRIMA di cominciarlo.
+		size_t k = 1, quanti = 1;
+		if (c == '"' || c == '\\')
+			quanti = 2;
+		else if (c >= 0x80 && (k = utf8_lunghezza_valida(p)) != 0)
+			quanti = k;
+		else
+			k = 1;
+		if (o + quanti + 1 > n)
 			break;
-		}
 		if (c == '"' || c == '\\') {
 			fuori[o++] = '\\';
 			fuori[o++] = (char)c;
 		} else if (c < 0x20) {
 			fuori[o++] = ' ';
-		} else {
+		} else if (c < 0x80) {
 			fuori[o++] = (char)c;
+		} else if (quanti > 1) {
+			memcpy(fuori + o, p, quanti);
+			o += quanti;
+		} else {
+			fuori[o++] = '?';
 		}
+		p += k;
 	}
 	fuori[o] = '\0';
 }
@@ -8914,7 +9213,8 @@ static void comando_sensibilita(struct minerva *m, char *resto,
 		return;
 	}
 	const double v = atof(sv);
-	if (v < -1.0 || v > 1.0) {
+	// `!isfinite`: «nan» passa sia `< -1` sia `> 1`, e rispondeva «ok».
+	if (!isfinite(v) || v < -1.0 || v > 1.0) {
 		snprintf(risposta, n, "no la sensibilità va da -1 a 1, e 0 è il "
 			"neutro: %s è fuori", sv);
 		return;
@@ -9908,7 +10208,10 @@ static void comando_colore(struct minerva *m, char *resto,
 	// Sopra 1 non si schiarisce: si SATURA, e il risultato è uno schermo
 	// slavato che sembra rotto. Sotto zero non vuol dire niente.
 	for (int i = 0; i < 3; i++) {
-		if (moltiplica[i] < 0.0 || moltiplica[i] > 1.0) {
+		// `!isfinite`: «colore nan 1 1» passava il controllo, e `(uint16_t)`
+		// di NaN nella tabella non è definito — in pratica un canale nero
+		// su tutto lo schermo. 30 settembre 2026.
+		if (!isfinite(moltiplica[i]) || moltiplica[i] < 0.0 || moltiplica[i] > 1.0) {
 			snprintf(risposta, n, "no i moltiplicatori vanno da 0 a 1, e 1 è "
 				"il neutro: %s %s %s è fuori", sr, sg, sb);
 			return;
@@ -10567,9 +10870,39 @@ void minerva_comando(struct minerva *m, const char *riga,
 	// Il vecchio gestore si butta DOPO aver messo su il nuovo: buttarlo
 	// prima vorrebbe dire un istante con il cursore che punta a un tema
 	// distrutto, e quell'istante è quando si ridisegna.
+	//
+	// ── Due forme, e la nuova regge i nomi con gli spazi ─────────────────
+	//
+	//     cursore <misura> <tema fino a fine riga>    (dal 1º ottobre 2026)
+	//     cursore <tema> <misura>                     (quella di prima)
+	//
+	// Leggere il tema come PAROLA spezzava «Bibata Modern Ice» in tema
+	// «Bibata» e misura «Modern» — cioè 24, qualunque misura si fosse
+	// scelta, e un tema che non esiste. Nella forma nuova la misura viene
+	// prima e il tema è tutto il resto, spazi compresi, come il nome in
+	// `dispositivo`. Si riconoscono dalla prima parola: una misura è fatta
+	// solo di cifre, e un tema di sole cifre non esiste.
 	if (strcmp(verbo, "cursore") == 0) {
-		char *tema = parola(&resto);
-		char *mis = parola(&resto);
+		char *prima = parola(&resto);
+		char *tema = NULL;
+		char *mis = NULL;
+		bool solo_cifre = prima != NULL && *prima != '\0';
+		for (const char *c = prima; solo_cifre && *c != '\0'; c++)
+			if (!isdigit((unsigned char)*c))
+				solo_cifre = false;
+		if (solo_cifre) {
+			mis = prima;
+			while (*resto == ' ' || *resto == '\t')
+				resto++;
+			size_t l = strlen(resto);
+			while (l > 0 && (resto[l - 1] == ' ' || resto[l - 1] == '\t'
+					|| resto[l - 1] == '\r' || resto[l - 1] == '\n'))
+				resto[--l] = '\0';
+			tema = resto;
+		} else {
+			tema = prima;
+			mis = parola(&resto);
+		}
 		int misura = mis != NULL ? atoi(mis) : 24;
 		if (misura <= 0 || misura > 512)
 			misura = 24;
@@ -10959,6 +11292,10 @@ static void proteggi_sonno(void *data) {
 		blocco_ridimensiona_tenda(m);
 		blocco_mostra_tenda(m, true);
 		fuoco_tastiera(m, NULL);
+		// Vedi `serratura_nuova`: senza, la presa implicita riconsegnava il
+		// puntatore alla finestra nascosta al primo movimento.
+		m->tenuta = NULL;
+		m->superficie_sotto = NULL;
 		wlr_seat_pointer_notify_clear_focus(m->seat);
 		annuncia_blocco(m);
 	}
@@ -11087,14 +11424,49 @@ static void serratura_morta(struct wl_listener *l, void *dati) {
 
 	// Se `bloccato` è ancora vero il client è MORTO senza sbloccare — un
 	// guasto, o qualcuno che ha provato a uccidere il blocco per rientrare.
-	// La tenda resta, e il fuoco resta tolto: da qui si esce solo da un'altra
-	// console.
+	// La tenda resta, e il fuoco resta tolto; il programma del blocco si
+	// rilancia (vedi `blocco_rilancia`), così la password si può di nuovo
+	// scrivere senza passare da un'altra console.
 	if (m->bloccato) {
 		wlr_log(WLR_ERROR, "minerva: il blocco schermo è morto senza "
 			"sbloccare. Lo schermo RESTA bloccato.");
 		fuoco_tastiera(m, NULL);
 		blocco_mostra_tenda(m, true);
+		blocco_rilancia(m);
 	}
+}
+
+// ── Bloccati senza nessuno che sblocchi ──────────────────────────────────
+//
+// `proteggi_sonno` mette la tenda PRIMA che `minerva-blocca` esista, ed è
+// giusto: il coperchio si chiude adesso. Ma se lo script non parte — manca
+// il file PAM e rifiuta di proposito, o il blocco va in crash — non restava
+// nessuno a mandare `unlock`: al risveglio uno schermo nero con la tastiera
+// morta, e l'unica uscita era un'altra console. Il contrario di quello che
+// promette `scripts/minerva-blocca` («meglio non bloccato che bloccato per
+// sempre»). Si rilancia a un tasto o a un clic, e alla morte del blocco,
+// ma al massimo ogni tre secondi: un blocco che cade appena parte non deve
+// diventare un giro di processi. Lo schermo resta bloccato in ogni caso.
+// 30 settembre 2026.
+static void blocco_rilancia(struct minerva *m) {
+	if (!m->bloccato || m->serratura != NULL)
+		return;
+	const uint64_t adesso = ora_ms();
+	if (m->blocco_rilanciato_ms != 0 && adesso - m->blocco_rilanciato_ms < 3000)
+		return;
+	m->blocco_rilanciato_ms = adesso;
+	// In prova no: il vero `minerva-blocca` dentro una sessione annidata è
+	// uno schermo di blocco senza l'uscita di sicurezza delle prove
+	// (`MINERVA_BLOCCO_PROVA`), che resterebbe orfano a compositore chiuso.
+	// La riga sul registro c'è lo stesso, ed è quella che le prove guardano.
+	if (getenv("MINERVA_PROVA") != NULL) {
+		wlr_log(WLR_ERROR, "minerva: bloccati senza programma del blocco: "
+			"in prova non rilancio minerva-blocca");
+		return;
+	}
+	wlr_log(WLR_ERROR, "minerva: bloccati senza programma del blocco: "
+		"rilancio minerva-blocca");
+	avvia_programma("minerva-blocca");
 }
 
 static void serratura_nuova(struct wl_listener *l, void *dati) {
@@ -11122,6 +11494,18 @@ static void serratura_nuova(struct wl_listener *l, void *dati) {
 	// millisecondi, e in quei millisecondi la tastiera non deve poter
 	// scrivere in quello che c'era aperto.
 	fuoco_tastiera(m, NULL);
+	// ── E anche il PUNTATORE non è più di nessuno ────────────────────────
+	//
+	// Si toglieva solo la tastiera. Il fuoco del puntatore restava alla
+	// finestra sotto, e si aggiorna solo quando il mouse si muove: blocco
+	// per inattività col mouse fermo, si torna, si clicca senza muoverlo — e
+	// il clic (o la rotellina) arrivava all'applicazione NASCOSTA sotto la
+	// tenda. Riprodotto il 30 settembre 2026 con una finestra spia. Con un
+	// tasto tenuto giù, la presa implicita (`tenuta`) continuava a mandarle
+	// anche i movimenti.
+	m->tenuta = NULL;
+	m->superficie_sotto = NULL;
+	wlr_seat_pointer_notify_clear_focus(m->seat);
 	annuncia_blocco(m);
 
 	m->serratura_superficie.notify = serratura_superficie;
@@ -11400,6 +11784,7 @@ int main(int argc, char *argv[]) {
 	// inibitori vivi. Vedi `inibitore_nuovo`.
 	struct wlr_idle_inhibit_manager_v1 *inibizione =
 		wlr_idle_inhibit_v1_create(m.display);
+	m.inibizione = inibizione;
 	if (inibizione != NULL) {
 		m.inibitore_nuovo.notify = inibitore_nuovo;
 		wl_signal_add(&inibizione->events.new_inhibitor, &m.inibitore_nuovo);

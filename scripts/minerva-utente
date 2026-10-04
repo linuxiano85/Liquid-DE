@@ -90,7 +90,13 @@ case "$AZIONE" in
         controlla_utente
 
         # Una riga sola, senza a-capo dentro: `chpasswd` legge «utente:password».
-        read -r NUOVA || errore "Nessuna password ricevuta."
+        #
+        # `IFS=` davanti a `read`: senza, `read` toglie spazi e tabulazioni in
+        # testa e in coda. Il pannello accetta «  cavallo batteria » (sono
+        # caratteri come gli altri), qui si salvava «cavallo batteria», e al
+        # primo accesso la password digitata — quella vera — non entrava più.
+        # Trovato in revisione il 30 settembre 2026.
+        IFS= read -r NUOVA || errore "Nessuna password ricevuta."
         [ -n "$NUOVA" ] || errore "La password è vuota."
 
         printf '%s:%s\n' "$CHI" "$NUOVA" | chpasswd

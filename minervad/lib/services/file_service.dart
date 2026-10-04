@@ -5,6 +5,7 @@ import '../core/linux_files.dart';
 
 import 'archive_service.dart';
 import 'image_dims.dart';
+import 'processo_limitato.dart';
 import '../core/minerva_paths.dart';
 
 /// Servizio file di Minerva: elenca cartelle ed esegue i trasferimenti.
@@ -383,9 +384,10 @@ class FileService {
   /// ed è esattamente il caso di `/usr` e `/etc`.
   Future<bool> _siPuoCambiare(String path) async {
     try {
-      final r = await Process.run('test', ['-w', path, '-a', '-x', path])
-          .timeout(const Duration(seconds: 2));
-      return r.exitCode == 0;
+      final r = await eseguiLimitato('test', ['-w', path, '-a', '-x', path],
+          limite: const Duration(seconds: 2));
+      if (r.scaduto) return true; // lo stesso dubbio del `catch` qui sotto
+      return r.codice == 0;
     } catch (_) {
       // Nel dubbio si dice di sì: l'alternativa è un gestore file che si
       // rifiuta di lavorare perché non è riuscito a lanciare `test`.
@@ -404,16 +406,22 @@ class FileService {
   /// la si apre quando qualcosa non si lascia scrivere.
   Future<Map<String, dynamic>> info(String path) async {
     try {
-      final r = await Process.run('stat', [
+      // Con un limite: `fs_info` si chiede per ogni file mostrato, e su un
+      // disco di rete caduto `stat` resta appeso per sempre — un processo in
+      // più a ogni finestra «Proprietà» (30 settembre 2026).
+      final r = await eseguiLimitato('stat', [
         '-c',
         '%F|%s|%a|%A|%U|%G|%u|%g|%h|%i|%X|%Y|%Z|%N',
         '--',
         path,
-      ]);
-      if (r.exitCode != 0) {
-        return {'ok': false, 'error': (r.stderr as String).trim(), 'path': path};
+      ], limite: const Duration(seconds: 5));
+      if (r.scaduto) {
+        return {'ok': false, 'error': 'Il disco non risponde', 'path': path};
       }
-      final f = (r.stdout as String).trim().split('|');
+      if (r.codice != 0) {
+        return {'ok': false, 'error': r.stderr.trim(), 'path': path};
+      }
+      final f = r.stdout.trim().split('|');
       if (f.length < 14) {
         return {'ok': false, 'error': 'Risposta di stat illeggibile', 'path': path};
       }
@@ -486,11 +494,17 @@ class FileService {
   /// giro ricorsivo scritto qui.
   Future<Map<String, dynamic>> measure(String path) async {
     try {
-      final r = await Process.run('du', ['-sb', '--', path]);
-      if (r.exitCode != 0) {
-        return {'ok': false, 'error': (r.stderr as String).trim(), 'path': path};
+      // Dieci minuti: una cartella enorme ci può stare, un disco di rete
+      // caduto no — senza limite `du` restava vivo per sempre.
+      final r = await eseguiLimitato('du', ['-sb', '--', path],
+          limite: const Duration(minutes: 10));
+      if (r.scaduto) {
+        return {'ok': false, 'error': 'Il disco non risponde', 'path': path};
       }
-      final out = (r.stdout as String).trim().split(RegExp(r'\s+'));
+      if (r.codice != 0) {
+        return {'ok': false, 'error': r.stderr.trim(), 'path': path};
+      }
+      final out = r.stdout.trim().split(RegExp(r'\s+'));
       return {
         'ok': true,
         'error': '',
@@ -689,6 +703,22 @@ class FileService {
 
     for (final p in paths) {
       final nome = p.split('/').last;
+
+      // ── Solo quello che sta direttamente nel cestino (30 settembre 2026) ──
+      //
+      // Le schede `.trashinfo` esistono solo per gli elementi di primo
+      // livello. Un file DENTRO una cartella cestinata si cercava lo stesso
+      // per nome, e trovava la scheda di un altro: cestinati `Progetti/`
+      // (con dentro `note.txt`) e poi `Documenti/note.txt`, rimettere a posto
+      // `Progetti/note.txt` lo mandava in `Documenti/`, e cancellava la
+      // scheda del vero `note.txt` — che restava nel cestino senza più un
+      // posto dove tornare. Provato. Una cartella si rimette a posto intera.
+      if (_genitoreDi(p) != cartellaCestino) {
+        falliti.add('$nome (sta dentro una cartella del cestino: rimetti a '
+            'posto la cartella intera)');
+        continue;
+      }
+
       final scheda = File('${info.path}/$nome.trashinfo');
 
       String? origine;
@@ -796,16 +826,19 @@ class FileService {
   /// chiunque il pulsante «smonta» sul disco da cui sta girando tutto.
   Future<Map<String, dynamic>> volumes() async {
     try {
-      final r = await Process.run('lsblk', [
+      final r = await eseguiLimitato('lsblk', [
         '-J',
         '-o',
         'NAME,PATH,LABEL,MOUNTPOINTS,FSTYPE,SIZE,RM,HOTPLUG,TYPE,VENDOR,MODEL',
-      ]);
-      if (r.exitCode != 0) {
-        return {'volumes': [], 'error': (r.stderr as String).trim()};
+      ], limite: const Duration(seconds: 10));
+      if (!r.ok) {
+        return {
+          'volumes': [],
+          'error': r.scaduto ? 'lsblk non ha risposto' : r.stderr.trim(),
+        };
       }
       final found = <Map<String, dynamic>>[];
-      _walkBlockDevices(_decode(r.stdout as String), found, await _rootDevice());
+      _walkBlockDevices(_decode(r.stdout), found, await _rootDevice());
       return {'volumes': found, 'error': ''};
     } catch (e) {
       return {'volumes': [], 'error': '$e'};
@@ -828,9 +861,10 @@ class FileService {
   /// quadre è il sottovolume, e va tolta per confrontare con `lsblk`.
   Future<String> _rootDevice() async {
     try {
-      final r = await Process.run('findmnt', ['-no', 'SOURCE', '/']);
-      if (r.exitCode != 0) return '';
-      var s = (r.stdout as String).trim();
+      final r = await eseguiLimitato('findmnt', ['-no', 'SOURCE', '/'],
+          limite: const Duration(seconds: 10));
+      if (!r.ok) return '';
+      var s = r.stdout.trim();
       final bracket = s.indexOf('[');
       if (bracket > 0) s = s.substring(0, bracket);
       return s;
@@ -1271,22 +1305,44 @@ class FileService {
 
   Future<Map<String, dynamic>> _udisks(List<String> args) async {
     try {
-      final r = await Process.run('udisksctl', args);
-      if (r.exitCode != 0) {
-        return {'ok': false, 'error': errorePulito((r.stderr as String))};
+      // Due minuti: può comparire la richiesta della password di polkit, e
+      // chi la scrive ha il suo tempo. Oltre, non risponde nessuno — e senza
+      // limite il processo restava appeso per sempre.
+      final r = await eseguiLimitato('udisksctl', args,
+          limite: const Duration(minutes: 2));
+      if (r.scaduto) {
+        return {'ok': false, 'error': 'UDisks non ha risposto.'};
+      }
+      if (r.codice != 0) {
+        return {'ok': false, 'error': errorePulito(r.stderr)};
       }
       // `udisksctl mount` stampa «Mounted /dev/sdb1 at /run/media/...»: il
       // punto di mount serve per andarci subito dopo.
-      final out = (r.stdout as String).trim();
-      final at = out.lastIndexOf(' at ');
       return {
         'ok': true,
         'error': '',
-        'mountPoint': at >= 0 ? out.substring(at + 4).replaceAll('.', '') : '',
+        'mountPoint': puntoDiMontaggioDa(r.stdout),
       };
     } catch (e) {
       return {'ok': false, 'error': '$e'};
     }
+  }
+
+  /// Il punto di montaggio dalla frase di `udisksctl mount`:
+  /// «Mounted /dev/sdb1 at /run/media/giacomo/CHIAVETTA.» — il punto finale
+  /// c'è in certe versioni e in altre no.
+  ///
+  /// Si toglie SOLO quel punto. Prima si toglievano tutti: una ISO con
+  /// l'etichetta «Ubuntu 24.04.1 LTS» diventava `…/Ubuntu 24041 LTS`, una
+  /// cartella che non esiste, e aprire il disco appena montato falliva
+  /// (30 settembre 2026). Pubblica per poterla provare.
+  static String puntoDiMontaggioDa(String uscita) {
+    final out = uscita.trim();
+    final at = out.lastIndexOf(' at ');
+    if (at < 0) return '';
+    var punto = out.substring(at + 4);
+    if (punto.endsWith('.')) punto = punto.substring(0, punto.length - 1);
+    return punto;
   }
 
   // ── Trasferimenti ──────────────────────────────────────────────────────
@@ -1396,6 +1452,9 @@ class FileService {
             throw FileSystemException('Non si può copiare una cartella dentro sé stessa', s);
           }
         }
+        if (job.conflitto == 'sostituisci') {
+          await _nonDentroAlBersaglio(s, destination);
+        }
       }
       // 1. Quanto c'è da spostare
       for (final s in job.sources) {
@@ -1420,7 +1479,7 @@ class FileService {
           _emit(job);
           continue;
         }
-        final target = job.conflitto == 'entrambi'
+        var target = job.conflitto == 'entrambi'
             ? _uniqueTarget(voluto)
             : voluto;
 
@@ -1428,7 +1487,8 @@ class FileService {
           // Sullo stesso filesystem lo spostamento è istantaneo: non c'è
           // niente da copiare, solo un nome da cambiare.
           try {
-            LinuxFiles.renameNoReplace(s, target);
+            target = _rinominaSenzaSovrascrivere(
+                s, target, voluto, job.conflitto == 'entrambi');
             job.bytesDone += await _measureQuiet(target);
             job.currentFile = name;
             _emit(job);
@@ -1442,22 +1502,37 @@ class FileService {
               throw FileSystemException(motivo(name, e), s);
             }
           }
+          // ── EXDEV arriva PRIMA dei permessi (30 settembre 2026) ─────────
+          //
+          // Il kernel controlla «sono due dischi?» prima di «puoi togliere
+          // l'originale?». Spostando da una cartella non tua su un altro
+          // disco si copiava tutto e solo alla fine si scopriva che la
+          // sorgente non si toglieva: gigabyte copiati per un'operazione che
+          // non poteva riuscire. Lo si chiede prima.
+          if (!await _siPuoCambiare(_genitoreDi(s))) {
+            throw FileSystemException(
+                motivo(name,
+                    const FileSystemException('', '', OSError('', _eacces))),
+                s);
+          }
         }
 
         // Directory temporanea privata sul filesystem di destinazione.
         // Nessun contenuto parziale è pubblicato sotto il nome definitivo.
         staging = LinuxFiles.privateTemp(Directory(destination), '.minerva-transfer-');
         final prepared = '${staging.path}/contenuto';
-        await _copyTree(s, prepared, job);
+        await _copyTree(s, prepared, job, metadatiDellaCimaDopo: true);
         if (job.state == 'cancelling') break;
         if (occupato && job.conflitto == 'sostituisci') {
           LinuxFiles.exchange(prepared, target);
         } else {
-          LinuxFiles.renameNoReplace(prepared, target);
+          target = _rinominaSenzaSovrascrivere(
+              prepared, target, voluto, job.conflitto == 'entrambi');
         }
         // Da qui target è una copia COMPLETA: non eliminarla mai nel rollback,
         // nemmeno se la successiva rimozione della sorgente fallisce a metà.
-        await _deletePathQuiet(staging.path);
+        await _metadatiDellaCima(s, target);
+        await _togliPreparazione(staging.path);
         staging = null;
         if (job.move) {
           try {
@@ -1482,7 +1557,7 @@ class FileService {
       // trattava; qui si toglie solo l'involucro dell'eccezione.
       job.error = e is FileSystemException ? e.message : '$e';
     } finally {
-      if (staging != null) await _deletePathQuiet(staging.path);
+      if (staging != null) await _togliPreparazione(staging.path);
     }
 
     job.finishedAt = DateTime.now();
@@ -1537,7 +1612,22 @@ class FileService {
   /// Copia ricorsiva, un blocco alla volta. È il cuore della pausa: fra un
   /// blocco e l'altro si controlla lo stato del lavoro, e se è in pausa ci si
   /// ferma lì finché non arriva «riprendi».
-  Future<void> _copyTree(String from, String to, TransferJob? job) async {
+  ///
+  /// `metadatiDellaCimaDopo`: la cartella di cima NON riceve qui né il modo
+  /// né la data. Li riceve `_metadatiDellaCima`, dopo la pubblicazione.
+  ///
+  /// ── Perché (30 settembre 2026) ────────────────────────────────────────
+  ///
+  /// Per spostare una cartella sotto un altro genitore il kernel vuole poter
+  /// SCRIVERE nella cartella stessa (deve aggiornare il suo `..`). Copiando
+  /// una cartella `r-x` — da una ISO, da un CD, da `/usr/share` — lo staging
+  /// la riceveva già `r-x`, e la rinomina finale verso il nome vero falliva
+  /// con «permesso negato»: copia fallita, e una `.minerva-transfer-…`
+  /// nascosta rimasta nella destinazione che non si lasciava nemmeno
+  /// cancellare. Provato da utente normale. E la rinomina stessa cambia la
+  /// data della cartella: anche quella va rimessa dopo.
+  Future<void> _copyTree(String from, String to, TransferJob? job,
+      {bool metadatiDellaCimaDopo = false}) async {
     final type = await FileSystemEntity.type(from, followLinks: false);
 
     if (type == FileSystemEntityType.directory) {
@@ -1547,7 +1637,10 @@ class FileService {
         final name = e.path.split(Platform.pathSeparator).last;
         await _copyTree(e.path, '$to/$name', job);
       }
-      await _copyMode(from, to);
+      if (!metadatiDellaCimaDopo) {
+        await _copiaData(from, to);
+        await _copyMode(from, to);
+      }
       return;
     }
 
@@ -1591,15 +1684,138 @@ class FileService {
       await output.close();
     }
 
+    await _copiaData(from, to);
     await _copyMode(from, to);
   }
 
   Future<void> _copyMode(String from, String to) async {
     final st = await FileStat.stat(from);
     final octal = (st.mode & 0x1FF).toRadixString(8).padLeft(3, '0');
-    final r = await Process.run('chmod', [octal, '--', to])
-        .timeout(const Duration(seconds: 2));
-    if (r.exitCode != 0) throw FileSystemException('Permessi non conservati: ${r.stderr}', to);
+    final r = await eseguiLimitato('chmod', [octal, '--', to],
+        limite: const Duration(seconds: 2));
+    if (!r.ok) throw FileSystemException('Permessi non conservati: ${r.stderr}', to);
+  }
+
+  /// La data di modifica dell'originale, rimessa sulla copia.
+  ///
+  /// ── Perché (30 settembre 2026) ────────────────────────────────────────
+  ///
+  /// Fra due dischi diversi uno «sposta» è una copia, e la copia nasceva
+  /// con la data di OGGI: spostare l'archivio delle foto sulla chiavetta, o
+  /// ripescare dal cestino un file finito su un altro disco, e l'ordine per
+  /// data era perso per sempre. Un cambio di posto non deve cambiare
+  /// nient'altro.
+  ///
+  /// Non solleva: una data che non si lascia rimettere (un filesystem che
+  /// non la tiene) non vale un trasferimento fallito.
+  Future<void> _copiaData(String from, String to) async {
+    try {
+      final st = await FileStat.stat(from);
+      if (st.type != FileSystemEntityType.directory) {
+        await File(to).setLastModified(st.modified);
+        return;
+      }
+      // `File.setLastModified` rifiuta le cartelle («Is a directory»): per
+      // loro c'è `touch`, con la data in secondi dall'epoca.
+      final us = st.modified.microsecondsSinceEpoch;
+      final quando =
+          '@${us ~/ 1000000}.${(us % 1000000).toString().padLeft(6, '0')}';
+      await eseguiLimitato('touch', ['-m', '-d', quando, '--', to],
+          limite: const Duration(seconds: 2));
+    } catch (_) {}
+  }
+
+  /// Modo e data della cima, dopo che è stata pubblicata sotto il nome vero.
+  /// Vedi `_copyTree`: prima non si poteva.
+  Future<void> _metadatiDellaCima(String from, String to) async {
+    if (await FileSystemEntity.type(from, followLinks: false) !=
+        FileSystemEntityType.directory) {
+      return;
+    }
+    await _copiaData(from, to);
+    await _copyMode(from, to);
+  }
+
+  /// Toglie una cartella di preparazione NOSTRA, anche se dentro ci sono
+  /// cartelle `r-x`.
+  ///
+  /// Solo per le `.minerva-transfer-*`: lì dentro c'è una copia interrotta,
+  /// o il vecchio bersaglio di una sostituzione già decisa. Senza il `u+w`,
+  /// una cartella di sola lettura copiata a metà restava nella destinazione
+  /// per sempre (30 settembre 2026).
+  Future<void> _togliPreparazione(String percorso) async {
+    try {
+      await eseguiLimitato('chmod', ['-R', 'u+w', '--', percorso],
+          limite: const Duration(seconds: 30));
+    } catch (_) {}
+    await _deletePathQuiet(percorso);
+  }
+
+  /// La cartella che contiene `percorso`.
+  static String _genitoreDi(String percorso) {
+    final i = percorso.lastIndexOf(Platform.pathSeparator);
+    if (i < 0) return '.';
+    if (i == 0) return '/';
+    return percorso.substring(0, i);
+  }
+
+  /// Rinomina senza sovrascrivere e, se il nome è stato preso nel frattempo
+  /// e la politica è «tieni entrambi», ne sceglie un altro e riprova.
+  ///
+  /// ── Perché (30 settembre 2026) ────────────────────────────────────────
+  ///
+  /// Il nome libero si sceglie PRIMA di copiare. Due «Incolla» di seguito
+  /// nella stessa cartella sceglievano lo stesso «foto (1).png»: il secondo
+  /// copiava tutto e poi, al momento di pubblicare, trovava il nome preso e
+  /// falliva con «Rinomina atomica non riuscita» — lavoro buttato per un nome.
+  String _rinominaSenzaSovrascrivere(
+      String da, String target, String voluto, bool unAltroNome) {
+    while (true) {
+      try {
+        LinuxFiles.renameNoReplace(da, target);
+        return target;
+      } catch (e) {
+        if (!unAltroNome || _codiceErrore(e) != _eexist) rethrow;
+        target = _uniqueTarget(voluto);
+      }
+    }
+  }
+
+  /// Rifiuta una sostituzione in cui il bersaglio CONTIENE la sorgente.
+  ///
+  /// ── Il difetto che faceva perdere dati (30 settembre 2026) ────────────
+  ///
+  /// Un archivio estratto dà `foto/foto/`. Si trascina `foto/foto` nella
+  /// cartella di sopra, «Sostituisci»: il bersaglio `foto` veniva scambiato
+  /// con la copia, il vecchio `foto` — che conteneva la sorgente e tutti i
+  /// suoi fratelli — finiva nello staging e veniva buttato, e poi si
+  /// cancellava la «sorgente» `foto/foto`, che a quel punto era un pezzo
+  /// della copia appena pubblicata. Provato: `foto/foto/foto/interno.txt`
+  /// spariva del tutto e il lavoro finiva «fatto». Anche copiando, la
+  /// sorgente se ne andava con il vecchio bersaglio.
+  ///
+  /// Un collegamento come bersaglio non conta: lo scambio sostituisce il
+  /// collegamento, non la cartella a cui punta.
+  Future<void> _nonDentroAlBersaglio(
+      String sorgente, String destinazione) async {
+    final nome = sorgente.split(Platform.pathSeparator).last;
+    if (nome.isEmpty) return;
+    final voluto = '$destinazione/$nome';
+    if (await FileSystemEntity.type(voluto, followLinks: false) !=
+        FileSystemEntityType.directory) {
+      return;
+    }
+    final bersaglio = await Directory(voluto).resolveSymbolicLinks();
+    final genitore = await Directory(File(sorgente).absolute.parent.path)
+        .resolveSymbolicLinks();
+    final vera = genitore == '/' ? '/$nome' : '$genitore/$nome';
+    if (vera.startsWith('$bersaglio/')) {
+      throw FileSystemException(
+          '«$nome» non può sostituire la cartella «$nome» di destinazione: '
+          'quella cartella lo contiene, e sostituirla vorrebbe dire buttare '
+          'via anche l\'originale. Scegli «Tieni entrambi».',
+          sorgente);
+    }
   }
 
   Future<bool> _sameEntry(String from, String to) async {
@@ -1631,6 +1847,7 @@ class FileService {
   // home per un'operazione che non poteva riuscire.
   static const int _eperm = 1;   // operazione non permessa (bit sticky)
   static const int _eacces = 13; // permesso negato
+  static const int _eexist = 17; // il nome è già preso
   static const int _exdev = 18;  // sono due dischi diversi: QUESTO si copia
   static const int _erofs = 30;  // il disco è montato in sola lettura
 
@@ -1661,6 +1878,22 @@ class FileService {
 
   /// Sposta senza sovrascrivere. Su EXDEV pubblica prima la copia completa;
   /// se la rimozione della sorgente fallisce, conserva la copia e segnala errore.
+  ///
+  /// ── Due reti in più (30 settembre 2026) ───────────────────────────────
+  ///
+  /// Il kernel risponde «dischi diversi» PRIMA di guardare i permessi.
+  /// Cestinando `importante.conf` da una cartella non tua su un altro disco
+  /// — o da un disco montato in sola lettura — si copiava tutto nel cestino
+  /// e solo dopo si scopriva che l'originale non si toglieva: provato, il
+  /// messaggio diceva «non si può togliere» e nel cestino restavano la copia
+  /// e la sua scheda. Con una cartella da 50 GB, la casa piena. Quindi prima
+  /// si chiede se l'originale si può togliere.
+  ///
+  /// E se la rimozione fallisce lo stesso, la copia di un FILE si butta: il
+  /// file è ancora tutto dov'era, e un doppione nel cestino tornerebbe a
+  /// sparire al prossimo «svuota» facendo credere di averlo salvato. Una
+  /// CARTELLA invece può essere stata tolta a metà: lì la copia è l'unica
+  /// versione intera, e si tiene.
   Future<void> _sposta(String da, String a) async {
     try {
       LinuxFiles.renameNoReplace(da, a);
@@ -1669,14 +1902,27 @@ class FileService {
       if (_codiceErrore(e) != _exdev) rethrow;
     }
 
+    if (!await _siPuoCambiare(_genitoreDi(da))) {
+      throw FileSystemException('', da, const OSError('', _eacces));
+    }
+
+    final tipo = await FileSystemEntity.type(da, followLinks: false);
     final staging = LinuxFiles.privateTemp(File(a).parent, '.minerva-transfer-');
     try {
       final prepared = '${staging.path}/contenuto';
-      await _copyTree(da, prepared, null);
+      await _copyTree(da, prepared, null, metadatiDellaCimaDopo: true);
       LinuxFiles.renameNoReplace(prepared, a);
-      await _deletePath(da);
+      await _metadatiDellaCima(da, a);
+      try {
+        await _deletePath(da);
+      } catch (_) {
+        if (tipo != FileSystemEntityType.directory) {
+          await _togliPreparazione(a);
+        }
+        rethrow;
+      }
     } finally {
-      await _deletePathQuiet(staging.path);
+      await _togliPreparazione(staging.path);
     }
   }
 

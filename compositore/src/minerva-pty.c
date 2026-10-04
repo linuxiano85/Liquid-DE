@@ -39,6 +39,7 @@
 // è la riga che vale per «sicuro» nella richiesta di Giacomo.
 #define _GNU_SOURCE
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <pty.h>
 #include <signal.h>
@@ -176,11 +177,33 @@ int main(int argc, char **argv) {
 	// Due sorgenti: lo pseudo-terminale (verso stdout) e stdin (cornici verso
 	// il terminale o la misura). `poll` su tutte e due; niente fili.
 	unsigned char buf[65536];
+
+	// ── Verso il terminale non si scrive MAI aspettando ──────────────────
+	//
+	// Qui c'era `scrivi_tutto(padrone, …)`, bloccante. Incollando molto
+	// testo in un programma che intanto scrive (vim, un `cat` che fa eco),
+	// il programma si ferma a scrivere perché nessuno legge la sua uscita, e
+	// noi ci fermiamo a scrivere il suo ingresso perché lui non legge più:
+	// tutti e due aspettano l'altro, e il terminale resta congelato per
+	// sempre. Il lato padrone diventa non bloccante; quello che non entra
+	// subito aspetta in `coda` e parte quando `poll` dice POLLOUT. Con la coda
+	// piena si smette di leggere lo stdin: chi ci scrive rallenta, invece di
+	// far crescere la memoria. 30 settembre 2026.
+	static unsigned char coda[4 * 65536];
+	size_t in_coda = 0;
+	{
+		const int fl = fcntl(padrone, F_GETFL);
+		if (fl >= 0)
+			(void)fcntl(padrone, F_SETFL, fl | O_NONBLOCK);
+	}
+
 	int vivo = 1;
 	while (vivo) {
+		// Una cornice intera (fino a 65535 byte) deve poter entrare.
+		const int posto = sizeof(coda) - in_coda >= sizeof(buf);
 		struct pollfd pf[2] = {
-			{ .fd = padrone, .events = POLLIN },
-			{ .fd = STDIN_FILENO, .events = POLLIN },
+			{ .fd = padrone, .events = POLLIN | (in_coda ? POLLOUT : 0) },
+			{ .fd = posto ? STDIN_FILENO : -1, .events = POLLIN },
 		};
 		int pronto = poll(pf, 2, -1);
 		if (pronto < 0) {
@@ -190,12 +213,23 @@ int main(int argc, char **argv) {
 		}
 		if (pf[0].revents & (POLLIN | POLLHUP | POLLERR)) {
 			ssize_t r = read(padrone, buf, sizeof(buf));
-			if (r <= 0) {
+			if (r < 0 && (errno == EAGAIN || errno == EINTR)) {
+				// Niente da leggere adesso: il padrone è non bloccante.
+			} else if (r <= 0) {
 				// La shell ha chiuso: si esce, e si dice come.
 				break;
-			}
-			if (!scrivi_tutto(STDOUT_FILENO, buf, (size_t)r))
+			} else if (!scrivi_tutto(STDOUT_FILENO, buf, (size_t)r)) {
 				break;
+			}
+		}
+		if (in_coda > 0 && (pf[0].revents & POLLOUT)) {
+			ssize_t w = write(padrone, coda, in_coda);
+			if (w > 0) {
+				in_coda -= (size_t)w;
+				memmove(coda, coda + w, in_coda);
+			} else if (w < 0 && errno != EAGAIN && errno != EINTR) {
+				break;
+			}
 		}
 		if (pf[1].revents & (POLLIN | POLLHUP | POLLERR)) {
 			unsigned char testa[3];
@@ -212,8 +246,10 @@ int main(int argc, char **argv) {
 			if (n > 0 && !leggi_esatto(buf, n))
 				break;
 			if (testa[0] == 0) {
-				if (!scrivi_tutto(padrone, buf, n))
-					break;
+				// In coda (c'è posto: lo stdin si legge solo allora); il
+				// prossimo giro la manda appena il terminale la prende.
+				memcpy(coda + in_coda, buf, n);
+				in_coda += n;
 			} else if (testa[0] == 1) {
 				buf[n < sizeof(buf) ? n : sizeof(buf) - 1] = '\0';
 				int c = 0, rr = 0;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -85,6 +86,29 @@ class RadiceService {
     'fucina-profila',
   };
 
+  /// Le operazioni che la porta generica del gestore file (`radice_azione`)
+  /// può chiedere: quelle che cambiano una cartella, e basta.
+  ///
+  /// `elenca`, `leggi` e `scrivi` hanno le loro porte, e `scrivi` in
+  /// particolare NON deve passare di qui: senza il contenuto sullo standard
+  /// input l'aiutante leggeva un file vuoto e lo metteva al posto di quello
+  /// vero, da root. La trasmissione e la manutenzione hanno controlli loro.
+  /// Vedi il 30 settembre 2026 in `websocket_server.dart`.
+  static const Set<String> operazioniDiFile = {
+    'elimina',
+    'crea-cartella',
+    'rinomina',
+    'copia',
+    'sposta',
+    'permessi',
+  };
+
+  /// Oltre questo si smette di ascoltare l'aiutante. `leggi` ha già un tetto
+  /// di 8 MB dentro `minerva-radice`, ma il demone non deve dipendere da un
+  /// file installato a parte per non riempirsi la memoria: un aiutante più
+  /// vecchio, o un verbo nuovo che stampa tanto, lo farebbe.
+  static const int uscitaMassima = 16 * 1024 * 1024;
+
   /// `126` quando la finestrella della password viene annullata, `127` quando
   /// non si è riusciti ad aprirla. Sono di `pkexec`, non nostri, e vanno
   /// distinti da un fallimento vero: «annullato» non è un guasto.
@@ -115,6 +139,14 @@ class RadiceService {
   }) async {
     if (!operazioni.contains(operazione)) {
       return _no('Operazione «$operazione» sconosciuta.');
+    }
+    // `scrivi` senza contenuto non è «scrivi un file vuoto»: è una chiamata
+    // sbagliata, e l'aiutante non può distinguerla — legge uno standard input
+    // chiuso e mette un file vuoto al posto di quello vero. Un file vuoto
+    // voluto arriva con `dentro: ''`. Controllato PRIMA di tutto il resto,
+    // così il rifiuto è lo stesso anche dove l'aiutante non è installato.
+    if (operazione == 'scrivi' && dentro == null) {
+      return _no('Non c\'è niente da scrivere: il contenuto manca.');
     }
     if (!await disponibile()) {
       return _no('La modalità amministratore non è installata su questo '
@@ -153,7 +185,33 @@ class RadiceService {
 
       final uscita = <int>[];
       final errori = StringBuffer();
-      final a = p.stdout.listen(uscita.addAll).asFuture<void>();
+      // ── Con un tetto ───────────────────────────────────────────────────
+      //
+      // Fino al 30 settembre 2026 tutto quello che l'aiutante stampava finiva
+      // in memoria, e `leggi` su un collegamento verso un file da dieci giga
+      // passava il controllo della dimensione (vedi `minerva-radice`). Oltre
+      // il tetto si smette di ascoltare: chiudere la lettura fa morire
+      // l'aiutante di SIGPIPE alla scrittura successiva — ucciderlo non si
+      // può, gira da root.
+      var troppo = false;
+      final letto = Completer<void>();
+      late final StreamSubscription<List<int>> sub;
+      sub = p.stdout.listen((pezzo) {
+        if (troppo) return;
+        if (uscita.length + pezzo.length > uscitaMassima) {
+          troppo = true;
+          uscita.clear();
+          sub.cancel();
+          if (!letto.isCompleted) letto.complete();
+          return;
+        }
+        uscita.addAll(pezzo);
+      }, onDone: () {
+        if (!letto.isCompleted) letto.complete();
+      }, onError: (Object e) {
+        if (!letto.isCompleted) letto.complete();
+      });
+      final a = letto.future;
       final b = p.stderr
           .transform(utf8.decoder)
           .listen(errori.write)
@@ -162,6 +220,10 @@ class RadiceService {
       await a;
       await b;
 
+      if (troppo) {
+        return _no('La risposta dell\'aiutante è troppo grande (oltre '
+            '${uscitaMassima ~/ (1024 * 1024)} MB): non la tengo.');
+      }
       if (codice == annullato) {
         return {'ok': false, 'annullato': true, 'error': 'Annullato.'};
       }

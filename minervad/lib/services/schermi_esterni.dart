@@ -1,8 +1,7 @@
-import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'foto/dlna.dart';
+import 'processo_limitato.dart';
 
 /// Uno schermo esterno trovato in rete.
 class SchermoEsterno {
@@ -161,20 +160,28 @@ class SchermiEsterni {
   }
 
   Future<List<SchermoEsterno>> _sfoglia(String servizio) async {
-    ProcessResult r;
+    // ── Quello che ha trovato prima di scadere, si tiene ──────────────────
+    //
+    // Con `Process.run(...).timeout(...)` un solo televisore spento — che
+    // `avahi-browse -r` prova a risolvere per secondi — faceva scadere il
+    // tempo e buttava via ANCHE quelli già risolti: elenco vuoto. E il
+    // processo restava vivo, uno in più a ogni apertura del menù
+    // (30 settembre 2026). Adesso lo si ferma e si legge ciò che aveva già
+    // scritto: le righe `=` complete valgono anche a metà giro, e una riga
+    // troncata dall'uccisione ha meno di dieci campi e `leggiUscita` la
+    // scarta da sé.
+    UscitaLimitata r;
     try {
-      r = await Process.run('avahi-browse', ['-tpr', servizio])
-          .timeout(pazienza);
-    } on TimeoutException {
-      return const [];
+      r = await eseguiLimitato('avahi-browse', ['-tpr', servizio],
+          limite: pazienza);
     } catch (_) {
       // `avahi-browse` non installato, o avahi spento. Non è un errore da
       // gridare: è una scrivania senza scoperta di rete, e il menù lo dirà.
       return const [];
     }
-    if (r.exitCode != 0) return const [];
-    return leggiUscita(r.stdout as String,
-        servizio.startsWith('_googlecast') ? 'cast' : 'airplay');
+    if (!r.scaduto && r.codice != 0) return const [];
+    return leggiUscita(
+        r.stdout, servizio.startsWith('_googlecast') ? 'cast' : 'airplay');
   }
 
   // ── Da qui in giù è CONTO PURO, e ha le sue prove ────────────────────

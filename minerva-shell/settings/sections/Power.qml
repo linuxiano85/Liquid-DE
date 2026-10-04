@@ -60,11 +60,25 @@ Page {
         }
     }
 
-    Core.Exec { id: setter }
+    // ── Il profilo si scrive in fila, e poi si rilegge ───────────────────
+    //
+    // Era `fire`, che col comando precedente ancora in corso non lanciava
+    // niente: «Risparmio» e subito «Prestazioni» lasciavano la macchina in
+    // risparmio con la pagina che diceva prestazioni, e nessuno la
+    // rileggeva. Adesso `start` mette in fila, e a ogni comando finito si
+    // chiede a `powerprofilesctl` com'è davvero — anche quando il cambio è
+    // stato rifiutato (30 settembre 2026).
+    Core.Exec {
+        id: setter
+        onCompleted: function(codice, uscita, errore) {
+            if (!setter.busy)
+                profileQuery.start(["powerprofilesctl", "list"]);
+        }
+    }
 
     function setProfile(name) {
         page.profile = name;
-        setter.fire(["powerprofilesctl", "set", name]);
+        setter.start(["powerprofilesctl", "set", name]);
     }
 
     readonly property var profileLabels: ({
@@ -480,7 +494,9 @@ Page {
             Text {
                 anchors.right: parent.right
                 anchors.verticalCenter: sogliaLabel.verticalCenter
-                text: Math.round(sogliaCursore.value) + " %"
+                // `mostrato` e non `value`: il numero segue il dito mentre si
+                // trascina (il cursore non scrive più il suo `value`).
+                text: Math.round(sogliaCursore.mostrato) + " %"
                 color: Theme.Colors.accent
                 font.family: Theme.Typography.fontMono
                 font.pixelSize: Theme.Typography.sizeSM

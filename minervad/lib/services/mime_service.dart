@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import '../ipc/websocket_server.dart' show WebSocketServer;
 import 'app_scanner.dart';
 import 'mime_database.dart';
 
@@ -1058,9 +1059,18 @@ class MimeService {
         final argv = _expand(execLine, batch);
         if (argv.isEmpty) continue;
         if (app.needsTerminal) {
+          // ── Non sempre c'è Alacritty (30 settembre 2026) ──────────────
+          //
+          // Qui il terminale era scritto a mano: `alacritty -e`. Su un
+          // computer senza Alacritty «Apri con → Vim» rispondeva «fatto»
+          // (il `sh` staccato parte sempre) e non si apriva niente. Il
+          // demone sa già scegliere un terminale che c'è —
+          // `dentroUnTerminale` — e si usa quello. Gli argomenti diventano
+          // una riga di shell uno a uno, ciascuno fra virgolette singole: un
+          // nome di file con spazi o apostrofi resta un argomento solo.
           await Process.start(
             'sh',
-            ['-c', 'exec "\$0" -e "\$@"', 'alacritty', ...argv],
+            ['-c', WebSocketServer.dentroUnTerminale(rigaDiShell(argv))],
             mode: ProcessStartMode.detached,
           );
         } else {
@@ -1073,6 +1083,13 @@ class MimeService {
       return {'ok': false, 'error': '$e'};
     }
   }
+
+  /// Gli argomenti come riga di shell, ognuno fra virgolette singole.
+  /// Pubblica per provarla: è il punto in cui un nome di file diventa testo
+  /// che una shell interpreta.
+  static String rigaDiShell(List<String> argv) => argv
+      .map((a) => "'${WebSocketServer.protettaPerShell(a)}'")
+      .join(' ');
 
   /// La riga `Exec=` originale, codici di campo compresi.
   Future<String> _rawExec(String appId) async {

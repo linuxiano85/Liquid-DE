@@ -34,6 +34,20 @@ import "blocco" as Schermo
 ShellRoot {
     id: radice
 
+    // ── La lingua scelta, anche qui ──────────────────────────────────────
+    //
+    // La scrivania, le Impostazioni e ogni app legano `requestedLanguage` a
+    // `general.language`; la schermata di blocco no, e seguiva la lingua DI
+    // SISTEMA. Con Minerva in inglese su un sistema italiano «Password
+    // sbagliata» e il resto restavano in italiano, unico pezzo della
+    // scrivania a farlo (30 settembre 2026). Sono processi diversi e non si
+    // leggono le proprietà a vicenda: la riga va ripetuta qui.
+    Binding {
+        target: Core.Strings
+        property: "requestedLanguage"
+        value: Core.Ipc.get("general.language", "auto")
+    }
+
     readonly property int provaSecondi: {
         var v = Quickshell.env("MINERVA_BLOCCO_PROVA");
         var n = parseInt(v || "0", 10);
@@ -76,6 +90,10 @@ ShellRoot {
         }
     }
 
+    // Le password sbagliate si contano UNA volta per tutto il blocco, non una
+    // per schermo: vedi `blocco/Tentativi.qml`.
+    Schermo.Tentativi { id: tentativiComuni }
+
     WlSessionLock {
         id: serratura
         locked: true
@@ -99,6 +117,7 @@ ShellRoot {
                 clip: true
 
                 Schermo.Blocco {
+                    tentativi: tentativiComuni
                     width: superficie.width
                     height: superficie.height
                     anchors.bottom: parent.bottom

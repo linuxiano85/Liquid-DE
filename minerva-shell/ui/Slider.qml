@@ -27,11 +27,36 @@ Item {
     signal moved(real value)
     signal released(real value)
 
+    /// ── Il dito ha un posto suo, e `value` non si tocca ──────────────────
+    ///
+    /// Fino al 30 settembre 2026 il trascinamento scriveva `slider.value =
+    /// …`, e quell'assegnazione spezzava il legame di chi aveva scritto
+    /// `value: Core.SystemState.volume`: dopo la prima trascinata il cursore
+    /// del volume non seguiva più i tasti multimediali né l'altro pannello.
+    /// Stessa cura di `settings/ValueSlider.qml` (il perché lungo è lì):
+    /// `_dito` vale mentre si trascina e finché il valore nuovo non torna da
+    /// fuori (al massimo un secondo e mezzo); `mostrato` è ciò che si vede.
+    property real _dito: NaN
+    readonly property real mostrato: isNaN(slider._dito) ? slider.value : slider._dito
+
+    onValueChanged: {
+        if (!drag.pressed) {
+            slider._dito = NaN;
+            attesa.stop();
+        }
+    }
+
+    Timer {
+        id: attesa
+        interval: 1500
+        onTriggered: if (!drag.pressed) slider._dito = NaN
+    }
+
     implicitHeight: 44
 
     readonly property real _fraction: {
         var span = to - from;
-        return span <= 0 ? 0 : Math.max(0, Math.min(1, (value - from) / span));
+        return span <= 0 ? 0 : Math.max(0, Math.min(1, (slider.mostrato - from) / span));
     }
 
     /// Dove finisce davvero il riempimento. Serve per decidere il colore di
@@ -132,24 +157,37 @@ Item {
         }
 
         onPressed: function(m) {
-            slider.value = valueAt(m.x);
-            slider.moved(slider.value);
+            attesa.stop();
+            slider._dito = valueAt(m.x);
+            slider.moved(slider._dito);
         }
         onPositionChanged: function(m) {
             if (!pressed)
                 return;
-            slider.value = valueAt(m.x);
-            slider.moved(slider.value);
+            slider._dito = valueAt(m.x);
+            slider.moved(slider._dito);
         }
-        onReleased: slider.released(slider.value)
+        onReleased: {
+            var v = slider._dito;
+            // Prima il tempo, poi il segnale: se chi ascolta aggiorna la
+            // sorgente subito, `onValueChanged` spegne l'attesa appena accesa.
+            attesa.restart();
+            slider.released(v);
+        }
+        onCanceled: {
+            slider._dito = NaN;
+            attesa.stop();
+        }
 
         onWheel: function(wheel) {
             var step = (slider.to - slider.from) / 20;
-            slider.value = Math.max(slider.from,
-                                    Math.min(slider.to,
-                                             slider.value + (wheel.angleDelta.y > 0 ? step : -step)));
-            slider.moved(slider.value);
-            slider.released(slider.value);
+            var v = Math.max(slider.from,
+                             Math.min(slider.to,
+                                      slider.mostrato + (wheel.angleDelta.y > 0 ? step : -step)));
+            slider._dito = v;
+            attesa.restart();
+            slider.moved(v);
+            slider.released(v);
         }
     }
 }

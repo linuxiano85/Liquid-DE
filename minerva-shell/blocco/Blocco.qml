@@ -66,8 +66,11 @@ Item {
     /// Vero mentre PAM sta pensando. Il campo si chiude: una seconda password
     /// mandata mentre la prima è in volo confonde la macchina a stati di PAM.
     property bool inCorso: false
-    /// Quante volte di fila si è sbagliato. Serve alla pausa crescente.
-    property int errori: 0
+    /// Quante volte di fila si è sbagliato, e la pausa: UNO per tutto il
+    /// blocco, non uno per schermo (vedi `Tentativi.qml`). `blocco.qml` passa
+    /// il suo; quello di serie serve solo a chi usa questa schermata da sola.
+    property Schermo.Tentativi tentativi: Schermo.Tentativi {}
+    readonly property int errori: blocco.tentativi.errori
     property string avviso: ""
 
     // ── La pausa che cresce ──────────────────────────────────────────────
@@ -77,15 +80,8 @@ Item {
     // lasciata accesa. Cresce e si ferma a otto secondi, perché oltre quella
     // soglia dà fastidio a chi la password la sa e non ferma di più chi non
     // la sa (a quel punto tanto vale spegnere il computer e portarselo via).
-    readonly property int pausa: blocco.errori === 0 ? 0
-        : Math.min(8000, 500 * Math.pow(2, blocco.errori - 1))
-    property bool inPausa: false
-
-    Timer {
-        id: attesa
-        interval: blocco.pausa
-        onTriggered: blocco.inPausa = false
-    }
+    readonly property int pausa: blocco.tentativi.pausa
+    readonly property bool inPausa: blocco.tentativi.inPausa
 
     // Un modulo o un subprocesso PAM bloccato non deve lasciare il campo
     // disabilitato per sempre. Si annulla solo la verifica, mai il blocco.
@@ -113,16 +109,14 @@ Item {
             return;
         }
         if (status === 0 && code === 0 && reply === "ok\n") {
-            blocco.errori = 0;
+            blocco.tentativi.giusto();
             blocco.avviso = "";
             blocco.sbloccato();
             return;
         }
         if (status === 0 && ((code === 1 && reply === "denied\n")
                          || (code === 2 && reply === "maxtries\n"))) {
-            blocco.errori++;
-            blocco.inPausa = blocco.pausa > 0;
-            if (blocco.inPausa) attesa.restart();
+            blocco.tentativi.sbagliato();
             blocco.avviso = code === 2
                 ? (blocco.it ? "Troppi tentativi. Aspetta un momento." : "Too many attempts. Wait a moment.")
                 : (blocco.it ? "Password sbagliata" : "Wrong password");

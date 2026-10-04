@@ -9,9 +9,42 @@ import "../theme" as Theme
 Item {
     id: slider
 
+    /// Il valore VERO, quello che arriva da fuori (di solito legato a
+    /// `Core.Ipc.get(…)`). Il cursore non lo scrive mai: vedi `mostrato`.
     property real value: 0.5
     property real from: 0.0
     property real to: 1.0
+
+    /// ── Quello che si vede, e perché non è `value` ───────────────────────
+    ///
+    /// Fino al 30 settembre 2026 il trascinamento scriveva `slider.value =
+    /// …`, e un'assegnazione in QML SPEZZA il legame di chi aveva scritto
+    /// `value: Core.Ipc.get("windows.rigidita", 1)`. Da quel momento il
+    /// cursore non seguiva più niente: dopo aver trascinato «Rigidità», il
+    /// preset «Delicato» rimetteva 1 nelle impostazioni e il cursore restava
+    /// dov'era; lo stesso dopo «Ripristina», o una modifica fatta altrove. Su
+    /// trenta cursori, uno solo si rimetteva il legame a mano.
+    ///
+    /// Adesso il dito ha un posto suo, `_dito`: vale mentre si trascina e
+    /// per poco dopo — finché il valore nuovo non torna da fuori, o al
+    /// massimo un secondo e mezzo, così un valore rifiutato si rivede com'è
+    /// davvero. `mostrato` è quello che si disegna, e chi fuori vuole il
+    /// numero sotto il dito legge questo.
+    property real _dito: NaN
+    readonly property real mostrato: isNaN(slider._dito) ? slider.value : slider._dito
+
+    onValueChanged: {
+        if (!drag.pressed) {
+            slider._dito = NaN;
+            attesa.stop();
+        }
+    }
+
+    Timer {
+        id: attesa
+        interval: 1500
+        onTriggered: if (!drag.pressed) slider._dito = NaN
+    }
 
     /// Come si scrive il valore accanto al cursore.
     ///
@@ -56,7 +89,7 @@ Item {
     // e basta: chi non vede la posizione della manopola ha bisogno del valore.
     Accessible.role: Accessible.Slider
     Accessible.name: slider.unit
-    Accessible.description: Math.round(slider.value) + " " + slider.unit
+    Accessible.description: Math.round(slider.mostrato) + " " + slider.unit
 
     readonly property string readoutText: {
         // Un suffisso che comincia coi due punti è un orario: «21:00», non
@@ -65,11 +98,11 @@ Item {
                  : (slider.suffix.charAt(0) === ":" ? slider.suffix : " " + slider.suffix);
         switch (slider.unit) {
         case "niente": return "";
-        case "pixel":  return Math.round(slider.value) + " px";
-        case "intero": return Math.round(slider.value) + tail;
-        case "numero": return (Math.round(slider.value * 10) / 10)
+        case "pixel":  return Math.round(slider.mostrato) + " px";
+        case "intero": return Math.round(slider.mostrato) + tail;
+        case "numero": return (Math.round(slider.mostrato * 10) / 10)
                               .toLocaleString(Qt.locale(), 'f', 1) + tail;
-        case "percento": return Math.round(slider.value * 100) + "%";
+        case "percento": return Math.round(slider.mostrato * 100) + "%";
         }
         // ── Un'unità che non esiste non è una percentuale ────────────────
         //
@@ -85,7 +118,7 @@ Item {
         // quale unità è stata inventata.
         console.warn("[MINERVA][ValueSlider] unità sconosciuta:",
                      slider.unit, "— il valore si mostra nudo");
-        return Math.round(slider.value) + tail;
+        return Math.round(slider.mostrato) + tail;
     }
 
     /// Emesso in continuo durante il trascinamento (anteprima)
@@ -100,7 +133,7 @@ Item {
         var span = to - from;
         if (span <= 0)
             return 0;
-        return Math.max(0, Math.min(1, (value - from) / span));
+        return Math.max(0, Math.min(1, (slider.mostrato - from) / span));
     }
 
     Text {
@@ -178,16 +211,28 @@ Item {
             }
 
             onPressed: function(mouse) {
-                slider.value = valueAt(mouse.x);
-                slider.moved(slider.value);
+                attesa.stop();
+                slider._dito = valueAt(mouse.x);
+                slider.moved(slider._dito);
             }
             onPositionChanged: function(mouse) {
                 if (!pressed)
                     return;
-                slider.value = valueAt(mouse.x);
-                slider.moved(slider.value);
+                slider._dito = valueAt(mouse.x);
+                slider.moved(slider._dito);
             }
-            onReleased: slider.released(slider.value)
+            onReleased: {
+                var v = slider._dito;
+                // Prima il tempo, poi il segnale: chi ascolta di solito
+                // scrive nelle impostazioni, il valore torna SUBITO, e
+                // `onValueChanged` spegne l'attesa appena accesa.
+                attesa.restart();
+                slider.released(v);
+            }
+            onCanceled: {
+                slider._dito = NaN;
+                attesa.stop();
+            }
         }
     }
 }

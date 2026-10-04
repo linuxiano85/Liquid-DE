@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
+
+import 'processo_limitato.dart';
 
 /// Il canale verso i servizi di sistema: D-Bus.
 ///
@@ -40,12 +41,16 @@ class Dbus {
   /// sistema che non si aggiorna più.
   static const Duration _attesa = Duration(seconds: 3);
 
+  // `eseguiLimitato` e non `Process.run(...).timeout(...)`: il secondo
+  // smetteva di aspettare ma lasciava vivo `busctl`, che davanti a un servizio
+  // impallato restava lì i suoi venticinque secondi — uno in più a ogni giro
+  // dello stato di sistema (30 settembre 2026).
   static Future<String?> _busctl(List<String> argomenti) async {
     try {
-      final r = await Process.run('busctl', ['--json=short', ...argomenti])
-          .timeout(_attesa);
-      if (r.exitCode != 0) return null;
-      final s = (r.stdout as String).trim();
+      final r = await eseguiLimitato('busctl', ['--json=short', ...argomenti],
+          limite: _attesa);
+      if (!r.ok) return null;
+      final s = r.stdout.trim();
       return s.isEmpty ? null : s;
     } catch (_) {
       // `busctl` assente, bus assente, servizio spento, tempo scaduto: sono
@@ -152,7 +157,7 @@ class Dbus {
     bool sistema = true,
   }) async {
     try {
-      final r = await Process.run('busctl', [
+      final r = await eseguiLimitato('busctl', [
         ..._dove(sistema),
         'set-property',
         servizio,
@@ -161,8 +166,8 @@ class Dbus {
         nome,
         firma,
         valore,
-      ]).timeout(_attesa);
-      return r.exitCode == 0;
+      ], limite: _attesa);
+      return r.ok;
     } catch (_) {
       return false;
     }
@@ -216,7 +221,7 @@ class Dbus {
     Duration? attesa,
   }) async {
     try {
-      final r = await Process.run('busctl', [
+      final r = await eseguiLimitato('busctl', [
         '--json=short',
         ..._dove(sistema),
         'call',
@@ -226,9 +231,9 @@ class Dbus {
         metodo,
         firma,
         ...argomenti,
-      ]).timeout(attesa ?? _attesa);
-      if (r.exitCode != 0) return null;
-      final out = (r.stdout as String).trim();
+      ], limite: attesa ?? _attesa);
+      if (!r.ok) return null;
+      final out = r.stdout.trim();
       if (out.isEmpty) return true; // metodo senza valore di ritorno: è andata
       final m = jsonDecode(out);
       return m is Map ? m['data'] : null;

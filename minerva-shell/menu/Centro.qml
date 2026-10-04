@@ -155,7 +155,15 @@ PanelWindow {
                     nome: "Risparmio"
                     acceso: Core.Compositore.risparmio && Core.Compositore.risparmio.attivo === true
                     detto: "effetti ridotti"
-                    onScelto: Core.Ipc.setSetting("power.risparmioEffetti", acceso ? "auto" : "sempre")
+                    // Spegnerla deve spegnere. Scriveva sempre «auto» quando era
+                    // accesa: ma accesa da sola — «auto», batteria bassa — voleva
+                    // dire riscrivere lo stesso valore, e la levetta non si
+                    // spegneva mai (30 settembre 2026). Accesa a mano («sempre»)
+                    // torna ad «auto»; accesa dalla batteria diventa «mai», che
+                    // si rimette dalle Impostazioni → Energia.
+                    onScelto: Core.Ipc.setSetting("power.risparmioEffetti",
+                        !acceso ? "sempre"
+                        : Core.Ipc.get("power.risparmioEffetti", "auto") === "sempre" ? "auto" : "mai")
                 }
                 Levetta {
                     nome: "Modo gioco"

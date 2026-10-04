@@ -4,6 +4,7 @@ import 'dart:io';
 
 import '../core/settings_api.dart';
 import '../providers/compositor_provider.dart';
+import '../providers/minerva/minerva_provider.dart';
 
 /// La memoria che respira: le app che non si guardano si comprimono.
 ///
@@ -112,6 +113,10 @@ class RespiroService {
       final scope = _scopeDelleApp();
       if (scope.isEmpty) return;
       final inVista = await _pidInVista();
+      // Il compositore non ha risposto: questo giro si salta. Contarlo come
+      // «nessuna finestra in vista» comprimeva, un minuto dopo, anche l'app
+      // che si stava usando (30 settembre 2026).
+      if (inVista == null) return;
       final visibili = <String, bool>{
         for (final s in scope)
           s: _processi(s).any(inVista.contains),
@@ -182,7 +187,22 @@ class RespiroService {
   }
 
   /// I pid con una finestra in vista: non ridotta, sulla scrivania attiva.
-  Future<Set<int>> _pidInVista() async {
+  /// `null` quando non si sa.
+  ///
+  /// Con minerva-wayland si usano le domande che distinguono «nessuna
+  /// finestra» da «non ha risposto»: `getClientsRaw` e `getWorkspaces`
+  /// ripiegano su `[]` e su una scrivania 1 finta, e con quelle — stando
+  /// sulla scrivania 3 durante un intoppo — tutte le app risultavano fuori
+  /// vista.
+  Future<Set<int>?> _pidInVista() async {
+    final c = _compositore;
+    if (c is MinervaProvider) {
+      final attiva = await c.scrivaniaAttivaSeRisponde();
+      if (attiva == null) return null;
+      final finestre = await c.finestreSeRisponde();
+      if (finestre == null) return null;
+      return Respiro.pidInVista(finestre, attiva);
+    }
     final scrivanie = await _compositore.getWorkspaces();
     final attiva = scrivanie
         .firstWhere((w) => w.isActive, orElse: () => scrivanie.first)

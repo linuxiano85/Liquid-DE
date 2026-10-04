@@ -1593,11 +1593,16 @@ FloatingWindow {
                             value: 300
                             icon: ""
                             showValue: false
+                            // Questo cursore È il suo valore (non c'è
+                            // un'impostazione dietro): dal 30 settembre 2026
+                            // `Ui.Slider` non scrive più `value` da sé, e
+                            // lo si tiene qui, al rilascio.
+                            onReleased: function (v) { fadeInSlider.value = v; }
                         }
                         Text {
                             width: 52
                             anchors.verticalCenter: parent.verticalCenter
-                            text: Math.round(fadeInSlider.value) + " ms"
+                            text: Math.round(fadeInSlider.mostrato) + " ms"
                             font { family: Theme.Typography.fontMono
                                    ; pixelSize: Theme.Typography.sizeXS }
                             color: Theme.Colors.textFaint
@@ -1628,11 +1633,12 @@ FloatingWindow {
                             value: 500
                             icon: ""
                             showValue: false
+                            onReleased: function (v) { fadeOutSlider.value = v; }
                         }
                         Text {
                             width: 52
                             anchors.verticalCenter: parent.verticalCenter
-                            text: Math.round(fadeOutSlider.value) + " ms"
+                            text: Math.round(fadeOutSlider.mostrato) + " ms"
                             font { family: Theme.Typography.fontMono
                                    ; pixelSize: Theme.Typography.sizeXS }
                             color: Theme.Colors.textFaint

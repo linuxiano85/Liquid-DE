@@ -102,6 +102,25 @@ controlla_percorso() {
         *)    muori "il percorso dev'essere assoluto: «$1»." ;;
     esac
     PULITO="$1"
+    # ── Le barre doppie e i «/./» ─────────────────────────────────────────
+    #
+    # Sono lo stesso percorso per il kernel e un percorso DIVERSO per il
+    # controllo di «intoccabile», che guarda il testo: fino al 30 settembre
+    # 2026 `//etc`, `/./etc` e `/usr//lib` passavano e arrivavano a `rm -rf`.
+    # Provato: quel giorno, da root in un contenitore di prova, `elimina //etc`
+    # ha cancellato `/etc` davvero. Si riducono qui, prima di ogni altro
+    # controllo, e l'operazione usa il percorso ridotto — che è lo stesso
+    # file. Niente `sed` dentro una `$(…)`: la sostituzione di comando si
+    # mangia gli a-capo in fondo, e un nome che finisce con un a-capo
+    # diventerebbe il nome di un ALTRO file.
+    while : ; do
+        case "$PULITO" in
+            *//*)  PULITO="${PULITO%%//*}/${PULITO#*//}" ;;
+            */./*) PULITO="${PULITO%%/./*}/${PULITO#*/./}" ;;
+            */.)   PULITO="${PULITO%/.}"; [ -n "$PULITO" ] || PULITO=/ ;;
+            *) break ;;
+        esac
+    done
     while : ; do
         case "$PULITO" in
             /) break ;;
@@ -146,9 +165,15 @@ annota() {
     # Il registro non deve poter far fallire l'operazione: se non si scrive,
     # pazienza. Un aiutante che si rifiuta di lavorare perché non trova il
     # proprio quaderno è un aiutante inutile.
+    #
+    # Gli a-capo dentro un percorso diventano «?»: un nome di file può
+    # contenerne, e senza questa riga chi sceglie il nome sceglie anche le
+    # righe che compaiono nel registro di root — una riga inventata con la
+    # data e l'uid di qualcun altro (30 settembre 2026).
+    RIGA=$(printf '%s' "$1" | tr '\n\r' '??')
     {
         printf '%s uid=%s %s\n' \
-            "$(date '+%Y-%m-%d %H:%M:%S')" "${PKEXEC_UID:-?}" "$1" \
+            "$(date '+%Y-%m-%d %H:%M:%S')" "${PKEXEC_UID:-?}" "$RIGA" \
             >> "$REGISTRO"
         chmod 600 "$REGISTRO"
     } 2>/dev/null || true
@@ -466,14 +491,44 @@ case "$AZIONE" in
         [ -f "$F" ] || muori "«$F» non è un file."
         # Un limite c'è, e serve: il contenuto passa dal demone alla finestra
         # in un messaggio solo, e un file da un gigabyte non ci sta.
-        DIM=$(stat -c '%s' -- "$F" 2>/dev/null || echo 0)
+        #
+        # `-L`, perché `[ -f ]` e la lettura seguono i collegamenti: senza,
+        # si misurava il COLLEGAMENTO (sei byte) e un collegamento a un
+        # registro da dieci giga passava il controllo (30 settembre 2026).
+        DIM=$(stat -L -c '%s' -- "$F" 2>/dev/null || echo 0)
         [ "$DIM" -le 8388608 ] || muori "«$F» è troppo grande da aprire qui (${DIM} byte)."
         annota "leggi $F"
-        cat -- "$F"
+        # E la dimensione dichiarata non basta: i file di /proc dicono 0 e ne
+        # danno quanto vogliono, e alcuni (`/proc/kmsg`) non finiscono mai.
+        # Si legge al massimo un byte oltre il tetto, con un tempo massimo, e
+        # si consegna solo se è rimasto sotto: un file tagliato a metà che
+        # poi si modifica e si salva è peggio di un rifiuto.
+        TMP=$(mktemp) || muori "non riesco a preparare la lettura."
+        if ! timeout 10 head -c 8388609 -- "$F" > "$TMP"; then
+            rm -f -- "$TMP"; muori "non sono riuscito a leggere «$F» (o non finiva più)."
+        fi
+        LETTI=$(stat -c '%s' -- "$TMP")
+        if [ "$LETTI" -gt 8388608 ]; then
+            rm -f -- "$TMP"; muori "«$F» è troppo grande da aprire qui."
+        fi
+        cat -- "$TMP"
+        rm -f -- "$TMP"
         ;;
 
     scrivi)
         controlla_percorso "${1:-}"; F="$PULITO"
+        # ── Un collegamento si scrive dove PUNTA ──────────────────────────
+        #
+        # Lo spostamento qui sotto sostituisce il NOME: su un collegamento
+        # metteva un file normale al posto del collegamento, e il file vero
+        # restava com'era. `/etc/resolv.conf` modificato in modalità
+        # amministratore smetteva così di essere di systemd-resolved, senza
+        # che niente lo dicesse (30 settembre 2026). Il bersaglio si
+        # ricontrolla da capo, come un percorso arrivato da fuori.
+        if [ -L "$F" ]; then
+            VERO=$(readlink -f -- "$F") || muori "non capisco dove porta «$F»."
+            controlla_percorso "$VERO"; F="$PULITO"
+        fi
         [ -e "$F" ] && [ ! -f "$F" ] && muori "«$F» non è un file normale."
         D=$(dirname -- "$F")
         [ -d "$D" ] || muori "la cartella «$D» non esiste."
@@ -550,6 +605,28 @@ case "$AZIONE" in
         esac
         controlla_percorso "$P"; P="$PULITO"
         [ -e "$P" ] || muori "«$P» non c'è."
+        # ── `chmod` segue i collegamenti, e non c'è modo di dirgli di no ──
+        #
+        # Su un collegamento cambierebbe i permessi del file a cui punta. E se
+        # la cartella è scrivibile da qualcun altro, quel qualcuno può mettere
+        # un collegamento a `/etc/shadow` al posto del file fra il momento in
+        # cui lo guardi e il `chmod`: `chmod 666` da root, sul file sbagliato
+        # (30 settembre 2026). In una cartella che è solo di root o tua nessun
+        # altro può fare lo scambio.
+        [ -L "$P" ] && muori \
+            "«$P» è un collegamento: i permessi si cambiano sul file vero."
+        CARTELLA_P=$(dirname -- "$P")
+        DI=$(stat -c '%u' -- "$CARTELLA_P" 2>/dev/null || echo -1)
+        MODO_C=$(stat -c '%a' -- "$CARTELLA_P" 2>/dev/null || echo 777)
+        case "$DI" in
+            0|"$PKEXEC_UID") : ;;
+            *) muori "«$CARTELLA_P» è di un altro utente: lì i permessi non li cambio da amministratore." ;;
+        esac
+        # Le ultime due cifre ottali: gruppo e altri. 2, 3, 6 e 7 vogliono
+        # dire «può scrivere».
+        case "$MODO_C" in
+            *[2367]?|*[2367]) muori "«$CARTELLA_P» è scrivibile da altri: lì i permessi non li cambio da amministratore." ;;
+        esac
         annota "permessi $M $P"
         chmod "$M" -- "$P" || muori "non sono riuscito a cambiare i permessi."
         printf 'fatto\n'

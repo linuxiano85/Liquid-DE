@@ -56,7 +56,7 @@ Column {
     }
 
     function _daColore(c) {
-        if (sel._staScegliendo)
+        if (sel._staScegliendo || sel._trascinando)
             return;
         // Il grigio puro non ha tinta: si tiene quella di prima, o il cursore
         // salterebbe a rosso ogni volta che si passa per il centro.
@@ -73,6 +73,52 @@ Column {
         sel._staScegliendo = true;
         sel.scelto(sel._componi());
         sel._staScegliendo = false;
+    }
+
+    // ── Mentre si trascina: anteprima qui, scrittura di rado ─────────────
+    //
+    // Ogni movimento del dito annunciava `scelto`, e chi ascolta scrive
+    // nelle impostazioni: sessanta transazioni al secondo nel demone, ognuna
+    // un `settings.json` riscritto su disco e un `settings_changed` a tutte
+    // le finestre, che si ritingevano tutte. E l'eco di un colore VECCHIO,
+    // arrivata a trascinamento in corso, riportava tinta e saturazione
+    // indietro: il cursore scattava sotto il dito. Trovato in revisione il
+    // 30 settembre 2026.
+    //
+    // Adesso durante il trascinamento il colore si vede nel quadratino qui
+    // accanto (`_componi()`), gli echi da fuori si ignorano, e verso fuori
+    // parte al più un colore ogni 150 ms — l'ultimo. Al rilascio parte quello
+    // finale, sempre.
+    property bool _trascinando: false
+    property bool _daAnnunciare: false
+
+    function _muove() {
+        sel._trascinando = true;
+        sel._daAnnunciare = true;
+        if (!ritmo.running) {
+            sel._daAnnunciare = false;
+            sel._annuncia();
+            ritmo.restart();
+        }
+    }
+
+    function _lascia() {
+        ritmo.stop();
+        sel._daAnnunciare = false;
+        sel._annuncia();
+        sel._trascinando = false;
+    }
+
+    Timer {
+        id: ritmo
+        interval: 150
+        onTriggered: {
+            if (!sel._daAnnunciare)
+                return;
+            sel._daAnnunciare = false;
+            sel._annuncia();
+            ritmo.restart();
+        }
     }
 
     // ── Il quadrato: saturazione e luminosità ────────────────────────────
@@ -134,10 +180,12 @@ Column {
             function aggiorna(mx, my) {
                 sel.saturazione = Math.max(0, Math.min(1, mx / quadro.width));
                 sel.valoreV = 1 - Math.max(0, Math.min(1, my / quadro.height));
-                sel._annuncia();
+                sel._muove();
             }
             onPressed: function(m) { aggiorna(m.x, m.y); }
             onPositionChanged: function(m) { if (pressed) aggiorna(m.x, m.y); }
+            onReleased: sel._lascia()
+            onCanceled: sel._lascia()
         }
     }
 
@@ -181,10 +229,12 @@ Column {
             preventStealing: true
             function aggiorna(mx) {
                 sel.tonalita = Math.max(0, Math.min(1, mx / striscia.width));
-                sel._annuncia();
+                sel._muove();
             }
             onPressed: function(m) { aggiorna(m.x); }
             onPositionChanged: function(m) { if (pressed) aggiorna(m.x); }
+            onReleased: sel._lascia()
+            onCanceled: sel._lascia()
         }
     }
 
@@ -198,7 +248,7 @@ Column {
         Rectangle {
             width: 34; height: 34
             radius: Theme.Effects.radiusXS
-            color: sel.valore
+            color: sel._trascinando ? sel._componi() : sel.valore
             border.width: 1
             border.color: Theme.Colors.edge
         }

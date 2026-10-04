@@ -142,7 +142,17 @@ class KeybindService {
     final file = File(_configPath);
     try {
       _watcher = file.parent.watch().listen((event) async {
-        if (event.path != file.path) return;
+        // ── Il salvataggio per rinomina (30 settembre 2026) ─────────────
+        //
+        // Molti editor (Kate e tutto ciò che usa QSaveFile, gedit) non
+        // scrivono dentro il file: scrivono un file temporaneo accanto e lo
+        // RINOMINANO sopra. L'evento è uno spostamento, e il nome del file
+        // sta in `destination`, non in `path`: guardando solo `path` il
+        // salvataggio non si vedeva, e il compositore restava con le
+        // scorciatoie di prima.
+        final eIlNostro = event.path == file.path ||
+            (event is FileSystemMoveEvent && event.destination == file.path);
+        if (!eIlNostro) return;
         if (event.type == FileSystemEvent.delete) return;
         await Future.delayed(const Duration(milliseconds: 120));
         await reload();
