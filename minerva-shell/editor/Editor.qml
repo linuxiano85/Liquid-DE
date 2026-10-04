@@ -51,7 +51,18 @@ FloatingWindow {
     implicitHeight: 600
 
     signal requestClose()
-    onClosed: editor.requestClose()
+    // La × della barra disegnata dal compositore chiude la finestra da fuori,
+    // e Quickshell non lascia trattenerla: c'è solo `closed`, a cose fatte.
+    // Con qualcosa di non salvato la finestra si rimostra subito, con la
+    // domanda; senza, si chiude come prima.
+    onClosed: {
+        if (editor.qualcosaDaSalvare()) {
+            editor.visible = true;
+            editor.daChiudere = -1;
+            return;
+        }
+        editor.requestClose();
+    }
 
     /// Il documento su cui aprirsi, dall'ambiente.
     property string initialFile: ""
@@ -156,12 +167,55 @@ FloatingWindow {
             editor.apri(path);
     }
 
-    function closeTab(index) {
+    // ── Chiudere senza perdere niente ────────────────────────────────────
+    //
+    // `isDirty()` c'era e non la chiamava nessuno: Ctrl+W, la × di una scheda
+    // e la × della finestra buttavano le modifiche senza una parola (segnalato
+    // dal PC di prova, J1). Adesso, se c'è qualcosa di non salvato, si chiede.
+    /// Cosa si sta per chiudere: -2 niente, -1 la finestra, ≥0 una scheda.
+    property int daChiudere: -2
+
+    function closeTab(index, forza) {
         if (editor.docs.count <= 1 || index < 0 || index >= editor.docs.count)
             return;
+        if (forza !== true && editor.docs.get(index).dirty === true) {
+            editor.daChiudere = index;
+            return;
+        }
         editor.docs.remove(index);
+        // L'indice resta lo stesso NUMERO ma ora indica un altro documento:
+        // senza questo, togliendo una scheda prima di quella attiva, il testo
+        // mostrato restava quello vecchio.
+        if (index < editor.currentIndex)
+            editor.currentIndex--;
         if (editor.currentIndex >= editor.docs.count)
             editor.currentIndex = editor.docs.count - 1;
+        editor.riprendiStato();
+    }
+
+    function qualcosaDaSalvare() {
+        for (var i = 0; i < editor.docs.count; i++)
+            if (editor.docs.get(i).dirty === true)
+                return true;
+        return false;
+    }
+
+    function chiudiFinestra(forza) {
+        if (forza !== true && editor.qualcosaDaSalvare()) {
+            editor.daChiudere = -1;
+            return;
+        }
+        editor.daChiudere = -2;
+        editor.requestClose();
+    }
+
+    function confermaChiusura() {
+        var quale = editor.daChiudere;
+        editor.daChiudere = -2;
+        if (quale === -1)
+            editor.chiudiFinestra(true);
+        else if (quale >= 0)
+            editor.closeTab(quale, true);
     }
 
     function segnaDirty(si) {
@@ -612,7 +666,7 @@ FloatingWindow {
         anchors.left: parent.left
         anchors.right: parent.right
         label: editor.title
-        onCloseRequested: editor.requestClose()
+        onCloseRequested: editor.chiudiFinestra(false)
     }
 
     // ── Le schede ────────────────────────────────────────────────────────
@@ -1583,6 +1637,100 @@ FloatingWindow {
                         onClicked: {
                             editor.impostaCarattere(modelData);
                             menùCaratteri.visible = false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ── «Chiudere senza salvare?» ────────────────────────────────────────
+
+    Rectangle {
+        id: conferma
+        anchors.fill: parent
+        color: Theme.Colors.scrim
+        visible: editor.daChiudere !== -2
+        z: 11
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: editor.daChiudere = -2
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 440
+            height: 132
+            radius: Theme.Effects.radiusMD
+            color: Theme.Colors.panel
+            border.width: 1
+            border.color: Theme.Colors.edge
+
+            MouseArea { anchors.fill: parent }
+
+            Text {
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: Theme.Effects.space4
+                wrapMode: Text.WordWrap
+                text: {
+                    if (editor.daChiudere === -1)
+                        return editor.it ? "Ci sono modifiche non salvate. Chiudere lo stesso?"
+                                         : "There are unsaved changes. Close anyway?";
+                    var d = editor.daChiudere >= 0 ? editor.docs.get(editor.daChiudere) : null;
+                    var nome = d && d.path ? editor.nomeFile(d.path)
+                                           : (editor.it ? "Senza nome" : "Untitled");
+                    return editor.it ? "«" + nome + "» ha modifiche non salvate. Chiudere lo stesso?"
+                                     : "“" + nome + "” has unsaved changes. Close anyway?";
+                }
+                color: Theme.Colors.text
+                font.family: Theme.Typography.fontDisplay
+                font.pixelSize: Theme.Typography.sizeSM
+            }
+
+            Row {
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: Theme.Effects.space4
+                spacing: Theme.Effects.space2
+
+                Repeater {
+                    model: [
+                        { "id": "annulla", "it": "Annulla", "en": "Cancel" },
+                        { "id": "chiudi", "it": "Chiudi senza salvare", "en": "Close without saving" }
+                    ]
+                    delegate: Rectangle {
+                        id: bottone
+                        required property var modelData
+                        width: etichetta.implicitWidth + Theme.Effects.space4 * 2
+                        height: 32
+                        radius: Theme.Effects.radiusXS
+                        color: bottone.modelData.id === "chiudi"
+                               ? Qt.alpha(Theme.Colors.danger, area.containsMouse ? 0.32 : 0.22)
+                               : (area.containsMouse ? Theme.Colors.sunken : "transparent")
+                        border.width: 1
+                        border.color: Theme.Colors.edge
+
+                        Text {
+                            id: etichetta
+                            anchors.centerIn: parent
+                            text: editor.it ? bottone.modelData.it : bottone.modelData.en
+                            color: Theme.Colors.text
+                            font.family: Theme.Typography.fontDisplay
+                            font.pixelSize: Theme.Typography.sizeSM
+                        }
+                        MouseArea {
+                            id: area
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: {
+                                if (bottone.modelData.id === "chiudi")
+                                    editor.confermaChiusura();
+                                else
+                                    editor.daChiudere = -2;
+                            }
                         }
                     }
                 }
