@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import tempfile
 import unittest
@@ -84,6 +85,16 @@ if args[0] == 'ipc':
         p = self.launch(HUNG='1')
         self.assertNotEqual(p.returncode, 0)
         self.assertIn('non risponde', p.stderr)
+
+    def test_failed_systemd_scope_falls_back_to_direct_launch(self):
+        (self.root / 'systemd').mkdir()
+        with socket.socket(socket.AF_UNIX) as sock:
+            sock.bind(str(self.root / 'systemd/private'))
+            self.command('systemd-run', '#!/bin/sh\nexit 1\n')
+            result = self.launch('/fallback')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sum(c[0][0] != 'ipc' for c in self.calls()), 1)
+        self.assertTrue(any(c[0][-2:] == ['avvia', '/fallback'] for c in self.calls()))
 
     def orphan(self, *packages, manifest=True, boot=False, missing_files=False):
         protection = self.root / 'required-packages.txt'

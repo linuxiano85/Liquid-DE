@@ -14,7 +14,10 @@ entry_text = entry.read_text()
 probe = 'return JSON.stringify({sleeping: pronta.dormiente, windowSleeping: manager.dormiente, visible: manager.visible, variable: pronta.variabile, env: Quickshell.env("MINERVA_FILES_DORMIENTE"), pid: Quickshell.processId});'
 needle = 'function ping(): string {\n            return "ok";'
 assert needle in entry_text
-entry.write_text(entry_text.replace(needle, 'function ping(): string {\n            ' + probe))
+entry_text = entry_text.replace(needle, 'function ping(): string {\n            ' + probe)
+entry_text = entry_text.replace('Quickshell.watchFiles = false;', 'Quickshell.watchFiles = false; console.log("NATIVE_STATE", pronta.dormiente, manager.dormiente, pronta.variabile, Quickshell.env("MINERVA_FILES_DORMIENTE"));')
+entry.write_text(entry_text)
+(out / 'filemanager-observed.qml').write_text(entry_text)
 
 def run(*args, **kw):
     return subprocess.run(args, capture_output=True, text=True, timeout=20, **kw)
@@ -50,7 +53,7 @@ def scenario(name, config, env, target, pattern, preload=False):
                 if window(pattern):
                     subprocess.run(['import', '-window', 'root', str(out / (name + '-failure.png'))], check=True, timeout=10)
                     state = ipc('ping')
-                    raise AssertionError('preload pid=' + str(p.pid) + ' showed a window: ' + str(describe_windows(pattern)) + state.stdout + state.stderr)
+                    raise AssertionError('preload pid=' + str(p.pid) + ' showed a window: ' + str(describe_windows(pattern)) + state.stdout + state.stderr + log.read_text())
                 opened = run('sh', str(repo / 'scripts/minerva-files'), str(Path.home()))
                 assert opened.returncode == 0, opened.stderr
             until(lambda: window(pattern), name + ': no visible window')
@@ -61,6 +64,7 @@ def scenario(name, config, env, target, pattern, preload=False):
                     assert window(pattern), 'window disappeared'
             subprocess.run(['import', '-window', 'root', str(out / (name + '.png'))], check=True, timeout=10)
             assert p.poll() is None, 'Quickshell exited'
+            print(name + ' ping: ' + ipc('ping').stdout, flush=True)
         finally:
             if p.poll() is None:
                 os.killpg(p.pid, signal.SIGTERM)
