@@ -209,6 +209,17 @@ FloatingWindow {
     /// stretto dei nomi dei file che deve mostrare.
     readonly property int maxTabs: 4
 
+    // ── Di quale finestra è un riquadro ──────────────────────────────────
+    //
+    // Dal 29 settembre una «nuova finestra» nasce nello stesso processo
+    // (`filemanager.qml`), e i riquadri di tutte si chiamavano `t0`, `t1`…:
+    // l'elenco di una cartella chiesto da una finestra arrivava anche al
+    // riquadro omonimo dell'altra, che mostrava la cartella sbagliata — «entro
+    // in una cartella e ci entra anche l'altro» (K2, PC di prova). Lo stesso
+    // per le ricerche. Ogni finestra ha il suo prefisso.
+    readonly property string finestraId: "w" + Date.now().toString(36)
+                                         + Math.floor(Math.random() * 1e9).toString(36)
+
     /// Indice della scheda che riceve i comandi.
     property int currentIndex: 0
 
@@ -2055,7 +2066,7 @@ FloatingWindow {
                 // qui che non è di là», e dipende da qual è «qui».
                 esitoConfronto: tabPane.index === manager.currentIndex
                                 ? manager.esitoConfronto : ({})
-                paneId: "t" + index
+                paneId: manager.finestraId + "t" + index
                 width: panes.cell
                 height: panes.height
                 canClose: manager.tabs.count > 1
