@@ -149,16 +149,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install disposable native app runtime
-        run: pacman -Syu --noconfirm --needed quickshell xorg-server-xvfb mesa qt6-svg qt6-5compat qt6-multimedia qt6-websockets ttf-dejavu adwaita-fonts noto-fonts xdotool dbus python shadow util-linux imagemagick
+        run: pacman -Syu --noconfirm --needed quickshell sway grim mesa qt6-svg qt6-5compat qt6-multimedia qt6-websockets qt6-wayland ttf-dejavu adwaita-fonts noto-fonts dbus python shadow util-linux
       - name: Test production Fucina and File Manager windows
         run: |
           useradd -m liquidapps
           mkdir -p native-results /tmp/liquid-apps-runtime
           chown liquidapps:liquidapps native-results /tmp/liquid-apps-runtime
           chmod 700 /tmp/liquid-apps-runtime
-          Xvfb :98 -screen 0 1360x900x24 -nolisten tcp > native-results/xvfb-apps.log 2>&1 &
-          for i in $(seq 1 50); do [ -S /tmp/.X11-unix/X98 ] && break; sleep .1; done
-          runuser -u liquidapps -- env DISPLAY=:98 XDG_RUNTIME_DIR=/tmp/liquid-apps-runtime QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software LIBGL_ALWAYS_SOFTWARE=1 dbus-run-session -- python tests/native/test_apps_recovery.py
+          runuser -u liquidapps -- env XDG_RUNTIME_DIR=/tmp/liquid-apps-runtime QT_QPA_PLATFORM=wayland QT_QUICK_BACKEND=software LIBGL_ALWAYS_SOFTWARE=1 dbus-run-session -- python tests/native/test_apps_recovery.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
