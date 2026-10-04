@@ -205,6 +205,15 @@ class Pulitore {
         continue;
       }
 
+      // L'età della cartella /tmp non dice se i suoi discendenti siano in
+      // uso: una directory vecchia può contenere socket o file appena creati.
+      // Lasciare la pulizia globale alla politica di systemd-tmpfiles.
+      if (id == 'temporanei') {
+        fatte.add(Tolta(id, byte, false,
+            'I temporanei di sistema sono gestiti da systemd-tmpfiles; non vengono cancellati dalla pulizia manuale.'));
+        continue;
+      }
+
       if (!_permesso(dove)) {
         fatte.add(Tolta(id, byte, false,
             'Non è in un posto da cui Minerva tolga qualcosa.'));

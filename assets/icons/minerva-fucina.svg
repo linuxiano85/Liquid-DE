@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- Minerva Fucina — un'incudine, e sopra una scintilla.
+
+       Non un pinguino e non un chip, che sono le icone di tutto quello che
+       riguarda Linux o l'hardware: questo programma BATTE un kernel finché
+       non ha la forma di questo computer. La scintilla è il pezzo che se ne
+       va, cioè quello che la scrematura toglie. -->
+  <defs>
+    <linearGradient id="tinta" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F59E0B"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="luce" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".22"/>
+      <stop offset=".55" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="3" y="3" width="42" height="42" rx="12.5" fill="url(#tinta)"/>
+  <rect x="3" y="3" width="42" height="42" rx="12.5" fill="url(#luce)"/>
+  <!-- L'incudine: il piano con il corno a sinistra, la vita stretta, la base. -->
+  <path fill="#FFFFFF"
+        d="M11 22 H35 V26.5 C35 27.9 33.9 29 32.5 29 H29.5 V31.5 H33 V35 H15 V31.5 H18.5 V29 H17 C13.6 29 11 26.2 11 22.8 Z"/>
+  <!-- Le scintille: tre, di tre grandezze, che si allontanano. -->
+  <g fill="#FFFFFF">
+    <path d="M28 10.5 L29.1 13.9 L32.5 15 L29.1 16.1 L28 19.5 L26.9 16.1 L23.5 15 L26.9 13.9 Z"/>
+    <circle cx="35" cy="12" r="1.5" fill-opacity=".8"/>
+    <circle cx="21" cy="12.5" r="1.1" fill-opacity=".6"/>
+  </g>
+</svg>

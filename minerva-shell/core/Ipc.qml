@@ -1233,6 +1233,41 @@ QtObject {
     /// Le cartelle che la Manutenzione non guarda: `{percorsi: [...]}`.
     signal manutenzioneEscluse(var info)
 
+    // ── Fucina ──────────────────────────────────────────────────────────
+    //
+    // Kernel su misura. Il rilievo guarda e basta; la ricetta è un calcolo
+    // senza effetti (si chiede a ogni spunta, per mostrare il piano mentre si
+    // sceglie); la compilazione racconta a chi ascolta, e chi riapre la
+    // finestra a metà chiede lo stato e riprende il racconto da lì.
+
+    /// Le tappe del rilievo: `{fase, testo, fatte, quante}`, come Manutenzione.
+    signal fucinaGuardo(var info)
+    /// Che cosa c'è nel computer: dispositivi, moduli con le loro fonti,
+    /// famiglie, scorte, preset, macchina, avvisi. Vedi `fucina/rilievo.dart`.
+    signal fucinaRilievo(var info)
+    /// Le versioni del kernel da kernel.org, e se CachyOS ha le patch.
+    signal fucinaVersioni(var info)
+    /// Il piano per le scelte fatte: moduli, valori, passi, avvisi.
+    signal fucinaRicetta(var info)
+    /// La risposta a «compila»: `{ok, errore, rilascio}`. Il seguito arriva
+    /// coi quattro segnali sotto.
+    signal fucinaAvviata(var info)
+    signal fucinaPasso(var info)
+    signal fucinaRighe(var info)
+    signal fucinaAvanzamento(var info)
+    signal fucinaFatto(var info)
+    signal fucinaFermata(var info)
+    /// Lo stato dell'officina per chi arriva a metà: `{inCorso, rilascio,
+    /// passo, secondi, righe, esito}`.
+    signal fucinaStato(var info)
+    signal fucinaKernel(var info)
+    signal fucinaInstallato(var info)
+    signal fucinaTolto(var info)
+    signal fucinaVerifica(var info)
+    /// La fine della registrazione del profilo AutoFDO: `{ok, errore,
+    /// rilascio, minuti, sommato, byte}`. Arriva dopo minuti.
+    signal fucinaProfilato(var info)
+
     signal custodiaPanoramica(var info)
     signal custodiaDettaglio(var info)
     signal custodiaEsito(var info)
@@ -1246,6 +1281,48 @@ QtObject {
 
     function manutenzioneVedi() {
         return send({ "action": "manutenzione_inventario" });
+    }
+
+    // Le funzioni della Fucina hanno nomi diversi dai segnali, per la stessa
+    // ragione scritta sopra `manutenzioneVediEscluse`: un segnale e una
+    // funzione con lo stesso nome portano giù tutta la shell.
+    function fucinaRileva() {
+        return send({ "action": "fucina_rileva" });
+    }
+    function fucinaChiediVersioni() {
+        return send({ "action": "fucina_versioni" });
+    }
+    /// Si mandano SCELTE, mai comandi: la ricetta la calcola il demone.
+    function fucinaCalcola(scelte) {
+        return send({ "action": "fucina_ricetta", "scelte": scelte });
+    }
+    function fucinaAvvia(scelte) {
+        return send({ "action": "fucina_avvia", "scelte": scelte });
+    }
+    function fucinaFerma() {
+        return send({ "action": "fucina_ferma" });
+    }
+    function fucinaChiediStato() {
+        return send({ "action": "fucina_stato" });
+    }
+    function fucinaChiediKernel() {
+        return send({ "action": "fucina_kernel" });
+    }
+    /// Un NOME di kernel, mai un percorso: la cartella la ricava il demone e
+    /// l'aiutante di root la ricontrolla.
+    function fucinaInstalla(rilascio) {
+        return send({ "action": "fucina_installa", "rilascio": rilascio });
+    }
+    function fucinaTogli(rilascio) {
+        return send({ "action": "fucina_togli", "rilascio": rilascio });
+    }
+    function fucinaVerificaOra() {
+        return send({ "action": "fucina_verifica" });
+    }
+    /// Il profilo si registra sul kernel in uso: si manda il suo NOME, che il
+    /// demone e l'aiutante ricontrollano, e quanti minuti.
+    function fucinaRegistraProfilo(rilascio, minuti) {
+        return send({ "action": "fucina_profila", "rilascio": rilascio, "minuti": minuti });
     }
 
     /// Toglie le voci spuntate. Si mandano **identificativi**, mai percorsi: i
@@ -2310,6 +2387,54 @@ QtObject {
                 break;
             case "manutenzione_inventario":
                 ipc.manutenzioneInventario(msg.payload);
+                break;
+            case "fucina_guardo":
+                ipc.fucinaGuardo(msg.payload);
+                break;
+            case "fucina_rilievo":
+                ipc.fucinaRilievo(msg.payload);
+                break;
+            case "fucina_versioni":
+                ipc.fucinaVersioni(msg.payload);
+                break;
+            case "fucina_ricetta":
+                ipc.fucinaRicetta(msg.payload);
+                break;
+            case "fucina_avviata":
+                ipc.fucinaAvviata(msg.payload);
+                break;
+            case "fucina_passo":
+                ipc.fucinaPasso(msg.payload);
+                break;
+            case "fucina_righe":
+                ipc.fucinaRighe(msg.payload);
+                break;
+            case "fucina_avanzamento":
+                ipc.fucinaAvanzamento(msg.payload);
+                break;
+            case "fucina_fatto":
+                ipc.fucinaFatto(msg.payload);
+                break;
+            case "fucina_fermata":
+                ipc.fucinaFermata(msg.payload);
+                break;
+            case "fucina_stato":
+                ipc.fucinaStato(msg.payload);
+                break;
+            case "fucina_kernel":
+                ipc.fucinaKernel(msg.payload);
+                break;
+            case "fucina_installato":
+                ipc.fucinaInstallato(msg.payload);
+                break;
+            case "fucina_tolto":
+                ipc.fucinaTolto(msg.payload);
+                break;
+            case "fucina_verifica":
+                ipc.fucinaVerifica(msg.payload);
+                break;
+            case "fucina_profilato":
+                ipc.fucinaProfilato(msg.payload);
                 break;
             case "custodia_panoramica":
                 ipc.custodiaPanoramica(msg.payload);

@@ -45,6 +45,7 @@ import '../services/condivisione_service.dart';
 import '../services/bluetooth_pairing_service.dart';
 import '../services/tema_icone_service.dart';
 import '../services/foto_service.dart';
+import '../services/fucina_service.dart';
 import 'canale_segreto.dart';
 import '../core/ambiente.dart';
 import '../core/minerva_paths.dart';
@@ -255,6 +256,31 @@ class WebSocketServer {
       },
     });
     return null;
+  }
+
+  /// Minerva Fucina: kernel su misura per questo computer. Compila come te,
+  /// nella tua cache; installare e togliere passano dall'aiutante di root,
+  /// che riceve una funzione e basta. Vedi `services/fucina_service.dart`.
+  late final FucinaService _fucina = FucinaService(radice: _radice.chiedi);
+
+  /// Chi guarda la Fucina riceve il racconto della compilazione in corso.
+  ///
+  /// I nomi degli eventi stanno QUI, scritti per esteso, e non nell'officina:
+  /// è in questo file che le prove li contano contro `EVENTS.md`. E sono
+  /// degli `if` e non uno `switch`, perché ogni `case` con una stringa in
+  /// questo file le prove lo leggono come un verbo del bus.
+  void _ascoltaFucina(WebSocketClientConnection client) {
+    _fucina.officina.ascolta(client, (tipo, dati) {
+      if (tipo == 'passo') {
+        client.send({'event': 'fucina_passo', 'payload': dati});
+      } else if (tipo == 'righe') {
+        client.send({'event': 'fucina_righe', 'payload': dati});
+      } else if (tipo == 'avanzamento') {
+        client.send({'event': 'fucina_avanzamento', 'payload': dati});
+      } else if (tipo == 'fatto') {
+        client.send({'event': 'fucina_fatto', 'payload': dati});
+      }
+    });
   }
 
   late final TrasmettiService _trasmetti =
@@ -889,6 +915,9 @@ class WebSocketServer {
     // leggere `/proc` ogni due secondi per il resto della sessione.
     if (_iscrittiProcessi.remove(client)) _processi.disiscrivi();
     if (_iscrittiMacchina.remove(client)) _processi.disiscriviMacchina();
+    // La Fucina racconta la compilazione a chi ascolta: chi se ne va smette
+    // di essere nell'elenco, o ogni riga di `make` proverebbe a raggiungerlo.
+    _fucina.officina.smetti(client);
 
     // Cleanup belongs to the conversation owner; it cannot be stolen by a
     // new client while a reply or cancellation is still outstanding.
@@ -2768,6 +2797,108 @@ class WebSocketServer {
                   ? 'Hai annullato la richiesta della password.'
                   : '${esito['error'] ?? 'Non ci sono riuscito.'}',
           },
+        });
+        break;
+
+      // ── Minerva Fucina ─────────────────────────────────────────────
+      //
+      // Guardare, scegliere, compilare: tutto come te. La finestra manda
+      // SCELTE e mai comandi o percorsi — la ricetta la ricalcola il demone
+      // ogni volta, e l'aiutante di root riceve solo il nome di un kernel che
+      // cominci per `-fucina-`. Vedi `services/fucina_service.dart`.
+      case 'fucina_rileva':
+        client.send({
+          'event': 'fucina_rilievo',
+          'payload': await _fucina.rileva((fase, testo, fatte, quante) =>
+              client.send({
+                'event': 'fucina_guardo',
+                'payload': {
+                  'fase': fase,
+                  'testo': testo,
+                  'fatte': fatte,
+                  'quante': quante,
+                },
+              })),
+        });
+        break;
+
+      case 'fucina_versioni':
+        client.send({
+          'event': 'fucina_versioni',
+          'payload': await _fucina.versioni(),
+        });
+        break;
+
+      case 'fucina_ricetta':
+        client.send({
+          'event': 'fucina_ricetta',
+          'payload': await _fucina.ricetta(msg['scelte']),
+        });
+        break;
+
+      // Chi avvia ascolta: il seguito arriva come `fucina_passo`,
+      // `fucina_righe`, `fucina_avanzamento` e infine `fucina_fatto`.
+      case 'fucina_avvia':
+        _ascoltaFucina(client);
+        client.send({
+          'event': 'fucina_avviata',
+          'payload': await _fucina.avvia(msg['scelte']),
+        });
+        break;
+
+      case 'fucina_ferma':
+        client.send({
+          'event': 'fucina_fermata',
+          'payload': await _fucina.ferma(),
+        });
+        break;
+
+      // Una finestra che si riapre a compilazione in corso: riceve le
+      // ultime righe e da lì in poi ascolta.
+      case 'fucina_stato':
+        _ascoltaFucina(client);
+        client.send({
+          'event': 'fucina_stato',
+          'payload': _fucina.officina.stato(),
+        });
+        break;
+
+      case 'fucina_kernel':
+        client.send({
+          'event': 'fucina_kernel',
+          'payload': await _fucina.kernel(),
+        });
+        break;
+
+      case 'fucina_installa':
+        client.send({
+          'event': 'fucina_installato',
+          'payload': await _fucina.installa(msg['rilascio']),
+        });
+        break;
+
+      case 'fucina_togli':
+        client.send({
+          'event': 'fucina_tolto',
+          'payload': await _fucina.togli(msg['rilascio']),
+        });
+        break;
+
+      case 'fucina_verifica':
+        client.send({
+          'event': 'fucina_verifica',
+          'payload': await _fucina.verifica(),
+        });
+        break;
+
+      // Il secondo tempo di AutoFDO: perf registra (da root, con
+      // l'aiutante) per i minuti chiesti mentre usi il computer, poi il
+      // demone converte. Arriva il NOME del kernel, che deve essere quello
+      // in uso; la risposta arriva alla fine, dopo minuti.
+      case 'fucina_profila':
+        client.send({
+          'event': 'fucina_profilato',
+          'payload': await _fucina.profila(msg['rilascio'], msg['minuti']),
         });
         break;
 

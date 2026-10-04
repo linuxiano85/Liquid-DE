@@ -206,6 +206,14 @@ ShellRoot {
     IpcHandler {
         target: "files"
 
+        // Completion of a cold start, including a race won by preload.
+        // Reuse the initial tab instead of adding a duplicate of initialPath.
+        function avvia(path: string): string {
+            manager.risveglia(path);
+            pronta.risveglia();
+            return "ok";
+        }
+
         function open(path: string): string {
             // Dormiente: non si aggiunge una scheda, si RIUSA quella che c'è.
             // Aggiungerla lascerebbe aperta anche la scheda di casa che

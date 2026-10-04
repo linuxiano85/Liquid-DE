@@ -1687,7 +1687,7 @@ FloatingWindow {
     // in mezzo a una parola.
 
     readonly property bool typing: {
-        if (prompt.visible)
+        if (prompt && prompt.visible)
             return true;
         for (var i = 0; i < manager.panes.length; i++)
             if (manager.panes[i] && manager.panes[i].editingPath)
@@ -1701,9 +1701,9 @@ FloatingWindow {
     /// di essa, e a quel punto non si capisce più a che cosa si sta
     /// rispondendo.
     readonly property bool busy: manager.typing
-                                 || destination.visible
-                                 || trashConfirm.visible
-                                 || fileProps.visible
+                                 || (destination !== null && destination.visible)
+                                 || (trashConfirm !== null && trashConfirm.visible)
+                                 || (fileProps !== null && fileProps.visible)
 
     Shortcut { sequence: "Ctrl+C"; enabled: !manager.busy; onActivated: manager.doCopy() }
     Shortcut { sequence: "Ctrl+Shift+C"; enabled: !manager.busy; onActivated: manager.doCopyPath() }

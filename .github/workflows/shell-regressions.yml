@@ -96,6 +96,13 @@ jobs:
       - name: Install daemon development dependencies
         working-directory: minervad
         run: dart pub get
+      - name: Test Fucina orchestration and recovery regressions
+        working-directory: tests/fucina_suite
+        run: |
+          dart pub get
+          dart test --reporter expanded
+      - name: Test launcher races and isolated maintenance package removal
+        run: python3 tests/test_recovery_scripts.py
       - name: Analyze the launch guard
         working-directory: minervad
         run: dart analyze lib/services/desktop_launcher.dart
@@ -132,4 +139,29 @@ jobs:
         if: always()
         with:
           name: native-graphics-pam
+          path: native-results/
+
+  native-apps-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    container:
+      image: archlinux:base
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install disposable native app runtime
+        run: pacman -Syu --noconfirm --needed quickshell sway grim mesa qt6-svg qt6-5compat qt6-multimedia qt6-websockets qt6-wayland ttf-dejavu adwaita-fonts noto-fonts dbus python shadow util-linux
+      - name: Test production Fucina and File Manager windows
+        run: |
+          # Headless Sway needs no privileged scheduler capability; Docker
+          # cannot execute the Arch binary with capabilities outside its set.
+          if [ -n "$(getcap /usr/bin/sway)" ]; then setcap -r /usr/bin/sway; fi
+          useradd -m liquidapps
+          mkdir -p native-results /tmp/liquid-apps-runtime
+          chown liquidapps:liquidapps native-results /tmp/liquid-apps-runtime
+          chmod 700 /tmp/liquid-apps-runtime
+          runuser -u liquidapps -- env XDG_RUNTIME_DIR=/tmp/liquid-apps-runtime QT_QPA_PLATFORM=wayland QT_QUICK_BACKEND=software LIBGL_ALWAYS_SOFTWARE=1 dbus-run-session -- python tests/native/test_apps_recovery.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-apps-recovery
           path: native-results/
