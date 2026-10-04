@@ -54,6 +54,10 @@ PERMESSE = {
     # dal confine, e questa guardia lo ha detto a ogni giro finché qualcuno non
     # l'ha letto — l'8 settembre 2026.
     "finestra_vuole_pieno", "finestra_vuole_ingrandita",
+    # «Le si può scrivere?»: una xdg prima del primo commit, o smappata, no
+    # (wlroots si ferma con un assert); una X11 sempre. Dalla revisione del
+    # 30 settembre 2026, entrata con l'unione del 4 ottobre.
+    "finestra_configurabile",
     # Il ciclo di vita xdg, che di xdg parla per forza.
     "decorazione_applica", "finestra_commit", "finestra_nuova",
     "finestra_distrutta", "decorazione_nuova",

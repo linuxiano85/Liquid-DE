@@ -9,12 +9,21 @@ import 'ricetta.dart';
 ///
 /// ── Le due sorgenti ─────────────────────────────────────────────────────
 ///
-/// Giacomo usava «sia i repository di Linux che quelli di CachyOS». Qui non
-/// sono due alberi separati: è **un albero solo** — l'archivio ufficiale da
-/// kernel.org — e, se si sceglie CachyOS, le loro patch applicate sopra: lo
-/// scheduler BORE sempre, la serie base dove CachyOS la pubblica ancora
-/// (fino alla 6.17). Una sola strada da scaricare, controllare e
-/// ricompilare.
+/// Giacomo usava «sia i repository di Linux che quelli di CachyOS».
+///
+/// * **Linux**: l'archivio ufficiale da kernel.org.
+/// * **CachyOS, dalla 6.17**: l'archivio di CachyOS stesso
+///   (`github.com/CachyOS/linux`, etichetta `cachyos-<versione>-<n>`), che è
+///   già il loro kernel con le loro patch e lo scheduler BORE dentro — quello
+///   che scarica il loro PKGBUILD. Firmato da due sviluppatori di CachyOS.
+/// * **CachyOS prima della 6.17**: l'archivio di kernel.org con la loro serie
+///   base e BORE applicati sopra, come faceva il loro PKGBUILD allora.
+///
+/// Fino al 4 ottobre 2026 la Fucina faceva la terza cosa per TUTTE le serie.
+/// Dalla 6.18 la serie base non c'è più, e la patch BORE è scritta per il
+/// LORO albero, non per quello di kernel.org: sul 7.2.9 falliva 9 blocchi su
+/// 22. Giacomo: «cerca di applicare delle patch e fallisce quando il kernel
+/// cachy ha già tante patch».
 ///
 /// ── Due controlli, e che cosa garantisce ognuno ─────────────────────────
 ///
@@ -29,9 +38,11 @@ import 'ricetta.dart';
 ///    accettano solo se la loro impronta primaria è una di queste quattro:
 ///    chi sostituisse la chiave sul server non otterrebbe la stessa impronta.
 ///
-/// Le patch di CachyOS NON sono firmate: si prendono dal loro repository così
-/// come sono, e nel kernel pronto resta scritta la somma di ognuna. Chi sceglie
-/// CachyOS si fida di CachyOS, esattamente come chi installa il loro kernel.
+/// L'archivio di CachyOS si verifica come quello di kernel.org: firma `.asc`
+/// accanto all'archivio, chiavi accettate solo per impronta
+/// ([firmatariCachyos], dai `validpgpkeys` del loro PKGBUILD). Le patch della
+/// strada vecchia invece NON sono firmate: nel kernel pronto resta scritta la
+/// somma di ognuna.
 ///
 /// (Trovato da una revisione automatica della PR il 30 settembre: la prima
 /// versione si fermava alla somma, e lo diceva, ma non bastava.)
@@ -117,6 +128,45 @@ class Sorgenti {
   static final Uri refsCachyos = Uri.parse(
       'https://github.com/CachyOS/kernel-patches/info/refs?service=git-upload-pack');
 
+  /// Le etichette dell'albero di CachyOS, dallo stesso protocollo di git.
+  static final Uri refsLinuxCachyos = Uri.parse(
+      'https://github.com/CachyOS/linux/info/refs?service=git-upload-pack');
+
+  /// L'etichetta di CachyOS per una versione di kernel.org: la più recente
+  /// (`cachyos-7.2.9-2` batte `cachyos-7.2.9-1`), o `null` se non c'è.
+  static String? etichettaCachyos(String refs, String versione) {
+    final v = RegExp.escape(versione);
+    var meglio = -1;
+    for (final m in RegExp('refs/tags/cachyos-$v-(\\d+)(?![\\d.^])')
+        .allMatches(refs)) {
+      final n = int.parse(m.group(1)!);
+      if (n > meglio) meglio = n;
+    }
+    return meglio < 0 ? null : 'cachyos-$versione-$meglio';
+  }
+
+  static Uri archivioCachyos(String etichetta) => Uri.parse(
+      'https://github.com/CachyOS/linux/releases/download/$etichetta/'
+      '$etichetta.tar.gz');
+
+  /// La firma è sull'archivio `.tar.gz` così com'è.
+  static Uri firmaCachyos(String etichetta) => Uri.parse(
+      'https://github.com/CachyOS/linux/releases/download/$etichetta/'
+      '$etichetta.tar.gz.asc');
+
+  /// Chi firma gli archivi di CachyOS: i `validpgpkeys` del PKGBUILD di
+  /// `linux-cachyos`, copiati il 4 ottobre 2026.
+  static const Map<String, String> firmatariCachyos = {
+    'E18447AC260021D31F3FF6C4C8A2A4774B8B63C4': 'Eric Naim',
+    'E8B9AA39F054E30E8290D492C3C4820857F654FE': 'Peter Jung',
+  };
+
+  /// La chiave pubblica di un firmatario di CachyOS per impronta, da
+  /// keys.openpgp.org. Si accetta comunque solo se l'impronta della firma è
+  /// fra [firmatariCachyos].
+  static Uri chiaveCachyos(String impronta) =>
+      Uri.parse('https://keys.openpgp.org/vks/v1/by-fingerprint/$impronta');
+
   /// Il commit di `master` dalla risposta di [refsCachyos], o `null`.
   static String? commitDaRefs(String risposta) => RegExp(
           r'([0-9a-f]{40}) refs/heads/master\b')
@@ -148,17 +198,27 @@ class Sorgenti {
         'versioni': <dynamic>[],
       };
     }
-    // Due domande per serie, in parallelo: BORE (senza, «CachyOS» non vuol
-    // dire niente) e la serie base (che dalla 6.18 non si trova più lì).
+    // CachyOS c'è per una versione se ha il suo archivio (dalla 6.17), o
+    // altrimenti se pubblica ancora la serie base da applicare sopra quello
+    // di kernel.org. BORE da solo sopra kernel.org NON è «CachyOS»: è una
+    // patch scritta per un altro albero.
+    final refs = await testo(refsLinuxCachyos);
     await Future.wait([
-      for (final v in fuori) ...[
-        esiste(boreCachyos(serieDi('${v['versione']}')))
-            .then((si) => v['cachyos'] = si)
-            .catchError((_) => v['cachyos'] = false),
-        esiste(baseCachyos(serieDi('${v['versione']}')))
-            .then((si) => v['cachyosBase'] = si)
-            .catchError((_) => v['cachyosBase'] = false),
-      ],
+      for (final v in fuori)
+        () async {
+          final versione = '${v['versione']}';
+          final etichetta =
+              refs == null ? null : etichettaCachyos(refs, versione);
+          if (etichetta != null) {
+            v['cachyos'] = true;
+            v['cachyosEtichetta'] = etichetta;
+            return;
+          }
+          final base = await esiste(baseCachyos(serieDi(versione)))
+              .catchError((_) => false);
+          v['cachyosBase'] = base;
+          v['cachyos'] = base;
+        }(),
     ]);
     return {'ok': true, 'versioni': fuori};
   }
@@ -372,5 +432,65 @@ void Function(String)? racconta,
         'ancora, non fidarti della rete che stai usando.';
   }
   racconta?.call('Firmato da ${Sorgenti.firmatari[chi]} ($chi): la firma torna.');
+  return null;
+}
+
+/// La verifica dell'archivio di CachyOS: la firma `.asc` accanto all'archivio,
+/// le chiavi dei due firmatari da keys.openpgp.org nello stesso portachiavi
+/// nostro, e gpg direttamente sul `.tar.gz` (la firma è su quello). Si accetta
+/// solo una firma valida la cui impronta primaria è fra
+/// `Sorgenti.firmatariCachyos`.
+Future<String?> verificaArchivioCachyos({
+  required String etichetta,
+  required File archivio,
+  required String portachiavi,
+  required Sorgenti sorgenti,
+  required Future<String?> Function(Uri, File) scarica,
+  void Function(String)? racconta,
+}) async {
+  final firma = File('${archivio.path}.asc');
+  final e = await scarica(Sorgenti.firmaCachyos(etichetta), firma);
+  if (e != null) return 'Non riesco a scaricare la firma di CachyOS: $e';
+
+  final casa = Directory(portachiavi);
+  await casa.create(recursive: true);
+  try {
+    await Process.run('chmod', ['700', casa.path]);
+  } catch (_) {}
+  for (final impronta in Sorgenti.firmatariCachyos.keys) {
+    final chiave = await sorgenti.testo(Sorgenti.chiaveCachyos(impronta));
+    if (chiave == null) continue;
+    try {
+      final p = await Process.start(
+          'gpg', ['--homedir', casa.path, '--batch', '--quiet', '--import']);
+      p.stdin.write(chiave);
+      await p.stdin.close();
+      await p.stdout.drain<void>();
+      await p.stderr.drain<void>();
+      await p.exitCode;
+    } on ProcessException {
+      return 'Manca gpg (pacchetto gnupg): senza, la firma di CachyOS non si '
+          'può verificare, e non compilo un archivio non verificato.';
+    }
+  }
+
+  final ProcessResult r;
+  try {
+    r = await Process.run('gpg', [
+      '--homedir', casa.path, '--batch', '--status-fd', '1',
+      '--verify', firma.path, archivio.path,
+    ]);
+  } on ProcessException {
+    return 'Manca gpg (pacchetto gnupg): senza, la firma di CachyOS non si '
+        'può verificare.';
+  }
+  final chi = Sorgenti.firmataDa('${r.stdout}');
+  if (chi == null || !Sorgenti.firmatariCachyos.containsKey(chi)) {
+    return 'La firma di $etichetta non torna, o non è di uno dei firmatari di '
+        'CachyOS: ho cancellato l\'archivio. Se succede ancora, non fidarti '
+        'della rete che stai usando.';
+  }
+  racconta?.call(
+      'Firmato da ${Sorgenti.firmatariCachyos[chi]} ($chi): la firma torna.');
   return null;
 }

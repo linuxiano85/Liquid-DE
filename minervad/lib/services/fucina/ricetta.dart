@@ -421,6 +421,11 @@ Ricetta calcola(Rilievo r, Scelte s, Cartelle c,
               'e non parte su un processore più vecchio. C\'è dal 6.16; con '
               'Clang serve la 19.1 o più recente.'),
     if (s.misura) ...suMisura(r.macchina),
+    // Il PKGBUILD di CachyOS, con lo scheduler di serie, fa esattamente
+    // questo: BORE sta già nell'albero, e lo si accende per nome.
+    if (s.sorgente == TipoSorgente.cachyos)
+      const Impostazione('SCHED_BORE', 'y',
+          'Lo scheduler BORE di CachyOS, acceso come nel loro kernel.'),
   ];
 
   if (s.provaVeloce) {
@@ -428,10 +433,10 @@ Ricetta calcola(Rilievo r, Scelte s, Cartelle c,
         'BTF gli scheduler sched_ext (scx_*) non partono.');
   }
   if (s.sorgente == TipoSorgente.cachyos) {
-    avvisi.add('Le patch di CachyOS non sono firmate: si prendono dal loro '
-        'repository così come sono, e la somma di ognuna resta scritta nel '
-        'kernel pronto. Il kernel ufficiale invece si verifica con la firma '
-        'dello sviluppatore.');
+    avvisi.add('Dalla 6.17 si scarica l\'archivio di CachyOS, già patchato, '
+        'e se ne verifica la firma (Peter Jung o Eric Naim). Per le versioni '
+        'più vecchie si applicano le loro patch sopra kernel.org: quelle non '
+        'sono firmate, e la somma di ognuna resta scritta nel kernel pronto.');
   }
   if (s.nativo) {
     avvisi.add('Ottimizzato per questo processore: se sposti il disco su un '
@@ -544,21 +549,25 @@ Ricetta calcola(Rilievo r, Scelte s, Cartelle c,
 
   final passi = <Passo>[
     Passo('scarica', 'Scarica i sorgenti',
-        'linux-${s.versione}.tar.xz da cdn.kernel.org, con la somma di '
-            'controllo SHA-256 pubblicata accanto. Se c\'è già e torna, non '
-            'si riscarica.',
+        s.sorgente == TipoSorgente.cachyos
+            ? 'L\'archivio di CachyOS per il ${s.versione} (github.com/CachyOS/'
+                'linux), verificato con la firma dei loro sviluppatori; se '
+                'CachyOS non ne ha uno, linux-${s.versione}.tar.xz da '
+                'cdn.kernel.org. Se c\'è già e torna, non si riscarica.'
+            : 'linux-${s.versione}.tar.xz da cdn.kernel.org, con la somma di '
+                'controllo SHA-256 pubblicata accanto. Se c\'è già e torna, '
+                'non si riscarica.',
         soloLaPrimaVolta: true),
     Passo('estrai', 'Apri l\'archivio',
         'Una volta sola: le compilazioni successive riusano l\'albero e '
             'ricompilano solo quello che è cambiato.',
         soloLaPrimaVolta: true),
     if (s.sorgente == TipoSorgente.cachyos)
-      Passo('patch', 'Applica le patch di CachyOS',
-          'Lo scheduler BORE di CachyOS e, dove la pubblicano ancora (fino '
-              'alla 6.17), la loro serie base, per il kernel '
-              '${serieDi(s.versione)}. Ognuna si prova prima a secco: se una non '
-              'si applica ci si ferma, e la volta dopo l\'albero si rifà da '
-              'capo.',
+      Passo('patch', 'Le patch di CachyOS',
+          'Con l\'archivio di CachyOS ci sono già, e non si applica niente. '
+              'Senza (versioni prima della 6.17): la loro serie base e BORE '
+              'sopra kernel.org, ognuna provata prima a secco; se una non si '
+              'applica ci si ferma, e la volta dopo l\'albero si rifà da capo.',
           soloLaPrimaVolta: true),
     Passo('base',
         s.base == 'in-uso' && r.configPartenza.isNotEmpty

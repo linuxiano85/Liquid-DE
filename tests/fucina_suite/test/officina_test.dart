@@ -29,6 +29,7 @@ void main() {
   late int scaricamenti;
   late List<String> scaricati;
   var baseCachyosEsiste = false;
+  String? etichettaCachyos;
   late int verifiche;
   String? firmaRisposta;
   var rilascioDetto = '6.17.2-fucina-prova';
@@ -56,6 +57,7 @@ void main() {
     scaricamenti = 0;
     scaricati = [];
     baseCachyosEsiste = false;
+    etichettaCachyos = null;
     verifiche = 0;
     firmaRisposta = null;
     rilascioDetto = '6.17.2-fucina-prova';
@@ -76,7 +78,11 @@ void main() {
     if (eseguibile == 'tar') {
       // Un albero piccolo ma vero dove conta: i Makefile e i Kconfig da cui
       // il passo «completa» ricava quale simbolo costruisce un modulo.
-      final t = '${a[3]}/linux-6.17.2';
+      // L'archivio di CachyOS si apre DENTRO l'albero, togliendo la sua
+      // cartella in cima (`--strip-components=1`).
+      final t = a.contains('--strip-components=1')
+          ? a[3]
+          : '${a[3]}/linux-6.17.2';
       return 'mkdir -p "$t/scripts" "$t/fs/fat" "$t/fs/btrfs" && '
           'echo "VERSION = 6" > "$t/Makefile" && '
           'printf "obj-\\\$(CONFIG_VFAT_FS) += vfat.o\\n" > "$t/fs/fat/Makefile" && '
@@ -136,9 +142,13 @@ void main() {
         radice: '${tana.path}/',
         spazioMinimo: 0,
         sorgenti: Sorgenti(
-          testo: (u) async => u.host == 'github.com'
-              ? '003f${'a' * 40} refs/heads/master\n0000'
-              : '$sommaPubblicata  linux-6.17.2.tar.xz\n',
+          testo: (u) async => u.path.contains('/CachyOS/linux/')
+              ? (etichettaCachyos == null
+                  ? '0000'
+                  : '003f${'b' * 40} refs/tags/$etichettaCachyos\n0000')
+              : u.host == 'github.com'
+                  ? '003f${'a' * 40} refs/heads/master\n0000'
+                  : '$sommaPubblicata  linux-6.17.2.tar.xz\n',
           esiste: (u) async =>
               u.path.contains('/sched/') || baseCachyosEsiste,
         ),
@@ -293,20 +303,47 @@ void main() {
     expect(saltati, ['scarica', 'estrai']);
   });
 
-  test('CachyOS senza serie base: si applica solo BORE, e lo si dice',
+  test('CachyOS senza archivio né serie base: si ferma e lo dice', () async {
+    // Fino al 4 ottobre 2026 applicava BORE da solo sopra kernel.org: è la
+    // patch scritta per l'albero di CachyOS, e sul 7.2.9 falliva.
+    final o = officina();
+    final g = await gira(o, ricetta({'sorgente': 'cachyos'}));
+    expect(g.fatto['ok'], isFalse);
+    expect('${g.fatto['errore']}', contains('kernel.org'));
+    expect(lanciati.where((c) => c.first == 'patch'), isEmpty);
+  });
+
+  test('CachyOS col suo archivio: firma verificata, niente patch, resta scritto',
       () async {
+    etichettaCachyos = 'cachyos-6.17.2-3';
     final o = officina();
     final g = await gira(o, ricetta({'sorgente': 'cachyos'}));
     expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
-    expect(scaricati, ['linux-6.17.2.tar.xz', '0001-bore-cachy.patch']);
-    final patch = lanciati.where((c) => c.first == 'patch').toList();
-    expect(patch, hasLength(2), reason: 'a secco e poi davvero');
-    expect(patch.first, contains('--dry-run'));
-    expect(g.righe.join('\n'), contains('solo lo scheduler BORE'));
+    expect(scaricati, ['cachyos-6.17.2-3.tar.gz']);
+    expect(verifiche, 1);
+    expect(lanciati.where((c) => c.first == 'patch'), isEmpty,
+        reason: 'le loro patch ci sono già');
+    final tar = lanciati.firstWhere((c) => c.first == 'tar');
+    expect(tar, containsAll(['-xzf', '--strip-components=1']));
+    expect(g.righe.join('\n'), contains('ci sono già'));
+    final info = File('$lavoro/uscita/6.17.2-fucina-prova/fucina.json')
+        .readAsStringSync();
+    expect(info, contains('cachyos-6.17.2-3.tar.gz'));
+  });
+
+  test('CachyOS col suo archivio: una firma che non torna lo butta', () async {
+    etichettaCachyos = 'cachyos-6.17.2-3';
+    firmaRisposta = 'La firma di cachyos-6.17.2-3 non torna.';
+    final o = officina();
+    final g = await gira(o, ricetta({'sorgente': 'cachyos'}));
+    expect(g.fatto['ok'], isFalse);
+    expect(File('$lavoro/archivi/cachyos-6.17.2-3.tar.gz').existsSync(), isFalse);
+    expect(lanciati.where((c) => c.first == 'tar'), isEmpty);
   });
 
   test('le patch si scaricano da un commit preciso, e il commit resta scritto',
       () async {
+    baseCachyosEsiste = true;
     final o = officina();
     final g = await gira(o, ricetta({'sorgente': 'cachyos'}));
     expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
@@ -661,4 +698,3 @@ void main() {
     expect(ricevuti, 0);
   });
 }
-

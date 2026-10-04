@@ -408,9 +408,12 @@ class Officina {
       String base, List<String> avvisi) async {
     switch (p.id) {
       case 'scarica':
-        return _scarica(r.scelte.versione);
+        return r.scelte.sorgente == TipoSorgente.cachyos
+            ? _scaricaCachyos(r.scelte.versione)
+            : _scarica(r.scelte.versione);
       case 'estrai':
-        return _estrai(r.scelte.versione, base, c.albero);
+        return _estrai(r.scelte.versione, base, c.albero,
+            cachyos: r.scelte.sorgente == TipoSorgente.cachyos);
       case 'patch':
         return _patch(r.scelte.versione, c.albero);
       case 'base':
@@ -528,6 +531,85 @@ class Officina {
     return _firma(versione, file, verificato, attesa);
   }
 
+  // ── CachyOS: il loro archivio, quando c'è ─────────────────────────────
+  //
+  // Dalla 6.17 CachyOS pubblica il suo albero già patchato; prima, solo le
+  // patch da mettere sopra kernel.org. Quale delle due si è presa resta
+  // scritto in `cachyos-<versione>.etichetta` accanto agli archivi: `estrai`
+  // e `patch` lo rileggono.
+  File _fileEtichetta(String versione) =>
+      File('$lavoro/archivi/cachyos-$versione.etichetta');
+
+  Future<String?> _etichettaScelta(String versione) async {
+    try {
+      final t = (await _fileEtichetta(versione).readAsString()).trim();
+      return t.isEmpty ? null : t;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _scaricaCachyos(String versione) async {
+    _riga('Chiedo a CachyOS se ha l\'archivio del $versione.');
+    final refs = await sorgenti.testo(Sorgenti.refsLinuxCachyos);
+    final etichetta =
+        refs == null ? null : Sorgenti.etichettaCachyos(refs, versione);
+    final segno = _fileEtichetta(versione);
+    await segno.parent.create(recursive: true);
+    if (etichetta == null) {
+      if (refs == null) {
+        return 'Non riesco a chiedere a CachyOS quali archivi ha. Sei in rete?';
+      }
+      if (await segno.exists()) await segno.delete();
+      _riga('CachyOS non ha un archivio suo per il $versione: prendo quello '
+          'di kernel.org e ci metto sopra le loro patch.');
+      return _scarica(versione);
+    }
+    await segno.writeAsString('$etichetta\n');
+
+    final nome = '$etichetta.tar.gz';
+    final file = File('$lavoro/archivi/$nome');
+    final verificato = File('$lavoro/archivi/$nome.firma-verificata');
+    if (await file.exists()) {
+      final somma = await _somma(file.path);
+      try {
+        if (somma != null &&
+            (await verificato.readAsString()).trim() == somma) {
+          _riga('$nome già scaricato, e la sua firma è già stata verificata.');
+          return null;
+        }
+      } catch (_) {}
+    } else {
+      _riga('Scarico $nome da CachyOS.');
+      final e = await scarica(Sorgenti.archivioCachyos(etichetta), file,
+          progresso: (fatti, attesi) => _manda('avanzamento',
+              {'fase': 'scarica', 'fatti': fatti, 'attesi': attesi}),
+          annullato: () => _annullato);
+      if (e != null) return e;
+    }
+    _riga('Verifico la firma degli sviluppatori di CachyOS (gpg).');
+    final e = await (verificaFirma ?? _verificaCachyosVera)(etichetta, file);
+    if (e != null) {
+      try {
+        await file.delete();
+      } catch (_) {}
+      return e;
+    }
+    final somma = await _somma(file.path) ?? '';
+    await verificato.writeAsString('$somma\n');
+    return null;
+  }
+
+  Future<String?> _verificaCachyosVera(String etichetta, File archivio) =>
+      verificaArchivioCachyos(
+        etichetta: etichetta,
+        archivio: archivio,
+        portachiavi: '$lavoro/gnupg',
+        sorgenti: sorgenti,
+        scarica: (u, f) => scarica(u, f, annullato: () => _annullato),
+        racconta: _riga,
+      );
+
   /// La firma dello sviluppatore, una volta per archivio. Una firma che non
   /// torna butta via l'archivio: non si compila un kernel che nessuno dei
   /// firmatari di kernel.org ha firmato.
@@ -574,7 +656,8 @@ class Officina {
     }
   }
 
-  Future<String?> _estrai(String versione, String base, String albero) async {
+  Future<String?> _estrai(String versione, String base, String albero,
+      {bool cachyos = false}) async {
     final d = Directory(base);
     // Un albero senza il segno di «pronto» è un'estrazione o una patch
     // rimasta a metà: si butta e si rifà. Solo dentro la nostra cartella —
@@ -588,18 +671,41 @@ class Officina {
       await d.delete(recursive: true);
     }
     await d.create(recursive: true);
-    final e = await _lancia(
-        ['tar', '-xf', '$lavoro/archivi/linux-$versione.tar.xz', '-C', base],
-        base);
+    final etichetta = cachyos ? await _etichettaScelta(versione) : null;
+    final String? e;
+    if (etichetta != null) {
+      // L'archivio di CachyOS si apre in `cachyos-<versione>-<n>/`: lo si
+      // mette dove la Fucina si aspetta l'albero, `linux-<versione>/`.
+      await Directory(albero).create(recursive: true);
+      e = await _lancia([
+        'tar', '-xzf', '$lavoro/archivi/$etichetta.tar.gz',
+        '-C', albero, '--strip-components=1',
+      ], base);
+    } else {
+      e = await _lancia(
+          ['tar', '-xf', '$lavoro/archivi/linux-$versione.tar.xz', '-C', base],
+          base);
+    }
     if (e != null) return e;
     if (!await File('$albero/Makefile').exists()) {
-      return 'L\'archivio non contiene linux-$versione/Makefile.';
+      return 'L\'archivio non contiene ${etichetta ?? 'linux-$versione'}/Makefile.';
     }
     return null;
   }
 
   Future<String?> _patch(String versione, String albero) async {
     final serie = serieDi(versione);
+    final etichetta = await _etichettaScelta(versione);
+    if (etichetta != null) {
+      // L'albero È già il kernel di CachyOS: le loro patch e BORE ci sono.
+      // Riapplicarle è quello che falliva (4 ottobre 2026).
+      _riga('Sorgenti di CachyOS ($etichetta): le loro patch e lo scheduler '
+          'BORE ci sono già, non applico niente.');
+      final somma =
+          await _somma('$lavoro/archivi/$etichetta.tar.gz') ?? '?';
+      await _segnaPatch(albero, '$etichetta.tar.gz', somma, etichetta);
+      return null;
+    }
     // ── Un commit, non «master» ────────────────────────────────────────
     //
     // `master` cambia sotto i piedi: due download a un minuto di distanza
@@ -620,8 +726,12 @@ class Officina {
     if (await sorgenti.esiste(Sorgenti.baseCachyos(serie, commit))) {
       daApplicare.add(Sorgenti.baseCachyos(serie, commit));
     } else {
-      _riga('CachyOS non pubblica più la serie base per il $serie (dalla '
-          '6.18 non c\'è): applico solo lo scheduler BORE.');
+      // BORE da solo sopra kernel.org NON è il kernel di CachyOS, e la patch
+      // è scritta per il loro albero: non si applica (9 blocchi su 22 sul
+      // 7.2.9). Meglio fermarsi e dirlo.
+      return 'CachyOS non ha né un archivio suo né la serie base per il '
+          '$versione: le sue patch da sole non si applicano ai sorgenti di '
+          'kernel.org. Scegli «Linux», o un\'altra versione.';
     }
     daApplicare.add(Sorgenti.boreCachyos(serie, commit));
 

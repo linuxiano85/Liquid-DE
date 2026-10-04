@@ -151,5 +151,29 @@ kernel/drivers/acpi/battery.ko
       expect(vuoto.moduliPer('pci:v1'), isEmpty);
     });
   });
-}
 
+  group('l\'indice tiene solo i bus che servono', () {
+    // Trentasettemila regole costavano al demone 32 MB per un PC con due o
+    // tre bus che hanno un dispositivo senza driver (4 ottobre 2026).
+    const testo = 'alias pci:v00008086d*sv*sd*bc*sc*i* e1000e\n'
+        'alias usb:v046Dp*d*dc*dsc*dp*ic*isc*ip*in* logitech\n'
+        'alias acpi*:PNP0C0A:* battery\n';
+
+    test('le regole degli altri bus non si tengono, i jolly sì', () {
+      final i = IndiceAlias.daTesti(alias: testo, soloBus: {'pci'});
+      expect(i.regole, 2);
+      expect(i.moduliPer('pci:v00008086d000015BCsv0sd0bc02sc00i00'), {'e1000e'});
+      expect(i.moduliPer('usb:v046Dp0001d0dc0dsc0dp0ic0isc0ip0in0'), isEmpty);
+      expect(i.moduliPer('acpi:PNP0C0A:'), {'battery'});
+    });
+
+    test('senza soloBus si tiene tutto, come prima', () {
+      expect(IndiceAlias.daTesti(alias: testo).regole, 3);
+    });
+
+    test('il bus di un modalias', () {
+      expect(IndiceAlias.busDi('pci:v1'), 'pci');
+      expect(IndiceAlias.busDi('senza-due-punti'), isNull);
+    });
+  });
+}

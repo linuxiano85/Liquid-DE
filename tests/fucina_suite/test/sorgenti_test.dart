@@ -31,16 +31,22 @@ void main() {
       expect(v[2]['tipo'], 'longterm');
     });
 
-    test('CachyOS: BORE e serie base si chiedono per ogni serie, separati',
+    test('CachyOS: il loro archivio se c\'è, altrimenti la serie base; BORE da solo no',
         () async {
-      // Com'è davvero il loro repository il 30 settembre 2026: BORE c'è
-      // per tutte le serie, la serie base solo fino alla 6.17.
+      // Com'è davvero il 4 ottobre 2026: CachyOS ha un archivio suo dalla
+      // 6.17 (etichette `cachyos-<versione>-<n>`), la serie base fino alla
+      // 6.17, e BORE per tutte — ma BORE da solo sopra kernel.org non si
+      // applica, quindi non rende «CachyOS» una versione.
       final chiesti = <Uri>[];
       final s = Sorgenti(
-        testo: (u) async => rilasci,
+        testo: (u) async => u.path.contains('/CachyOS/linux/')
+            ? '003f${'b' * 40} refs/tags/cachyos-6.17.2-1\n'
+                '003f${'c' * 40} refs/tags/cachyos-6.17.2-3\n'
+                '0042${'d' * 40} refs/tags/cachyos-6.17.2-3^{}\n0000'
+            : rilasci,
         esiste: (u) async {
           chiesti.add(u);
-          if (u.path.contains('/sched/')) return !u.path.contains('/6.12/');
+          if (u.path.contains('/sched/')) return true;
           return u.path.contains('/6.16/');
         },
       );
@@ -48,10 +54,20 @@ void main() {
       expect(r['ok'], isTrue);
       final v = {for (final x in r['versioni'] as List) x['versione']: x};
       expect(v['6.17.2']['cachyos'], isTrue);
-      expect(v['6.17.2']['cachyosBase'], isFalse);
+      expect(v['6.17.2']['cachyosEtichetta'], 'cachyos-6.17.2-3');
+      expect(v['6.16.12']['cachyos'], isTrue);
       expect(v['6.16.12']['cachyosBase'], isTrue);
-      expect(v['6.12.50']['cachyos'], isFalse);
-      expect(chiesti.every((u) => u.host == 'raw.githubusercontent.com'), isTrue);
+      expect(v['6.12.50']['cachyos'], isFalse,
+          reason: 'c\'è solo BORE: non si applica a kernel.org');
+      expect(chiesti.any((u) => u.path.contains('/sched/')), isFalse);
+    });
+
+    test('l\'etichetta più recente, e solo per quella versione esatta', () {
+      const refs = 'refs/tags/cachyos-7.2.9-1\nrefs/tags/cachyos-7.2.9-2\n'
+          'refs/tags/cachyos-7.2.9-2^{}\nrefs/tags/cachyos-7.2.10-1\n';
+      expect(Sorgenti.etichettaCachyos(refs, '7.2.9'), 'cachyos-7.2.9-2');
+      expect(Sorgenti.etichettaCachyos(refs, '7.2.1'), isNull);
+      expect(Sorgenti.etichettaCachyos(refs, '7.2.10'), 'cachyos-7.2.10-1');
     });
 
     test('senza rete lo dice, invece di dare un elenco vuoto muto', () async {
@@ -167,4 +183,3 @@ iQIzBAEBCAAdFiEE
     });
   });
 }
-

@@ -29,8 +29,12 @@ Item {
 
     readonly property bool cachyosSi: pagina.voceVersione !== null
                                       && pagina.voceVersione.cachyos === true
-    /// La serie base di CachyOS: fino alla 6.17 sì, dalla 6.18 in poi nel
-    /// loro repository non c'è più, e resta solo BORE.
+    /// L'archivio di CachyOS per questa versione (dalla 6.17): il loro
+    /// kernel così com'è, patch e BORE già dentro. Senza, la serie base da
+    /// mettere sopra kernel.org (versioni più vecchie).
+    readonly property string cachyosEtichetta: pagina.voceVersione !== null
+                                               && pagina.voceVersione.cachyosEtichetta
+                                               ? String(pagina.voceVersione.cachyosEtichetta) : ""
     readonly property bool cachyosBase: pagina.voceVersione !== null
                                         && pagina.voceVersione.cachyosBase === true
 
@@ -73,9 +77,9 @@ Item {
                     cliccabile: true
                     scelta: pagina.f.sorgente === "cachyos"
                     testo: "CachyOS" + (pagina.voceVersione === null ? ""
-                                        : !pagina.cachyosSi ? " · niente patch per questa serie"
-                                        : pagina.cachyosBase ? " · base e BORE"
-                                        : " · solo BORE")
+                                        : !pagina.cachyosSi ? " · non c'è per questa versione"
+                                        : pagina.cachyosEtichetta !== "" ? " · il loro archivio"
+                                        : " · patch su kernel.org")
                     tono: pagina.f.sorgente === "cachyos" && pagina.voceVersione !== null
                           && !pagina.cachyosSi ? "attenzione" : ""
                     onPremuta: pagina.f.sorgente = "cachyos"
@@ -87,12 +91,15 @@ Item {
                 wrapMode: Text.WordWrap
                 text: pagina.f.sorgente !== "cachyos"
                       ? "L'archivio ufficiale di kernel.org, così com'è."
-                      : (pagina.cachyosBase
+                      : (pagina.cachyosEtichetta !== ""
+                         ? "L'archivio di CachyOS (" + pagina.cachyosEtichetta + "): il loro "
+                           + "kernel con le loro patch e lo scheduler BORE già dentro, "
+                           + "verificato con la firma dei loro sviluppatori."
+                         : pagina.cachyosBase
                          ? "L'archivio ufficiale con sopra la serie base di CachyOS e lo "
-                           + "scheduler BORE. Le patch seguono l'ultima versione di ogni serie."
-                         : "L'archivio ufficiale con sopra lo scheduler BORE di CachyOS. La "
-                           + "loro serie base, per questa versione, non la pubblicano più nel "
-                           + "repository delle patch: il kernel non sarà uguale al loro.")
+                           + "scheduler BORE, come faceva CachyOS per le versioni prima della 6.17."
+                         : "CachyOS non ha un archivio né le patch per questa versione: "
+                           + "scegli «Linux» o un'altra versione.")
                 color: Theme.Colors.textFaint
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeXS
