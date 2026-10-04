@@ -338,6 +338,9 @@ FloatingWindow {
     Shortcut { sequence: "*"; onActivated: calco.premi(" × ") }
     Shortcut { sequence: "/"; onActivated: calco.premi(" ÷ ") }
     Shortcut { sequence: "."; onActivated: calco.premi(".") }
+    // Il tastierino con la disposizione italiana scrive «,» al posto del
+    // punto (J4, PC di prova): è lo stesso tasto, e vuol dire la stessa cosa.
+    Shortcut { sequence: ","; onActivated: calco.premi(".") }
     Shortcut { sequence: "("; onActivated: calco.premi("(") }
     Shortcut { sequence: ")"; onActivated: calco.premi(")") }
     Shortcut { sequence: "Return"; onActivated: calco.premi("=") }
