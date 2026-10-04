@@ -164,8 +164,29 @@ class SystemAudioService {
     try {
       return await snapshot();
     } catch (e) {
-      return {'ok': false, 'error': '$e'};
+      return {'ok': false, 'error': perChiUsa(e)};
     }
+  }
+
+  /// La frase per la pagina Audio, non il `toString()` di Dart.
+  ///
+  /// Arrivava grezzo: «Bad state: Audio: Connection failure: Connection
+  /// refused pa_context_connect() failed» (E2, PC di prova). Il testo tecnico
+  /// resta nel registro, dove serve a chi cerca il guasto.
+  static String perChiUsa(Object e) {
+    final grezzo = '$e';
+    final noto = grezzo.toLowerCase();
+    if (noto.contains('connection refused') ||
+        noto.contains('connection failure') ||
+        noto.contains('pa_context_connect') ||
+        noto.contains('non risponde')) {
+      print('[MINERVA][AUDIO][WARN] $grezzo');
+      return 'Il servizio audio (PipeWire) non risponde. Riprova fra poco.';
+    }
+    if (e is StateError) return e.message;
+    if (e is ArgumentError) return '${e.message}';
+    print('[MINERVA][AUDIO][WARN] $grezzo');
+    return grezzo.replaceFirst(RegExp(r'^(Bad state|Invalid argument\(s\)|Exception): '), '');
   }
 
   Future<void> start() async {
@@ -301,7 +322,7 @@ class SystemAudioService {
             target,
           ]);
         } catch (e) {
-          warnings.add('$e');
+          warnings.add(perChiUsa(e));
         }
       }
       final after = await snapshot();
@@ -316,10 +337,10 @@ class SystemAudioService {
         try {
           await _command(['set-card-profile', changedCard, oldProfile]);
         } catch (failure) {
-          rollback = '; ripristino profilo fallito: $failure';
+          rollback = '; ripristino profilo fallito: ${perChiUsa(failure)}';
         }
       }
-      return {'ok': false, 'error': '$e$rollback', 'state': await status()};
+      return {'ok': false, 'error': '${perChiUsa(e)}$rollback', 'state': await status()};
     } finally {
       _selecting = false;
       unawaited(_publish());
