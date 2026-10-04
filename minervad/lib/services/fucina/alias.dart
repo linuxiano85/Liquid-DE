@@ -58,14 +58,26 @@ class IndiceAlias {
   /// Costruito dai tre file di `/usr/lib/modules/<rilascio>/`. Uno che manca
   /// è una stringa vuota, non un errore: un kernel senza moduli caricabili
   /// (`CONFIG_MODULES=n`) non li ha, e non è un kernel rotto.
+  ///
+  /// `soloBus`: se c'è, si tengono solo le regole di quei bus (e i jolly).
+  /// Le regole sono trentasettemila per tutti i dispositivi immaginabili, e
+  /// tenerle tutte costava al demone 32 MB per un computer che di bus con un
+  /// dispositivo senza driver ne ha due o tre (misurato il 4 ottobre 2026).
   factory IndiceAlias.daTesti({
     String alias = '',
     String dep = '',
     String incorporati = '',
+    Set<String>? soloBus,
   }) {
     final i = IndiceAlias();
-    for (final riga in alias.split('\n')) {
-      i._aggiungiRiga(riga);
+    // Riga per riga con `indexOf`, senza `split`: un elenco di trentamila
+    // stringhe solo per scorrerle era metà del picco.
+    var da = 0;
+    while (da < alias.length) {
+      var a = alias.indexOf('\n', da);
+      if (a < 0) a = alias.length;
+      i._aggiungiRiga(alias.substring(da, a), soloBus);
+      da = a + 1;
     }
     for (final riga in dep.split('\n')) {
       final due = riga.indexOf(':');
@@ -83,20 +95,26 @@ class IndiceAlias {
     return i;
   }
 
-  void _aggiungiRiga(String riga) {
+  static final RegExp _spazi = RegExp(r'\s+');
+
+  void _aggiungiRiga(String riga, [Set<String>? soloBus]) {
     // `alias <modello> <modulo>`, separati da spazi. Il modello non contiene
     // spazi: se una riga ne ha più di tre pezzi, non è una riga che capiamo.
-    final pezzi = riga.trim().split(RegExp(r'\s+'));
+    final pezzi = riga.trim().split(_spazi);
     if (pezzi.length != 3 || pezzi[0] != 'alias') return;
     final modello = pezzi[1];
-    final r = _Regola(modello, normalizza(pezzi[2]));
     final bus = _bus(modello);
+    if (bus != null && soloBus != null && !soloBus.contains(bus)) return;
+    final r = _Regola(modello, normalizza(pezzi[2]));
     if (bus == null) {
       _jolly.add(r);
     } else {
       _perBus.putIfAbsent(bus, () => []).add(r);
     }
   }
+
+  /// Il bus di un `modalias` (`pci:v…` → `pci`), o `null`.
+  static String? busDi(String modalias) => _bus(modalias.trim());
 
   /// Il pezzo prima dei due punti, se è una parola e non un modello.
   /// `null` vuol dire «può valere per più bus»: va fra i jolly.

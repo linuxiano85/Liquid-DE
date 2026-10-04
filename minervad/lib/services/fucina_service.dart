@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -117,7 +118,24 @@ class FucinaService {
     final nuovo = await nuovoRilevatore(racconta).rileva();
     _rilievo = nuovo;
     _quando = DateTime.now();
+    _dimentica();
     return nuovo;
+  }
+
+  /// Passati i dieci minuti il rilievo si lascia andare davvero. Prima
+  /// «valeva dieci minuti» ma restava in memoria per tutta la sessione:
+  /// aperta la Fucina una volta, il demone se lo portava dietro fino al
+  /// logout (4 ottobre 2026).
+  Timer? _scadenza;
+  void _dimentica() {
+    _scadenza?.cancel();
+    _scadenza = Timer(_vale, () {
+      _rilievo = null;
+      _quando = null;
+      _versioni = null;
+      _versioniQuando = null;
+      _scadenza = null;
+    });
   }
 
   Future<Map<String, dynamic>> rileva(
@@ -139,6 +157,7 @@ class FucinaService {
     if (nuove['ok'] == true) {
       _versioni = nuove;
       _versioniQuando = DateTime.now();
+      _dimentica();
     }
     return nuove;
   }

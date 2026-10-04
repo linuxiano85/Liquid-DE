@@ -77,20 +77,30 @@ class Rilevatore {
     _dici('kernel', 'Leggo il kernel in uso.', 0);
     final rilascio = (await _leggi('proc/sys/kernel/osrelease')).trim();
     final cartellaModuli = await _cartellaModuli(rilascio);
-    final indice = cartellaModuli == null
-        ? IndiceAlias()
-        : IndiceAlias.daTesti(
-            alias: await _leggi('$cartellaModuli/modules.alias'),
-            dep: await _leggi('$cartellaModuli/modules.dep'),
-            incorporati: await _leggi('$cartellaModuli/modules.builtin'),
-          );
     if (cartellaModuli == null) {
       avvisi.add('Non trovo i moduli del kernel in uso ($rilascio): i '
           'dispositivi si vedono, ma non so dire quale modulo li guidi.');
     }
 
     _dici('dispositivi', 'Guardo tutti i dispositivi in /sys.', 1);
-    final dispositivi = await _dispositivi(indice);
+    // Prima i dispositivi, poi l'indice: così l'indice tiene solo le regole
+    // dei bus che hanno davvero un dispositivo senza driver.
+    final grezzi = await _dispositiviGrezzi();
+    final busCercati = {
+      for (final g in grezzi)
+        if (g.driver == null &&
+            !_senzaLegame.contains(_primaDeiDuePunti(g.modalias)))
+          ?IndiceAlias.busDi(g.modalias),
+    };
+    final indice = cartellaModuli == null
+        ? IndiceAlias()
+        : IndiceAlias.daTesti(
+            alias: await _leggi('$cartellaModuli/modules.alias'),
+            dep: await _leggi('$cartellaModuli/modules.dep'),
+            incorporati: await _leggi('$cartellaModuli/modules.builtin'),
+            soloBus: busCercati,
+          );
+    final dispositivi = _dispositivi(grezzi, indice);
 
     _dici('moduli', 'Leggo i moduli caricati e il diario di modprobed.', 2);
     // ── Un kernel senza moduli ──────────────────────────────────────────
@@ -267,18 +277,14 @@ class Rilevatore {
   /// I collegamenti NON si seguono: `/sys` ne è pieno (`subsystem`,
   /// `device`, `driver`, `port`) e molti tornano indietro. Seguirli vorrebbe
   /// dire visitare lo stesso dispositivo dieci volte, o per sempre.
-  Future<List<Dispositivo>> _dispositivi(IndiceAlias indice) async {
+  Future<List<({String cartella, String modalias, String? driver, String? modulo})>>
+      _dispositiviGrezzi() async {
     final base = Directory(_p('sys/devices'));
-    final fuori = <Dispositivo>[];
+    final fuori =
+        <({String cartella, String modalias, String? driver, String? modulo})>[];
     if (!await base.exists()) return fuori;
-    final radiceSys = base.path;
 
-    final tutti = <String>[];
-    await for (final e in base
-        .list(recursive: true, followLinks: false)
-        .handleError((_) {})) {
-      if (e is File && e.path.endsWith('/modalias')) tutti.add(e.path);
-    }
+    final tutti = await _fileModalias(base);
     tutti.sort();
 
     for (final f in tutti) {
@@ -289,20 +295,47 @@ class Rilevatore {
       final modulo = driver == null
           ? null
           : await _nomeDelCollegamento('$cartella/driver/module');
-      final due = alias.indexOf(':');
-      fuori.add(Dispositivo(
-        percorso: cartella.substring(radiceSys.length),
-        modalias: alias,
-        bus: due > 0 ? alias.substring(0, due) : '',
-        driver: driver,
-        modulo: modulo == null ? null : normalizza(modulo),
-        candidati: driver == null && !_senzaLegame.contains(
-                    due > 0 ? alias.substring(0, due) : '')
-            ? indice.moduliPer(alias)
-            : const {},
-      ));
+      fuori.add((cartella: cartella, modalias: alias, driver: driver, modulo: modulo));
     }
     return fuori;
+  }
+
+  /// I file `modalias` sotto /sys/devices. I collegamenti non si seguono:
+  /// in /sys tornano indietro (vedi sopra).
+  Future<List<String>> _fileModalias(Directory base) async {
+    final tutti = <String>[];
+    await for (final e in base
+        .list(recursive: true, followLinks: false)
+        .handleError((_) {})) {
+      if (e is File && e.path.endsWith('/modalias')) tutti.add(e.path);
+    }
+    return tutti;
+  }
+
+  List<Dispositivo> _dispositivi(
+      List<({String cartella, String modalias, String? driver, String? modulo})>
+          grezzi,
+      IndiceAlias indice) {
+    final radiceSys = Directory(_p('sys/devices')).path;
+    return [
+      for (final g in grezzi)
+        Dispositivo(
+          percorso: g.cartella.substring(radiceSys.length),
+          modalias: g.modalias,
+          bus: _primaDeiDuePunti(g.modalias),
+          driver: g.driver,
+          modulo: g.modulo == null ? null : normalizza(g.modulo!),
+          candidati: g.driver == null &&
+                  !_senzaLegame.contains(_primaDeiDuePunti(g.modalias))
+              ? indice.moduliPer(g.modalias)
+              : const {},
+        ),
+    ];
+  }
+
+  static String _primaDeiDuePunti(String alias) {
+    final due = alias.indexOf(':');
+    return due > 0 ? alias.substring(0, due) : '';
   }
 
   /// I bus i cui dispositivi non hanno MAI un driver legato: la CPU (i suoi
