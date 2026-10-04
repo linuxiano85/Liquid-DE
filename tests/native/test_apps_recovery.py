@@ -8,17 +8,6 @@ import time
 repo = Path.cwd()
 out = repo / 'native-results'
 
-# Test-only observation; production bindings and handlers are unchanged.
-entry = repo / 'minerva-shell/filemanager.qml'
-entry_text = entry.read_text()
-probe = 'return JSON.stringify({sleeping: pronta.dormiente, windowSleeping: manager.dormiente, visible: manager.visible, variable: pronta.variabile, env: Quickshell.env("MINERVA_FILES_DORMIENTE"), pid: Quickshell.processId});'
-needle = 'function ping(): string {\n            return "ok";'
-assert needle in entry_text
-entry_text = entry_text.replace(needle, 'function ping(): string {\n            ' + probe)
-entry_text = entry_text.replace('Quickshell.watchFiles = false;', 'Quickshell.watchFiles = false; console.log("NATIVE_STATE", pronta.dormiente, manager.dormiente, pronta.variabile, Quickshell.env("MINERVA_FILES_DORMIENTE"));')
-entry.write_text(entry_text)
-(out / 'filemanager-observed.qml').write_text(entry_text)
-
 def run(*args, **kw):
     return subprocess.run(args, capture_output=True, text=True, timeout=20, **kw)
 
@@ -47,7 +36,7 @@ def scenario(name, config, env, target, pattern, preload=False):
             def ipc(*args):
                 return run('qs', 'ipc', '-p', str(repo / 'minerva-shell' / config),
                            'call', target, *args)
-            until(lambda: ipc('ping').returncode == 0, name + ': IPC not ready')
+            until(lambda: ipc('ping').stdout.strip() == 'ok', name + ': IPC not ready')
             if preload:
                 time.sleep(3.5)
                 if window(pattern):
@@ -58,6 +47,7 @@ def scenario(name, config, env, target, pattern, preload=False):
                 assert opened.returncode == 0, opened.stderr
             until(lambda: window(pattern), name + ': no visible window')
             if target == 'files':
+                assert ipc('avvia', str(Path.home())).stdout.strip() == 'ok'
                 for i in range(5):
                     r = run('sh', str(repo / 'scripts/minerva-files'), str(Path.home()))
                     assert r.returncode == 0, r.stderr
@@ -65,6 +55,9 @@ def scenario(name, config, env, target, pattern, preload=False):
             subprocess.run(['import', '-window', 'root', str(out / (name + '.png'))], check=True, timeout=10)
             assert p.poll() is None, 'Quickshell exited'
             print(name + ' ping: ' + ipc('ping').stdout, flush=True)
+        except Exception:
+            print(log.read_text(), flush=True)
+            raise
         finally:
             if p.poll() is None:
                 os.killpg(p.pid, signal.SIGTERM)

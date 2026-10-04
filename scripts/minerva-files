@@ -64,7 +64,13 @@ flock -w 12 9 || { echo "minerva-files: un altro avvio non termina" >&2; exit 1;
 SOLO_PREPARA=no
 [ "${MINERVA_FILES_DORMIENTE:-0}" = 1 ] && SOLO_PREPARA=si
 ipc_files() {
-    timeout -k 1 2 qs ipc -p "$CONFIG" call files "$@" 9>&-
+    RISPOSTA=$(timeout -k 1 2 qs ipc -p "$CONFIG" call files "$@" 9>&-) || return $?
+    # Some Quickshell versions return success even for "Target not found".
+    # Require an acknowledgement from our handler, not just an exit status.
+    case "$1:$RISPOSTA" in
+        ping:ok|open:ok|avvia:ok|finestra:"finestre in più: "*) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 apri_files() {
     [ "$SOLO_PREPARA" = si ] && return 0

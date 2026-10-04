@@ -49,6 +49,7 @@ ShellRoot {
     // ricaricare mentre una copia da due gigabyte è a metà.
     Component.onCompleted: {
         Quickshell.watchFiles = false;
+        managerLoader.active = true;
     }
 
     // ── Quello che si prende dalle impostazioni ──────────────────────────
@@ -114,11 +115,17 @@ ShellRoot {
         // Si riparte puliti: schede in più chiuse e ricerca spenta. Ritrovare
         // la finestra com'era tre giorni fa non è memoria, è disordine — e chi
         // riapre il gestore file quasi sempre sta cominciando un'altra cosa.
-        onAddormentata: manager.addormenta()
+        onAddormentata: { if (app.manager) app.manager.addormenta(); }
     }
 
+    // Complete the entry point before constructing the large window tree.
+    // IPC and preload state must be live before the window is created.
+    readonly property var manager: managerLoader.item
+    Loader {
+        id: managerLoader
+        active: false
+        sourceComponent: Component {
     FileManager {
-        id: manager
 
         /// La cartella su cui aprirsi, passata nell'ambiente da chi ci lancia.
         ///
@@ -155,6 +162,8 @@ ShellRoot {
         // programma resta — e si vede in `Minerva Attività`, che è il posto
         // dove si va a cercare chi occupa la memoria.
         onRequestClose: pronta.chiudi()
+    }
+        }
     }
 
     // ── Una finestra IN PIÙ, nello stesso processo ──────────────────────
@@ -236,7 +245,7 @@ ShellRoot {
         /// Serve a chi ci lancia per sapere che siamo vivi senza aprire
         /// niente: se questa risponde, il processo c'è.
         function ping(): string {
-            return "ok";
+            return app.manager ? "ok" : "not-ready";
         }
 
         /// Per le prove: dove sta l'icona di un file nella finestra («x y»).

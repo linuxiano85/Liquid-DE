@@ -37,7 +37,9 @@ with (r / 'calls').open('a') as f: f.write(json.dumps([args, inherited]) + '\\n'
 if args[0] == 'ipc':
     if os.environ.get('HUNG') == '1': time.sleep(60)
     if not (r / 'ready').exists(): sys.exit(1)
-    sys.exit(0 if time.time() >= float((r / 'ready').read_text()) else 1)
+    if time.time() < float((r / 'ready').read_text()): sys.exit(1)
+    print('Target not found.' if os.environ.get('MISSING_TARGET') == '1' else 'ok')
+    sys.exit(0)
 (r / 'ready').write_text(str(time.time() + .3))
 ''')
 
@@ -85,6 +87,11 @@ if args[0] == 'ipc':
         p = self.launch(HUNG='1')
         self.assertNotEqual(p.returncode, 0)
         self.assertIn('non risponde', p.stderr)
+
+    def test_missing_target_with_zero_exit_is_not_success(self):
+        result = self.launch(MISSING_TARGET='1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('non risponde', result.stderr)
 
     def test_failed_systemd_scope_falls_back_to_direct_launch(self):
         (self.root / 'systemd').mkdir()
