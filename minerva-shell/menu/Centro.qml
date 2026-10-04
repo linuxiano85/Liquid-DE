@@ -130,7 +130,11 @@ PanelWindow {
                 Levetta {
                     nome: "Wi-Fi"
                     acceso: Core.SystemState.wifiOn
-                    detto: "connesso"
+                    // Radio accesa non vuol dire connessi (J2, PC di prova):
+                    // diceva «connesso» anche senza nessuna rete.
+                    detto: Core.SystemState.networkWired ? "in rete col cavo"
+                           : Core.SystemState.networkName !== "" ? Core.SystemState.networkName
+                           : "non connesso"
                     onScelto: if (!centro.inProva) Core.SystemState.setWifi(!Core.SystemState.wifiOn)
                 }
                 Levetta {
