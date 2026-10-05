@@ -341,21 +341,20 @@ Item {
     /// Sembra un dettaglio da pignoli e non lo è. Le due specifiche usano
     /// separatori DIVERSI per la stessa lista di nomi:
     ///
-    ///   · nel file `.desktop`, `DesktopNames=Minerva;Hyprland;` — punto e
+    ///   · nel file `.desktop`, `DesktopNames=KDE;Plasma;` — punto e
     ///     virgola, con quello finale, perché lì è il tipo «lista di stringhe»
     ///     e la specifica vuole il separatore anche in fondo;
-    ///   · nella variabile, `XDG_CURRENT_DESKTOP=Minerva:Hyprland` — due
+    ///   · nella variabile, `XDG_CURRENT_DESKTOP=KDE:Plasma` — due
     ///     punti, come `PATH`.
     ///
     /// Chi legge la variabile la spezza sui due punti. Passandogliela com'è
-    /// scritta nel file, `Minerva;Hyprland;` è UN nome solo — un nome che non
-    /// esiste — e il confronto con «Minerva» o con «Hyprland» fallisce
+    /// scritta nel file, `KDE;Plasma;` è UN nome solo — un nome che non
+    /// esiste — e il confronto con «KDE» fallisce
     /// silenziosamente. È il modo in cui si era rotto il portachiavi di
     /// Chrome: nessun errore, solo una funzione che smette di esserci.
     ///
-    /// `start-minerva.sh` la scrive già giusta (`Minerva:Hyprland`), quindi
-    /// fino a oggi la sessione di Minerva era l'unica a partire con il valore
-    /// corretto — e solo perché lo riscriveva lei da capo dopo l'accesso.
+    /// La sessione di Minerva se la riscrive comunque da capo dopo l'accesso
+    /// (`scripts/minerva-greeter-sessione`); le altre scrivanie no.
     function aDueSepararatori(nomi) {
         return String(nomi).split(";")
                            .filter(function (n) { return n !== ""; })

@@ -559,9 +559,8 @@ FloatingWindow {
 
     // ── Schermo intero ───────────────────────────────────────────────────
     //
-    // Lo stesso comando della barra del titolo (`fullscreen 0`), non
-    // `fullscreen 1` che in Hyprland vuol dire «ingrandisci» e lascia le zone
-    // riservate. Un'immagine a schermo intero deve coprire lo schermo.
+    // Lo schermo intero vero, non «ingrandisci» che lascia le zone
+    // riservate: un'immagine a schermo intero deve coprire lo schermo.
     readonly property string me: "pid:" + Quickshell.processId
     readonly property var miaFinestra: Core.Windows.find(viewer.me)
     readonly property bool aTuttoSchermo:

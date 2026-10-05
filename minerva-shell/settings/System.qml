@@ -13,8 +13,8 @@ import "../ui" as Ui
 //
 // Ogni comando ha effetto immediato. Nessun pulsante «Applica»: se una cosa
 // non piace si rimette com'era, ed è più veloce che leggere un dialogo di
-// conferma. Le scelte finiscono in ~/.config/hypr/minerva-user.conf, che
-// appartiene a chi usa il computer e sopravvive agli aggiornamenti di Minerva.
+// conferma. Le scelte le tiene il demone, nelle impostazioni di chi usa il
+// computer, e sopravvivono agli aggiornamenti di Minerva.
 FloatingWindow {
     id: settings
 

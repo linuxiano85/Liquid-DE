@@ -360,7 +360,7 @@ QtObject {
     ///
     /// **Ad applicarla al compositore è la sola shell** (`avviaTouchpad()`,
     /// chiamata da `shell.qml`). Se lo facesse questo singleton, lo farebbero
-    /// tutte e cinque le finestre di Minerva: cinque `hyprctl -j devices`
+    /// tutte e cinque le finestre di Minerva: cinque domande `dispositivi`
     /// all'avvio e cinque scritture identiche a ogni pressione del tasto.
     /// È la stessa regola del Bluetooth qui sopra — uno esegue, gli altri
     /// guardano.

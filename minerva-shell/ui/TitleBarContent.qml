@@ -7,22 +7,11 @@ import "../core" as Core
 // Solo il contenuto: icona, titolo, pulsanti. Non disegna nessuno sfondo e non
 // gestisce nessun trascinamento, e non è una svista.
 //
-// Le barre del titolo di Minerva sono due cose diverse per necessità:
-//
-//  · dentro le NOSTRE finestre (gestore file, Impostazioni) la barra è parte
-//    della finestra stessa. Stessa superficie, stesso vetro, stessa
-//    sfocatura, e soprattutto: quando la finestra si sposta, la barra è già
-//    lì, perché è lei. Vedi `ui/WindowTitleBar.qml`.
-//
-//  · sopra le finestre ALTRUI (un terminale, un browser) la barra non può
-//    essere parte di niente: Hyprland non disegna cornici e nessun programma
-//    accetta che gliene aggiungiamo una dentro. Resta una superficie a parte
-//    che insegue la finestra leggendo dove si trova, con tutto quello che
-//    l'inseguimento comporta. Vedi `spine/TitleBars.qml`.
-//
-// Questo file è ciò che le rende IDENTICHE da guardare. Senza, sarebbero due
-// disegni che somigliano, e la differenza si noterebbe esattamente dove non
-// deve: fra due finestre affiancate.
+// Lo usa `ui/WindowTitleBar.qml`, la barra dentro le NOSTRE finestre, che fa
+// parte della finestra stessa: stessa superficie, stesso vetro. Le barre
+// delle finestre altrui le disegna il compositore (`compositore/src/barra.c`)
+// con gli stessi colori e la stessa altezza, che gli manda
+// `Compositore.aspettoBarra`.
 Item {
     id: content
 

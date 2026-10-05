@@ -10,9 +10,9 @@ import "." as Core
 //
 // ── Perché lo fa la shell e non l'avvio del compositore ─────────────────────
 //
-// Il gestore file parte da `config/hyprland.conf`, con una riga `exec-once`.
-// Funziona perché è l'unico acceso di fabbrica: parte comunque, e non c'è
-// niente da sprecare.
+// Il gestore file parte da `scripts/minerva-dentro-wayland`, all'avvio della
+// sessione. Funziona perché è l'unico acceso di fabbrica: parte comunque, e
+// non c'è niente da sprecare.
 //
 // Per le altre cinque quella strada costa cara e in silenzio. Quando parte
 // l'accesso il demone sta ancora nascendo, quindi da lì NON si può sapere
@@ -43,8 +43,8 @@ Item {
     /// scritti una seconda volta, e la prova `preload_avvio_test.dart` esiste
     /// apposta per accorgersi se un giorno divergono.
     ///
-    /// Il gestore file non c'è: lo avvia `config/hyprland.conf`, che è l'unico
-    /// posto da cui può partire abbastanza presto da servire a qualcosa.
+    /// Il gestore file non c'è: lo avvia `scripts/minerva-dentro-wayland`, che
+    /// è l'unico posto da cui può partire abbastanza presto da servire.
     readonly property var elenco: [
         { "chiave": "preload.calcolatrice", "variabile": "MINERVA_CALCOLATRICE_DORMIENTE",
           "script": "minerva-calcolatrice" },

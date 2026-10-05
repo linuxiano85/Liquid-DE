@@ -130,7 +130,7 @@ QtObject {
         onTriggered: ipc._troppoTempo = true
     }
 
-    /// Elenco scorciatoie letto da config/hypr/keybinds.conf
+    /// Le scorciatoie, come le legge il demone da `config/scorciatoie.minerva`.
     property var keybindings: []
 
     /// Elenco completo delle applicazioni installate

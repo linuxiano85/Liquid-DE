@@ -34,7 +34,7 @@ import "../core" as Core
 // «torna a quella di prima», che è quello che si vuole nove volte su dieci — e
 // da lì ogni Tab avanza. Si conferma lasciando Alt, si annulla con Esc.
 //
-// Il fuoco della tastiera qui NON serve: i tasti li riceve Hyprland, che ce li
+// Il fuoco della tastiera qui NON serve: i tasti li riceve il compositore, che ce li
 // gira come scorciatoie globali. Una superficie che si prende la tastiera
 // mentre si tiene premuto Alt se la porterebbe via a chi la stava usando.
 PanelWindow {

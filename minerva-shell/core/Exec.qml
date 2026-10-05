@@ -3,14 +3,14 @@ import Quickshell.Io
 
 // Exec — Un comando da lanciare e una risposta da aspettare.
 //
-// Le impostazioni di sistema non hanno un'API: si parlano con `hyprctl`,
-// `pactl`, `nmcli`, `powerprofilesctl`. Ognuno va lanciato, aspettato e letto,
+// Le impostazioni di sistema non hanno un'API: si parlano con `pactl`,
+// `nmcli`, `powerprofilesctl`. Ognuno va lanciato, aspettato e letto,
 // e farlo a mano ogni volta significa ripetere lo stesso `Process` con lo
 // stesso `StdioCollector` in venti punti diversi.
 //
-//     Exec { id: monitors; onDone: function(out) { ... } }
+//     Exec { id: profili; onDone: function(out) { ... } }
 //     ...
-//     monitors.start(["hyprctl", "-j", "monitors"])
+//     profili.start(["powerprofilesctl", "get"])
 //
 // `done` arriva SEMPRE, anche quando il comando fallisce: chi chiama deve
 // poter distinguere «ha risposto vuoto» da «non ha risposto», e un segnale che

@@ -8,7 +8,8 @@ import ".." as S
 // Avvio — I programmi che partono insieme alla sessione.
 //
 // KDE ha una pagina così; Minerva non aveva niente, e non per svista:
-// **Hyprland non legge `~/.config/autostart`**. Chi arriva da un altro
+// **il compositore non legge `~/.config/autostart`** — lo fa
+// `scripts/minerva-autostart`. Chi arriva da un altro
 // ambiente si porta dietro quella cartella e i suoi programmi smettono di
 // partire senza che nessuno glielo dica.
 //

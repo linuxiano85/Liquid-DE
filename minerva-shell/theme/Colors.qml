@@ -212,8 +212,8 @@ QtObject {
     // `sunken`    — campi di testo, incavi
     //
     // La membrana è deliberatamente molto coprente: contiene testo da leggere
-    // sopra finestre di qualunque colore. Il blur di Hyprland la ammorbidisce,
-    // non deve essere lui a renderla leggibile.
+    // sopra finestre di qualunque colore. Il blur del compositore la
+    // ammorbidisce, non deve essere lui a renderla leggibile.
     //
     // `membraneOpacity` è una delle poche cose qui dentro che si possono
     // cambiare da fuori: la lega alle impostazioni la shell. Sotto 0,75 il
@@ -226,8 +226,8 @@ QtObject {
     /// sta sempre sopra qualcosa e deve restare leggibile, una finestra ha
     /// dietro di sé la scrivania e può permettersi molto di più.
     ///
-    /// Il vetro vero — la sfocatura — lo fa Hyprland, e lo fa SOLO se il
-    /// pixel è trasparente. È il motivo per cui questo numero non è cosmesi:
+    /// Il vetro vero — la sfocatura — lo fa il compositore (l'effetto «blur»,
+    /// `Compositore.effetto`), e si vede SOLO se il pixel è trasparente. È il motivo per cui questo numero non è cosmesi:
     /// a 1.0 la finestra è opaca e il blur non esiste, qualunque cosa dica la
     /// configurazione del compositore.
     property real windowOpacity: 0.88

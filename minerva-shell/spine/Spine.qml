@@ -334,12 +334,10 @@ PanelWindow {
         }
         // ── E con un pannello aperto, tutto il resto fino alla dock ──────
         //
-        // Serve per ricevere il clic che chiude il pannello. Non è una scelta
-        // di comodo: con `input:follow_mouse = 2` — che è la scelta di Minerva
-        // — Hyprland manda i tasti del mouse alla superficie che ha il FUOCO,
-        // non a quella sotto il puntatore, e mentre un pannello è aperto il
-        // fuoco ce l'ha questa. Una superficie separata non riceverebbe mai un
-        // clic: provate e buttate, il 2 agosto, tre versioni diverse.
+        // Serve per ricevere il clic che chiude il pannello. Mentre un
+        // pannello è aperto il fuoco ce l'ha questa superficie, e sotto
+        // Hyprland una superficie separata non riceveva mai un clic: provate
+        // e buttate, il 2 agosto, tre versioni diverse.
         //
         // Arriva fino in FONDO, dock compresa. Sembra sbagliato e non lo è:
         // con il fuoco esclusivo la dock il puntatore non lo vedrebbe comunque
@@ -387,12 +385,9 @@ PanelWindow {
     ///
     /// ── Perché deve dirglielo la Spine ───────────────────────────────────
     ///
-    /// Con un pannello aperto questa superficie ha il fuoco ESCLUSIVO, e in
-    /// quel caso Hyprland manda a lei **tutti** gli eventi del puntatore,
-    /// ovunque si trovi, ignorando le aree d'ingresso di tutti gli altri. Non
-    /// è una nostra svista: è un difetto noto e aperto del compositore
-    /// (hyprwm/Hyprland #2017, e la discussione #14136), e su sway e niri lo
-    /// stesso codice si comporta come dice il protocollo.
+    /// Con un pannello aperto questa superficie ha il fuoco ESCLUSIVO, e
+    /// questa superficie copre tutto fino alla dock (vedi sopra): gli eventi
+    /// del puntatore li riceve lei, anche sopra la dock.
     ///
     /// Conseguenza: con il menu aperto la dock non usciva più al passaggio del
     /// mouse, perché il puntatore non lo vedeva più. Siccome lo vediamo noi,

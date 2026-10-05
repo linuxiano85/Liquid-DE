@@ -518,7 +518,7 @@ Item {
     /// «Con che cosa lo apro?» lo chiede la shell, non la scrivania.
     ///
     /// Il pannello stava QUI, ed era invisibile: il livello della scrivania sta
-    /// in fondo a tutto (`hyprctl layers`: «Layer level 1 (bottom)»), quindi si
+    /// in fondo a tutto (il piano 1 del compositore), quindi si
     /// disegnava dietro a ogni finestra aperta. Con lo schermo sgombro
     /// funzionava, ed è il motivo per cui è passato inosservato. Adesso vive in
     /// `shell.qml`, dentro una finestra di sovrapposizione vera.

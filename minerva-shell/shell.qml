@@ -461,13 +461,6 @@ ShellRoot {
     //   3. Spine      — la barra e la sua lingua stanno sopra tutto: sono il
     //                   comando dell'ambiente, e niente le deve coprire.
 
-    // ── Barre del titolo ─────────────────────────────────────────────────
-    //
-    // Danno a ogni finestra la sua maniglia e i suoi tre pulsanti, senza
-    // dover salire fino alla barra di sistema. Occupano lo spazio che
-    // Hyprland lascia libero sopra ogni riquadro — vedi `windows.titleBars`
-    // nelle Impostazioni, che regola anche i margini del compositore.
-
     // ── Dove stanno barra e dock ─────────────────────────────────────────
     //
     // La risposta sta in `Core.Posizioni`, non qui: se la fanno anche gli
@@ -534,7 +527,7 @@ ShellRoot {
     // Con un monitor solo la domanda non esisteva: `spine.toggle("apps")` e
     // via. Con due, ogni scorciatoia deve scegliere — e la risposta giusta è
     // sempre la stessa: **lo schermo dove sta il puntatore**, cioè quello che
-    // Hyprland chiama attivo. Chi preme Super+A guarda lì.
+    // il compositore chiama attivo. Chi preme Super+A guarda lì.
     //
     // `scrivanie` è la mappa nome-monitor → { barra, dock }. La riempiono le
     // copie stesse nascendo, e la svuotano morendo: staccare un monitor
@@ -1737,8 +1730,8 @@ ShellRoot {
     // «Condividi…» e «Apri con…» sono due `Rectangle` a schermo intero che
     // dentro un'applicazione stanno nella finestra dell'applicazione. La
     // scrivania una finestra così non ce l'ha: il suo livello — `minerva-desktop`
-    // — sta in fondo a tutto (`hyprctl layers`: «Layer level 1 (bottom)»), che
-    // è giusto, perché la scrivania DEVE stare dietro alle finestre.
+    // — sta in fondo a tutto (il piano 1 del compositore), che è giusto,
+    // perché la scrivania DEVE stare dietro alle finestre.
     //
     // Mettercele dentro le disegnava lì: sotto ogni finestra aperta, e senza
     // poter prendere un tasto. Nessun errore, nessun avviso — il pannello si
@@ -2170,8 +2163,8 @@ ShellRoot {
     // cambia — da qualunque parte sia cambiata.
     //
     // Il nome NON si scrive a mano: `elan0504:01-04f3:312a-touchpad` è vero
-    // su questa macchina e su nessun'altra. Si chiede a Hyprland e si tiene
-    // il primo dispositivo di puntamento il cui nome finisce per «touchpad».
+    // su questa macchina e su nessun'altra. Si chiede al compositore, che lo
+    // riconosce da libinput (`Compositore.touchpadDaTesto`).
     property string touchpadName: ""
 
     Connections {
@@ -2190,8 +2183,7 @@ ShellRoot {
         function onRisposta(cosa, text) {
             if (cosa !== "dispositivi")
                 return;
-            // Chi sia il touchpad lo dicono i due compositori in due modi
-            // diversi, e la traduzione sta dove stanno tutte le altre — in
+            // La traduzione sta dove stanno tutte le altre, in
             // `core/Compositore.qml`. Qui basta il nome.
             var nome = Core.Compositore.touchpadDaTesto(text);
             if (nome === "")
@@ -2205,13 +2197,8 @@ ShellRoot {
         // ── Il coperchio del portatile ──────────────────────────────────
         //
         // Il compositore riferisce il FATTO — il coperchio è chiuso — e la
-        // politica sta qui, dove sta già quella dei tasti di accensione.
-        //
-        // Sotto Hyprland lo stesso fatto arriva per un'altra strada
-        // (`bindl = , switch:on:Lid Switch`, scritta da `Power.qml`), e la
-        // scelta è la stessa impostazione: `power.lidAction`. Due strade, una
-        // politica — o il coperchio farebbe due cose diverse a seconda della
-        // sessione, e nessuno capirebbe quale delle due è quella giusta.
+        // politica sta qui, dove sta già quella dei tasti di accensione:
+        // `power.lidAction`.
         function onCoperchio(chiuso) {
             if (!chiuso)
                 return;
@@ -2577,8 +2564,8 @@ ShellRoot {
     }
 
     // I tasti della luminosità passano di qui invece di chiamare
-    // `brightnessctl` da soli. Non è pignoleria: se li lancia Hyprland, la
-    // shell scopre che la luminosità è cambiata solo al giro di lettura
+    // `brightnessctl` da soli. Non è pignoleria: lanciati da fuori, la
+    // shell scoprirebbe che la luminosità è cambiata solo al giro di lettura
     // successivo, e l'avviso a schermo compare in ritardo con il valore
     // sbagliato. Il volume no: quello lo racconta PipeWire nell'istante in
     // cui cambia, da qualunque parte arrivi.
@@ -2736,16 +2723,14 @@ ShellRoot {
 
     // ── La lente d'ingrandimento ─────────────────────────────────────────
     //
-    // `cursor:zoom_factor` di Hyprland ingrandisce tutto lo schermo attorno al
+    // La lente del compositore ingrandisce tutto lo schermo attorno al
     // puntatore. È la sola cosa in Minerva che permetta a chi ci vede poco di
     // leggere una finestra che non ha modo di ingrandire — un PDF, una foto,
     // un programma che non è nostro.
     //
-    // Il fattore vive nelle IMPOSTAZIONI e non dentro Hyprland, e la
+    // Il fattore vive nelle IMPOSTAZIONI e non dentro il compositore, e la
     // differenza conta: il compositore lo dimentica a ogni riavvio della
     // sessione, e chi ne ha bisogno se lo ritroverebbe spento ogni mattina.
-    // Qui è la nostra impostazione a comandare, e Hyprland ne è la
-    // conseguenza.
     //
     // Il passo è MOLTIPLICATIVO. A somma fissa, da 1 a 1.25 il salto è
     // enorme e da 4 a 4.25 non si vede: ingrandire è un rapporto, non una
@@ -2762,8 +2747,8 @@ ShellRoot {
         var nuovo = verso === 0 ? 1.0
                   : verso > 0   ? ora * 1.25
                                 : ora / 1.25;
-        // Sotto l'uno non si «rimpicciolisce»: Hyprland disegnerebbe lo
-        // schermo più piccolo dello schermo, con una cornice nera attorno.
+        // Sotto l'uno non si «rimpicciolisce»: lo schermo verrebbe disegnato
+        // più piccolo dello schermo, con una cornice nera attorno.
         nuovo = Math.max(1.0, Math.min(root.lenteMax, nuovo));
         nuovo = Math.round(nuovo * 100) / 100;
         Core.Ipc.setSetting("accessibility.zoom", nuovo);
@@ -2781,7 +2766,7 @@ ShellRoot {
 
     // ── Il cursore più grande ────────────────────────────────────────────
     //
-    // `hyprctl setcursor` vuole DUE cose: il tema e la dimensione. Il tema non
+    // Il compositore vuole DUE cose: il tema e la dimensione. Il tema non
     // lo sceglie Minerva — è quello che l'utente ha già per tutto il resto del
     // computer, scritto dove lo scrivono GTK e KDE — e passargliene uno che
     // non esiste **fa sparire il puntatore**, senza messaggi. Per questo il
@@ -2802,19 +2787,12 @@ ShellRoot {
         // due cartelle), ma applicarlo passa dalla porta: un tema di
         // puntatori che non esiste fa SPARIRE il puntatore, e il nome
         // va verificato su disco prima di usarlo.
-        // ── `sh`, non `fireSh` ───────────────────────────────────────
-            //
-            // `fireSh` vuol dire «lancia e basta»: usa un `Process` senza
-            // raccoglitore di stdout e senza segnale, e `onDone` **non arriva
-            // mai**. Qui il risultato del comando È la risposta — il nome del
-            // tema — quindi serve `sh`, che aspetta.
-            //
-            // Giacomo, 7 settembre 2026: «nemmeno ingrandire il puntatore».
-            // Non era una questione di quando si applicava: non si applicava
-            // proprio, né all'accesso né premendo il pulsante. Il comando
-            // partiva, trovava il tema, e la risposta la buttava via un
-            // `Process` che non ascoltava nessuno.
-            scriviCursore.sh(
+        //
+        // `sh` e non `fireSh`, che lancia e basta: `onDone` non arriverebbe
+        // mai, e qui il risultato del comando È la risposta. Giacomo, 7
+        // settembre 2026: «nemmeno ingrandire il puntatore» — il comando
+        // trovava il tema e la risposta la buttava via.
+        scriviCursore.sh(
             "t=$(sed -n 's/^gtk-cursor-theme-name=//p' " +
             "\"$HOME/.config/gtk-3.0/settings.ini\" 2>/dev/null " +
             "| tr -d '\"' | head -1); " +

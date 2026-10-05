@@ -7,12 +7,9 @@ import "../core" as Core
 //
 // ── Perché questo file esiste ────────────────────────────────────────────
 //
-// Fino a ieri anche le nostre finestre prendevano la barra da
-// `spine/TitleBars.qml`: una superficie a parte, disegnata dalla shell sopra
-// tutto, che insegue la finestra chiedendo a Hyprland dove si trova. Per un
-// terminale o un browser non c'è alternativa — Hyprland non disegna cornici e
-// nessun programma accetta che gliene infiliamo una dentro. Per le NOSTRE
-// finestre invece era una scelta, e sbagliata, perché costava tutto questo:
+// Ad agosto 2026 anche le nostre finestre prendevano la barra da una
+// superficie a parte, disegnata dalla shell sopra tutto, che inseguiva la
+// finestra chiedendo al compositore dove si trovasse. Costava tutto questo:
 //
 //  · la barra arrivava in ritardo. Spostando la finestra in fretta restava
 //    indietro e poi la raggiungeva a scatti; in una schermata di Giacomo si
@@ -35,8 +32,7 @@ import "../core" as Core
 // ── Lo sfondo ────────────────────────────────────────────────────────────
 //
 // NESSUNO, ed è il punto di tutto. Questo `Item` non dipinge niente: si vede
-// il fondo della finestra, che è già `Theme.Colors.window` e già sfocato da
-// Hyprland. Dipingere qui un colore anche minimamente diverso rimetterebbe la
+// il fondo della finestra, che è già `Theme.Colors.window`. Dipingere qui un colore anche minimamente diverso rimetterebbe la
 // riga di separazione che questo file esiste per togliere.
 Item {
     id: bar
@@ -131,14 +127,8 @@ Item {
 
     // ── Lo stato della finestra arriva, non si va a prendere ─────────────
     //
-    // Qui c'erano tre cose che adesso non servono più: un ascolto diretto degli
-    // eventi di Hyprland, un ritardo di ottanta millisecondi per lasciargli
-    // finire di riordinare, e una rilettura al secondo come rete di sicurezza.
-    // Tre modi di chiedere «dove sono e come sto», ognuno con il suo `hyprctl`,
-    // dentro OGNI finestra di Minerva — e tutte e tre chiedevano la stessa cosa
-    // che chiedeva anche la barra, nello stesso momento.
-    //
-    // Adesso lo dice il demone, che ascolta il compositore per tutti. La rete
+    // Lo dice il demone, che ascolta il compositore per tutti: nessuna
+    // finestra di Minerva chiede da sé «dove sono e come sto». La rete
     // di sicurezza non è sparita, si è spostata dove ha senso: chi si collega
     // riceve lo stato all'istante (`spingiTutto()`), e se il demone muore il
     // guardiano lo rifà partire e la riconnessione ricomincia da una spinta.
@@ -195,11 +185,7 @@ Item {
     // ── Quando sotto non c'è Minerva ─────────────────────────────────────
     //
     // Su COSMIC, GNOME, KDE o sway non c'è nessuno che ascolti i comandi di
-    // Minerva: prima si finiva comunque nel ramo di Hyprland, cioè `hyprctl`,
-    // cioè un programma che lì non esiste. Le nostre finestre si aprivano e i
-    // pulsanti della barra non facevano niente — senza un errore.
-    //
-    // Qui invece la finestra comanda **sé stessa**, con le richieste che
+    // Minerva. Lì la finestra comanda **sé stessa**, con le richieste che
     // `xdg_toplevel` dà a ogni finestra Wayland e che tutti i compositori
     // capiscono. È la stessa scelta del trascinamento, che usa
     // `startSystemMove()` e infatti funziona ovunque.
@@ -219,13 +205,9 @@ Item {
     }
 
     function minimizza() {
-        // «Riduci a icona» in Hyprland non esiste: si sposta la finestra in
-        // una scrivania speciale, ed è da lì che la ripesca il pannello
-        // «Finestre ridotte» della shell (Super+W).
-        //
-        // Fuori da Minerva quel pannello non c'è, e nemmeno la scrivania di
-        // servizio: si chiede al compositore ospite di ridurla, che è quello
-        // che l'utente si aspetta e quello che il suo pannello sa ripescare.
+        // In Minerva la ripesca il pannello «Finestre ridotte» (Super+W).
+        // Fuori da Minerva si chiede al compositore ospite di ridurla, che è
+        // quello che il suo pannello sa ripescare.
         if (!Core.Compositore.comandabile) {
             bar._daSola("minimized", true);
             return;
@@ -234,11 +216,6 @@ Item {
     }
 
     function ingrandisci() {
-        // NON `fullscreen 1` di Hyprland, che si chiama «maximize» e invece
-        // prende tutto lo schermo, barra della scrivania compresa: provato,
-        // dà [0,0 1536x864] su un monitor che ne ha 44 riservati in cima. È
-        // il difetto per cui il terminale ingrandito copriva la barra.
-        //
         // «Ingrandisci» in Minerva vuol dire arrivare ai bordi dello spazio
         // UTILE e fermarsi lì. Lo fa il compositore (`ingrandisci`), che le
         // zone riservate le conosce.
@@ -264,12 +241,6 @@ Item {
         }
         Core.Compositore.commutaSchermoIntero(bar.me);
     }
-
-    // ── Trascinamento ────────────────────────────────────────────────────
-    //
-    // Nessun inseguimento: mentre si trascina, la barra si sposta insieme
-    // alla finestra perché ne fa parte. Basta dire a Hyprland dove va la
-    // finestra, e la barra ci si trova già.
 
     // ── Trascinamento: lo fa il COMPOSITORE ──────────────────────────────
     //

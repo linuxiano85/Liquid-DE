@@ -5,7 +5,7 @@ import QtQuick
 //
 // Serve due scopi:
 //  1. tradurre le etichette della shell;
-//  2. tradurre i NOMI DEI TASTI, che Hyprland esprime in keysym X11
+//  2. tradurre i NOMI DEI TASTI, che `config/scorciatoie.minerva` scrive in keysym X11
 //     ("Return", "slash", "XF86AudioRaiseVolume", "mouse:272"). Senza questa
 //     tabella il pannello Scorciatoie mostrerebbe sigle incomprensibili a
 //     chi non conosce X11.

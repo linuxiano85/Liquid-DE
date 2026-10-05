@@ -18,8 +18,7 @@ Page {
     readonly property bool it: Core.Strings.lang === "it"
 
     // Le impostazioni vivono nel demone, così il pannello le ritrova uguali
-    // alla riapertura e il file di Hyprland resta una conseguenza, non la
-    // fonte della verità.
+    // alla riapertura; il compositore le riceve sul canale.
     readonly property string layout:      Core.Ipc.get("input.layout", "it")
     readonly property int    repeatRate:  Core.Ipc.get("input.repeatRate", 25)
     readonly property int    repeatDelay: Core.Ipc.get("input.repeatDelay", 600)

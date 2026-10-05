@@ -52,7 +52,7 @@ Item {
 
     Component.onCompleted: Core.Compositore.aggiornaScrivanie()
 
-    // Il socket eventi di Hyprland notifica i cambi; senza questo le pastiglie
+    // Il compositore annuncia i cambi; senza questo le pastiglie
     // resterebbero ferme finché non si tocca qualcos'altro.
     Connections {
         target: Core.Compositore

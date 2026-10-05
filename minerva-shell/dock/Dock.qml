@@ -485,8 +485,8 @@ PanelWindow {
     // e la dock non tornerebbe più.
 
     /// Chiesta da fuori. La usa la Spine quando un pannello aperto le ha
-    /// tolto il passaggio del puntatore — vedi `Spine.qml`, e il difetto noto
-    /// di Hyprland citato lì.
+    /// tolto il passaggio del puntatore — vedi `puntatoreSullaDock` in
+    /// `Spine.qml`.
     property bool forceReveal: false
 
     /// La riva riservata (una finestra riempie lo schermo): sfiorarla non la

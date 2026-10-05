@@ -10,9 +10,8 @@ import "." as Core
 //
 // I due programmi che fanno questo su Wayland (`wlsunset`, `gammastep`) qui
 // non ci sono, e sarebbero due cose in più da installare, da far partire
-// all'avvio e che possono mancare. Minerva sa già disegnare uno shader — è
-// così che fa l'aurora della schermata di accesso — e Hyprland sa applicarne
-// uno a tutto lo schermo (`decoration:screen_shader`).
+// all'avvio e che possono mancare. La tinta la applica il compositore con
+// una tabella di colore (`Compositore.coloreSchermo`).
 //
 // Il vantaggio non è solo una dipendenza in meno: applicato dal compositore,
 // il filtro vale per OGNI cosa a schermo, giochi e filmati a schermo intero

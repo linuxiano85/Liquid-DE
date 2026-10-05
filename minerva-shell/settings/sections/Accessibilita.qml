@@ -10,7 +10,7 @@ import ".." as S
 // testo esclude proprio le persone che ha detto di voler accogliere.
 //
 // Le tre cose di questa pagina hanno una proprietà in comune che vale la pena
-// dire: **Hyprland e la tipografia le dimenticano a ogni avvio**. Vivono
+// dire: **il compositore e la tipografia le dimenticano a ogni avvio**. Vivono
 // quindi nelle impostazioni del demone, e la shell le riapplica appena il
 // demone risponde (`applicaLente`, `applicaCursore` in `shell.qml`). Senza,
 // chi ne ha bisogno le ritroverebbe spente ogni mattina — cioè esattamente

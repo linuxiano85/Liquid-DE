@@ -11,19 +11,12 @@ import ".." as S
 // monitor supporta: un elenco di risoluzioni scritto a mano prima o poi
 // propone qualcosa che lo schermo non regge, e chi la sceglie resta al buio.
 //
-// ── Un vocabolario solo, due compositori ─────────────────────────────────
-//
-// Questa pagina parlava il vocabolario di Hyprland a mano — `width`,
-// `refreshRate`, `availableModes`, `transform`, `disabled` — e sotto
-// `minerva-wayland` non trovava nessuno di quei nomi: mostrava «nessuno
-// schermo rilevato» su un computer che lo schermo ce l'ha davanti.
-//
-// Adesso i nomi sono quelli di Minerva (`larghezza`, `hz`, `modi`, `gradi`,
-// `acceso`) e la traduzione la fa `core/Compositore.qml`, che è il posto
+// I nomi sono quelli di Minerva (`larghezza`, `hz`, `modi`, `gradi`,
+// `acceso`): la traduzione la fa `core/Compositore.qml`, che è il posto
 // dichiarato per farla.
 //
-// Ogni modifica si applica SUBITO, su tutti e due i compositori, e poi viene
-// scritta nei due file di configurazione perché resti dopo il riavvio.
+// Ogni modifica si applica SUBITO, e poi viene scritta in `schermi.conf`
+// perché resti dopo il riavvio.
 Page {
     id: page
 
@@ -238,7 +231,7 @@ Page {
         onTriggered: page.reload()
     }
 
-    /// Aspetta che Hyprland abbia finito di applicare, poi fotografa lo stato
+    /// Aspetta che il compositore abbia finito di applicare, poi fotografa lo stato
     /// e lo scrive. Scrivere prima significherebbe salvare ciò che abbiamo
     /// chiesto invece di ciò che è successo davvero.
     Timer {
@@ -284,11 +277,7 @@ Page {
                 righe.push(m.nome + " = spento");
                 continue;
             }
-            // La rotazione è già in gradi, e ci arriva pulita: le
-            // trasformazioni specchiate di Hyprland (da 4 in su) le ha già
-            // ridotte a «dritto» il traduttore, perché moltiplicate per 90
-            // darebbero 360 e oltre — un numero senza senso in una casella
-            // di rotazione.
+            // La rotazione è già in gradi.
             righe.push(m.nome + " = "
                        + m.modoLarghezza + "x" + m.modoAltezza + "@" + Number(m.hz).toFixed(3)
                        + " " + m.x + "," + m.y

@@ -147,9 +147,8 @@ QtObject {
     // e una superficie della shell sopra la finestra a schermo intero basta
     // a impedire lo scanout diretto: la scheda video ricompone ogni
     // fotogramma per una striscia trasparente. Qui resta il freno acceso a
-    // mano (`forzato`), e quello sotto Hyprland, che non frena da sé.
-    readonly property bool frenoServe: gioco.attiva
-        && (gioco.forzato || !Core.Compositore.nostro)
+    // mano (`forzato`).
+    readonly property bool frenoServe: gioco.attiva && gioco.forzato
 
     property var freno: IdleInhibitor {
         window: gioco.finestraFreno

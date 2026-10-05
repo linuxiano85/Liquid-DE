@@ -105,7 +105,7 @@ FloatingWindow {
     implicitHeight: 680
 
     // Vetro come la barra: il fondo è trasparente e la sfocatura la mette
-    // Hyprland dietro ai pixel che lo sono. Con un fondo opaco non c'è blur
+    // il compositore dietro ai pixel che lo sono. Con un fondo opaco non c'è blur
     // che tenga — non è una questione di configurazione del compositore, è
     // che non c'è niente da sfocare.
     // ── Il colore lo mette la FINESTRA, e costa quindici megabyte di meno ─
