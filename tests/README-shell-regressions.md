@@ -6,7 +6,16 @@ Run from the repository root on Linux with Node.js 22 or newer and Python 3:
 node --test tests/shell-regressions.mjs
 python3 tests/test_greeter_state.py
 dart run tests/desktop_launcher_test.dart
+dart run tests/greetd_conversation_test.dart
+tests/compila-shell.sh
+(cd tests/fucina_suite && dart test)
 ```
+
+`tests/compila-shell.sh` compiles every QML file of the shell inside
+Quickshell (`Qt.createComponent`, nothing is instantiated, no window opens)
+and names each broken file with the reason: a removed import, an unknown
+type or property, a syntax error. It needs `qs` on the `PATH`; it does not
+touch the running session.
 
 The suite executes JavaScript function and handler bodies extracted from the
 production QML. It runs the generated network query against a temporary fake
