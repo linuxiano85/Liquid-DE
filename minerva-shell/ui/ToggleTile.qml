@@ -105,9 +105,9 @@ Rectangle {
         hoverEnabled: true
         enabled: tile.enabled
         cursorShape: Qt.PointingHandCursor
-        onClicked: {
-            tile.checked = !tile.checked;
-            tile.toggled(tile.checked);
-        }
+        // Si chiede, non si decide: assegnare `checked` qui spezzava il legame
+        // con l'impostazione, e da lì la piastrella non seguiva più i cambi
+        // fatti altrove. Lo stato nuovo arriva da chi la usa.
+        onClicked: tile.toggled(!tile.checked)
     }
 }
