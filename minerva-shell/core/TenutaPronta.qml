@@ -128,8 +128,6 @@ Item {
     /// Dopo quanti minuti da ferma esce da sola. 0 la lascia lì per sempre.
     readonly property int minutiDiPazienza: Core.Ipc.get("preload.minuti", 30)
 
-    /// Emesso quando torna a farsi vedere, per chi deve ripartire pulito.
-    signal risvegliata()
 
     /// Emesso quando si toglie di mezzo, per chi deve mettere via le sue cose.
     signal addormentata()
@@ -194,10 +192,7 @@ Item {
 
     /// Torna a farsi vedere, e davanti a tutto.
     function risveglia() {
-        var dormiva = pronta.dormiente;
         pronta.dormiente = false;
-        if (dormiva)
-            pronta.risvegliata();
         pronta.portaDavanti();
     }
 

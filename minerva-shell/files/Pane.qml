@@ -249,8 +249,6 @@ Item {
         return Files.motivoPerCartella(pane.path);
     }
 
-    /// Qualcuno vuole scegliere lo sfondo di questa cartella.
-    signal sfondoRichiesto()
 
     /// Percorsi selezionati. Un array e non un indice: si opera su gruppi.
     property var selection: []

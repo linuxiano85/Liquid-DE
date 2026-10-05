@@ -25,7 +25,6 @@ Rectangle {
     property bool it: true
 
     signal apri()
-    signal salvaSubito()
 
     readonly property bool esiste: riquadro.dati.esiste !== false
     readonly property var stato: riquadro.dati.stato || ({})

@@ -37,7 +37,6 @@ PanelWindow {
     color: "transparent"
 
     signal rightClicked(int x, int y)
-    signal leftClicked()
     /// Ci hanno lasciato sopra dei file trascinati da un'altra parte —
     /// dal gestore file, da Dolphin, dal browser. Gli indirizzi sono
     /// `file://`, come parlano tutti, e il punto è quello dello schermo in
@@ -131,15 +130,9 @@ PanelWindow {
 
     MouseArea {
         anchors.fill: parent
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        acceptedButtons: Qt.RightButton
         enabled: desktop.menuEnabled
-
-        onClicked: function(mouse) {
-            if (mouse.button === Qt.RightButton)
-                desktop.rightClicked(mouse.x, mouse.y);
-            else
-                desktop.leftClicked();
-        }
+        onClicked: function(mouse) { desktop.rightClicked(mouse.x, mouse.y); }
     }
 
     // Suggerimento per chi arriva da un altro ambiente: appare solo in
