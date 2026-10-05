@@ -4,65 +4,31 @@ import "." as Core
 
 // Windows — Le finestre aperte, viste dalla shell.
 //
-// Hyprland non disegna cornici attorno alle finestre: non esistono i tre
-// pulsanti in alto a destra. Per chi arriva da Windows o da KDE questa è la
-// prima cosa che manca, e non è un vezzo — è il modo in cui si è imparato a
-// chiudere e ridurre a icona qualunque cosa.
-//
-// Qui li ricostruiamo, ma nella barra invece che sulla finestra. Non è un
-// ripiego: nella barra sono sempre nello stesso punto, non coprono mai il
-// contenuto, e valgono anche per le finestre affiancate dal tiling, che una
-// cornice non ce l'hanno per definizione.
-//
-// «Riduci a icona» non esiste in Hyprland. Lo costruiamo spostando la finestra
-// in una scrivania speciale che nessuno guarda mai: sparisce dallo schermo e
-// resta viva, che è esattamente cosa vuol dire ridurre a icona.
+// È la POLITICA di Minerva sulle finestre: cosa vuol dire «ingrandisci»,
+// cosa succede riducendo a icona, come si tiene una finestra dentro lo
+// spazio utile. La forma in cui il compositore le descrive la traduce
+// `core/Compositore.qml`; qui arriva già in lingua nostra.
 QtObject {
     id: windows
 
     // ── Qual è la finestra attiva ────────────────────────────────────────
     //
-    // Qui c'era `Hyprland.activeToplevel`, il modello di quickshell. Ed era
-    // SEMPRE NULLO.
-    //
-    // Il motivo è scritto poco più sotto, dove si spiega perché l'elenco delle
-    // finestre si legge con `hyprctl clients` e non con `Hyprland.toplevels`:
-    // quel modello va popolato con `refreshToplevels()`, e siccome nessuno
-    // qui lo chiama mai — non serviva — restava vuoto, e con lui
-    // `activeToplevel`.
-    //
-    // Non dava nessun errore. Dava questo, e per settimane:
-    //
-    //  · NESSUNA barra del titolo si accendeva mai. La cornice della finestra
-    //    la disegna Hyprland con l'accento, quella della barra la disegniamo
-    //    noi: con la barra convinta di essere spenta, la linea d'accento
-    //    saliva lungo i tre lati della finestra e si spezzava di netto dove
-    //    cominciava la barra. È esattamente ciò che Giacomo ha visto e ha
-    //    chiamato «la vecchia barra staccata»: non era staccata, era spenta;
-    //  · il nome della finestra nella barra di sistema restava vuoto;
-    //  · la dock non evidenziava mai il programma in uso;
-    //  · e ogni comando senza indirizzo — «riduci», «chiudi», «ingrandisci»
-    //    dal menu o da una scorciatoia — non faceva niente, perché controlla
-    //    `hasActive` prima di agire.
-    //
-    // Adesso la risposta arriva dalle STESSE due strade da cui arriva tutto il
-    // resto, e nessuna delle due può essere vuota mentre una finestra ha il
-    // fuoco:
-    //
-    //  · l'evento `activewindowv2`, che porta l'indirizzo e arriva subito;
-    //  · `focusHistoryID === 0` nell'elenco letto da `hyprctl clients`, che
-    //    c'è sempre e rimette a posto le cose se un evento si perde.
+    // Quella con `stack === 0` nell'elenco che manda il compositore (il suo
+    // `posto`): l'elenco c'è sempre, e rimette a posto le cose anche se un
+    // evento si perde. Senza una finestra attiva affidabile si spengono le
+    // barre del titolo, la dock non evidenzia il programma in uso e ogni
+    // comando senza indirizzo — «riduci», «chiudi», «ingrandisci» dal menu o
+    // da una scorciatoia — non fa niente, perché controlla `hasActive`.
 
-    /// Indirizzo della finestra attiva, nella forma `0x…` usata da hyprctl.
+    /// Indirizzo della finestra attiva, nella forma `0x…` del compositore.
     property string activeAddress: ""
 
     /// La finestra attiva, come la vede il compositore, o `null`.
     readonly property var active: windows.find("address:" + windows.activeAddress)
 
-    /// Vero quando la finestra «attiva» è in realtà già ridotta a icona.
-    /// Hyprland continua a considerarla attiva dopo averla spostata nella
-    /// scrivania speciale, e senza questo controllo i pulsanti resterebbero
-    /// nella barra a comandare una finestra che non si vede più.
+    /// Vero quando la finestra in cima alla pila è ridotta a icona: senza
+    /// questo controllo i pulsanti resterebbero nella barra a comandare una
+    /// finestra che non si vede.
     readonly property bool activeIsMinimized:
         activeAddress !== "" && _minimizedAddresses.indexOf(activeAddress) !== -1
 
@@ -80,23 +46,11 @@ QtObject {
         return t;
     }
 
-    // Qui c'era `activeFloating`, che serviva solo a scrivere «Affianca» o
-    // «Rendi libera» nel menu della finestra. Con il tiling è sparita anche
-    // la domanda: in Minerva le finestre sono libere e basta.
-
     /// Vero quando la finestra attiva è già ingrandita.
-    ///
-    /// Qui c'era `fullscreen !== 0`, cioè lo stato di Hyprland, e non poteva
-    /// funzionare: «ingrandisci» in Minerva NON è `fullscreen 1` del
-    /// compositore — è un comando nostro che porta la finestra ai bordi dello
-    /// spazio utile lasciando visibile la barra della scrivania, e che quindi
-    /// non accende nessun interruttore di Hyprland. Il risultato era un
-    /// pulsante che non cambiava mai segno e una voce di menu che diceva
-    /// sempre «Ingrandisci» anche su una finestra già ingrandita.
     readonly property bool activeMaximized:
         windows.isMaximized(windows.find("address:" + windows.activeAddress))
 
-    /// Finestre parcheggiate nella scrivania speciale.
+    /// Finestre ridotte a icona.
     property var minimized: []
     property var _minimizedAddresses: []
 
@@ -110,7 +64,7 @@ QtObject {
     /// programmi diversi manda a gambe all'aria qualunque abbinamento fatto
     /// sulla classe, e `Core.Apps` le riconosce dal titolo.
     ///
-    /// Che si possano chiudere è stato verificato a mano: `closewindow` su una
+    /// Che si possano chiudere è stato verificato a mano: «chiudi» su una
     /// finestra della shell chiude quella finestra e basta, il processo resta
     /// in piedi. Era il dubbio che le teneva fuori dalla dock.
     property var all: []
@@ -131,16 +85,9 @@ QtObject {
             || windows.ownClasses.indexOf(C) !== -1;
     }
 
-    // ── Interrogazione ───────────────────────────────────────────────────
+    // ── L'elenco ─────────────────────────────────────────────────────────
     //
-    // L'elenco arriva da `hyprctl -j clients` e non da `Hyprland.toplevels`.
-    // Non è pigrizia: `refreshToplevels()` è asincrono e non dice quando ha
-    // finito, quindi leggere la lista subito dopo averlo chiamato restituisce
-    // lo stato PRECEDENTE — e la finestra appena ridotta a icona non compare
-    // mai. Una interrogazione che risponde è più semplice di una che forse
-    // ha già risposto.
-
-    // _query rimosso: l'elenco arriva in push dal demone.
+    // Arriva dal demone, che lo rimanda a ogni cambio (`windows_state`).
 
     /// L'ultimo elenco ricevuto, come testo: solo per accorgersi che il
     /// prossimo è uguale.
@@ -199,7 +146,6 @@ QtObject {
         }
 
         windows.all = every;
-        windows._niente_ingranditi_dal_compositore();
 
         // ── La garanzia sullo spazio ─────────────────────────────────────
         //
@@ -222,16 +168,8 @@ QtObject {
     // ── Lo spazio in cui una finestra può stare ──────────────────────────
     //
     // Non è lo schermo: è lo schermo meno ciò che la shell si è riservata —
-    // la barra in alto, e qualunque altra cosa dichiari una zona esclusiva.
-    // Lo dice Hyprland in `hyprctl monitors`, campo `reserved`, nell'ordine
-    // sinistra/alto/destra/basso e in pixel logici.
-    //
-    // Serve per «ingrandisci», che è un comando NOSTRO e non di Hyprland.
-    // `fullscreen 1` del compositore si chiama «maximize» ma prende tutto lo
-    // schermo, barra della scrivania compresa: provato, restituisce
-    // [0,0 1536x864] su un monitor che ne ha 44 riservati in cima. È il
-    // difetto per cui il terminale ingrandito copriva la barra e la propria
-    // barra del titolo spariva sotto di essa.
+    // la barra, la dock, e qualunque altra cosa dichiari una zona esclusiva.
+    // Il compositore lo manda già calcolato (`utileX`, `utileY`, …).
 
     property var usable: null
 
@@ -279,10 +217,8 @@ QtObject {
 
     /// Lo spazio utile del monitor su cui sta una finestra.
     ///
-    /// Si sceglie per POSIZIONE e non per il campo `monitor` di Hyprland: quel
-    /// campo dice su quale monitor il compositore considera la finestra, che
-    /// nell'istante dopo un attacca-e-stacca non è ancora dove la finestra si
-    /// vede. La posizione invece è quella che si guarda.
+    /// Si sceglie per POSIZIONE: è quella che si guarda, anche nell'istante
+    /// dopo un attacca-e-stacca.
     function spazioPer(w) {
         var tutti = windows.spaziPerMonitor || [];
         if (tutti.length === 0)
@@ -326,78 +262,18 @@ QtObject {
 
     // ── Perché lo spazio utile si rilegge, e non si legge una volta ──────
     //
-    // Si leggeva una volta sola, all'avvio del componente. Ed è il momento
-    // PEGGIORE in cui chiederlo: la shell sta nascendo, e le zone riservate le
-    // riserva la shell stessa. Nell'istante in cui questo singleton prende
-    // vita, la barra della scrivania non ha ancora dichiarato la propria zona
-    // esclusiva, quindi il compositore risponde onestamente «riservato:
-    // niente» — e quella risposta restava vera per tutta la sessione.
-    //
-    // Le conseguenze non somigliano affatto alla causa, ed è per questo che è
-    // costato tanto trovarla. Con `usable.y` a zero:
-    //
-    //  · «ingrandisci» ferma la finestra quarantaquattro pixel troppo in alto,
-    //    cioè con la propria barra del titolo SOTTO la barra della scrivania.
-    //    La finestra sembra incollata alla barra e senza maniglia, e per
-    //    chiuderla non resta che Super+C;
-    //  · l'aggancio ai bordi porta allo stesso punto, per la stessa ragione;
-    //  · e non capita sempre, ma solo quando la lettura è arrivata prima della
-    //    barra — cioè al primo avvio della sessione, e poi mai più. Che è
-    //    esattamente quello che si vede: «lo ha fatto al suo primo avvio, nei
-    //    successivi non è successo».
-    //
-    // Una lettura ogni cinque secondi costa un `hyprctl` — le barre del titolo
-    // ne fanno uno ogni nove decimi — e non c'è nessun evento del compositore
-    // che annunci un cambio di zona riservata.
-    // _riletturaSpazio rimosso: le notifiche dello spazio arrivano dal demone.
+    // Letto una volta sola all'avvio, sarebbe lo spazio di uno schermo senza
+    // barra: la barra non ha ancora dichiarato la propria zona esclusiva, e
+    // il compositore risponde onestamente «riservato: niente». «Ingrandisci»
+    // fermerebbe allora la finestra con la barra del titolo SOTTO quella
+    // della scrivania. Per questo il demone rimanda lo spazio a ogni cambio,
+    // e `_initial` qui sotto lo richiede comunque dopo un secondo.
 
-
-    // ── Chi ha la barra del titolo SOPRA, e chi dentro ───────────────────
-    //
-    // Cambia dove una finestra si ferma quando la si ingrandisce, e non è un
-    // dettaglio: una finestra con la barra sopra che arriva fino al bordo si
-    // porta la propria barra sotto quella della scrivania, e i suoi pulsanti
-    // diventano incliccabili. È il difetto che Giacomo aveva descritto come
-    // «il terminale se lo metto a schermo intero metà barra del titolo viene
-    // coperta dalla barra del desktop».
-    //
-    // La risposta stava in tre posti che potevano rispondere diversamente:
-    // le barre sopra le finestre altrui passavano `true`, quelle dentro le
-    // nostre `false`, e il menu della finestra non passava niente perché
-    // chiamava un'altra funzione ancora. Adesso la domanda si fa qui, una
-    // volta, e chi ingrandisce non deve più saperne niente.
-
-    /// I programmi che la barra del titolo se la disegnano da soli.
-    ///
-    /// Hyprland non ha decorazioni lato server: dice a ogni programma
-    /// «fattela tu», e quasi nessuno lo fa — perciò gliela disegna Minerva.
-    /// I browser però sì, e parecchie applicazioni GNOME anche: su quelle la
-    /// nostra sarebbe la seconda barra. L'elenco sta nelle impostazioni.
-    function disegnaLaSua(appClass) {
-        var cls = String(appClass || "").toLowerCase();
-        if (cls === "")
-            return false;
-        var elenco = Core.Ipc.get("windows.csdApps", []);
-        for (var i = 0; i < elenco.length; i++) {
-            var voce = String(elenco[i] || "").toLowerCase();
-            if (voce !== "" && cls.indexOf(voce) !== -1)
-                return true;
-        }
-        return false;
-    }
-
-    /// Vero quando la finestra riempie già tutto lo spazio che le compete.
-    ///
-    /// Si guarda la GEOMETRIA e non un interruttore nostro: così resta giusto
+    /// Vero quando la finestra è ingrandita. Lo stato lo tiene il
+    /// compositore (`ingrandita`, che arriva come `modoSchermo === 1`): vale
     /// anche se a ingrandirla è stato un aggancio al bordo, un doppio clic
-    /// sulla barra o il programma stesso, e il pulsante mostra sempre il segno
-    /// che serve.
-    ///
-    /// Un pixel di tolleranza: lo schermo è ingrandito di un quarto, e fra
-    /// pixel logici e fisici gli arrotondamenti non tornano sempre.
+    /// sulla barra o il programma stesso.
     function isMaximized(w) {
-        // Lo stato lo tiene il compositore (`ingrandita`, che arriva come
-        // `modoSchermo === 1`): niente più indovinarlo dalla geometria.
         return !!w && w.modoSchermo === 1;
     }
 
@@ -452,12 +328,8 @@ QtObject {
         for (var i = 0; i < all.length; i++) {
             var w = all[i];
 
-            // `w.fullscreen` è vero solo per lo schermo intero VERO (modo 2),
-            // ma il compositore rifiuta di spostare anche le finestre
-            // ingrandite (modo 1) — e rifiutando risponde «Window is
-            // fullscreen». Il risultato era un comando respinto a ogni giro:
-            // centocinquanta avvisi nel registro in una sessione, e altrettante
-            // andate e ritorni sul socket per niente.
+            // Le ingrandite e quelle a schermo intero le mette a posto il
+            // compositore: spostarle a mano lo contraddirebbe.
             if (!w.address || w.address === "" || w.minimized || w.modoSchermo !== 0)
                 continue;
             if (w.w <= 0 || w.h <= 0)
@@ -465,8 +337,8 @@ QtObject {
 
             // ── Non si tocca una finestra che si sta muovendo ────────────
             //
-            // Questa garanzia manda `movewindowpixel`. Il trascinamento col
-            // mouse lo fa il compositore, con la sua strada. Se i due agiscono
+            // Questa garanzia manda «sposta». Il trascinamento col mouse lo
+            // fa il compositore, con la sua strada. Se i due agiscono
             // insieme, la finestra viene tirata da due parti: segue la mano a
             // scatti, si ferma, torna indietro. Parole di Giacomo l'11 agosto:
             // «non c'è più un trascinamento libero, vuole per forza stare
@@ -525,8 +397,8 @@ QtObject {
     // pixel sotto il bordo basso. Esattamente quelli che le si erano tolti in
     // cima.
     //
-    // Misurato il 10 agosto 2026 sul gestore file, prima riga di `hyprctl
-    // clients`: `at: -2,44   size: 1536,864`. Le parole di Giacomo erano «le
+    // Misurato il 10 agosto 2026 sul gestore file: posizione -2,44, misura
+    // 1536x864. Le parole di Giacomo erano «le
     // finestre escono fuori dallo schermo e devo passarle a schermo intero»:
     // il rimedio che aveva trovato è giusto, perché «schermo intero» è
     // l'unico comando che rifà i conti da capo.
@@ -536,63 +408,6 @@ QtObject {
     //
     // È una funzione pura apposta: le prove in `prove-finestre.qml` le passano
     // numeri e non toccano nessuna finestra vera.
-    // ── Il modo «ingrandito» del compositore non lo chiede nessuno ───────
-    //
-    // In Minerva «ingrandisci» è GEOMETRIA: si ridimensiona e si sposta (vedi
-    // `maximize`). Il modo 1 di Hyprland non lo usiamo mai — per le finestre
-    // che si disegnano da sé si tocca solo il bit del PROGRAMMA
-    // (`fullscreenstate 0 1`), non quello del compositore.
-    //
-    // Quindi una finestra che si trova nel modo 1 ce l'ha messa qualcun
-    // altro: il programma stesso, o un comando arrivato da fuori. E costa
-    // carissimo, perché in quel modo il compositore manda l'ingresso a LEI:
-    // le altre restano disegnate sullo schermo e non ricevono più niente.
-    //
-    // Giacomo, 12 agosto 2026: «non riesco più a spostare Kate, è diventata
-    // una finestra fantasma: è sullo schermo ma non posso chiuderla,
-    // spostarla o usarla». Il colpevole non l'abbiamo trovato; la difesa
-    // serve comunque.
-    //
-    // Togliendo il modo, il compositore rimette la finestra alla misura che
-    // aveva prima. Qui c'era anche un «e poi la ingrandisco con i conti
-    // nostri», e non funzionava: partiva centocinquanta millisecondi dopo e
-    // trovava l'elenco delle finestre non ancora riletto, quindi si tirava
-    // indietro — sempre. Una cosa che a volte succede e a volte no è peggio
-    // di una che non c'è: tolta. Chi vuole la finestra grande preme
-    // Super+M, che è il nostro «ingrandisci» e funziona sempre.
-    //
-    // Si dice ad alta voce: se un giorno scatta di continuo, il registro dirà
-    // chi lo mette e si potrà smettere di indovinare.
-    function _niente_ingranditi_dal_compositore() {
-        var tutte = windows.all || [];
-        for (var i = 0; i < tutte.length; i++) {
-            var w = tutte[i];
-            if (!w.address || w.minimized)
-                continue;
-            if (w.modoSchermo === 1 && !windows.disegnaLaSua(w.appClass)) {
-                if (windows._giaCorrette.indexOf(w.address) !== -1)
-                    continue;
-                console.log("[MINERVA][FINESTRE] " + (w.appClass || "?")
-                            + " era nel modo «ingrandito» del compositore, che "
-                            + "noi non chiediamo mai: lo tolgo, e torna alla "
-                            + "misura che aveva prima.");
-                windows._giaCorrette = windows._giaCorrette.concat([w.address]);
-                Compositore.schermoIntero(w.address, false);
-            } else if (w.modoSchermo === 0
-                       && windows._giaCorrette.indexOf(w.address) !== -1) {
-                // Tornata normale: si dimentica, così se ci ricasca la si
-                // corregge di nuovo invece di lasciarla lì per sempre.
-                windows._giaCorrette = windows._giaCorrette.filter(function (a) {
-                    return a !== w.address;
-                });
-            }
-        }
-    }
-
-    /// Indirizzi già tolti dal modo «ingrandito» del compositore, per non
-    /// combattere all'infinito con un programma che ci ricasca da solo.
-    property var _giaCorrette: []
-
     function dentroLoSpazio(w, u, margine) {
         if (!w || !u)
             return null;
@@ -630,8 +445,8 @@ QtObject {
         return { "x": nx, "y": ny, "w": nw, "h": nh };
     }
 
-    /// La finestra indicata da un selettore di Hyprland (`address:0x…`
-    /// oppure `pid:1234`), o null. La usa anche ogni finestra di Minerva
+    /// La finestra indicata da un selettore (`address:0x…` oppure
+    /// `pid:1234`), o null. La usa anche ogni finestra di Minerva
     /// per riconoscere sé stessa.
     function find(selector) {
         var all = windows.all || [];
@@ -652,15 +467,11 @@ QtObject {
             return;
         // ── Lo chiede al compositore, e basta ────────────────────────────
         //
-        // Qui c'erano centoventi righe che ingrandivano a mano: si leggeva lo
-        // spazio libero, si ricordava dov'era la finestra, e si mandavano
-        // «ridimensiona» e «sposta» coi conti nostri. Era la strada di quando
-        // sotto c'era un compositore che non sapeva farlo. Il nostro lo sa
-        // (`finestra_ingrandisci`): tiene lui lo stato, dice al programma
-        // «sei ingrandito», ricorda la misura di prima, e — la cosa che coi
-        // conti nostri mancava — fa tornare piccola sotto il puntatore una
-        // finestra ingrandita che si trascina. Con i pixel spostati a mano per
-        // lui la finestra era normale e grande, e trascinandola usciva dallo
+        // Il compositore sa farlo (`finestra_ingrandisci`): tiene lui lo
+        // stato, dice al programma «sei ingrandito», ricorda la misura di
+        // prima, e fa tornare piccola sotto il puntatore una finestra
+        // ingrandita che si trascina. Coi conti fatti qui, per lui la
+        // finestra era normale e grande, e trascinandola usciva dallo
         // schermo: visto il 27 settembre 2026 col gestore file.
         //
         // Senza «si» o «no» il compositore commuta: ingrandisce una finestra
@@ -723,10 +534,7 @@ QtObject {
 
     function minimize(address) {
         // Un'INTENZIONE e non un modo: come si riduce a icona lo sa
-        // `Compositore.riduci()`, e cambia da un compositore all'altro. Qui
-        // c'era «mandala nella scrivania speciale», che è la strada di
-        // Hyprland — e sotto il nostro compositore faceva sparire la finestra
-        // senza modo di riportarla indietro.
+        // `Compositore.riduci()`.
         if (address)
             Compositore.riduci(address, true);
         else if (windows.hasActive)
@@ -736,29 +544,11 @@ QtObject {
         refreshSoon.restart();
     }
 
-    /// Porta una finestra davanti E le dà il fuoco. Sono DUE cose, e per anni
-    /// qui ce n'era una sola.
-    ///
-    /// `focuswindow` sposta il fuoco: da quel momento i tasti vanno lì. Non
-    /// tocca l'ordine di sovrapposizione. Il risultato è una finestra che ha
-    /// il fuoco e sta dietro a un'altra — si scrive dentro qualcosa che non si
-    /// vede. Cliccando l'icona nella dock sembra semplicemente che non sia
-    /// successo niente.
-    ///
-    /// `alterzorder top` è il pezzo che mancava.
-    ///
-    /// ── QUELLO CHE `alterzorder` NON PUÒ FARE ────────────────────────────
-    ///
-    /// Hyprland disegna in quest'ordine: prima le finestre agganciate alla
-    /// griglia, POI tutte quelle libere. Sempre. Una finestra agganciata non
-    /// può stare davanti a una libera, qualunque cosa le si chieda — e non
-    /// c'è un'impostazione del compositore che lo cambi (cercata: non esiste).
-    ///
-    /// Quindi con un terminale libero che copre lo schermo, cliccare nella
-    /// dock un programma agganciato lo mette a fuoco ma resta dietro. Non è
-    /// un difetto di Minerva e non si risolve da qui: si risolve scegliendo
-    /// «finestre libere» nelle impostazioni, dove tutto sta in una pila sola
-    /// e l'ordine torna a essere una cosa che decidiamo noi.
+    /// Porta una finestra davanti E le dà il fuoco. Sono DUE cose: il fuoco
+    /// da solo non tocca l'ordine di sovrapposizione, e il risultato è una
+    /// finestra che ha il fuoco e sta dietro a un'altra — si scrive dentro
+    /// qualcosa che non si vede, e dalla dock sembra che non sia successo
+    /// niente.
     function focus(address) {
         if (!address)
             return;
@@ -767,21 +557,10 @@ QtObject {
         refreshSoon.restart();
     }
 
-    /// Massimizza o rimette a posto. Accetta un indirizzo, come tutti gli
-    /// altri: il pulsante sulla barra del titolo di una finestra QUALSIASI
-    /// deve agire su quella finestra, non su quella che ha il fuoco. Erano la
-    /// stessa cosa solo finché il fuoco seguiva sempre il clic — e con una
-    /// dock che agisce a distanza non è più vero.
-    /// Ingrandisce o rimette a posto. Senza indirizzo vale per la finestra
-    /// attiva.
-    ///
-    /// Qui c'era `fullscreenstate 2` (e `fullscreen 1` senza indirizzo), cioè
-    /// il «massimizza» di Hyprland — che prende TUTTO lo schermo, barra della
-    /// scrivania compresa. Il risultato era che lo stesso comando faceva due
-    /// cose diverse a seconda di dove lo si chiedeva: dal pulsante sulla barra
-    /// del titolo la finestra si fermava sotto la barra della scrivania, dal
-    /// menu della finestra la copriva. Adesso è la stessa cosa da tutte e due
-    /// le parti, perché è la stessa funzione.
+    /// Ingrandisce o rimette a posto. Accetta un indirizzo: il pulsante sulla
+    /// barra del titolo di una finestra QUALSIASI deve agire su quella
+    /// finestra, non su quella che ha il fuoco. Senza indirizzo vale per la
+    /// finestra attiva.
     function toggleMaximize(address) {
         var a = address || windows.activeAddress;
         if (a === "")
@@ -798,13 +577,6 @@ QtObject {
             return;
         refreshSoon.restart();
     }
-
-    // Qui c'era `toggleFloating()`, che affiancava o liberava la finestra
-    // attiva. Non c'è più perché non c'è più niente da commutare: in Minerva
-    // ogni finestra nasce libera e resta libera (vedi `core/WindowRules.qml`).
-    // Restava raggiungibile da due posti — il nome della finestra nella barra
-    // e il menu della finestra — e da lì si poteva affiancare una finestra in
-    // un ambiente che non sa più come rimetterla a posto.
 
     /// Riporta una finestra ridotta a icona sulla scrivania in uso.
     function restore(address) {
@@ -824,14 +596,11 @@ QtObject {
 
     // ── Aggiornamento ────────────────────────────────────────────────────
     //
-    // Si interroga dopo gli eventi del compositore, non a intervalli fissi:
-    // chiedere a Hyprland dieci volte al secondo se è cambiato qualcosa costa
-    // più di tutto il resto della shell messo insieme.
+    // Dopo un comando si richiede l'elenco, senza aspettare il prossimo invio
+    // del demone: così la dock e le barre seguono subito.
 
     property Timer _refreshSoon: Timer {
         id: refreshSoon
-        // Hyprland manda l'evento prima di aver finito di spostare la
-        // finestra: interrogarlo subito restituisce lo stato precedente.
         interval: 150
         onTriggered: windows.refresh()
     }
@@ -843,10 +612,7 @@ QtObject {
         onTriggered: {
             windows.refresh();
             // E lo spazio utile, che alla nascita di questo singleton era
-            // ancora quello di uno schermo senza barra: vedi il perché sopra
-            // `_riletturaSpazio`. Un secondo e due decimi è tempo più che
-            // sufficiente perché la barra abbia riservato il proprio posto, e
-            // la rilettura periodica comincia solo al quinto secondo.
+            // ancora quello di uno schermo senza barra: vedi sopra.
             windows.refreshUsable();
         }
     }

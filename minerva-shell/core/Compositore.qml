@@ -4,29 +4,22 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Compositore — L'UNICO file di Minerva che conosce le parole di Hyprland.
+// Compositore — L'unico file di Minerva che parla con il compositore.
 //
 // ── Perché esiste ────────────────────────────────────────────────────────
 //
-// Misurato l'11 agosto 2026: centosei chiamate a `Hyprland.dispatch` e
-// `hyprctl` sparse in venticinque file, dodici dei quali importavano
-// `Quickshell.Hyprland` di persona. Il 29 luglio si era deciso il contrario —
-// una porta sola — e nel frattempo il legame era CRESCIUTO del quaranta per
-// cento, perché una regola che non è scritta da nessuna parte non la rispetta
-// nessuno.
-//
-// Non è una questione di eleganza. È la causa di una classe di difetti veri:
-// lo stesso 29 luglio c'erano **tre «ingrandisci» diversi** — dalla barra del
-// titolo la finestra si fermava sotto la barra della scrivania, dal menu della
-// finestra la copriva — perché la stessa intenzione era scritta tre volte, in
-// tre punti che non si conoscevano.
+// Ad agosto 2026 i comandi al compositore erano sparsi in venticinque file,
+// e la stessa intenzione era scritta più volte: c'erano **tre «ingrandisci»
+// diversi**, uno si fermava sotto la barra della scrivania e un altro la
+// copriva, perché i tre punti non si conoscevano. Da allora c'è una porta
+// sola, ed è questa.
 //
 // ── La divisione del lavoro ──────────────────────────────────────────────
 //
-//   Compositore   TRADUCE. Sa come si dice in Hyprland «porta questa finestra
-//                 davanti». Non sa cosa sia una finestra ridotta a icona, non
-//                 tiene elenchi, non ha memoria. Cambiando compositore si
-//                 riscrive QUESTO file, e nient'altro.
+//   Compositore   TRADUCE. Sa come si dice a `minerva-wayland` «porta questa
+//                 finestra davanti», sul canale testuale di `MINERVA_CANALE`.
+//                 Non sa cosa sia una finestra ridotta a icona, non tiene
+//                 elenchi, non ha memoria.
 //
 //   Windows       DECIDE. È la politica di Minerva: cosa vuol dire
 //                 «ingrandisci» (lo spazio utile meno la cornice), dove nasce
@@ -39,24 +32,6 @@ import Quickshell.Io
 Singleton {
     id: comp
 
-    // ══════════════════════════════════════════════════════════════════════
-    // Il secondo compositore
-    // ══════════════════════════════════════════════════════════════════════
-    //
-    // Da oggi Minerva parla con DUE compositori: Hyprland, e il nostro
-    // `minerva-wayland`. Questo file è già l'unico posto che sa come si dicono
-    // le cose a un compositore, quindi è anche l'unico che deve cambiare — che
-    // è tutto il motivo per cui esiste (vedi il commento in cima).
-    //
-    // ── Perché non due file, uno per compositore ─────────────────────────
-    //
-    // Perché per un mese ci saranno tutti e due, e due file divergono: si
-    // corregge un verbo in uno e ci si accorge dell'altro tre settimane dopo,
-    // quando si riavvia nell'altro compositore. Con una riga sola per verbo la
-    // differenza si vede leggendo.
-    //
-    // Quando Hyprland uscirà di scena (Tappa 7) si toglie il ramo, non il file.
-
     /// Vero quando sotto c'è minerva-wayland. Lo dice lui stesso mettendo
     /// `MINERVA_CANALE` nell'ambiente dei programmi che avvia.
     readonly property string percorsoCanale: {
@@ -68,47 +43,24 @@ Singleton {
     }
     readonly property bool nostro: comp.percorsoCanale !== ""
 
-    // ── E il terzo caso, che per un anno non è esistito ──────────────────
+    // ── Fuori da Minerva ─────────────────────────────────────────────────
     //
-    // Questo file ha sempre avuto due strade: il nostro compositore, oppure
-    // Hyprland. Non ne aveva una terza — e la terza è **tutte le altre
-    // scrivanie del mondo**: COSMIC, GNOME, KDE, sway.
-    //
-    // Sotto una di quelle, `nostro` è falso e si prendeva il ramo di Hyprland,
-    // cioè `hyprctl`, cioè un programma che lì non esiste. Le nostre app si
-    // aprivano, si vedevano, e i pulsanti della loro barra del titolo **non
-    // facevano niente**: niente riduci, niente ingrandisci, niente schermo
-    // intero. Nessun errore, nessun avviso: i comandi partivano verso nessuno.
-    //
-    // Era la causa strutturale di «nemmeno le nostre app su KDE si aprivano»,
-    // e la richiesta di Giacomo del 30 agosto 2026: «le nostre app funzionanti
-    // su altri desktop environment di qualsiasi tipo».
-    //
-    // ── Come si esce ─────────────────────────────────────────────────────
-    //
-    // Non imparando a parlare con ognuna di loro — sarebbe una porta nuova per
-    // ogni scrivania, per sempre. Si usa quello che **il protocollo Wayland
-    // dà a ogni finestra su sé stessa**: `xdg_toplevel` ha `set_minimized`,
-    // `set_maximized` e `set_fullscreen`, e li capiscono tutti i compositori
-    // perché sono il protocollo. Il precedente in casa c'è già ed è ottimo:
-    // il trascinamento della barra usa `startSystemMove()` per la stessa
-    // ragione, e infatti funziona ovunque senza che nessuno l'abbia adattato.
-    //
-    // Quello che si perde fuori da Minerva è solo ciò che è NOSTRO: «riduci»
-    // che va nel pannello delle finestre ridotte, «ingrandisci» che si ferma
-    // allo spazio utile invece di coprire la barra. Cose che là non hanno
-    // senso, perché là la barra è di qualcun altro.
+    // Le nostre app girano anche su COSMIC, GNOME, KDE, sway: là `nostro` è
+    // falso e non c'è nessuno a cui chiedere. Lì una finestra comanda **sé
+    // stessa** con quello che il protocollo dà a tutti: `xdg_toplevel` ha
+    // `set_minimized`, `set_maximized` e `set_fullscreen`, come il
+    // trascinamento della barra usa `startSystemMove()`. Si perde solo ciò
+    // che è nostro: «riduci» nel pannello delle ridotte, «ingrandisci» che si
+    // ferma allo spazio utile. Richiesta di Giacomo del 30 agosto 2026: «le
+    // nostre app funzionanti su altri desktop environment di qualsiasi tipo».
     /// Vero quando c'è un compositore che ascolta i comandi di Minerva.
     ///
     /// Falso su qualunque altra scrivania — ed è lì che le nostre finestre
     /// devono comandare **sé stesse** invece di chiedere a qualcuno.
     ///
-    /// Fino al 1 settembre 2026 era `nostro || c'è Hyprland`. Adesso il
-    /// compositore è uno solo, e restano due nomi per la stessa cosa perché
-    /// dicono due cose diverse a chi legge: `nostro` è «il canale c'è»,
-    /// `comandabile` è «posso chiedere invece di arrangiarmi». Le nostre
-    /// finestre girano anche su scrivanie che non sono la nostra, e là questa
-    /// risposta è ancora no.
+    /// Oggi vale quanto `nostro`; restano due nomi perché dicono due cose
+    /// diverse a chi legge: `nostro` è «il canale c'è», `comandabile` è
+    /// «posso chiedere invece di arrangiarmi».
     readonly property bool comandabile: comp.nostro
 
     /// Il canale è APERTO davvero: c'è qualcuno dall'altra parte.
@@ -335,15 +287,14 @@ Singleton {
             comp.risposta(quale, String(riga));
         if (quale === "scrivanie" && String(riga).indexOf("ok [") === 0)
             comp._scrivanieNostre = comp.scrivanieDaNostro(riga.substring(3));
-        // Gli schermi escono dallo stesso segnale con cui esce la risposta di
-        // `hyprctl`: chi ascolta non deve sapere da dove è arrivata.
+        // Le risposte che servono a qualcuno escono dal segnale `risposta`,
+        // senza il «ok » davanti: chi ascolta riceve solo il dato.
         if (quale === "schermi" && String(riga).indexOf("ok [") === 0)
             comp.risposta("schermi", riga.substring(3));
         if (quale === "dispositivi" && String(riga).indexOf("ok {") === 0)
             comp.risposta("dispositivi", riga.substring(3));
-        // «ok 1211, 94» → «1211, 94», che è parola per parola quello che
-        // risponde `hyprctl cursorpos`. Chi legge — il menù del tasto destro
-        // — non deve sapere da quale dei due compositori sia arrivata.
+        // «ok 1211, 94» → «1211, 94»: il menù del tasto destro legge le
+        // due coordinate e basta.
         if (quale === "puntatore" && String(riga).indexOf("ok ") === 0)
             comp.risposta("puntatore", riga.substring(3));
         if (quale === "risparmio" && String(riga).indexOf("ok {") === 0)
@@ -546,8 +497,7 @@ Singleton {
 
     // ── Le scorciatoie, mandate al compositore ───────────────────────────
     //
-    // Sotto Hyprland i tasti li registra Hyprland leggendo il file che
-    // generiamo noi. minerva-wayland non legge nessun file — di proposito: due
+    // minerva-wayland non legge nessun file di scorciatoie — di proposito: due
     // parser per `config/scorciatoie.minerva` sono due parser che un giorno
     // non sono più d'accordo. Le riceve già masticate dal demone, e a
     // portargliele è la shell, che è quella che ha il canale in mano.
@@ -601,8 +551,8 @@ Singleton {
         return fuori;
     }
 
-    /// Come si nomina una finestra. Hyprland vuole `address:0x…`; un altro
-    /// compositore vorrà altro, e chi chiama non deve saperlo.
+    /// Come si nomina una finestra al compositore: `address:0x…`, e chi
+    /// chiama non deve saperlo.
     ///
     /// Si accettano tutte e due le forme, perché tutte e due esistono già nel
     /// codice: l'indirizzo nudo (`0x55…`) e il selettore intero
@@ -683,19 +633,15 @@ Singleton {
                       Math.round(larghezza), Math.round(altezza)]);
     }
 
-    // ── Schermo intero, e i suoi tre significati ─────────────────────────
+    // ── Schermo intero e ingrandita ──────────────────────────────────────
     //
-    // Hyprland ne ha tre, e confonderli è costato giornate:
+    // Sono due stati del compositore, e confonderli è costato giornate:
     //
-    //   fullscreen 0            schermo intero VERO: il compositore toglie di
-    //                           mezzo tutto, barra della scrivania compresa.
-    //   fullscreenstate 1 -1    «ingrandito» per il compositore: rispetta lo
-    //                           spazio riservato, e quindi la cornice.
-    //   fullscreenstate 0 1     non cambia niente sullo schermo: DICE al
-    //                           programma che è ingrandito, e basta. Serve per
-    //                           i programmi che si disegnano la cornice da sé
-    //                           (Chrome, GNOME) e che altrimenti mostrano il
-    //                           pulsante sbagliato.
+    //   schermointero   copre tutto, barra della scrivania compresa.
+    //   ingrandisci     occupa lo spazio utile: la barra e la dock restano.
+    //
+    // Sotto Hyprland ce n'era un terzo, «dillo solo al programma»: vedi più
+    // giù, dove c'era `dilloAlProgramma`.
 
     /// Schermo intero vero. `acceso` falso lo toglie.
     function schermoIntero(indirizzo, acceso) {
@@ -706,7 +652,6 @@ Singleton {
             comp._nostro("schermointero", [chi, 1]);
     }
 
-    /// Commuta lo schermo intero della finestra indicata (o dell'attiva).
     /// Ingrandisce, o rimette com'era, una finestra: lo stato è del
     /// compositore (`finestra_ingrandisci`). Senza `si` commuta.
     function ingrandisci(indirizzo, si) {
@@ -716,6 +661,7 @@ Singleton {
         comp._nostro("ingrandisci", argomenti);
     }
 
+    /// Commuta lo schermo intero della finestra indicata (o dell'attiva).
     function commutaSchermoIntero(indirizzo) {
         comp._nostro("schermointero",
                      [indirizzo ? comp._selettore(indirizzo) : "attiva"]);
@@ -753,38 +699,18 @@ Singleton {
 
     // ── Scrivanie ────────────────────────────────────────────────────────
 
-    // ── Su quale scrivania siamo, e perché non basta chiederlo ───────────
+    // ── Su quale scrivania siamo ─────────────────────────────────────────
     //
-    // `Hyprland.focusedWorkspace` è la risposta giusta, ma arriva TARDI: si
-    // popola con `refreshWorkspaces()`, che è asincrona. Fra il cambio di
-    // scrivania e la risposta passano dei decimi di secondo, e in quei decimi
-    // questa proprietà dice ancora la scrivania di prima.
+    // Due strade, come per la finestra attiva (`Windows.activeAddress`):
     //
-    // Non è teoria. Il 25 agosto 2026, misurato fotografando lo schermo subito
-    // dopo `workspace 2`: la barra del titolo di Konsole **restava disegnata
-    // sopra lo sfondo della scrivania vuota** per un tempo fra i 150 e i 550
-    // millisecondi. `spine/TitleBars.qml` nasconde le barre delle finestre
-    // che non sono su questa scrivania, e per farlo confronta con questo
-    // numero: finché il numero è vecchio, le barre restano. Sono le parole di
-    // Giacomo, «rimangono dei residui».
+    //  · l'EVENTO `evento scrivania`, che porta il numero e arriva subito;
+    //  · l'ELENCO, la risposta a `scrivanie`, che ci mette un attimo ma c'è
+    //    sempre e rimette a posto le cose se un evento si perde.
     //
-    // C'era anche una seconda metà del difetto, peggiore: a chiamare
-    // `aggiornaScrivanie()` era `spine/Workspaces.qml`, cioè i pallini sulla
-    // barra. Con la barra nascosta o non caricata **nessuno** la chiamava, e
-    // il numero non si aggiornava mai.
-    //
-    // ── Le due strade, come per la finestra attiva ───────────────────────
-    //
-    // È lo stesso schema di `Windows.activeAddress`, e per la stessa ragione:
-    //
-    //  · l'EVENTO, che porta il numero e arriva subito;
-    //  · l'ELENCO, che ci mette un attimo ma c'è sempre e rimette a posto le
-    //    cose se un evento si perde.
-    //
-    // L'evento vince finché l'elenco non lo raggiunge; quando l'elenco cambia,
-    // l'evento si dimentica e si torna alla sorgente autorevole. Se i due non
-    // fossero d'accordo vincerebbe comunque il più recente, che è quello che
-    // si vuole.
+    // Chiedere soltanto l'elenco non basta: il 25 agosto 2026, fotografando
+    // lo schermo subito dopo il cambio di scrivania, le barre del titolo della
+    // scrivania di prima restavano disegnate fra i 150 e i 550 millisecondi,
+    // il tempo della risposta. Le parole di Giacomo: «rimangono dei residui».
 
     /// La scrivania detta dall'ultimo evento del compositore, o 0.
     property int _scrivaniaDaEvento: 0
@@ -793,12 +719,7 @@ Singleton {
     property var _scrivanieNostre: []
 
     /// La scrivania in uso, o 1 se il compositore non l'ha ancora detto.
-    ///
-    /// Le due sorgenti valgono per tutti e due i compositori, ed è il punto:
-    /// l'EVENTO arriva subito, l'ELENCO ci mette un attimo ma c'è sempre.
-    /// Sotto minerva-wayland l'evento è `evento scrivania` e l'elenco è la
-    /// risposta a `scrivanie`; sotto Hyprland sono `workspacev2` e
-    /// `focusedWorkspace`. Chi legge non deve saperlo.
+    /// Vince l'evento finché l'elenco non lo raggiunge.
     readonly property int scrivaniaAttiva: {
         if (comp._scrivaniaDaEvento > 0)
             return comp._scrivaniaDaEvento;
@@ -808,18 +729,14 @@ Singleton {
         return 1;
     }
 
-    /// Il suo NOME, che in Hyprland può non essere un numero
-    /// (`special:minimized` è una scrivania a tutti gli effetti).
-    readonly property string nomeScrivaniaAttiva: {
-        // In minerva-wayland una scrivania È il suo numero: non ci sono nomi,
-        // e non c'è la scrivania di servizio dei ridotti — «ridotta» qui è uno
-        // stato della finestra, non un posto dove mandarla.
-        return String(comp.scrivaniaAttiva);
-    }
+    /// Il suo nome. In minerva-wayland una scrivania È il suo numero, e
+    /// non c'è una scrivania di servizio per le ridotte: «ridotta» è uno
+    /// stato della finestra, non un posto dove mandarla.
+    readonly property string nomeScrivaniaAttiva: String(comp.scrivaniaAttiva)
 
     /// Tutte le scrivanie che esistono adesso, come `{ id, nome }`. Ridotte a
     /// questi due campi di proposito: chi le disegna non deve poter dipendere
-    /// da com'è fatto l'oggetto di Hyprland.
+    /// da com'è fatta la risposta del compositore.
     readonly property var scrivanie: {
         comp._scosse;
         return comp._scrivanieNostre;
@@ -868,32 +785,13 @@ Singleton {
     //
     // Le intenzioni qui sotto traducono quello che Minerva CHIEDE. Questa
     // traduce il verso opposto: la forma in cui il compositore descrive una
-    // finestra.
-    //
-    // Stava in `core/Windows.qml`, ed era l'ultimo pezzo di vocabolario di
-    // Hyprland fuori da questo file: `at`, `size`, `class`, `address`,
-    // `focusHistoryID`, `fullscreenClient` sono nomi suoi. La divisione
-    // dichiarata da questo progetto è «Compositore **traduce**, Windows
-    // **decide**», e finché la forma della risposta si leggeva di là la
-    // regola era vera a metà: cambiando compositore i file da riscrivere
-    // erano due, non uno.
-
-    // ── Gli schermi, e lo stesso bivio ───────────────────────────────────
-    //
-    // Stava in `core/Windows.qml`, e leggeva `reserved`, `focused`, `width` —
-    // nomi di Hyprland — con la stessa incoerenza per cui la lettura delle
-    // finestre è stata spostata qui: la regola dice «Compositore traduce,
-    // Windows decide», e finché la forma degli schermi si leggeva di là erano
-    // due i file da riscrivere per cambiare compositore.
+    // finestra, e degli schermi. Stavano in `core/Windows.qml`: qui,
+    // perché «Compositore traduce, Windows decide».
 
     /// Uno schermo, come lo conosce Minerva: `{ id, nome, attivo, x, y, w, h,
     /// sx, sy, sw, sh }`, dove `x,y,w,h` è lo spazio UTILE e `sx,sy,sw,sh` il
     /// contorno vero — barre comprese.
     function schermoDaCompositore(m, indice) {
-        return comp._schermoDaNostro(m, indice);
-    }
-
-    function _schermoDaNostro(m, indice) {
         // Già in pixel logici e già sottratto: il compositore manda il
         // rettangolo utile invece delle quattro zone riservate, perché quel
         // conto lo fa comunque per decidere dove nasce una finestra.
@@ -912,13 +810,16 @@ Singleton {
         };
     }
 
-
-    /// Da come le descrive **minerva-wayland**, a come le conosce Minerva.
+    /// Una finestra, da come la descrive minerva-wayland (`finestre`) a come
+    /// la conosce Minerva.
     ///
-    /// I nomi sono già in italiano perché il compositore è nostro e non aveva
-    /// motivo di parlare inglese. Restano comunque una traduzione: `posto` non
-    /// è `stack` per caso, ed è qui che si dice che sono la stessa cosa.
-    function _finestraDaNostro(c) {
+    /// Ogni campo è una TRADUZIONE, non una decisione: cosa voglia dire
+    /// «ingrandita», quale finestra sia nascosta e cosa farne lo decide
+    /// `core/Windows.qml`. I nomi del compositore sono già in italiano, ma
+    /// restano una traduzione: `posto` non è `stack` per caso, ed è qui che
+    /// si dice che sono la stessa cosa.
+    function finestraDaCompositore(c) {
+        c = c || {};
         var titolo = c.titolo || c.classe || "";
         if (titolo.length > 90)
             titolo = c.classe || titolo;
@@ -930,49 +831,26 @@ Singleton {
             "appClass": c.classe || "",
             "minimized": c.ridotta === true,
             // In minerva-wayland il tiling non c'è: ogni finestra galleggia.
-            // Non è un ripiego — è la scelta di Minerva, presa a luglio e
-            // scritta in `minerva-finestre-modi`. Il compositore nuovo la
-            // eredita, e quindi non ha un bit da mandare.
+            // Non è un ripiego — è la scelta di Minerva, presa a luglio.
             "floating": true,
             // `posto` è già l'ordine di sovrapposizione: 0 la finestra
-            // attiva. In Hyprland lo stesso numero si chiama
-            // `focusHistoryID` e va DEDOTTO; qui l'elenco è la pila.
+            // attiva.
             "stack": c.posto === undefined ? 9999 : c.posto,
             "fullscreen": c.schermoIntero === true,
-            // Il modo grezzo esiste perché Hyprland ne ha tre. Qui i tre stati
-            // sono due bit separati, e si ricompongono nella stessa scala per
-            // non obbligare chi legge a conoscerne due.
+            // I due bit del compositore in una scala sola: 0 normale,
+            // 1 ingrandita, 2 schermo intero.
             "modoSchermo": c.schermoIntero === true ? 2
                          : (c.ingrandita === true ? 1 : 0),
-            // Fino al 25 agosto qui c'era scritto `1`, perché le scrivanie in
-            // minerva-wayland non esistevano. Adesso esistono, e questo numero
-            // è quello che dice a `spine/TitleBars.qml` quali barre disegnare:
-            // sbagliarlo vuol dire la barra di una finestra che sta altrove
-            // disegnata sopra lo sfondo di questa.
             "workspace": c.scrivania || 1,
             "x": c.x || 0, "y": c.y || 0,
             "w": c.larghezza || 0, "h": c.altezza || 0
         };
     }
 
-    /// Da come le descrive **Hyprland**, a come le conosce Minerva.
-    ///
-    /// Ogni campo qui sotto è una TRADUZIONE, non una decisione: cosa voglia
-    /// dire «ingrandita», quale finestra sia nascosta e cosa farne lo decide
-    /// `core/Windows.qml`, che riceve già roba in lingua nostra.
-    function finestraDaCompositore(c) {
-        // Una finestra come la manda il nostro compositore (`finestre`). Qui
-        // c'era anche la lettura del formato di Hyprland — `at`, `size`,
-        // `focusHistoryID`, «ridotta» come scrivania di servizio — per il mese
-        // in cui i compositori erano due. Tolta il 27 settembre 2026.
-        return comp._finestraDaNostro(c || {});
-    }
-
     // ── Le intenzioni ────────────────────────────────────────────────────
     //
     // Qui, e in nessun altro posto, sta la tabella fra quello che Minerva
-    // vuole e il nome che Hyprland gli dà. Chi cambia compositore riscrive
-    // QUESTE funzioni: chi le chiama non si accorge di niente.
+    // vuole e il verbo del compositore: chi le chiama non lo sa.
     //
     // I nomi sono quello che si vuole ottenere, non come si chiama la
     // manopola.
@@ -980,9 +858,7 @@ Singleton {
     // Le animazioni del compositore non hanno un verbo loro: l'interruttore
     // generale (`desktop.animations`) porta a zero l'elastico delle finestre
     // (`shell.qml`, `WindowRules.elastico`), e i movimenti liquidi della
-    // Tappa 3 si regoleranno da lì. Qui c'erano sei funzioni che non
-    // mandavano niente — gruppi, animazioni «avanzate», scia — con la tabella
-    // dei nomi delle animazioni di Hyprland: tolte il 27 settembre 2026.
+    // Tappa 3 si regoleranno da lì.
 
     /// L'ingrandimento della lente attorno al puntatore. 1 = nessuno.
     function ingrandimentoPuntatore(fattore) {
@@ -1028,13 +904,6 @@ Singleton {
         comp._nostro("effetto", [m, a.toFixed(2)]);
     }
 
-    // Qui c'era `sfocatura(accesa, misura, passaggi)`, i tre numeri di
-    // Hyprland. Se n'è andata col resto della catena: nessuno la chiamava più,
-    // e un buco che non chiama nessuno non è la memoria di una strada — è una
-    // strada in meno da leggere. Il suo posto l'ha preso `effetto()`, e la
-    // sfocatura vera sarà un passaggio di rendering dentro minerva-wayland,
-    // non tre numeri da mandare a qualcun altro.
-
     /// Il colore del bordo della finestra attiva.
     function coloriBordo(attivo) {
         // Da noi la cornice è la barra del titolo, e il suo colore si
@@ -1052,10 +921,8 @@ Singleton {
     /// L'aspetto della barra del titolo nativa: altezza, lato dei pulsanti,
     /// colore del fondo e del testo. `undefined` per non toccarne una.
     ///
-    /// Sotto Hyprland non c'è: la barra la disegna il plugin, con le sue
-    /// manopole. Qui NON si tace — si dice quale pezzo non ha una strada —
-    /// perché un pannello che scrive e non succede niente è il difetto che
-    /// questa funzione è nata per chiudere.
+    /// È nata per chiudere un difetto: un pannello che scriveva queste
+    /// manopole senza che succedesse niente.
     function aspettoBarra(alta, lato, fondo, testo) {
         comp._nostro("aspetto", [
             comp._numeroO(alta),
@@ -1071,9 +938,7 @@ Singleton {
     ///   periodo  millisecondi per un giro intero dello spettro
     ///   colore   la tinta del modo «fisso»
     ///
-    /// Sotto Hyprland era `general:col.active_border`, e ci arrivava
-    /// `coloriBordo` qui sopra. Sotto minerva-wayland la cornice è l'anello di
-    /// sei pixel che serve a prendere la finestra per ridimensionarla: c'era
+    /// La cornice è l'anello di sei pixel che serve a prendere la finestra per ridimensionarla: c'era
     /// già, ed era trasparente. Il modo «gira» lo anima il compositore, non
     /// noi — dodici passi al secondo mandati sul canale sarebbero dodici
     /// sveglie al secondo della shell, che è esattamente ciò che si è passato
@@ -1244,7 +1109,7 @@ Singleton {
     // sapesse farlo — `main.c` chiama `libinput_device_config_tap_set_enabled`
     // — ma perché non gliel'aveva detto nessuno.
     //
-    // Sotto Hyprland le manopole arrivano da un FILE, `minerva-input.conf`,
+    // Sotto Hyprland le manopole arrivavano da un FILE, `minerva-input.conf`,
     // letto al suo avvio. minerva-wayland non legge nessun file: le riceve sul
     // canale, e l'unico posto che gliele mandava era la pagina Impostazioni,
     // cioè **solo se aprivi quel pannello e toccavi un cursore**. Appena
@@ -1262,18 +1127,8 @@ Singleton {
     // progetto ha già pagato una volta: «non si agisce sui valori di ripiego».
     // Quindi si aspettano tutte e due le cose — il canale aperto E le
     // impostazioni vere — in qualunque ordine arrivino.
-    //
-    // ── Vale per TUTTI E DUE i compositori, di proposito ─────────────────
-    //
-    // Sotto Hyprland la chiama il pannello Impostazioni, ed è la strada per
-    // cui una manopola girata ha effetto SUBITO invece che al prossimo avvio.
-    // Farla uscire qui su `!nostro` sarebbe stato un rimedio che rompeva
-    // l'altro compositore — chi la chiama automaticamente all'avvio, invece,
-    // guarda `nostro`, perché là il file lo legge già Hyprland.
+
     /// Le app che la barra del titolo se la disegnano da sole.
-    ///
-    /// Solo per il nostro compositore: sotto Hyprland la stessa lista la legge
-    /// il plugin delle barre, che è un altro programma e non passa di qui.
     ///
     /// ── Perché deve viaggiare, invece di stare scritta là ────────────────
     ///
@@ -1393,9 +1248,7 @@ Singleton {
         function onImpostazioniArrivateChanged() {
             // Due condizioni, e servono tutte e due.
             //
-            // `nostro`: sotto Hyprland le stesse manopole arrivano già da
-            // `minerva-input.conf`, e rifarle qui sarebbero quattro `hyprctl`
-            // a ogni avvio per niente.
+            // `nostro`: senza il canale non c'è nessuno a cui mandarle.
             //
             // `scrivania`: questo file sta dentro OGNI nostra applicazione, e
             // le impostazioni arrivano a tutte. Senza questa parola, aprire il
@@ -1441,12 +1294,9 @@ Singleton {
     ///
     /// ── La rotazione si dice in gradi, e non è un dettaglio ─────────────
     ///
-    /// Hyprland la chiama `transform` e la conta da 0 a 7 — dove da 4 in su
-    /// sono le versioni specchiate, che non sono rotazioni affatto. Il nostro
-    /// compositore la vuole in gradi, come `schermi.conf`. Chi chiede «ruota
-    /// di 90» non deve sapere né l'uno né l'altro: qui entra un numero di
-    /// gradi, e la traduzione sta in questo file, che è il posto dichiarato
-    /// per le traduzioni.
+    /// Il compositore la vuole in gradi, come `schermi.conf`: niente codici
+    /// da 0 a 7 dove da 4 in su ci sono le versioni specchiate, che non sono
+    /// rotazioni affatto.
     ///
     /// `x` e `y` si possono omettere: vuol dire «mettilo dove ci sta».
     function schermo(nome, modo, scala, gradi, x, y, prova) {
@@ -1487,19 +1337,12 @@ Singleton {
 
     // ── Gli schermi, tradotti una volta sola ─────────────────────────────
     //
-    // La pagina Schermi delle Impostazioni parlava il vocabolario di Hyprland
-    // a mano: `width`, `refreshRate`, `availableModes`, `transform`,
-    // `disabled`. Sotto il nostro compositore non trovava nessuno di quei
-    // nomi, e mostrava una pagina vuota — cioè peggio di un errore, perché
-    // sembrava che non ci fosse nessuno schermo.
-    //
-    // Da qui in poi la pagina vede UNA forma sola:
+    // La pagina Schermi delle Impostazioni vede UNA forma sola:
     //
     //     { nome, descrizione, larghezza, altezza, hz, scala, gradi,
     //       x, y, acceso, attivo, modi: ["1920x1080@60", …] }
     //
-    // che è il vocabolario di Minerva. La differenza fra i due compositori
-    // finisce qui dentro, come tutte le altre.
+    // che è il vocabolario di Minerva.
     function schermiDaTesto(testo) {
         var grezzi = [];
         try {
@@ -1539,17 +1382,14 @@ Singleton {
         };
     }
 
-    // ── Chi è il touchpad, secondo i due compositori ─────────────────────
+    // ── Chi è il touchpad ────────────────────────────────────────────────
     //
     // `shell.qml` deve saperne il NOME per poterlo spegnere: è il tasto Fn
     // del portatile, e senza il nome quel tasto non fa niente.
     //
-    // Le due risposte lo dicono in due modi, e uno dei due è migliore.
-    // Hyprland manda un elenco `mice` e il touchpad si riconosce **dal
-    // nome** — un'ipotesi, e su questo portatile è già costata (vedi la
-    // memoria `minerva-touchpad-acer`). Il nostro compositore lo chiede a
-    // libinput: «questo dispositivo sa contare le dita?». Non è
-    // un'euristica, è la domanda giusta.
+    // Il compositore lo chiede a libinput: «questo dispositivo sa contare le
+    // dita?». Non si indovina dal nome, che su questo portatile è già
+    // costato (vedi la memoria `minerva-touchpad-acer`).
     //
     // Torna "" se non c'è nessun touchpad, che su un fisso è la verità.
     function touchpadDaTesto(testo) {
@@ -1605,17 +1445,11 @@ Singleton {
     /// La tinta di tutto lo schermo, in tre moltiplicatori: 1, 1, 1 è il
     /// neutro. È l'altra metà della luce notturna.
     ///
-    /// ── Due strade, e non è un ripiego ──────────────────────────────────
-    ///
-    /// Hyprland ha uno shader su tutto lo schermo; il nostro compositore no,
-    /// e non è una mancanza da colmare: per **scaldare i colori** una tabella
-    /// è la cosa giusta e costa meno — è la strada di `gammastep`, e quella
-    /// del pannello colori di un monitor da vent'anni.
-    ///
-    /// I tre numeri sono gli stessi: li calcola `core/LuceNotturna.qml` dai
-    /// gradi Kelvin, e sotto Hyprland finiscono dentro lo shader. Rifare il
-    /// conto qui vorrebbe dire due conti per la stessa cosa, cioè due tinte
-    /// diverse il giorno che uno dei due cambia.
+    /// Il compositore non ha uno shader su tutto lo schermo, e non è una
+    /// mancanza: per **scaldare i colori** una tabella è la cosa giusta e
+    /// costa meno — è la strada di `gammastep`, e quella del pannello colori
+    /// di un monitor da vent'anni. I tre numeri li calcola
+    /// `core/LuceNotturna.qml` dai gradi Kelvin.
     function coloreSchermo(r, g, b) {
         if (!comp.nostro)
             return;
@@ -1678,31 +1512,10 @@ Singleton {
 
     /// Chiude la sessione grafica.
     ///
-    /// Passava solo da `hyprctl dispatch exit`: sotto il nostro compositore
-    /// non c'è nessun `hyprctl`, quindi «Esci» non faceva niente — e non
-    /// c'era nemmeno un errore da leggere, perché il comando non esisteva
-    /// proprio. Una sessione da cui non si esce è una sessione che si chiude
-    /// col tasto di accensione.
     function esciDallaSessione() {
         comp._nostro("esci", []);
     }
 
-    // ── Una coda, e non un processo riusato ──────────────────────────────
-    //
-    // Qui c'era `_riga.command = …; _riga.running = true`, e sembrava
-    // innocuo. Non lo è: **due chiamate ravvicinate perdono la prima.** Il
-    // secondo `command` sovrascrive il primo prima che parta, e non lo dice
-    // nessuno — il valore semplicemente non viene applicato.
-    //
-    // Succedeva già: `settings/sections/Display.qml` imposta il modo dello
-    // schermo e SUBITO DOPO la rotazione. Sarebbe rimasta la rotazione, e il
-    // modo sarebbe stato ignorato una volta su due, a seconda di come
-    // cadevano i tempi. Trovato l'11 agosto 2026 rileggendo questo file per
-    // portarci dentro le ultime chiamate.
-    //
-    // La coda risolve anche il caso vero delle Impostazioni della tastiera:
-    // sette valori applicati uno dopo l'altro, in ordine, senza un
-    // `hyprctl reload` che rileggerebbe tutto il resto.
     // ── Domande ──────────────────────────────────────────────────────────
     //
     // Le cose che si chiedono al compositore e che nessun altro sa.
@@ -1714,20 +1527,12 @@ Singleton {
     signal risposta(string cosa, string testo)
 
     function chiedi(cosa) {
-        // ── Gli schermi, sotto il nostro compositore ─────────────────────
-        //
-        // `hyprctl -j monitors` lì dentro non risponde a nessuno: il comando
-        // non esiste. La pagina Schermi restava vuota, ed è il modo peggiore
-        // di sbagliare — «nessuno schermo rilevato» su un computer che uno
-        // schermo ce l'ha davanti.
         if (cosa === "schermi") {
             comp._nostro("schermi", []);
             return;
         }
-        // Stessa storia dei monitor: `hyprctl -j devices` lì dentro non
-        // risponde a nessuno, e il pannello «Tastiera e mouse» resta senza
-        // l'elenco dei dispositivi — cioè senza la levetta del touchpad, che
-        // ha bisogno del suo nome.
+        // L'elenco dei dispositivi serve al pannello «Tastiera e mouse»:
+        // la levetta del touchpad ha bisogno del suo nome.
         if (cosa === "dispositivi") {
             comp._nostro("dispositivi", []);
             return;
@@ -1735,11 +1540,8 @@ Singleton {
         // ── Dov'è il puntatore ───────────────────────────────────────────
         //
         // Il menù del tasto destro si apre dove sta il dito, e per saperlo lo
-        // chiede. `hyprctl cursorpos` sotto il nostro compositore non è
-        // nessuno: la risposta non arrivava, e il menù cadeva sul suo ripiego
-        // — **in alto a sinistra**, lontano dal punto in cui l'avevi chiesto.
-        // Il verbo risponde nello stesso formato, apposta: chi legge è lo
-        // stesso pezzo di interfaccia per tutti e due i compositori.
+        // chiede. Senza risposta cadrebbe sul suo ripiego, **in alto a
+        // sinistra**, lontano dal punto in cui l'avevi chiesto.
         if (cosa === "puntatore") {
             comp._nostro("puntatore", []);
             return;
@@ -1770,17 +1572,14 @@ Singleton {
     /// Una scorciatoia di quelle che tocca alla shell: `cheatsheet`,
     /// `launcher`, `control`… Il nome è quello scritto in
     /// `config/scorciatoie.minerva` dopo `minerva:`, ed è lo stesso che
-    /// `core/Scorciatoia.qml` mette in `name`. Sotto Hyprland la stessa cosa
-    /// arriva per `GlobalShortcut`; qui per il canale.
+    /// `core/Scorciatoia.qml` mette in `name`. Arriva per il canale.
     signal scorciatoiaPremuta(string nome)
 
     /// Il coperchio del portatile si è chiuso (o riaperto).
     ///
     /// Solo il FATTO. Cosa farne — sospendere, bloccare, niente — lo decide
-    /// chi ascolta, leggendo `power.lidAction`. Sotto Hyprland lo stesso fatto
-    /// arriva per un'altra strada (`bindl = , switch:on:Lid Switch`), e per
-    /// questo il segnale sta qui: chi lo ascolta non deve sapere sotto quale
-    /// compositore sta girando.
+    /// chi ascolta, leggendo `power.lidAction`: il compositore riferisce,
+    /// chi ha la politica decide.
     signal coperchio(bool chiuso)
 
     /// Sono passati `secondi` senza che nessuno tocchi niente.
