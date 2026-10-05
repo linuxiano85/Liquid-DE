@@ -69,19 +69,20 @@ Page {
 
         // ── Le spiegazioni sotto ogni interruttore ───────────────────
         //
-        // `general.beginnerMode` la leggono `ui/ToggleTile.qml` (le piastrelle
-        // della tendina) e `menu/DesktopLayer.qml` (il suggerimento sulla
-        // scrivania). Era accesa di fabbrica e non si poteva spegnere da
+        // `general.beginnerMode` la legge `menu/DesktopLayer.qml` (il
+        // suggerimento sulla scrivania). Le spiegazioni delle piastrelle della
+        // tendina se ne sono andate con lei (5 ottobre 2026). Era accesa di fabbrica e non si poteva spegnere da
         // nessuna parte: chi Minerva la conosce si teneva le spiegazioni per
         // sempre.
         S.SettingRow {
             width: parent.width
-            label: page.it ? "Spiega le cose sotto ogni interruttore"
-                           : "Explain each switch underneath"
+            label: page.it ? "Suggerimenti per chi comincia"
+                           : "Hints for beginners"
             description: page.it
-                ? "Le righe di spiegazione nella tendina e il suggerimento "
-                  + "sulla scrivania. Chi Minerva la conosce può spegnerle."
-                : "The explanation lines in the panel and the desktop hint."
+                ? "La riga in fondo alla scrivania vuota: «Super+K per le "
+                  + "scorciatoie · Clic destro qui per il menu». Chi Minerva "
+                  + "la conosce può spegnerla."
+                : "The hint on the desktop. Turn it off once you know Minerva."
             controlWidth: 60
             control: S.ToggleSwitch {
                 checked: Core.Ipc.get("general.beginnerMode", true)

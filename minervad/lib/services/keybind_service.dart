@@ -55,7 +55,7 @@ class KeyCombo {
 /// funzionava, perché quella precedente vale finché non ne arriva un'altra:
 /// il tasto compariva sotto la descrizione della riga sopra.
 ///
-/// Visto sullo schermo l'11 agosto 2026: il pannello F1 diceva che `Alt_L`
+/// Visto sullo schermo l'11 agosto 2026: il promemoria di Super+K diceva che `Alt_L`
 /// serve a «tornare indietro nell'elenco delle finestre». Non è vero, ed è il
 /// modo più veloce di rendere un promemoria inaffidabile.
 ///

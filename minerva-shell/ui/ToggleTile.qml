@@ -20,29 +20,9 @@ Rectangle {
     /// È un DATO, e si vede sempre.
     property string detail: ""
 
-    /// ── A cosa serve questo comando ──────────────────────────────────────
-    ///
-    /// «Silenzia le notifiche», «Toglie il blu dallo schermo». Non è un dato:
-    /// è una spiegazione, e si vede solo in modalità principiante.
-    ///
-    /// Perché sono separate, dal 3 settembre 2026: stavano tutte e due in
-    /// `detail`, cioè le spiegazioni occupavano il posto dei dati. Costava due
-    /// cose insieme — sette piastrelle con tre righe di testo ciascuna sono
-    /// rumore da guardare, e col carattere nuovo (più largo di un condensato)
-    /// le frasi lunghe hanno cominciato a troncarsi: «Toglie il blu dallo
-    /// sch…».
-    ///
-    /// Chi sa già cos'è la luce notturna non ha bisogno che glielo si ripeta
-    /// ogni volta che apre il pannello; chi non lo sa lo trova, perché la
-    /// modalità principiante nasce accesa.
-    property string spiegazione: ""
     property bool checked: false
     property color accent: Theme.Colors.accent
     property bool enabled: true
-
-    /// Modalità principiante: fa comparire `spiegazione` sotto il nome.
-    /// Nasce accesa, come l'impostazione da cui viene.
-    property bool principiante: Core.Ipc.get("general.beginnerMode", true)
 
     signal toggled(bool value)
 
@@ -51,12 +31,7 @@ Rectangle {
     // è attaccati senza vedere lo schermo.
     Accessible.role: Accessible.CheckBox
     Accessible.name: tile.label
-    // Chi non vede lo schermo la spiegazione la vuole SEMPRE: qui non c'è
-    // nessun rumore da risparmiare, e togliere una frase a chi ascolta per far
-    // stare meglio un riquadro a chi guarda sarebbe uno scambio a senso unico.
-    Accessible.description: tile.detail !== "" && tile.spiegazione !== ""
-                            ? tile.detail + ". " + tile.spiegazione
-                            : (tile.detail !== "" ? tile.detail : tile.spiegazione)
+    Accessible.description: tile.detail
     Accessible.checkable: true
     Accessible.checked: tile.checked
     Accessible.onToggleAction: tile.toggled(!tile.checked)
@@ -114,11 +89,7 @@ Rectangle {
 
         Text {
             width: parent.width
-            // Il dato se c'è, altrimenti la spiegazione — ma solo per chi la
-            // vuole. Mai tutte e due: la piastrella è alta due righe, e la
-            // terza spingerebbe fuori qualcosa.
-            text: tile.detail !== "" ? tile.detail
-                  : (tile.principiante ? tile.spiegazione : "")
+            text: tile.detail
             visible: text !== ""
             elide: Text.ElideRight
             color: Theme.Colors.textFaint

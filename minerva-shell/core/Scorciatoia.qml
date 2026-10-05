@@ -14,7 +14,7 @@ import QtQuick
 //
 // Il nome NON è la combinazione di tasti: è un'etichetta. Quali tasti la
 // scatenino lo decide `config/scorciatoie.minerva`, che è anche il file da cui
-// il demone costruisce il pannello F1 — vedi `minervad/lib/services/
+// il demone costruisce il promemoria di Super+K — vedi `minervad/lib/services/
 // scorciatoie.dart`. Tenerli separati è ciò che permette di cambiare i tasti
 // senza toccare il codice.
 Item {

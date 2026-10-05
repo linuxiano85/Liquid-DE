@@ -929,7 +929,7 @@ ShellRoot {
                     root.scattaSchermata(modo, ritardo);
                 }
                 onWindowMenuRequested: function(where) {
-                    windowMenu.openAt(where.x, where.y, root.windowMenuItems());
+                    windowMenu.openAt(where.x, where.y, root.windowMenuItems(true));
                 }
 
                 // Il tasto destro sul vuoto della barra. Lo stesso menù
@@ -1370,9 +1370,12 @@ ShellRoot {
 
     // ── Menu della finestra attiva ───────────────────────────────────────
 
-    function windowMenuItems() {
+    /// `dallaBarra`: aperto dal nome della finestra nella barra della
+    /// scrivania, e non dalla barra del titolo — solo lì ha senso la voce che
+    /// quel nome lo nasconde.
+    function windowMenuItems(dallaBarra) {
         var it = Core.Strings.lang === "it";
-        return [
+        var voci = [
             { "label": it ? "Riduci a icona" : "Minimise",  "icon": "minimize", "action": "minimize" },
             { "label": Core.Windows.activeMaximized
                        ? (it ? "Ripristina" : "Restore")
@@ -1384,14 +1387,17 @@ ShellRoot {
             { "label": it ? "Schermo intero" : "Full screen",
               "icon": "expand", "action": "fullscreen", "shortcut": "Super+F" },
             { "separator": true },
-            // L'opzione che spegne i pulsanti sta dove i pulsanti sono: chi li
-            // trova d'intralcio ci arriva senza cercarli nelle impostazioni.
-            { "label": it ? "Nascondi questi pulsanti" : "Hide these buttons",
-              "icon": "close", "action": "hideControls" },
-            { "separator": true },
             { "label": it ? "Chiudi la finestra" : "Close the window",
               "icon": "close", "action": "close", "shortcut": "Super+Q", "danger": true }
         ];
+        // L'opzione che spegne il nome sta dove il nome è: chi lo trova
+        // d'intralcio ci arriva senza cercarlo nelle impostazioni.
+        if (dallaBarra === true)
+            voci.splice(voci.length - 1, 0,
+                { "label": it ? "Nascondi il nome nella barra" : "Hide the name in the bar",
+                  "icon": "close", "action": "hideControls" },
+                { "separator": true });
+        return voci;
     }
 
     ContextMenu {

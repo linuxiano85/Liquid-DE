@@ -267,7 +267,7 @@ Page {
 
         S.SettingRow {
             width: parent.width
-            label: page.it ? "Pulsanti della finestra nella barra" : "Window buttons in the bar"
+            label: page.it ? "Nome della finestra nella barra" : "Window name in the bar"
             description: Core.Strings.t("windowControlsDesc")
             controlWidth: 60
             control: S.ToggleSwitch {

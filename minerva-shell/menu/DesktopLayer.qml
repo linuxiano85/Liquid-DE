@@ -174,8 +174,8 @@ PanelWindow {
             id: hintText
             anchors.centerIn: parent
             text: Core.Strings.lang === "it"
-                  ? "Premi F1 per le scorciatoie · Clic destro qui per il menu"
-                  : "Press F1 for shortcuts · Right-click here for the menu"
+                  ? "Super+K per le scorciatoie · Clic destro qui per il menu"
+                  : "Super+K for shortcuts · Right-click here for the menu"
             color: Theme.Colors.textMuted
             font.family: Theme.Typography.fontDisplay
             font.weight: Theme.Typography.weightRegular

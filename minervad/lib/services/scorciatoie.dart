@@ -5,7 +5,7 @@ import 'dart:io';
 /// `config/scorciatoie.minerva` è la sorgente unica, in lingua nostra: quali
 /// tasti aprono cosa, con le ragioni scritte accanto. Da qui escono due
 /// cose: le righe `scorciatoia …` che la shell manda a minerva-wayland
-/// (`perMinervaWayland`), e il promemoria F1 (`daMostrare`).
+/// (`perMinervaWayland`), e il promemoria di Super+K (`daMostrare`).
 ///
 /// Fino al 2 settembre 2026 ne usciva anche `config/hypr/keybinds.conf`, la
 /// stessa sorgente tradotta per Hyprland: se n'è andato con quella sessione,
@@ -31,7 +31,7 @@ class Scorciatoia {
   /// `avvia: alacritty`, `chiudi-finestra`.
   final String azione;
 
-  /// Per il promemoria F1. `null` quando la scorciatoia non ci va (è il
+  /// Per il promemoria di Super+K. `null` quando la scorciatoia non ci va (è il
   /// seguito di un'altra: il rilascio di Alt che conferma l'Alt+Tab).
   final String? categoria;
   final String? descrizione;
@@ -75,7 +75,7 @@ class Scorciatoie {
 
   const Scorciatoie(this.tutte, this.variabili);
 
-  /// Quelle che vanno nel promemoria F1.
+  /// Quelle che vanno nel promemoria di Super+K.
   List<Scorciatoia> get daMostrare =>
       tutte.where((s) => s.categoria != null && s.descrizione != null).toList();
 
@@ -181,7 +181,7 @@ class Scorciatoie {
   ///     le righe che glielo mandavano.
   ///
   /// Il conto era 67 registrate su 95 scritte, con dodici tasti che nel
-  /// promemoria F1 comparivano e non facevano niente.
+  /// promemoria di Super+K comparivano e non facevano niente.
   static const Set<String> _sueDavvero = {
     'minerva',
     'avvia',
@@ -213,7 +213,7 @@ class Scorciatoie {
     // dentro `cursore_rotella`: Super + rotellina cambia scrivania, con
     // l'accumulo che impedisce a una rotellina ad alta risoluzione di saltarne
     // otto in un colpo. Queste due righe restano nella sorgente perché sono la
-    // documentazione del gesto e finiscono nel promemoria F1 — non perché
+    // documentazione del gesto e finiscono nel promemoria di Super+K — non perché
     // qualcuno le debba registrare.
     if (s.tasto.startsWith('mouse')) return false;
     if (!_sueDavvero.contains(_verboDi(s.azione))) return false;
