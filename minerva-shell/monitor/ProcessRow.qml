@@ -25,23 +25,15 @@ Rectangle {
     readonly property var respiro: riga.respiro || null
     readonly property string statoRespiro: respiro && respiro.stato ? respiro.stato : ""
 
-    function misura(v) {
-        if (!v || v <= 0) return "0";
-        var u = ["B", "KB", "MB", "GB"];
-        var i = 0;
-        while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
-        return (v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)) + " " + u[i];
-    }
-
     /// «1,4 MB in RAM · 28 MB compressi in 6,9 MB di zram», o vuoto se
     /// l'app non ha niente di compresso (allora resta la descrizione).
     readonly property string memoriaRespiro: {
         if (!respiro || !(respiro.inSwap > 0)) return "";
-        var ram = misura(respiro.inRam) + " in RAM";
+        var ram = Core.Formato.peso(respiro.inRam) + " in RAM";
         var z = respiro.inZram !== null && respiro.inZram !== undefined
-                ? (it ? misura(respiro.inSwap) + " compressi in " + misura(respiro.inZram) + " di zram"
-                      : misura(respiro.inSwap) + " compressed into " + misura(respiro.inZram) + " of zram")
-                : misura(respiro.inSwap) + " in zram";
+                ? (it ? Core.Formato.peso(respiro.inSwap) + " compressi in " + Core.Formato.peso(respiro.inZram) + " di zram"
+                      : Core.Formato.peso(respiro.inSwap) + " compressed into " + Core.Formato.peso(respiro.inZram) + " of zram")
+                : Core.Formato.peso(respiro.inSwap) + " in zram";
         return ram + " · " + z;
     }
 
@@ -240,7 +232,7 @@ Rectangle {
             width: 90
             horizontalAlignment: Text.AlignRight
             anchors.verticalCenter: parent.verticalCenter
-            text: (row.riga.memoria || 0) > 0 ? row.misura(row.riga.memoria) : "—"
+            text: (row.riga.memoria || 0) > 0 ? Core.Formato.peso(row.riga.memoria) : "—"
             color: Theme.Colors.textMuted
             font.family: Theme.Typography.fontMono
             font.pixelSize: Theme.Typography.sizeSM

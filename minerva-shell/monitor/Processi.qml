@@ -344,25 +344,4 @@ Item {
         }
         return { "pagine": pagine, "occupa": occupa, "app": compresse };
     }
-
-    // ── Formattazione ────────────────────────────────────────────────────
-
-    function byte(v) {
-        if (!v || v <= 0) return "0";
-        var u = ["B", "KB", "MB", "GB", "TB"];
-        var i = 0;
-        while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
-        return (v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)) + " " + u[i];
-    }
-
-    function durata(secondi) {
-        if (!secondi) return "—";
-        var g = Math.floor(secondi / 86400);
-        var o = Math.floor((secondi % 86400) / 3600);
-        var m = Math.floor((secondi % 3600) / 60);
-        if (g > 0) return g + (dati.it ? " g " : "d ") + o + "h";
-        if (o > 0) return o + "h " + m + "m";
-        return m + "m";
-    }
-
 }

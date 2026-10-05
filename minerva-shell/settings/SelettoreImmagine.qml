@@ -60,7 +60,7 @@ Rectangle {
         var b = nome.toLowerCase();
         for (var i = 0; i < selettore.estensioni.length; i++) {
             var e = selettore.estensioni[i];
-            if (b.lastIndexOf(e) === b.length - e.length)
+            if (b.endsWith(e))
                 return true;
         }
         return false;

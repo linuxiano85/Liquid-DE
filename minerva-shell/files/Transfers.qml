@@ -219,8 +219,8 @@ Item {
                         Text {
                             width: parent.width
                             horizontalAlignment: Text.AlignRight
-                            text: Files.humanSize(job.modelData.bytesDone) + " / "
-                                  + Files.humanSize(job.modelData.bytesTotal)
+                            text: Core.Formato.peso(job.modelData.bytesDone) + " / "
+                                  + Core.Formato.peso(job.modelData.bytesTotal)
                             color: Theme.Colors.textFaint
                             font.family: Theme.Typography.fontMono
                             font.pixelSize: Theme.Typography.sizeXS

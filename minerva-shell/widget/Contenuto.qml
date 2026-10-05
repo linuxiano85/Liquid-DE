@@ -54,18 +54,18 @@ Item {
         case "temperatura":
             return m.temperatura >= 0 ? Math.round(m.temperatura) + "°" : "—";
         case "rete":
-            return m.alSecondo(m.reteGiu);
+            return Core.Formato.peso(m.reteGiu || 0) + "/s";
         case "carico":
             return (Math.round(m.carico * 100) / 100).toString();
         case "acceso":
-            return m.daQuanto(m.acceso);
+            return Core.Formato.durata(m.acceso);
         case "batteria":
             return Core.SystemState.hasBattery
                    ? Core.SystemState.batteryPercent + "%" : "—";
         // Quanto RESTA e non quanto è pieno: la domanda che uno si fa
         // guardando il disco è «ci sta?», non «quanto ne ho consumato».
         case "disco":
-            return m.discoTotale > 0 ? m.inParole(m.discoLibero) : "—";
+            return m.discoTotale > 0 ? Core.Formato.peso(m.discoLibero || 0) : "—";
         case "orologio":
             // Con la lingua di Minerva e non con quella del sistema: la barra
             // fa così (`spine/ClockCluster.qml`), e un orologio in italiano
@@ -156,17 +156,17 @@ Item {
             return m.core > 0 ? m.core + (it ? " core" : " cores") : "";
         case "memoria":
             return m.memoriaTotale > 0
-                   ? m.inParole(m.memoriaUsata) + " / "
-                     + m.inParole(m.memoriaTotale) : "";
+                   ? Core.Formato.peso(m.memoriaUsata || 0) + " / "
+                     + Core.Formato.peso(m.memoriaTotale || 0) : "";
         case "rete":
-            return "↑ " + m.alSecondo(m.reteSu);
+            return "↑ " + Core.Formato.peso(m.reteSu || 0) + "/s";
         case "batteria":
             return Core.SystemState.batteryCharging
                    ? (it ? "in carica" : "charging") : "";
         case "disco":
             return m.discoTotale > 0
-                   ? m.inParole(m.discoTotale - m.discoLibero) + " / "
-                     + m.inParole(m.discoTotale) : "";
+                   ? Core.Formato.peso(m.discoTotale - m.discoLibero || 0) + " / "
+                     + Core.Formato.peso(m.discoTotale || 0) : "";
         case "meteo":
             return Core.Meteo.pronto
                    ? Core.Meteo.descrizione(Core.Meteo.adesso.codice) : "";

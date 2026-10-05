@@ -165,7 +165,7 @@ PanelWindow {
                                       .replace(/\.$/, "")
                                   + (dati.macchina.acceso
                                      ? "  ·  " + (attivita.it ? "acceso da " : "up ")
-                                       + dati.durata(dati.macchina.acceso)
+                                       + Core.Formato.durata(dati.macchina.acceso)
                                      : "")
                             color: Theme.Colors.text
                             font.family: Theme.Typography.fontDisplay
@@ -220,9 +220,9 @@ PanelWindow {
                             // posto di «usata / totale» (che resta nella percentuale).
                             sotto: dati.risparmio.pagine > 0
                                    ? (attivita.it ? "respiro: " : "breathing: ")
-                                     + dati.byte(dati.risparmio.pagine - dati.risparmio.occupa)
+                                     + Core.Formato.peso((dati.risparmio.pagine - dati.risparmio.occupa) || 0)
                                      + (attivita.it ? " risparmiati" : " saved")
-                                   : dati.byte(dati.macchina.memoriaUsata) + " / " + dati.byte(dati.macchina.memoriaTotale)
+                                   : Core.Formato.peso(dati.macchina.memoriaUsata || 0) + " / " + Core.Formato.peso(dati.macchina.memoriaTotale || 0)
                             punti: dati.storiaMem
                             massimo: 100
                             colore: Theme.Colors.accentAlt !== undefined ? Theme.Colors.accentAlt : Theme.Colors.accent
@@ -232,9 +232,9 @@ PanelWindow {
                         Mon.StatTile {
                             width: cruscotto.largo
                             titolo: attivita.it ? "RETE" : "NETWORK"
-                            valore: dati.byte((dati.macchina.reteGiu || 0) + (dati.macchina.reteSu || 0))
+                            valore: Core.Formato.peso((dati.macchina.reteGiu || 0) + (dati.macchina.reteSu || 0))
                             unita: "/s"
-                            sotto: "↓ " + dati.byte(dati.macchina.reteGiu) + "   ↑ " + dati.byte(dati.macchina.reteSu)
+                            sotto: "↓ " + Core.Formato.peso(dati.macchina.reteGiu || 0) + "   ↑ " + Core.Formato.peso(dati.macchina.reteSu || 0)
                             punti: dati.storiaRete
                             massimo: 0
                         }

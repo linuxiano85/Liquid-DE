@@ -33,7 +33,6 @@ Page {
     property var images: []
     property var _pending: []
     property bool loading: false
-    readonly property var _extensions: [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".jxl"]
     // ── Si guarda solo dove si sta guardando ─────────────────────────────
     //
     // `scan()` elenca centinaia di file e riempie il modello di una griglia
@@ -73,15 +72,6 @@ Page {
         }
         Core.Ipc.fsList(page._pending.shift(), false, "wallpaper");
     }
-    function isImage(name) {
-        var lower = name.toLowerCase();
-        for (var k = 0; k < page._extensions.length; k++) {
-            var ext = page._extensions[k];
-            if (lower.lastIndexOf(ext) === lower.length - ext.length)
-                return true;
-        }
-        return false;
-    }
     Connections {
         target: Core.Ipc
         function onFileListingReceived(listing) {
@@ -91,7 +81,7 @@ Page {
             var entries = listing.entries || [];
             for (var i = 0; i < entries.length; i++) {
                 var e = entries[i];
-                if (e.isDir || !page.isImage(e.name))
+                if (e.isDir || !Core.Wallpaper.isImage(e.name))
                     continue;
                 if (found.indexOf(e.path) === -1)
                     found.push(e.path);

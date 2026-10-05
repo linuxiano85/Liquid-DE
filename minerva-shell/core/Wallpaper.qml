@@ -170,7 +170,7 @@ QtObject {
         var lower = String(name).toLowerCase();
         for (var i = 0; i < paper.extensions.length; i++) {
             var e = paper.extensions[i];
-            if (lower.lastIndexOf(e) === lower.length - e.length)
+            if (lower.endsWith(e))
                 return true;
         }
         return false;

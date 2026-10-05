@@ -224,40 +224,4 @@ QtObject {
                     macchina._ricorda(macchina.storiaRete, m.reteGiu);
         }
     }
-
-    // ── Le parole ────────────────────────────────────────────────────────
-    //
-    // Stanno qui e non dentro i widget: gli stessi byte scritti in due modi
-    // diversi in due angoli della scrivania sono due modi di dire la stessa
-    // cosa, e chi guarda si chiede quale delle due sia giusta.
-
-    /// Byte in parole brevi: «7,8 GB».
-    function inParole(byte) {
-        var b = Number(byte) || 0;
-        if (b >= 1024 * 1024 * 1024)
-            return (b / (1024 * 1024 * 1024)).toFixed(1) + " GB";
-        if (b >= 1024 * 1024)
-            return Math.round(b / (1024 * 1024)) + " MB";
-        if (b >= 1024)
-            return Math.round(b / 1024) + " KB";
-        return Math.round(b) + " B";
-    }
-
-    /// Byte al secondo: «1,2 MB/s».
-    function alSecondo(byte) {
-        return macchina.inParole(byte) + "/s";
-    }
-
-    /// Da quanto è acceso, in parole: «3 g 4 h», «2 h 15 min».
-    function daQuanto(secondi) {
-        var s = Math.max(0, Math.round(Number(secondi) || 0));
-        var g = Math.floor(s / 86400);
-        var h = Math.floor((s % 86400) / 3600);
-        var m = Math.floor((s % 3600) / 60);
-        if (g > 0)
-            return g + " g " + h + " h";
-        if (h > 0)
-            return h + " h " + m + " min";
-        return m + " min";
-    }
 }

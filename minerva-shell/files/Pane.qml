@@ -2205,7 +2205,7 @@ Item {
                 width: pane.sizeColumn - Theme.Effects.space2
                 anchors.verticalCenter: parent.verticalCenter
                 horizontalAlignment: Text.AlignRight
-                text: cell.modelData.isDir ? "" : Files.humanSize(cell.modelData.size)
+                text: cell.modelData.isDir ? "" : Core.Formato.peso(cell.modelData.size)
                 color: Theme.Colors.textFaint
                 font.family: Theme.Typography.fontMono
                 font.pixelSize: Theme.Typography.sizeXS

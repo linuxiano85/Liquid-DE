@@ -216,7 +216,7 @@ FloatingWindow {
         var low = String(nomeFile).toLowerCase();
         for (var i = 0; i < lista.length; i++) {
             var e = lista[i];
-            if (low.lastIndexOf(e) === low.length - e.length)
+            if (low.endsWith(e))
                 return true;
         }
         return false;
@@ -368,20 +368,6 @@ FloatingWindow {
     readonly property int misuraH:
         (viewer.info && viewer.info.path === viewer.percorsoPronto)
         ? (viewer.info.imageHeight || 0) : 0
-
-    /// Byte in una forma che si legge. Le stesse unità del gestore file.
-    function pesoLeggibile(byte) {
-        if (byte === undefined || byte === null || byte <= 0)
-            return "";
-        var unita = ["B", "kB", "MB", "GB", "TB"];
-        var i = 0;
-        var v = byte;
-        while (v >= 1024 && i < unita.length - 1) {
-            v /= 1024;
-            i++;
-        }
-        return (i === 0 ? v : v.toFixed(v < 10 ? 1 : 0)) + " " + unita[i];
-    }
 
     Connections {
         target: Core.Ipc
@@ -926,7 +912,7 @@ FloatingWindow {
                     pezzi.push(tavolo.natW + " × " + tavolo.natH);
                 else if (viewer.misuraW > 0)
                     pezzi.push(viewer.misuraW + " × " + viewer.misuraH);
-                var peso = viewer.info ? viewer.pesoLeggibile(viewer.info.size) : "";
+                var peso = viewer.info ? Core.Formato.peso(viewer.info.size) : "";
                 if (peso !== "")
                     pezzi.push(peso);
                 pezzi.push(Math.round(tavolo.scala * 100) + "%");

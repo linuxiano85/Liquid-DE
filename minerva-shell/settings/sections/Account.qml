@@ -150,17 +150,6 @@ Page {
         }
     }
 
-    /// Byte in una misura che si legge. Mai un numero dedotto: questa funzione
-    /// riceve solo numeri che il server ha detto davvero.
-    function misura(b) {
-        if (b === undefined || b === null) return "";
-        var u = ["B", "KB", "MB", "GB", "TB"];
-        var i = 0;
-        var v = b;
-        while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
-        return (v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)) + " " + u[i];
-    }
-
     // ── L'avviso ─────────────────────────────────────────────────────────
 
     Card {
@@ -304,13 +293,13 @@ Page {
                                 var parti = [];
                                 if (s.usati !== undefined)
                                     parti.push((page.it ? "usati " : "used ")
-                                               + page.misura(s.usati));
+                                               + Core.Formato.peso(s.usati));
                                 if (s.liberi !== undefined)
                                     parti.push((page.it ? "liberi " : "free ")
-                                               + page.misura(s.liberi));
+                                               + Core.Formato.peso(s.liberi));
                                 if (s.totale !== undefined)
                                     parti.push((page.it ? "su " : "of ")
-                                               + page.misura(s.totale));
+                                               + Core.Formato.peso(s.totale));
                                 return parti.join(" · ");
                             }
                             color: (parent.parent.sp && parent.parent.sp.errore)

@@ -84,7 +84,7 @@ Item {
     /// rischio i molti `.webp` fermi per i pochi che si muovono.
     readonly property bool animata: {
         var p = String(stage.percorso).toLowerCase();
-        return p.lastIndexOf(".gif") === p.length - 4;
+        return p.endsWith(".gif");
     }
 
     /// Vero mentre si sta caricando, qualunque dei due elementi lo stia

@@ -505,26 +505,6 @@ QtObject {
         files.clipboardIsCut = false;
     }
 
-    // ── Formattazione ────────────────────────────────────────────────────
-
-    /// Dimensione leggibile. Unità binarie con i nomi decimali (KB, MB): sono
-    /// quelli che la gente riconosce, e la differenza fra 1000 e 1024 non ha
-    /// mai aiutato nessuno a decidere se un file ci sta su una chiavetta.
-    function humanSize(bytes) {
-        if (bytes === undefined || bytes === null)
-            return "";
-        if (bytes < 1024)
-            return bytes + " B";
-        var units = ["KB", "MB", "GB", "TB"];
-        var v = bytes / 1024;
-        var i = 0;
-        while (v >= 1024 && i < units.length - 1) {
-            v /= 1024;
-            i++;
-        }
-        return (v < 10 ? v.toFixed(1) : Math.round(v)) + " " + units[i];
-    }
-
     // ── Lo sfondo che una cartella si merita da sola ─────────────────────
     //
     // Le cartelle che il sistema conosce hanno un contenuto prevedibile, e

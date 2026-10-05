@@ -104,8 +104,6 @@ FloatingWindow {
     readonly property alias pidOstinato: dati.pidOstinato
     readonly property alias righe: dati.righe
     property alias inPausa: dati.inPausa
-    function byte(v) { return dati.byte(v); }
-    function durata(s) { return dati.durata(s); }
 
     /// Per le prove (`prove-attivita.qml`): la lista, per leggerne la
     /// posizione e il modello.
@@ -155,7 +153,7 @@ FloatingWindow {
               + (monitor.macchina.acceso
                  ? (monitor.macchina.comeSta ? "  ·  " : "")
                    + (monitor.it ? "acceso da " : "up ")
-                   + monitor.durata(monitor.macchina.acceso)
+                   + Core.Formato.durata(monitor.macchina.acceso)
                  : "")
         visible: text !== ""
         color: monitor.allarmato ? Theme.Colors.warning : Theme.Colors.textMuted
@@ -207,15 +205,15 @@ FloatingWindow {
                     ? Math.round(monitor.macchina.memoriaUsata
                                  / monitor.macchina.memoriaTotale * 100) : "—"
             unita: "%"
-            sotto: monitor.byte(monitor.macchina.memoriaUsata) + " / "
-                   + monitor.byte(monitor.macchina.memoriaTotale)
+            sotto: Core.Formato.peso(monitor.macchina.memoriaUsata || 0) + " / "
+                   + Core.Formato.peso(monitor.macchina.memoriaTotale || 0)
                    + (monitor.macchina.memoriaCache
-                      ? " · cache " + monitor.byte(monitor.macchina.memoriaCache) : "")
+                      ? " · cache " + Core.Formato.peso(monitor.macchina.memoriaCache || 0) : "")
                    // Il respiro, quando c'è qualcosa di compresso: vedi
                    // Processi.risparmio.
                    + (dati.risparmio.pagine > 0
                       ? (monitor.it ? " · respiro −" : " · breathing −")
-                        + monitor.byte(dati.risparmio.pagine - dati.risparmio.occupa) : "")
+                        + Core.Formato.peso((dati.risparmio.pagine - dati.risparmio.occupa) || 0) : "")
             punti: monitor.storiaMem
             massimo: 100
             colore: Theme.Colors.accentAlt !== undefined
@@ -228,11 +226,11 @@ FloatingWindow {
         StatTile {
             width: cruscotto.largo
             titolo: monitor.it ? "RETE" : "NETWORK"
-            valore: monitor.byte((monitor.macchina.reteGiu || 0)
-                                 + (monitor.macchina.reteSu || 0))
+            valore: Core.Formato.peso((monitor.macchina.reteGiu || 0)
+                              + (monitor.macchina.reteSu || 0))
             unita: "/s"
-            sotto: "↓ " + monitor.byte(monitor.macchina.reteGiu) + "/s   ↑ "
-                   + monitor.byte(monitor.macchina.reteSu) + "/s"
+            sotto: "↓ " + Core.Formato.peso(monitor.macchina.reteGiu || 0) + "/s   ↑ "
+                   + Core.Formato.peso(monitor.macchina.reteSu || 0) + "/s"
             punti: monitor.storiaRete
             // Fondoscala automatico: la rete non ha un tetto, e fissarne uno
             // vorrebbe dire una linea piatta in basso per il 99% del tempo.
@@ -247,8 +245,8 @@ FloatingWindow {
                                  / monitor.macchina.scambioTotale * 100) : "0"
             unita: "%"
             sotto: monitor.macchina.scambioTotale > 0
-                   ? monitor.byte(monitor.macchina.scambioUsato) + " / "
-                     + monitor.byte(monitor.macchina.scambioTotale)
+                   ? Core.Formato.peso(monitor.macchina.scambioUsato || 0) + " / "
+                     + Core.Formato.peso(monitor.macchina.scambioTotale || 0)
                    : (monitor.it ? "nessuno" : "none")
             punti: []
             allarme: monitor.macchina.scambioTotale > 0

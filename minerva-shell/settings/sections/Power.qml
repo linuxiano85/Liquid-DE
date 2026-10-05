@@ -119,7 +119,7 @@ Page {
                      "seconds": "secondi", "second": "secondo",
                      "days": "giorni", "day": "giorno" };
         for (var k in voci) {
-            if (t.lastIndexOf(k) === t.length - k.length)
+            if (t.endsWith(k))
                 return t.substring(0, t.length - k.length) + voci[k];
         }
         return t;

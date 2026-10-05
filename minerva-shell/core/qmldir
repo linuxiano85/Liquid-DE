@@ -21,3 +21,4 @@ AppPronte 1.0 AppPronte.qml
 singleton Vetro         1.0 Vetro.qml
 singleton Posizioni     1.0 Posizioni.qml
 singleton Riva          1.0 Riva.qml
+singleton Formato       1.0 Formato.qml

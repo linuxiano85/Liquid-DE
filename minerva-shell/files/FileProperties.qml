@@ -191,11 +191,11 @@ Rectangle {
                             rows.push({ "k": props.it ? "Dimensione" : "Size",
                                         "v": i.isDir
                                              ? (props.measured >= 0
-                                                ? Files.humanSize(props.measured)
+                                                ? Core.Formato.peso(props.measured)
                                                 : (props.measuring
                                                    ? (props.it ? "sto contando…" : "counting…")
                                                    : "—"))
-                                             : Files.humanSize(i.size)
+                                             : Core.Formato.peso(i.size)
                                                + "   (" + i.size + " byte)",
                                         "mono": false });
                             rows.push({ "k": props.it ? "Modificato" : "Modified",
