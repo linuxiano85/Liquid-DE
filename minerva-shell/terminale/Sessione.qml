@@ -76,8 +76,6 @@ Item {
     property bool pronta: false
     property bool finita: false
     property int codiceUscita: 0
-    /// I marcatori dei blocchi arrivano qui (tappa 2 li usa).
-    signal blocco(var m)
     signal campanello()
     signal chiusa(int codice)
     /// Dopo la fine, un tasto: chi ha la scheda la può togliere.
@@ -186,9 +184,6 @@ Item {
                 sessione.titolo = m.titolo || "";
                 sessione.titoloCambiato(sessione.titolo);
             }
-            break;
-        case "blocco":
-            sessione.blocco(m);
             break;
         case "campanello":
             if (sessione.campanelloAcceso) sessione.campanello();

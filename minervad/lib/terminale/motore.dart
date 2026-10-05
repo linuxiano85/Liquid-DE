@@ -163,10 +163,11 @@ class Motore {
     }
     // ── L'integrazione con la shell ──────────────────────────────────────
     //
-    // fish manda i marcatori dei blocchi da solo. zsh li prende da un
-    // `.zshenv` nostro (via `ZDOTDIR`, che il file rimette a posto subito),
-    // bash da un `--rcfile` che legge prima il `.bashrc` vero. Una shell che
-    // non è nessuna delle tre resta com'è: terminale classico.
+    // zsh prende i marcatori firmati da un `.zshenv` nostro (via `ZDOTDIR`,
+    // che il file rimette a posto subito), bash da un `--rcfile` che legge
+    // prima il `.bashrc` vero. Le altre shell — fish compreso, che i suoi
+    // marcatori OSC 133 li manda da solo ma senza firma — restano un
+    // terminale classico.
     final ambiente = <String, String>{};
     final quale = shell != null && shell!.isNotEmpty
         ? shell!
@@ -288,16 +289,6 @@ class Motore {
       });
       _mandaStato();
     }
-    for (final m in e.marcatori) {
-      _manda({
-        't': 'blocco',
-        'tipo': m.tipo,
-        'riga': m.rigaAssoluta,
-        'codice': m.codice,
-        'comando': m.comando,
-      });
-    }
-    e.marcatori.clear();
     for (final b in _blocchiDaMandare.values) {
       _manda({...b, 'comandoParziale': _shellBlocchi == 'bash'});
     }

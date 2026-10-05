@@ -17,8 +17,8 @@
 // inserimenti di righe e caratteri; la regione di scorrimento; lo schermo
 // alternativo (1049); l'incolla fra parentesi (2004); i modi del mouse
 // (1000, 1002, 1003, 1006); il titolo (OSC 0/2); la cartella (OSC 7); i
-// marcatori dei blocchi (OSC 133); le risposte a DA e DSR; la grafica DEC
-// per le cornici di `htop`.
+// marcatori firmati dei blocchi (OSC 777, vedi `blocchi_automatici.dart`);
+// le risposte a DA e DSR; la grafica DEC per le cornici di `htop`.
 //
 // Non fa: i caratteri combinanti (saltati: l'accento non si disegna, la
 // lettera sì), le sequenze DCS (lette e buttate), le tabulazioni verticali.
@@ -118,17 +118,6 @@ class Riga {
     r.avvolta = avvolta;
     return r;
   }
-}
-
-/// Un marcatore dei blocchi (OSC 133): dove comincia il prompt, il comando,
-/// l'uscita, e dove finisce con quale codice.
-class Marcatore {
-  Marcatore(this.tipo, this.rigaAssoluta, {this.codice = -1, this.comando = ''});
-  /// `A` prompt · `B` comando · `C` uscita · `D` fine.
-  final String tipo;
-  final int rigaAssoluta;
-  final int codice;
-  final String comando;
 }
 
 /// Le righe uscite dalla cima: un anello, non una lista.
@@ -276,7 +265,6 @@ class Emulatore {
   final List<int> risposte = [];
   String titolo = '';
   String cartella = '';
-  final List<Marcatore> marcatori = [];
   String? chiaveBlocchi;
   void Function(String tipo, int codice, String comando, String cartella)? bloccoMinerva;
   int campanelli = 0;
@@ -1333,8 +1321,12 @@ class Emulatore {
       case 7:
         cartella = _cartellaDaUrl(_daByte(resto));
         statoSporco = true;
+      // OSC 133 (i marcatori «standard» dei blocchi) si ignora di proposito:
+      // lo può scrivere qualunque programma, anche un file mostrato con
+      // `cat`, e diventerebbe un blocco finto. I blocchi veri arrivano
+      // firmati, con OSC 777 e la chiave di questa sessione.
       case 133:
-        _marcatore(resto);
+        break;
       case 777:
         final campi = resto.split(';');
         if (chiaveBlocchi != null && campi.length == 6 &&
@@ -1375,28 +1367,6 @@ class Emulatore {
     } catch (_) {
       return resto;
     }
-  }
-
-  /// OSC 133: `A` prompt, `B` comando, `C` uscita, `D;codice` fine. Le
-  /// forme con argomenti (`A;cmd=…`, `D;0;aid=…`) si accettano leggendo
-  /// solo il primo campo e, per D, il codice.
-  void _marcatore(String resto) {
-    if (resto.isEmpty) return;
-    final campi = resto.split(';');
-    final tipo = campi[0];
-    if (!'ABCD'.contains(tipo) || tipo.length != 1) return;
-    var codice = -1;
-    var comando = '';
-    if (tipo == 'D' && campi.length > 1) {
-      codice = int.tryParse(campi[1]) ?? -1;
-    }
-    for (final c in campi.skip(1)) {
-      if (c.startsWith('cmd=')) comando = _daByte(c.substring(4));
-    }
-    if (marcatori.length >= 512) marcatori.removeAt(0);
-    marcatori.add(Marcatore(tipo, rigaAssoluta(cy),
-        codice: codice, comando: comando));
-    statoSporco = true;
   }
 
   // ── La misura ────────────────────────────────────────────────────────
