@@ -181,6 +181,25 @@ fi
 # dei due lo diceva — è la «sincronizzazione sospesa» che Giacomo aveva già
 # incontrato ad agosto.
 #
+# ── Prima quello che ha avviato l'accesso ─────────────────────────────────
+#
+# Con `pam_kwallet5.so` nel PAM del gestore d'accesso, all'accesso parte già un
+# `ksecretd --pam-login` con la password in mano, e resta in attesa che la
+# sessione gli passi il suo ambiente sul socket `$PAM_KWALLET5_LOGIN`. Sotto
+# Plasma lo fa `/usr/lib/pam_kwallet_init` (da `/etc/xdg/autostart`); qui non
+# lo faceva nessuno, quindi quel processo restava appeso e se ne avviava un
+# secondo — due portachiavi in memoria, e il portafoglio che chiede la
+# password invece di aprirsi con quella dell'accesso (5 ottobre 2026).
+if [ -n "${PAM_KWALLET5_LOGIN:-}" ] && [ -x /usr/lib/pam_kwallet_init ]; then
+    /usr/lib/pam_kwallet_init >/dev/null 2>&1
+    # Il nome sul bus lo prende appena ha letto l'ambiente: si aspetta al più
+    # due secondi prima di dichiararlo assente.
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+        busctl --user status org.freedesktop.secrets >/dev/null 2>&1 && break
+        sleep 0.1
+    done
+fi
+
 # Si prova prima se qualcuno c'è già: sotto una sessione mista, o se un domani
 # ne installiamo un altro, avviarne un secondo vorrebbe dire due portachiavi
 # che si contendono lo stesso nome.
