@@ -47,9 +47,8 @@ const char *canale_percorso(const struct canale *c);
 // chiude o cambia titolo. L'alternativa era che chiedesse l'elenco a
 // ripetizione, ed è la strada che questo progetto ha già percorso e
 // abbandonato: `hyprctl clients` ogni nove decimi di secondo per processo. Il
-// costo non era la domanda, era svegliarsi per farla — vedi
-// `minervad/lib/providers/hyprland/hyprland_provider.dart`, che oggi ascolta
-// `.socket2.sock` esattamente così.
+// costo non era la domanda, era svegliarsi per farla. Il demone ascolta
+// questo canale in `minervad/lib/providers/minerva/minerva_provider.dart`.
 //
 // `NULL` come canale è lecito e non fa niente: il compositore parte anche
 // senza, e nessuno dei punti che annunciano deve saperlo.

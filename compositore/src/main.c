@@ -287,8 +287,7 @@ struct minerva {
 	// ── Le scorciatoie ───────────────────────────────────────────────────
 	//
 	// Novantacinque, e vivono in `config/scorciatoie.minerva` — che è la
-	// sorgente unica: da lì escono i tasti di Hyprland, il promemoria di
-	// Super+K, e adesso anche queste righe. **Qui dentro non si legge quel
+	// sorgente unica: da lì escono il promemoria di Super+K e queste righe. **Qui dentro non si legge quel
 	// file**: due parser per un formato solo sono due parser che un giorno
 	// non sono più d'accordo. Il demone lo legge, la shell le manda su questo
 	// canale (`scorciatoia …`), e qui restano dei numeri e delle parole.
@@ -3347,8 +3346,8 @@ static void finestra_riduci(struct finestra *f, bool si) {
 
 // ── Le scrivanie ──────────────────────────────────────────────────────────
 //
-// Sotto Hyprland la shell manda `workspace 3` e la cosa succede. Qui dentro,
-// fino a oggi, quella riga se ne andava **in silenzio**: `minerva_comando`
+// Sotto Hyprland la shell mandava `workspace 3` e la cosa succedeva. Qui
+// dentro, all'inizio, quella riga se ne andava **in silenzio**: `minerva_comando`
 // rispondeva «verbo sconosciuto» a voce bassa e lo schermo non cambiava. È lo
 // stesso modo in cui era sparito il «riduci» — un verbo di Hyprland scritto
 // nella shell, e nessuno dall'altra parte.
@@ -5013,8 +5012,8 @@ static void tastiera_modificatori(struct wl_listener *l, void *dati) {
 // Qui dentro non si legge `config/scorciatoie.minerva`, e non è pigrizia: quel
 // file ha le variabili, i flag e le annotazioni, e un secondo parser sarebbe
 // un secondo posto che un giorno non è più d'accordo col primo. Lo legge il
-// demone — che già lo fa per il promemoria di Super+K e per i tasti di
-// Hyprland — e la shell manda qui delle righe già masticate:
+// demone — che già lo fa per il promemoria di Super+K — e la shell manda qui
+// delle righe già masticate:
 //
 //     scorciatoie azzera
 //     scorciatoia SUPER K minerva:cheatsheet
@@ -8889,7 +8888,7 @@ static char *parola(char **resto) {
 // Perché la pagina Schermi delle Impostazioni scriveva il file e basta: il
 // compositore lo legge una volta sola, all'avvio. La risoluzione cambiava
 // **al riavvio della sessione**, che non è quello che chiede chi sta
-// guardando uno schermo storto. Sotto Hyprland la stessa pagina applica
+// guardando uno schermo storto. Sotto Hyprland la stessa pagina applicava
 // subito, con `hyprctl keyword monitor`; qui non arrivava a nessuno.
 //
 // ── E il rifiuto che conta ───────────────────────────────────────────────
@@ -11195,8 +11194,8 @@ void minerva_comando(struct minerva *m, const char *riga,
 	//
 	// `scrivania 3`, `scrivania avanti`, `scrivania indietro`. I due nomi al
 	// posto del numero sono il gesto della rotellina sopra i pallini della
-	// barra, e saltano le scrivanie vuote — come `workspace e+1` di
-	// Hyprland, che è la riga che la shell manda dall'altra parte.
+	// barra, e saltano le scrivanie vuote — come faceva `workspace e+1` di
+	// Hyprland.
 	if (strcmp(verbo, "scrivania") == 0) {
 		char *dove = parola(&resto);
 		if (dove == NULL) {

@@ -135,13 +135,18 @@ static void leggi_riga(struct schermi_config *c, char *riga) {
 	togli_spazi(valore);
 	if (nome[0] == '\0')
 		return;
+	// Un nome troncato potrebbe combaciare con lo schermo sbagliato: nessun
+	// connettore ne ha uno così lungo, quindi la riga si scarta.
+	size_t lungo = strlen(nome);
+	if (lungo >= sizeof(c->voci[0].nome))
+		return;
 
 	if (c->quanti >= MINERVA_SCHERMI_MAX)
 		return;
 
 	struct schermo_voluto *v = &c->voci[c->quanti];
 	memset(v, 0, sizeof(*v));
-	snprintf(v->nome, sizeof(v->nome), "%s", nome);
+	memcpy(v->nome, nome, lungo + 1);
 	v->rotazione = -1;
 	v->acceso = true;
 

@@ -8,8 +8,9 @@
 // Non sbagliava. Minerva sapeva disegnarla in due modi, e nessuno dei due
 // funzionava lì dentro:
 //
-//  · dalla SHELL (`spine/TitleBars.qml`), una superficie appoggiata sopra le
-//    finestre, che chiede a Hyprland dove sta ogni finestra. Dentro il nostro
+//  · dalla SHELL (`spine/TitleBars.qml`, tolta il 5 ottobre 2026), una
+//    superficie appoggiata sopra le finestre, che chiedeva a Hyprland dove
+//    stava ogni finestra. Dentro il nostro
 //    compositore Hyprland non c'è: le barre comparivano tutte nell'angolo in
 //    alto a sinistra, una sopra l'altra;
 //  · dal PLUGIN (`plugins/minerva-bars`), che è codice dentro Hyprland, e
