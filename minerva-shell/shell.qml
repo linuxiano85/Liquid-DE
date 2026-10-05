@@ -500,6 +500,24 @@ ShellRoot {
 
     // L'aspetto delle finestre scelto nelle Impostazioni, mandato al
     // compositore: vedi il file.
+    // ── La barra nativa, riapplicata quando cambia ───────────────────────
+    //
+    // Altezza, lato dei pulsanti e programmi che la barra se la disegnano da
+    // soli arrivavano al compositore solo all'avvio (`applicaIngresso`):
+    // cambiati dalle Impostazioni › Finestre, valevano dal prossimo accesso
+    // (5 ottobre 2026). Le firme sono TESTO apposta: un elenco riletto è un
+    // oggetto nuovo a ogni impostazione che cambia, una stringa no.
+    readonly property string _firmaBarra: JSON.stringify([
+        Core.Ipc.get("windows.titleHeight", 34),
+        Core.Ipc.get("windows.buttonsSide", "destra")])
+    readonly property string _firmaCsd: JSON.stringify(Core.Ipc.get("windows.csdApps", []))
+    on_FirmaBarraChanged: if (Core.Ipc.impostazioniArrivate)
+        Core.Compositore.aspettoBarra(Core.Ipc.get("windows.titleHeight", 34),
+                                      Core.Ipc.get("windows.buttonsSide", "destra"),
+                                      undefined, undefined)
+    on_FirmaCsdChanged: if (Core.Ipc.impostazioniArrivate)
+        Core.Compositore.appConBarraPropria(Core.Ipc.get("windows.csdApps", []))
+
     Core.WindowRules {
         id: windowRules
         effetto:        Core.Ipc.get("windows.effetto", "nessuno")
@@ -726,18 +744,26 @@ ShellRoot {
         }
     }
 
-    /// Il Centro di controllo dello schermo attivo; senza, il pannello di prima.
+    /// Il Centro di controllo dello schermo attivo.
     function apriCentro() {
         var s = root.scrivaniaAttiva();
         if (s && s.centro)
             s.centro.commuta();
-        else
-            root.pannello("control");
     }
 
     /// I pulsanti dell'energia del Centro. Esci, Riavvia e Spegni arrivano
     /// qui solo dopo essere stati tenuti premuti fino in fondo.
     function azioneDalCentro(id) {
+        // Le scorciatoie del Centro (vedi `catalogo` in `menu/Centro.qml`).
+        switch (id) {
+        case "impostazioni": root.openSettings(); return;
+        case "schermata":    root.apriSchermata(); return;
+        case "appunti":      root.apriCassetto(); return;
+        case "file":         root.openFiles(); return;
+        case "terminale":    root.run([Core.Ipc.get("launcher.defaultTerminal", "minerva-terminale")]); return;
+        case "attivita":     root.apriAttivita(); return;
+        case "scorciatoie":  root.toggleCheatsheet(); return;
+        }
         console.log("[LIQUID][CENTRO] azione: " + id);
         // In prova non si spegne, non si sospende e non si esce davvero: la
         // macchina è quella vera, e con lei il collegamento di chi ci lavora.

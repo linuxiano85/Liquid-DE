@@ -2304,8 +2304,8 @@ FloatingWindow {
                     // quanto l'ha fatta YouTube e qui sta in 80×45: senza
                     // `sourceSize` si decodificava intera, e senza
                     // `asynchronous` lo faceva sul filo dell'interfaccia
-                    // **mentre si scorreva**. Il doppio della misura, come in
-                    // `ui/MediaCard.qml`, per gli schermi scalati.
+                    // **mentre si scorreva**. Il doppio della misura, per gli
+                    // schermi scalati.
                     sourceSize.width: 160
                     asynchronous: true
                     cache: true

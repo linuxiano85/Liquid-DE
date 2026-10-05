@@ -802,15 +802,20 @@ Page {
                 var a = Number(Core.Ipc.get("display.nightLightTo", 7));
                 var h = page.oraAdesso;
                 var dentro = da <= a ? (h >= da && h < a) : (h >= da || h < a);
-                if (manuale)
+                // L'interruttore è quello generale: spento, la luce è spenta
+                // e basta. L'orario dice QUANDO, a interruttore acceso — è la
+                // regola di `core/LuceNotturna.qml` (`daApplicare`). Diceva
+                // «Accesa dall'orario» a interruttore spento, cioè mentre lo
+                // schermo restava freddo (5 ottobre 2026).
+                if (!manuale)
+                    return page.it ? "Spenta" : "Off";
+                if (!auto)
                     return page.it ? "Accesa" : "On";
-                if (auto && dentro)
-                    return page.it ? "Accesa dall'orario, fino alle " + a + ":00"
-                                   : "On from the schedule, until " + a + ":00";
-                if (auto)
-                    return page.it ? "Si accende da sola alle " + da + ":00"
-                                   : "Turns on by itself at " + da + ":00";
-                return page.it ? "Spenta" : "Off";
+                if (dentro)
+                    return page.it ? "Accesa fino alle " + a + ":00"
+                                   : "On until " + a + ":00";
+                return page.it ? "Si accenderà alle " + da + ":00"
+                               : "Will turn on at " + da + ":00";
             }
             control: S.ToggleSwitch {
                 checked: Core.Ipc.get("display.nightLight", false)
@@ -849,9 +854,9 @@ Page {
 
         S.SettingRow {
             width: parent.width
-            label: page.it ? "Si accende da sola" : "Turns on by itself"
-            description: page.it ? "A un'ora scelta, e si spegne al mattino"
-                                 : "At a chosen hour, off in the morning"
+            label: page.it ? "Solo di sera" : "Evenings only"
+            description: page.it ? "Con la luce notturna accesa, vale dall'ora scelta fino al mattino"
+                                 : "With night light on, it applies from the chosen hour until morning"
             control: S.ToggleSwitch {
                 checked: Core.Ipc.get("display.nightLightAuto", false)
                 onToggled: function(v) {

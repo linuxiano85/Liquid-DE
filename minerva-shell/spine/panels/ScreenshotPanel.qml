@@ -32,9 +32,8 @@ Item {
 
     readonly property bool it: Core.Strings.lang === "it"
 
-    // Stesso conto del pannello di controllo: `stack` è ancorato con un
-    // `topMargin` che la sua `implicitHeight` non conosce, e sotto ci vuole
-    // lo stesso respiro. Vedi il commento per esteso in `ControlPanel.qml`.
+    // `stack` è ancorato con un `topMargin` che la sua `implicitHeight` non
+    // conosce: si somma qui, e sotto ci vuole lo stesso respiro.
     readonly property real implicitPanelHeight: stack.implicitHeight
                                                 + Theme.Effects.space5
                                                 + Theme.Effects.space4

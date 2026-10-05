@@ -684,6 +684,22 @@ class SettingsApi {
             'stato': true,
           },
         },
+        // Il Centro di controllo (in alto a destra): quali riquadri e in che
+        // ordine. Si cambia dal Centro stesso, con «Personalizza». I nomi
+        // sono quelli del catalogo in `minerva-shell/menu/Centro.qml`; uno
+        // che non conosce si salta.
+        'centro': {
+          'voci': [
+            'wifi',
+            'bluetooth',
+            'notte',
+            'nondisturbare',
+            'risparmio',
+            'gioco',
+            'trasmetti',
+            'impostazioni',
+          ],
+        },
         'launcher': {
           // Qui c'era `'maxShown': 7` — quante voci mostrare nel menu — e
           // non la leggeva nessuno: zero occorrenze in tutto il progetto. Il

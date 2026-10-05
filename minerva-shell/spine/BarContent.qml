@@ -47,7 +47,6 @@ Item {
         put("minimized",     minimizedButton);
         put("calendar",      clockButton);
         put("meteo",         clockButton);
-        put("control",       statusCluster);
         put("clipboard",     clipButton);
         put("notifications", bellButton);
         put("power",         powerButton);
@@ -388,7 +387,6 @@ Item {
         StatusCluster {
             id: statusCluster
             anchors.verticalCenter: parent.verticalCenter
-            active: bar.spine.activePanel === "control"
             onClicked: bar.spine.centroChiesto()
         }
 

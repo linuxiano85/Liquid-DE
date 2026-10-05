@@ -8,7 +8,6 @@ ToggleTile  1.0 ToggleTile.qml
 ToolTipHint 1.0 ToolTipHint.qml
 TitleBarContent 1.0 TitleBarContent.qml
 WindowTitleBar  1.0 WindowTitleBar.qml
-MediaCard   1.0 MediaCard.qml
 RigaScelta  1.0 RigaScelta.qml
 ApriCon     1.0 ApriCon.qml
 RitrattoTondo 1.0 RitrattoTondo.qml

@@ -13,8 +13,6 @@ import "../ui" as Ui
 // posto solo: scende dall'angolo in alto a destra (la sosta del puntatore,
 // `Core.Compositore.angolo`) o dalla barra, con la molla.
 //
-// Le levette usano gli stessi comandi del pannello di prima
-// (`spine/panels/ControlPanel.qml`): cambia la forma, non chi fa le cose.
 // Esci, Riavvia e Spegni non chiedono «sei sicuro?»: si TENGONO premuti, e il
 // pulsante si riempie d'acqua; lasciato prima, non succede niente.
 //
@@ -55,9 +53,226 @@ PanelWindow {
         if (!centro.aperto) return;
         centro.aperto = false;
         centro.armato = "";
+        centro.modifica = false;
+        centro.scegliDove = false;
         spegni.restart();
     }
+
+    // ── I riquadri: quali, e in che ordine ──────────────────────────────
+    //
+    // Giacomo, 5 ottobre 2026: «la possibilità di personalizzare il menu in
+    // alto a destra per accesso rapido alle impostazioni, e l'aggiunta ad
+    // esempio del pulsante impostazioni e altre voci, l'ordine». Il catalogo
+    // sta qui; quali si vedono e in che ordine sta in `centro.voci`, e si
+    // cambia da qui dentro con «Personalizza».
+    //
+    // Due generi: le LEVETTE accendono e spengono qualcosa e dicono com'è;
+    // le SCORCIATOIE aprono un posto, e il Centro si chiude.
+    readonly property var catalogo: [
+        { "id": "wifi",          "nome": "Wi-Fi",          "levetta": true },
+        { "id": "bluetooth",     "nome": "Bluetooth",      "levetta": true },
+        { "id": "notte",         "nome": "Luce notturna",  "levetta": true },
+        { "id": "nondisturbare", "nome": "Non disturbare", "levetta": true },
+        { "id": "risparmio",     "nome": "Risparmio",      "levetta": true },
+        { "id": "gioco",         "nome": "Modo gioco",     "levetta": true },
+        { "id": "trasmetti",     "nome": "Trasmetti",      "levetta": true },
+        { "id": "impostazioni",  "nome": "Impostazioni",   "detto": "tutte le scelte" },
+        { "id": "schermata",     "nome": "Schermata",      "detto": "cattura lo schermo" },
+        { "id": "appunti",       "nome": "Appunti",        "detto": "quello che hai copiato" },
+        { "id": "file",          "nome": "File",           "detto": "la cartella personale" },
+        { "id": "terminale",     "nome": "Terminale",      "detto": "una riga di comando" },
+        { "id": "attivita",      "nome": "Attività",       "detto": "programmi e risorse" },
+        { "id": "scorciatoie",   "nome": "Scorciatoie",    "detto": "i tasti di Minerva" }
+    ]
+    readonly property var vociDiSerie: ["wifi", "bluetooth", "notte", "nondisturbare",
+                                        "risparmio", "gioco", "trasmetti", "impostazioni"]
+
+    function _voceDi(id) {
+        for (var i = 0; i < centro.catalogo.length; i++)
+            if (centro.catalogo[i].id === id) return centro.catalogo[i];
+        return null;
+    }
+
+    /// I riquadri da mostrare: quelli scelti, nel loro ordine, senza doppioni
+    /// e senza nomi che il catalogo non conosce più.
+    readonly property var voci: {
+        var scelte = Core.Ipc.get("centro.voci", centro.vociDiSerie) || [];
+        var out = [];
+        for (var i = 0; i < scelte.length; i++) {
+            var id = String(scelte[i]);
+            if (out.indexOf(id) === -1 && centro._voceDi(id) !== null)
+                out.push(id);
+        }
+        return out;
+    }
+    /// Quelli del catalogo che non si vedono: si aggiungono da «Personalizza».
+    readonly property var mancanti: centro.catalogo
+        .map(function (c) { return c.id; })
+        .filter(function (id) { return centro.voci.indexOf(id) === -1; })
+
+    /// Vero mentre si personalizza: i riquadri si spostano e si tolgono, e
+    /// toccarli non accende niente.
+    property bool modifica: false
+
+    function _salva(l) { Core.Ipc.setSetting("centro.voci", l); }
+    function sposta(id, verso) {
+        var l = centro.voci.slice();
+        var i = l.indexOf(id), j = i + verso;
+        if (i < 0 || j < 0 || j >= l.length) return;
+        l[i] = l[j]; l[j] = id;
+        centro._salva(l);
+    }
+    function togli(id) {
+        centro._salva(centro.voci.filter(function (v) { return v !== id; }));
+    }
+    function aggiungi(id) {
+        if (centro.voci.indexOf(id) === -1)
+            centro._salva(centro.voci.concat([id]));
+    }
+
+    function accesoDi(id) {
+        switch (id) {
+        case "wifi":          return Core.SystemState.wifiOn;
+        case "bluetooth":     return Core.SystemState.bluetoothOn;
+        case "notte":         return Core.Ipc.get("display.nightLight", false) === true;
+        case "nondisturbare": return Core.Notifications.doNotDisturb;
+        case "risparmio":     return !!Core.Compositore.risparmio && Core.Compositore.risparmio.attivo === true;
+        case "gioco":         return Core.Gioco.attiva;
+        case "trasmetti":     return centro.trasmissioneVerso !== "";
+        }
+        return false;
+    }
+
+    function dettoDi(id) {
+        switch (id) {
+        // Radio accesa non vuol dire connessi (J2, PC di prova): diceva
+        // «connesso» anche senza nessuna rete.
+        case "wifi":          return Core.SystemState.networkWired ? "in rete col cavo"
+                                   : Core.SystemState.networkName !== "" ? Core.SystemState.networkName
+                                   : "non connesso";
+        case "bluetooth":     return "acceso";
+        case "notte":         return "schermo caldo";
+        case "nondisturbare": return "notifiche in silenzio";
+        case "risparmio":     return "effetti ridotti";
+        case "gioco":         return "notifiche zitte";
+        case "trasmetti":
+            if (centro.trasmissioneVerso !== "")
+                return (centro.trasmissioneSpecchio ? "schermo su " : "sto mandando a ")
+                       + centro.trasmissioneVerso;
+            if (centro.schermiTrovati.length === 0)
+                return "nessuno schermo in rete";
+            return centro.schermiTrovati.map(function (s) { return String(s.nome); }).join(", ");
+        }
+        var v = centro._voceDi(id);
+        return v && v.detto ? v.detto : "";
+    }
+
+    function scegli(id) {
+        switch (id) {
+        case "wifi":
+            if (!centro.inProva) Core.SystemState.setWifi(!Core.SystemState.wifiOn);
+            return;
+        case "bluetooth":
+            if (!centro.inProva) Core.SystemState.setBluetooth(!Core.SystemState.bluetoothOn);
+            return;
+        case "notte":
+            Core.Ipc.setSetting("display.nightLight", !centro.accesoDi("notte"));
+            return;
+        case "nondisturbare":
+            Core.Ipc.setSetting("notifications.doNotDisturb", !centro.accesoDi("nondisturbare"));
+            return;
+        case "risparmio":
+            // Spegnerla deve spegnere. Scriveva sempre «auto» quando era
+            // accesa: ma accesa da sola — «auto», batteria bassa — voleva dire
+            // riscrivere lo stesso valore, e la levetta non si spegneva mai
+            // (30 settembre 2026). Accesa a mano («sempre») torna ad «auto»;
+            // accesa dalla batteria diventa «mai», che si rimette dalle
+            // Impostazioni → Energia.
+            Core.Ipc.setSetting("power.risparmioEffetti",
+                !centro.accesoDi("risparmio") ? "sempre"
+                : Core.Ipc.get("power.risparmioEffetti", "auto") === "sempre" ? "auto" : "mai");
+            return;
+        case "gioco":
+            Core.Gioco.forzato = !Core.Gioco.forzato;
+            return;
+        case "trasmetti":
+            // Sempre premibile mentre trasmette: è l'unico modo di fermarla.
+            if (centro.trasmissioneVerso !== "") {
+                Core.Ipc.trasmettiFerma();
+                centro.scegliDove = false;
+                return;
+            }
+            centro.motivoFallito = "";
+            // Un solo televisore: niente da scegliere.
+            if (centro.schermiTrovati.length === 1) {
+                Core.Ipc.trasmettiSchermo(String(centro.schermiTrovati[0].id), "");
+                return;
+            }
+            if (centro.schermiTrovati.length === 0) {
+                centro.motivoFallito = "Nessun televisore trovato in rete: deve essere acceso e sulla stessa rete.";
+                return;
+            }
+            centro.scegliDove = true;
+            return;
+        }
+        // Una scorciatoia: il posto lo apre la shell, e il Centro si toglie
+        // di mezzo — resterebbe sopra a quello che si è appena aperto.
+        centro.chiudi();
+        centro.azione(id);
+    }
     function commuta() { centro.aperto ? centro.chiudi() : centro.apri(); }
+
+    // ── Trasmettere lo schermo a un televisore ───────────────────────────
+    //
+    // Stava nel pannello di prima (`spine/panels/ControlPanel.qml`), e quando
+    // il Centro ne ha preso il posto è rimasto là: «Trasmetti lo schermo» non
+    // si poteva più né avviare né FERMARE (5 ottobre 2026). Un file si manda
+    // dal tasto destro, nel gestore file o in Anteprima; da qui si manda lo
+    // schermo, dal vivo.
+    //
+    // Si chiede solo se il riquadro c'è e il Centro è aperto: la ricerca dei
+    // televisori costa due secondi di rete.
+    readonly property bool _trasmettiQui: centro.aperto && centro.voci.indexOf("trasmetti") !== -1
+    property var schermiTrovati: []
+    property string trasmissioneVerso: ""
+    property bool trasmissioneSpecchio: false
+    property bool scegliDove: false
+    property string motivoFallito: ""
+    on_TrasmettiQuiChanged: if (centro._trasmettiQui) Core.Ipc.condivisioneDove()
+    Timer {
+        interval: 4000
+        repeat: true
+        running: centro._trasmettiQui
+        triggeredOnStart: true
+        onTriggered: Core.Ipc.trasmettiChiediStato()
+    }
+    Connections {
+        target: Core.Ipc
+        function onCondivisioneDoveRicevute(dati) {
+            var d = (dati && dati.destinazioni) || [];
+            for (var i = 0; i < d.length; i++) {
+                if (d[i].id === "schermo") {
+                    centro.schermiTrovati = d[i].dispositivi || [];
+                    return;
+                }
+            }
+        }
+        function onTrasmettiStato(st) {
+            centro.trasmissioneVerso = st && st.inCorso === true ? String(st.verso || "") : "";
+            centro.trasmissioneSpecchio = st ? st.specchio === true : false;
+        }
+        function onTrasmettiEsito(e) {
+            if (e && e.ok === true && e.verso) {
+                centro.trasmissioneVerso = String(e.verso);
+                centro.scegliDove = false;
+            } else {
+                centro.trasmissioneVerso = "";
+                centro.trasmissioneSpecchio = false;
+                if (e && e.error)
+                    centro.motivoFallito = String(e.error);
+            }
+        }
+    }
 
     visible: centro.mostrato
     anchors { top: true; bottom: true; left: true; right: true }
@@ -121,59 +336,179 @@ PanelWindow {
             opacity: centro.aperto ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: Theme.Motion.quick } }
 
-            // Le sei levette.
+            // ── I riquadri ──────────────────────────────────────────────
+            Item {
+                width: parent.width
+                height: 18
+                Text {
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: centro.modifica ? "Fatto" : "Personalizza"
+                    color: personalizzaMouse.containsMouse || centro.modifica
+                           ? Theme.Colors.accent : Theme.Colors.textFaint
+                    font.family: Theme.Typography.fontDisplay
+                    font.pixelSize: Theme.Typography.sizeXS
+                    font.weight: centro.modifica ? Theme.Typography.weightMedium
+                                                 : Theme.Typography.weightRegular
+                    MouseArea {
+                        id: personalizzaMouse
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: centro.modifica = !centro.modifica
+                    }
+                }
+            }
+
             Grid {
                 columns: 2
                 spacing: Theme.Effects.space2
                 width: parent.width
 
-                Levetta {
-                    nome: "Wi-Fi"
-                    acceso: Core.SystemState.wifiOn
-                    // Radio accesa non vuol dire connessi (J2, PC di prova):
-                    // diceva «connesso» anche senza nessuna rete.
-                    detto: Core.SystemState.networkWired ? "in rete col cavo"
-                           : Core.SystemState.networkName !== "" ? Core.SystemState.networkName
-                           : "non connesso"
-                    onScelto: if (!centro.inProva) Core.SystemState.setWifi(!Core.SystemState.wifiOn)
+                Repeater {
+                    model: centro.voci
+                    delegate: Levetta {
+                        required property var modelData
+                        required property int index
+                        readonly property var voce: centro._voceDi(modelData)
+                        nome: voce ? voce.nome : modelData
+                        scorciatoia: !(voce && voce.levetta)
+                        acceso: centro.accesoDi(modelData)
+                        detto: centro.dettoDi(modelData)
+                        inModifica: centro.modifica
+                        primo: index === 0
+                        ultimo: index === centro.voci.length - 1
+                        onScelto: centro.scegli(modelData)
+                        onSpostato: function (verso) { centro.sposta(modelData, verso); }
+                        onTolto: centro.togli(modelData)
+                    }
                 }
-                Levetta {
-                    nome: "Bluetooth"
-                    acceso: Core.SystemState.bluetoothOn
-                    detto: "acceso"
-                    onScelto: if (!centro.inProva) Core.SystemState.setBluetooth(!Core.SystemState.bluetoothOn)
+            }
+
+            // ── Dove mandare lo schermo ─────────────────────────────────
+            Column {
+                width: parent.width
+                spacing: Theme.Effects.space1
+                visible: !centro.modifica && centro.scegliDove && centro.trasmissioneVerso === ""
+                Text {
+                    text: "Manda lo schermo a:"
+                    color: Theme.Colors.textFaint
+                    font.family: Theme.Typography.fontDisplay
+                    font.pixelSize: Theme.Typography.sizeXS
                 }
-                Levetta {
-                    nome: "Luce notturna"
-                    acceso: Core.Ipc.get("display.nightLight", false) === true
-                    detto: "schermo caldo"
-                    onScelto: Core.Ipc.setSetting("display.nightLight", !acceso)
+                Repeater {
+                    model: centro.schermiTrovati
+                    delegate: Rectangle {
+                        id: tv
+                        required property var modelData
+                        width: parent.width
+                        height: 36
+                        radius: Theme.Effects.radiusMD
+                        color: tvMouse.containsMouse ? Qt.alpha(Theme.Colors.accent, 0.22) : Theme.Colors.raised
+                        Text {
+                            x: Theme.Effects.space3
+                            anchors.verticalCenter: parent.verticalCenter
+                            textFormat: Text.PlainText
+                            text: String(tv.modelData.nome)
+                            color: Theme.Colors.text
+                            font.family: Theme.Typography.fontDisplay
+                            font.pixelSize: Theme.Typography.sizeSM
+                        }
+                        MouseArea {
+                            id: tvMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                centro.motivoFallito = "";
+                                Core.Ipc.trasmettiSchermo(String(tv.modelData.id), "");
+                            }
+                        }
+                    }
                 }
-                Levetta {
-                    nome: "Non disturbare"
-                    acceso: Core.Notifications.doNotDisturb
-                    detto: "notifiche in silenzio"
-                    onScelto: Core.Ipc.setSetting("notifications.doNotDisturb", !acceso)
+                // Come è fatto HLS: va detto prima, non scoperto davanti alla TV.
+                Text {
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    text: "Circa tre secondi di ritardo: per guardare va bene, per lavorare "
+                          + "sullo schermo grande no. Un file si manda dal tasto destro, «Trasmetti a…»."
+                    color: Theme.Colors.textFaint
+                    font.family: Theme.Typography.fontDisplay
+                    font.pixelSize: Theme.Typography.sizeXS
                 }
-                Levetta {
-                    nome: "Risparmio"
-                    acceso: Core.Compositore.risparmio && Core.Compositore.risparmio.attivo === true
-                    detto: "effetti ridotti"
-                    // Spegnerla deve spegnere. Scriveva sempre «auto» quando era
-                    // accesa: ma accesa da sola — «auto», batteria bassa — voleva
-                    // dire riscrivere lo stesso valore, e la levetta non si
-                    // spegneva mai (30 settembre 2026). Accesa a mano («sempre»)
-                    // torna ad «auto»; accesa dalla batteria diventa «mai», che
-                    // si rimette dalle Impostazioni → Energia.
-                    onScelto: Core.Ipc.setSetting("power.risparmioEffetti",
-                        !acceso ? "sempre"
-                        : Core.Ipc.get("power.risparmioEffetti", "auto") === "sempre" ? "auto" : "mai")
+            }
+            Text {
+                width: parent.width
+                visible: centro.motivoFallito !== "" && centro.trasmissioneVerso === ""
+                wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
+                text: centro.motivoFallito
+                color: Theme.Colors.warning
+                font.family: Theme.Typography.fontDisplay
+                font.pixelSize: Theme.Typography.sizeXS
+            }
+
+            // In modifica: quello che si può aggiungere, e la via di ritorno.
+            Column {
+                width: parent.width
+                spacing: Theme.Effects.space2
+                visible: centro.modifica
+
+                Text {
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    text: centro.mancanti.length > 0
+                          ? "Tocca per aggiungere. Le frecce spostano, la croce toglie."
+                          : "Ci sono già tutti. Le frecce spostano, la croce toglie."
+                    color: Theme.Colors.textFaint
+                    font.family: Theme.Typography.fontDisplay
+                    font.pixelSize: Theme.Typography.sizeXS
                 }
-                Levetta {
-                    nome: "Modo gioco"
-                    acceso: Core.Gioco.attiva
-                    detto: "notifiche zitte"
-                    onScelto: Core.Gioco.forzato = !Core.Gioco.forzato
+                Flow {
+                    width: parent.width
+                    spacing: Theme.Effects.space1
+                    Repeater {
+                        model: centro.mancanti
+                        delegate: Rectangle {
+                            id: daAggiungere
+                            required property var modelData
+                            width: aggiungiTesto.implicitWidth + Theme.Effects.space4
+                            height: 30
+                            radius: height / 2
+                            color: aggiungiMouse.containsMouse ? Qt.alpha(Theme.Colors.accent, 0.22)
+                                                               : Theme.Colors.raised
+                            Text {
+                                id: aggiungiTesto
+                                anchors.centerIn: parent
+                                text: "+ " + (centro._voceDi(daAggiungere.modelData) || { "nome": "" }).nome
+                                color: Theme.Colors.text
+                                font.family: Theme.Typography.fontDisplay
+                                font.pixelSize: Theme.Typography.sizeXS
+                            }
+                            MouseArea {
+                                id: aggiungiMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: centro.aggiungi(daAggiungere.modelData)
+                            }
+                        }
+                    }
+                }
+                Text {
+                    text: "↺ Come di serie"
+                    color: serieMouse.containsMouse ? Theme.Colors.accent : Theme.Colors.textMuted
+                    font.family: Theme.Typography.fontDisplay
+                    font.pixelSize: Theme.Typography.sizeXS
+                    MouseArea {
+                        id: serieMouse
+                        anchors.fill: parent
+                        anchors.margins: -4
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: centro._salva(centro.vociDiSerie)
+                    }
                 }
             }
 
@@ -319,7 +654,14 @@ PanelWindow {
         property string nome: ""
         property bool acceso: false
         property string detto: ""
+        /// Apre un posto invece di accendere qualcosa: niente «spento».
+        property bool scorciatoia: false
+        property bool inModifica: false
+        property bool primo: false
+        property bool ultimo: false
         signal scelto()
+        signal spostato(int verso)
+        signal tolto()
         width: 179
         height: 58
         radius: Theme.Effects.radiusMD
@@ -335,8 +677,10 @@ PanelWindow {
         Column {
             x: Theme.Effects.space3
             anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - 2 * Theme.Effects.space3
+            width: parent.width - 2 * Theme.Effects.space3 - (lev.inModifica ? 80 : 0)
             Text {
+                width: parent.width
+                elide: Text.ElideRight
                 text: lev.nome
                 color: Theme.Colors.text
                 font.family: Theme.Typography.fontDisplay
@@ -346,7 +690,7 @@ PanelWindow {
             Text {
                 width: parent.width
                 elide: Text.ElideRight
-                text: lev.acceso ? lev.detto : "spento"
+                text: lev.scorciatoia || lev.acceso ? lev.detto : "spento"
                 color: lev.acceso ? Theme.Colors.accent : Theme.Colors.textFaint
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeXS
@@ -355,9 +699,52 @@ PanelWindow {
         MouseArea {
             id: levMouse
             anchors.fill: parent
+            enabled: !lev.inModifica
             preventStealing: true
             cursorShape: Qt.PointingHandCursor
             onClicked: lev.scelto()
+        }
+
+        // In modifica: ‹ › spostano, × toglie.
+        Row {
+            visible: lev.inModifica
+            anchors.right: parent.right
+            anchors.rightMargin: 4
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 2
+            Repeater {
+                model: [
+                    { "segno": "‹", "fa": -1, "si": !lev.primo },
+                    { "segno": "›", "fa": 1,  "si": !lev.ultimo },
+                    { "segno": "×", "fa": 0,  "si": true }
+                ]
+                delegate: Rectangle {
+                    id: tastino
+                    required property var modelData
+                    width: 24; height: 24; radius: 12
+                    opacity: tastino.modelData.si ? 1 : 0.3
+                    color: tastinoMouse.containsMouse && tastino.modelData.si
+                           ? (tastino.modelData.fa === 0 ? Qt.alpha(Theme.Colors.danger, 0.3)
+                                                         : Theme.Colors.hover)
+                           : Qt.alpha(Theme.Colors.panel, 0.6)
+                    Text {
+                        anchors.centerIn: parent
+                        text: tastino.modelData.segno
+                        color: Theme.Colors.text
+                        font.family: Theme.Typography.fontDisplay
+                        font.pixelSize: Theme.Typography.sizeSM
+                    }
+                    MouseArea {
+                        id: tastinoMouse
+                        anchors.fill: parent
+                        enabled: tastino.modelData.si
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: tastino.modelData.fa === 0 ? lev.tolto()
+                                                              : lev.spostato(tastino.modelData.fa)
+                    }
+                }
+            }
         }
     }
 

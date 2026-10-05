@@ -951,6 +951,14 @@ struct schermo {
 	/// ogni fotogramma vorrebbe dire chiedere al kernel sessanta volte al
 	/// secondo una risposta che non cambia mai.
 	int tinta_strada;
+	/// Lo schermo ha addosso una tabella dei colori (la luce notturna).
+	///
+	/// Serve a SPEGNERLA. La tabella si applica col commit dello schermo e
+	/// resta lì finché un altro commit non la cambia: quando la luce si
+	/// spegneva, la tinta diventava NULL, il fotogramma passava dal commit
+	/// normale della scena — che la tabella non la tocca — e il monitor
+	/// restava caldo. «Si abilita ma non si disabilita» (5 ottobre 2026).
+	bool tinta_accesa;
 };
 
 /// Di che razza è una finestra.
@@ -1482,8 +1490,19 @@ static bool lente_commit(struct schermo *s, struct wlr_scene_output *so,
 		}
 	}
 
+	// La tinta viaggia anche qui: con la lente accesa i fotogrammi passano
+	// da questa strada, e la luce notturna non si accendeva né si spegneva.
+	// Solo se lo schermo l'ha già accettata (`tinta_strada` 1): la prova la
+	// fa `tinta_commit`, appena la lente si spegne.
+	const bool con_tinta = s->tinta_strada == 1
+		&& (m->tinta != NULL || s->tinta_accesa);
+	if (con_tinta)
+		wlr_output_state_set_color_transform(&stato, m->tinta);
+
 	if (wlr_output_commit_state(out, &stato)) {
 		wlr_output_state_finish(&stato);
+		if (con_tinta)
+			s->tinta_accesa = m->tinta != NULL;
 		return true;
 	}
 
@@ -1552,6 +1571,8 @@ static bool tinta_commit(struct schermo *s, struct wlr_scene_output *so,
 
 	bool ok = wlr_output_commit_state(s->out, &stato);
 	wlr_output_state_finish(&stato);
+	if (ok && s->tinta_strada == 1)
+		s->tinta_accesa = s->m->tinta != NULL;
 	return ok;
 }
 
@@ -1641,7 +1662,7 @@ static void schermo_frame(struct wl_listener *l, void *dati) {
 		}
 	} else if (s->m->lente_scala > 1.0)
 		accettato = lente_commit(s, so, &opzioni);
-	else if (s->m->tinta != NULL)
+	else if (s->m->tinta != NULL || s->tinta_accesa)
 		accettato = tinta_commit(s, so, &opzioni);
 	else
 		accettato = wlr_scene_output_commit(so, &opzioni);

@@ -144,6 +144,11 @@ QtObject {
     }
 
     function _applicaDavvero() {
+        // Prima delle impostazioni vere `accesa` vale il ripiego (spenta): si
+        // manderebbe il neutro a uno schermo che deve restare caldo, e al
+        // ricaricamento della shell la luce lampeggiava.
+        if (!Core.Ipc.impostazioniArrivate)
+            return;
         // ── Non c'è nessuno shader, e non serve ──────────────────────────
         //
         // La tinta va dritta al compositore come tre moltiplicatori, e lui la
@@ -156,6 +161,10 @@ QtObject {
     }
 
     onDaApplicareChanged: luce.applica()
+    property Connections _arrivo: Connections {
+        target: Core.Ipc
+        function onImpostazioniArrivateChanged() { luce.applica(); }
+    }
     onTemperaturaChanged: luce.applica()
 
     // All'avvio si applica com'è: se la sessione è ripartita di notte con la
