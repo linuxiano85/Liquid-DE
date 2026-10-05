@@ -397,13 +397,12 @@ Item {
         Ui.SpineButton {
             id: clipButton
             anchors.verticalCenter: parent.verticalCenter
-            active: bar.spine.activePanel === "clipboard"
             tooltip: Core.Strings.lang === "it" ? "Appunti" : "Clipboard"
-            onClicked: bar.spine.toggle("clipboard")
+            onClicked: bar.spine.cassettoChiesto()
             content: Ui.Icon {
                 name: "clipboard"
                 width: 19; height: 19
-                color: clipButton.active ? Theme.Colors.accent : Theme.Colors.textMuted
+                color: Theme.Colors.textMuted
             }
         }
 

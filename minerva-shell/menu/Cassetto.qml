@@ -13,8 +13,7 @@ import "../ui" as Ui
 // il puntatore (`Core.Compositore.bordo`; una sosta non basta, perché lì si
 // va a prendere la barra di scorrimento), o con Super+V.
 //
-// Dentro c'è la storia di `cliphist`, la stessa del pannello di prima
-// (`spine/panels/ClipboardPanel.qml`): un tocco rimette una voce negli
+// Dentro c'è la storia di `cliphist`: un tocco rimette una voce negli
 // appunti, la crocetta la toglie, «Svuota» si tocca due volte. Le immagini
 // si vedono: `cliphist` le tiene come dati e basta, e il Cassetto le
 // decodifica una volta sola in `$XDG_RUNTIME_DIR/liquid-de/appunti`.

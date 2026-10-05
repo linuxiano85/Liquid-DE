@@ -699,8 +699,6 @@ ShellRoot {
         root.tastiAperti = si;
     }
 
-    /// Il Cassetto degli appunti dello schermo attivo; senza, il pannello di
-    /// prima.
     /// Ctrl+Maiusc+Esc: Attività nella shell, sullo schermo attivo. Senza
     /// uno schermo registrato (fra lo stacco di un monitor e l'altro) si
     /// apre la finestra: il gestore dei processi non deve mai mancare.
@@ -712,12 +710,11 @@ ShellRoot {
             root.openMonitor();
     }
 
+    /// Il Cassetto degli appunti dello schermo attivo.
     function apriCassetto() {
         var s = root.scrivaniaAttiva();
         if (s && s.cassetto)
             s.cassetto.commuta();
-        else
-            root.pannello("clipboard");
     }
 
     /// Le azioni che il Sottomarino trova con la ricerca. Quelle che
@@ -913,6 +910,7 @@ ShellRoot {
                 onSettingsRequested: root.openSettings()
                 onMenuAppChiesto: sottomarino.commuta()
                 onCentroChiesto: centroControllo.commuta()
+                onCassettoChiesto: cassettoAppunti.commuta()
                 onIsolaChiesta: function(dove) {
                     if (isolaGiorno.aperto) isolaGiorno.chiudi(); else isolaGiorno.apriDa(dove);
                 }

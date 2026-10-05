@@ -85,6 +85,8 @@ PanelWindow {
     signal menuAppChiesto()
     /// I segni di stato: aprono il Centro di controllo (`menu/Centro.qml`).
     signal centroChiesto()
+    /// Il pulsante degli appunti: apre il Cassetto (`menu/Cassetto.qml`).
+    signal cassettoChiesto()
     /// La capsula in mezzo: apre l'Isola (`menu/Isola.qml`), che nasce dal
     /// rettangolo della capsula, in coordinate dello schermo.
     signal isolaChiesta(rect dove)
@@ -131,10 +133,6 @@ PanelWindow {
         "control": {
             "width": 420, "height": 470, "align": "right",
             "source": "panels/ControlPanel.qml"
-        },
-        "clipboard": {
-            "width": 400, "height": 440, "align": "right",
-            "source": "panels/ClipboardPanel.qml"
         },
         "notifications": {
             "width": 400, "height": 480, "align": "right",
