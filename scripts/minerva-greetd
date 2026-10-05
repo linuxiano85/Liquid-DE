@@ -44,26 +44,6 @@ REGISTRI=/var/log/minerva-greeter
 CONF=/etc/greetd
 SEGNO=$CONF/gestore-precedente
 
-# La porta del canale fra demone e shell DENTRO il greeter.
-#
-# Diverso da quello della sessione perché i due Minerva possono essere accesi
-# insieme: durante una prova lo sono di sicuro, e al momento del cambio di
-# sessione si sfiorano comunque. Con un indirizzo solo il demone del greeter
-# non riesce ad ascoltare e la schermata di accesso si connette al demone
-# dell'utente già dentro — che non sa niente di greetd. Risultato: una
-# schermata che si vede benissimo e non fa entrare nessuno.
-#
-# Fino al 27 agosto 2026 qui c'era «PORTA_GREETER=11433». Adesso è un socket
-# Unix, e si scrive per esteso invece di lasciarlo dedurre dal nome della
-# sessione: l'utente «greeter» può avere XDG_RUNTIME_DIR impostato su una
-# cartella che non esiste e che non ha il diritto di creare — è successo il 10
-# agosto 2026, e allora il demone morì lasciando a schermo una schermata di
-# accesso intera con l'elenco utenti vuoto. «$STATO» invece è suo per
-# costruzione.
-#
-# Sotto i 100 caratteri, o «sun_path» lo taglia: vedi socketDa() nel demone.
-SOCKET_GREETER="$STATO/canale.sock"
-
 verde()  { printf '\033[32m✓\033[0m %s\n' "$1"; }
 grigio() { printf '\033[36m·\033[0m %s\n' "$1"; }
 rosso()  { printf '\033[31m✗\033[0m %s\n' "$1" >&2; }

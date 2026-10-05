@@ -33,6 +33,13 @@ export MINERVA_CONFIG_DIR="$STATO"
 # senza un nome ricadrebbe su «unica», cioè sullo stesso posto in cui scrive
 # la sessione dell'utente. Vedi scripts/minerva-posti.sh.
 export MINERVA_SESSIONE=greeter
+# La porta del canale fra demone e shell DENTRO il greeter, diversa da quella
+# della sessione: i due Minerva possono essere accesi insieme (durante una
+# prova, e al cambio di sessione), e con un indirizzo solo la schermata di
+# accesso si collegherebbe al demone dell'utente — che di greetd non sa niente.
+# Per esteso e in «$STATO», non dedotta: l'utente «greeter» può avere un
+# XDG_RUNTIME_DIR che non esiste (10 agosto 2026). Sotto i 100 caratteri, o
+# «sun_path» la taglia: vedi socketDa() nel demone.
 export MINERVA_IPC_SOCKET="$STATO/canale.sock"
 export XDG_CURRENT_DESKTOP=MinervaWayland:Minerva
 # L'utente «greeter» non ha una casa: senza, Qt prova a scrivere la cache
