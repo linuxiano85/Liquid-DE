@@ -490,6 +490,7 @@ PanelWindow {
                     color: Theme.Colors.raisedHigh
 
                     Text {
+                        textFormat: Text.PlainText
                         anchors.centerIn: parent
                         text: (row.modelData.title || "?").charAt(0).toUpperCase()
                         color: Theme.Colors.textMuted
@@ -508,6 +509,7 @@ PanelWindow {
                     spacing: 1
 
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         elide: Text.ElideRight
                         text: row.modelData.title || ""
@@ -581,6 +583,4 @@ PanelWindow {
             font.pixelSize: Theme.Typography.sizeMD
         }
     }
-
-    Component.onDestruction: {}
 }

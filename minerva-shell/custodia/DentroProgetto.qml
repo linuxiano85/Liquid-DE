@@ -48,7 +48,7 @@ Flickable {
     // si risponde sempre sì senza leggere — ma dice **cosa succede** e **cosa
     // resta recuperabile**, che è l'informazione con cui uno decide davvero.
 
-    property string chiedo: ""     // "salvataggio" | "punto"
+    property string chiedo: ""     // "salvataggio" | "punto" | "togli"
     property string chiedoId: ""
     property string chiedoCosa: ""
 
@@ -567,6 +567,25 @@ Flickable {
                 }
             }
         }
+
+        // ── Smettere di custodire ────────────────────────────────────────
+        //
+        // Si aggiungeva e non si toglieva: il demone lo sapeva fare
+        // (`custodia_togli`), mancava il pulsante (5 ottobre 2026). Toglie
+        // la cartella dall'ELENCO e basta: i punti di ritorno e le copie
+        // restano dove sono, e la conferma lo dice.
+        Ui.SpineButton {
+            height: 36
+            horizontalPadding: Theme.Effects.space4
+            onClicked: pagina.domanda("togli", "", pagina.dati.nome || pagina.percorso)
+            content: Text {
+                text: pagina.it ? "Smetti di custodire questa cartella"
+                                : "Stop keeping this folder safe"
+                color: Theme.Colors.textMuted
+                font.family: Theme.Typography.fontDisplay
+                font.pixelSize: Theme.Typography.sizeSM
+            }
+        }
     }
 
     // ── La conferma ──────────────────────────────────────────────────────
@@ -600,7 +619,11 @@ Flickable {
                 Text {
                     width: parent.width
                     wrapMode: Text.WordWrap
-                    text: pagina.chiedo === "punto"
+                    text: pagina.chiedo === "togli"
+                          ? (pagina.it
+                             ? "Smetto di custodire «" + pagina.chiedoCosa + "»?"
+                             : "Stop keeping «" + pagina.chiedoCosa + "» safe?")
+                          : pagina.chiedo === "punto"
                           ? (pagina.it
                              ? "Torno alla cartella com'era in «"
                                + pagina.chiedoCosa + "»?"
@@ -619,7 +642,11 @@ Flickable {
                 Text {
                     width: parent.width
                     wrapMode: Text.WordWrap
-                    text: pagina.it
+                    text: pagina.chiedo === "togli"
+                          ? (pagina.it
+                             ? "Esce dall'elenco e smetto di guardarla. La cartella non si tocca, e i punti di ritorno e le copie che ha già restano dove sono: aggiungendola di nuovo li ritrovi."
+                             : "It leaves the list and I stop watching it. The folder isn't touched, and its restore points and copies stay where they are: add it again and they're back.")
+                          : pagina.it
                           ? "Quello che hai fatto da allora sparisce da questa cartella — anche i file aggiunti dopo.\n\nPrima di toccare qualsiasi cosa prendo un punto di ritorno di com'è adesso, quindi puoi tornare avanti."
                           : "Everything since then goes away — including files added later.\n\nI take a restore point of the current state first, so you can come back."
                     color: Theme.Colors.textMuted
@@ -648,7 +675,13 @@ Flickable {
                         horizontalPadding: Theme.Effects.space4
                         accent: Theme.Colors.warning
                         onClicked: {
-                            if (pagina.chiedo === "punto") {
+                            if (pagina.chiedo === "togli") {
+                                Core.Ipc.custodiaTogli(pagina.percorso);
+                                // Si torna all'elenco: riaprire un progetto
+                                // che non è più nell'elenco darebbe errore.
+                                pagina.finestra.aperto = "";
+                                pagina.finestra.dettaglio = ({});
+                            } else if (pagina.chiedo === "punto") {
                                 Core.Ipc.custodiaTornaAPunto(pagina.percorso,
                                                              pagina.chiedoId);
                             } else {
@@ -658,7 +691,9 @@ Flickable {
                             pagina.chiedo = "";
                         }
                         content: Text {
-                            text: pagina.it ? "Torna indietro" : "Go back"
+                            text: pagina.chiedo === "togli"
+                                  ? (pagina.it ? "Smetti di custodire" : "Stop")
+                                  : (pagina.it ? "Torna indietro" : "Go back")
                             color: Theme.Colors.warning
                             font.family: Theme.Typography.fontDisplay
                             font.pixelSize: Theme.Typography.sizeMD

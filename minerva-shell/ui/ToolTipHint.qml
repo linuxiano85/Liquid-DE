@@ -78,6 +78,7 @@ Item {
         border.color: Theme.Colors.edge
 
         Text {
+            textFormat: Text.PlainText
             id: etichetta
             anchors.centerIn: parent
             text: hint.text

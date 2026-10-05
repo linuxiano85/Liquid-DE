@@ -92,6 +92,7 @@ Item {
         }
 
         Text {
+            textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
             text: tabellone.titolo
             color: Theme.Colors.text

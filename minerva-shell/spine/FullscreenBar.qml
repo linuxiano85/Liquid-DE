@@ -7,11 +7,9 @@ import "../ui" as Ui
 
 // FullscreenBar — La via d'uscita dallo schermo intero.
 //
-// A schermo intero Hyprland copre TUTTO: barra di sistema, dock e barre del
-// titolo spariscono, perché il livello `top` di layer-shell finisce sotto la
-// finestra. Verificato a mano su questa macchina, non dedotto: con una
-// finestra a schermo intero la fotografia dello schermo non contiene un solo
-// pixel della shell.
+// A schermo intero la finestra copre TUTTO: barra, dock e barra del titolo
+// spariscono, perché il livello `top` di layer-shell finisce sotto la
+// finestra (`piano_intero` nel compositore).
 //
 // Il risultato è che chi ci finisce dentro senza saperlo — e ci si finisce con
 // un tasto solo — non ha più niente da cliccare. Deve indovinare la
@@ -41,9 +39,8 @@ PanelWindow {
     // ── E questa resta in cima anche con la barra in fondo ───────────────
     //
     // Sembra una dimenticanza e non lo è. Questa non è la barra di Minerva: è
-    // la barra del TITOLO della finestra a schermo intero, cioè la stessa cosa
-    // che `spine/TitleBars.qml` disegna sopra ogni altra finestra. Le barre
-    // del titolo stanno in cima alla loro finestra, e una finestra a schermo
+    // la barra del TITOLO della finestra a schermo intero. Le barre del
+    // titolo stanno in cima alla loro finestra, e una finestra a schermo
     // intero ha la cima dove ce l'ha lo schermo.
     //
     // Legarla a `bar.position` vorrebbe dire che spostando la barra della
@@ -79,8 +76,7 @@ PanelWindow {
     // invece che da uno). Il bordo alto lo sorveglia il compositore, che
     // vede il puntatore comunque, e lo annuncia (`evento bordoalto`): la
     // barra si monta allora, e si smonta finita la discesa all'indietro.
-    // Sotto Hyprland resta com'era: là nessuno lo annuncia.
-    readonly property bool soloAlBordo: fs.mode === "hover" && Core.Compositore.nostro
+    readonly property bool soloAlBordo: fs.mode === "hover"
 
     visible: fs.mode !== "off" && fs.target !== null
              && (!fs.soloAlBordo || fs.revealed || smonta.running)
@@ -109,21 +105,6 @@ PanelWindow {
         onTriggered: if (fs.soloAlBordo && !area.containsMouse) fs.revealed = false
     }
     implicitHeight: fs.barHeight + Theme.Effects.space5
-
-    // Hyprland non manda nessun evento quando una finestra entra o esce dallo
-    // schermo intero: si guarda ogni tanto. Due secondi bastano — è una cosa
-    // che si fa una volta ogni tanto, non dieci volte al secondo.
-    //
-    // Il nostro compositore invece lo annuncia (`evento stato`, che il demone
-    // ascolta e gira come elenco delle finestre): lì questo giro era una
-    // sveglia di shell, demone e compositore ogni secondo e mezzo, per tutta
-    // la sessione, senza sapere niente di nuovo.
-    Timer {
-        interval: 1500
-        running: !Core.Compositore.nostro
-        repeat: true
-        onTriggered: Core.Windows.refresh()
-    }
 
     // ── Comparsa ─────────────────────────────────────────────────────────
 
@@ -272,6 +253,7 @@ PanelWindow {
             }
 
             Text {
+                textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 // Prende lo spazio che resta fra l'icona e i comandi: un
                 // titolo lungo si accorcia invece di spingere via i pulsanti.

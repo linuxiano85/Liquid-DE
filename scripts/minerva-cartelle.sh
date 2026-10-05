@@ -49,3 +49,14 @@ CARTELLA_CONFIG_DI_PARTENZA="$(_base_xdg XDG_CONFIG_HOME .config)/$LIQUID_NOME"
 # build da provare senza installarla.
 PREFISSO="${LIQUID_PREFISSO:-$HOME/.local/opt/$LIQUID_NOME}"
 CARTELLA_BIN="${MINERVA_BIN:-$PREFISSO/bin}"
+
+# ── La radice installata ───────────────────────────────────────────────────
+#
+# Dove Liquid DE gira davvero: una COPIA della parte dei sorgenti che serve
+# a runtime (script, shell, risorse, configurazioni, il demone compilato),
+# fatta da `minerva-installa-radice`. Fino al 4 ottobre 2026 la sessione
+# girava dalla cartella dei sorgenti stessa: spostata quella cartella da
+# Scaricati a Documenti, nessuna app di Minerva si apriva più — nemmeno le
+# Impostazioni — e al riavvio non sarebbe partita nemmeno la sessione. I
+# sorgenti adesso sono solo il posto da cui si costruisce.
+CARTELLA_RADICE="${LIQUID_RADICE:-$PREFISSO/radice}"

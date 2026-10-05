@@ -283,6 +283,8 @@ FloatingWindow {
           "cerca": "wifi rete cavo ethernet password connessione" },
         { "id": "bluetooth",  "icon": "bluetooth", "it": "Bluetooth",     "en": "Bluetooth",
           "cerca": "bluetooth accoppiamento cuffie dispositivi" },
+        { "id": "controller", "icon": "gamepad",   "it": "Controller",    "en": "Game controllers",
+          "cerca": "controller pad joystick gamepad giochi dualshock dualsense xbox playstation steam input inputplumber" },
         { "id": "input",      "icon": "keyboard",  "it": "Tastiera e mouse", "en": "Keyboard & mouse",
           "cerca": "tastiera disposizione layout mouse touchpad sensibilità ripetizione tap puntatore cursore grandezza dimensione" },
         { "id": "dataora",    "icon": "clock",     "it": "Data, ora e lingua", "en": "Date, time & language",
@@ -319,7 +321,7 @@ FloatingWindow {
         { "id": "g-scrivania", "icon": "image", "it": "Personalizzazione", "en": "Personalization",
           "voci": ["appearance", "scrivania", "finestre", "dock"] },
         { "id": "g-dispositivi", "icon": "screen", "it": "Dispositivi", "en": "Devices",
-          "voci": ["display", "audio", "input", "bluetooth"] },
+          "voci": ["display", "audio", "input", "bluetooth", "controller"] },
         { "id": "g-connessioni", "icon": "wifi", "it": "Connessioni", "en": "Connections",
           "voci": ["network", "account"] },
         { "id": "g-app", "icon": "apps", "it": "Applicazioni", "en": "Applications",
@@ -753,6 +755,7 @@ FloatingWindow {
             case "audio":    return "sections/Audio.qml";
             case "network":   return "sections/Network.qml";
             case "bluetooth": return "sections/Bluetooth.qml";
+            case "controller": return "sections/Controller.qml";
             case "input":    return "sections/Input.qml";
             case "dataora":  return "sections/DataOra.qml";
             case "accesso-facile": return "sections/Accessibilita.qml";

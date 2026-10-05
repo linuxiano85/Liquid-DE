@@ -636,6 +636,7 @@ PanelWindow {
                             width: parent.width - 2 * Theme.Effects.space3 - 28
                             spacing: 2
                             Text {
+                                textFormat: Text.PlainText
                                 width: parent.width
                                 elide: Text.ElideRight
                                 text: nota.modelData.appName + " · " + new Date(nota.modelData.time).toLocaleTimeString(isola._locale, "HH:mm")
@@ -644,6 +645,7 @@ PanelWindow {
                                 font.pixelSize: Theme.Typography.sizeXS
                             }
                             Text {
+                                textFormat: Text.PlainText
                                 width: parent.width
                                 visible: text !== ""
                                 elide: Text.ElideRight

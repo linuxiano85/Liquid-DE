@@ -159,7 +159,11 @@ Page {
         // sta parlando con l'adattatore, e mettersi a interrogarlo ogni
         // quattro secondi nel frattempo è il modo di far fallire proprio la
         // cosa che si sta aspettando.
-        running: page.busyMac === ""
+        // Solo con le Impostazioni davanti: ridotte o dietro un'altra
+        // finestra non c'è nessuno a guardare. Tornandoci si aggiorna
+        // subito (`triggeredOnStart`).
+        running: Qt.application.state === Qt.ApplicationActive && (page.busyMac === "")
+        triggeredOnStart: true
         repeat: true
         onTriggered: page.refresh()
     }
@@ -262,8 +266,11 @@ Page {
                 page.busyMac = "";
                 page.busyWhat = "";
                 page.refresh();
-                page.say(d.error || (it ? "Non è riuscito." : "It did not work."),
-                         true);
+                // Annullato da noi non è un errore: non si colora di rosso.
+                var annullato = d.error === "Annullato.";
+                page.say(annullato ? (it ? "Accoppiamento annullato." : "Pairing cancelled.")
+                                   : (d.error || (it ? "Non è riuscito." : "It did not work.")),
+                         !annullato);
             }
         }
     }
@@ -451,6 +458,7 @@ Page {
         case "audio-card":       return "music";
         case "input-mouse":      return "apps";
         case "input-keyboard":   return "keyboard";
+        case "input-gaming":     return "gamepad";
         case "phone":            return "cpu";
         default:                 return "bluetooth";
         }
@@ -688,6 +696,7 @@ Page {
                     spacing: 2
 
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         elide: Text.ElideRight
                         text: dev.modelData.name
@@ -753,12 +762,19 @@ Page {
                         // dispositivo: due `bluetoothctl` che si accavallano
                         // sullo stesso adattatore si disturbano a vicenda, e
                         // il secondo clic è quello che fa fallire il primo.
-                        opacity: page.busyMac !== "" ? 0.4 : 1
+                        // Tranne durante un accoppiamento di QUESTO
+                        // dispositivo: lì diventa «Annulla», perché un
+                        // telefono che non risponde non deve tenere la
+                        // pagina bloccata per due minuti.
+                        readonly property bool annullabile: dev.busy && page.busyWhat === "pair"
+                        opacity: page.busyMac !== "" && !annullabile ? 0.4 : 1
 
                         Text {
                             id: mainText
                             anchors.centerIn: parent
-                            text: dev.busy
+                            text: parent.annullabile
+                                  ? (page.it ? "Annulla" : "Cancel")
+                                  : dev.busy
                                   ? (page.it ? "Attendi…" : "Wait…")
                                   : dev.modelData.connected
                                     ? (page.it ? "Disconnetti" : "Disconnect")
@@ -776,10 +792,12 @@ Page {
                             id: mainMouse
                             anchors.fill: parent
                             hoverEnabled: true
-                            enabled: page.busyMac === ""
+                            enabled: page.busyMac === "" || parent.annullabile
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                if (dev.modelData.connected)
+                                if (parent.annullabile)
+                                    Core.Ipc.btPairCancel();
+                                else if (dev.modelData.connected)
                                     page.disconnect(dev.modelData.mac);
                                 else if (dev.modelData.paired)
                                     page.connect(dev.modelData.mac);

@@ -203,7 +203,11 @@ Page {
     property int oraAdesso: new Date().getHours()
     Timer {
         interval: 60000
-        running: true
+        // Solo con le Impostazioni davanti: ridotte o dietro un'altra
+        // finestra non c'è nessuno a guardare. Tornandoci si aggiorna
+        // subito (`triggeredOnStart`).
+        running: Qt.application.state === Qt.ApplicationActive
+        triggeredOnStart: true
         repeat: true
         onTriggered: page.oraAdesso = new Date().getHours()
     }

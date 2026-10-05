@@ -53,7 +53,11 @@ $filemgr = minerva-files
 # Il nome vero del tasto è `Super_L` («SUPER» è un modificatore, non un
 # tasto: xkb risponde NoSymbol), e il gesto è un TOCCO — premuto e lasciato
 # da solo — o non si distinguerebbe dalla fine di Super+E.
-@ Super da solo | Tocca Super: il menù, pronto a cercare. Scrivi e basta: «navigare il web» trova i browser
+#
+# Con un'app a schermo intero (un gioco, un film) il tocco NON apre il menù:
+# il tasto va all'app, che è lì a usarlo. Per la scrivania sopra un gioco si
+# tiene premuto Super (sotto). Lo decide il compositore per ogni `[tocco]`.
+@ Super da solo | Tocca Super: il menù, pronto a cercare. Scrivi e basta: «navigare il web» trova i browser. A schermo intero il tocco va all'app: tieni premuto per la scrivania
 Super_L [tocco] -> minerva: appmenu
 
 # Tenuto da solo per 400 ms: i tasti compaiono sulla scrivania finché non

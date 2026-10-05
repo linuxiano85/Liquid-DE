@@ -268,6 +268,7 @@ Item {
             spacing: Theme.Effects.space1
 
             Text {
+                textFormat: Text.PlainText
                 text: tessera.titolo
                 color: Theme.Colors.textFaint
                 font.family: Theme.Typography.fontDisplay

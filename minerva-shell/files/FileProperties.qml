@@ -598,6 +598,7 @@ Rectangle {
                             }
 
                             Text {
+                                textFormat: Text.PlainText
                                 anchors.left: candIcon.right
                                 anchors.leftMargin: Theme.Effects.space2
                                 anchors.right: makeDefault.left

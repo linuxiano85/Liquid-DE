@@ -200,6 +200,7 @@ Item {
                 spacing: 1
 
                 Text {
+                    textFormat: Text.PlainText
                     visible: scegli.titolo !== ""
                     text: scegli.titolo
                     color: Theme.Colors.text
@@ -429,6 +430,7 @@ Item {
                                                   : Theme.Colors.textFaint
                             }
                             Text {
+                                textFormat: Text.PlainText
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: parent.width - 14
                                        - Theme.Effects.space2 * 2

@@ -439,6 +439,7 @@ Item {
                             spacing: 2
 
                             Text {
+                                textFormat: Text.PlainText
                                 width: parent.width
                                 text: modelData.titolo
                                       + (stato === "saltato" ? " · già fatto" : "")

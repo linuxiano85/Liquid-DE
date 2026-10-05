@@ -41,6 +41,7 @@ Rectangle {
     Behavior on border.color { ColorAnimation { duration: Theme.Motion.quick } }
 
     Text {
+        textFormat: Text.PlainText
         id: etichetta
         anchors.left: parent.left
         anchors.top: parent.top

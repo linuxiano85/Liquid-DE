@@ -57,6 +57,7 @@ Item {
     ListModel { id: modello }
 
     Text {
+        textFormat: Text.PlainText
         id: intestazione
         anchors.top: parent.top
         anchors.left: parent.left

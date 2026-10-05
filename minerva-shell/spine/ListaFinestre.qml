@@ -230,6 +230,7 @@ Row {
             }
 
             Text {
+                textFormat: Text.PlainText
                 anchors { left: segno.right; leftMargin: Theme.Effects.space2
                           right: parent.right; rightMargin: Theme.Effects.space2
                           verticalCenter: parent.verticalCenter }

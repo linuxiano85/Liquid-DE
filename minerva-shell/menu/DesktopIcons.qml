@@ -110,17 +110,34 @@ Item {
 
     // ── L'elenco ─────────────────────────────────────────────────────────
 
+    // ── Una copia sola lavora ────────────────────────────────────────────
+    //
+    // `DesktopIcons` esiste su OGNI schermo ed è solo nascosta sugli altri
+    // (vedi `shell.qml`). Prima ogni copia chiedeva l'elenco per conto suo,
+    // e ogni risposta — col riquadro «scrivania» — la prendevano tutte: con
+    // N schermi, N×N ricostruzioni ogni quindici secondi, anche di icone che
+    // nessuno vede. Adesso chiede e ascolta solo quella che si vede, e solo
+    // se l'elenco è davvero cambiato si toccano le icone (5 ottobre 2026).
+    property string _firma: ""
+
     function ricarica() {
-        if (icons.cartella !== "" && Core.Ipc.connected)
+        if (icons.visible && icons.cartella !== "" && Core.Ipc.connected)
             Core.Ipc.fsList(icons.cartella, false, "scrivania");
     }
+
+    onVisibleChanged: if (icons.visible) icons.ricarica()
 
     Connections {
         target: Core.Ipc
         function onFileListingReceived(listing) {
-            if (listing.pane !== "scrivania")
+            if (listing.pane !== "scrivania" || !icons.visible)
                 return;
-            icons.entries = listing.entries || [];
+            var nuove = listing.entries || [];
+            var firma = JSON.stringify(nuove);
+            if (firma === icons._firma)
+                return;
+            icons._firma = firma;
+            icons.entries = nuove;
         }
         // Copiato qualcosa sulla scrivania, cestinato, rinominato: l'elenco
         // si riaggiorna da solo, o l'icona nuova compare solo al riavvio.
@@ -147,7 +164,7 @@ Item {
     Timer {
         interval: 15000
         repeat: true
-        running: icons.cartella !== ""
+        running: icons.visible && icons.cartella !== ""
         onTriggered: icons.ricarica()
     }
 

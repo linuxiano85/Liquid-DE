@@ -240,7 +240,9 @@ class Indice {
     final t = File('$percorsoPreferiti.nuovo');
     t.writeAsStringSync(jsonEncode(p.toList()..sort()), flush: true);
     t.renameSync(f.path);
-    return {'ok': true, 'preferito': si, 'quanti': p.length};
+    // Il percorso torna indietro: la galleria aggiorna la stella di QUELLA
+    // miniatura senza rileggere tutto il giorno.
+    return {'ok': true, 'percorso': percorso, 'preferito': si, 'quanti': p.length};
   }
 
   // ── La scansione ───────────────────────────────────────────────────────

@@ -190,7 +190,11 @@ Page {
 
     Timer {
         interval: 20000
-        running: true
+        // Solo con le Impostazioni davanti: ridotte o dietro un'altra
+        // finestra non c'è nessuno a guardare. Tornandoci si aggiorna
+        // subito (`triggeredOnStart`).
+        running: Qt.application.state === Qt.ApplicationActive
+        triggeredOnStart: true
         repeat: true
         onTriggered: page.refresh()
     }

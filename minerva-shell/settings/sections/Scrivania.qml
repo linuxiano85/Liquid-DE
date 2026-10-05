@@ -27,7 +27,7 @@ Page {
     }
     // ── Sfondi ───────────────────────────────────────────────────────────
 
-    readonly property string current: Core.Ipc.get("desktop.wallpaper", "")
+    readonly property string current: Core.Wallpaper.current
     /// Cartella da cui si stanno pescando le immagini. Vuota = le solite.
     readonly property string folder: Core.Ipc.get("desktop.wallpaperFolder", "")
     property var images: []
@@ -278,6 +278,7 @@ Page {
                     }
 
                     Text {
+                        textFormat: Text.PlainText
                         anchors.left: dirIcon.right
                         anchors.leftMargin: Theme.Effects.space2
                         anchors.right: parent.right

@@ -43,7 +43,9 @@ QtObject {
 
     property var _orologio: Timer {
         interval: 60000
-        running: true
+        // L'orario conta solo per la luce automatica: spenta, o accesa a
+        // mano, non c'è niente da controllare ogni minuto.
+        running: luce.accesa && luce.automatica
         repeat: true
         triggeredOnStart: true
         onTriggered: luce.aggiornaOrario()

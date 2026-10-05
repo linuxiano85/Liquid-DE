@@ -164,7 +164,9 @@ QtObject {
 
     /// I temi di icone installati. Vuoto finché non li si chiede.
     property var iconThemes: []
-    property string iconThemeDetected: ""
+    /// Quelli nella cartella dell'utente, che si possono togliere:
+    /// `[{nome, cartella}]`. Arrivano insieme a `iconThemes`.
+    property var iconeInstallate: []
 
     /// Lo stato dell'apparecchio — batteria, luminosità, rete, Bluetooth —
     /// letto dal demone UNA volta per tutte le finestre.
@@ -177,6 +179,9 @@ QtObject {
     signal systemReceived()
     signal systemAudioState(var data)
     signal systemAudioSelected(var data)
+    /// I pad di gioco: quali ci sono, se InputPlumber li gestisce, con che
+    /// tipo. Arriva a chi si è iscritto (`iscriviController`).
+    signal controllerState(var data)
 
     // ── Segnali ──────────────────────────────────────────────────────────
     /// Un'estensione del demone si è fermata da sola.
@@ -200,11 +205,11 @@ QtObject {
     /// porta categorie e descrizioni; queste sono righe per un compositore.
     signal scorciatoieCompositoreArrivate(var righe)
     signal allAppsReceived(var apps)
-    signal iconsReceived()
-    signal iconThemesReceived(var themes)
     signal matrixNodesReceived(var fixed, var dynamicApps)
-    signal matrixResultsReceived(var results)
-    signal windowsStateReceived(string clientsJson)
+    /// L'elenco delle finestre, già oggetto: prima lo si trasformava in
+    /// testo qui e lo si rileggeva in `Windows`, fino a sedici volte al
+    /// secondo mentre una finestra si muove.
+    signal windowsStateReceived(var clients)
     signal monitorsStateReceived(string monitorsJson)
 
     /// Il monitor di sistema: processi e stato della macchina.
@@ -242,8 +247,17 @@ QtObject {
     // Le conversazioni della login valgono solo sul canale corrente.
     // greeter_info è una lettura iniziale, non una richiesta di autenticazione.
     function _loginAction(payload) {
-        return payload && typeof payload.action === "string"
-            && payload.action.indexOf("greeter_") === 0
+        if (!payload || typeof payload.action !== "string")
+            return false;
+        // Anche le azioni che portano un SEGRETO: la password di un account,
+        // la chiave di Google. In coda resterebbero in memoria finché il
+        // demone non torna, e partirebbero magari minuti dopo, quando chi le
+        // ha scritte ha già chiuso la pagina (revisione di sicurezza, 5
+        // ottobre 2026). A demone assente non partono, e chi le manda lo sa.
+        if (payload.action === "account_collega"
+            || payload.action === "account_google_chiave")
+            return true;
+        return payload.action.indexOf("greeter_") === 0
             && payload.action !== "greeter_info";
     }
 
@@ -349,6 +363,15 @@ QtObject {
     }
 
     function setSetting(path, value) {
+        // Uguale a quello che c'è già: la copia locale non si tocca. Ogni
+        // `Core.Ipc.get(...)` di ogni finestra dipende da TUTTO `settings`, e
+        // riassegnarlo rifà circa quattrocento associazioni — per niente,
+        // quando il valore non cambia (un'icona trascinata che torna dov'era,
+        // un interruttore premuto sul suo stesso stato). Al demone si manda
+        // lo stesso: è lui che decide.
+        if (JSON.stringify(ipc.get(path, undefined)) === JSON.stringify(value))
+            return send({ "action": "set_setting", "path": path, "value": value });
+
         // Aggiorna subito la copia locale: l'interfaccia risponde all'istante
         // invece di aspettare il giro di ritorno dal demone.
         var copy = JSON.parse(JSON.stringify(ipc.settings || {}));
@@ -497,9 +520,6 @@ QtObject {
     function rescanApps() {
         return send({ "action": "rescan_apps" });
     }
-    function appSeen(appId) {
-        return send({ "action": "app_seen", "id": appId });
-    }
 
     // ── Il monitor di sistema ────────────────────────────────────────────
     //
@@ -545,6 +565,19 @@ QtObject {
 
     function disiscriviAudio() {
         return send({ "action": "unsubscribe_audio" });
+    }
+
+    // ── I pad di gioco ───────────────────────────────────────────────────
+    //
+    // Il servizio gira sempre nel demone — accorgersi da solo di un pad che
+    // si accende è il suo lavoro. Iscriversi vuol dire solo sentirne i
+    // cambi: lo fa la pagina Controller, e la shell per l'avviso.
+    function iscriviController() {
+        return send({ "action": "subscribe_controller" });
+    }
+
+    function disiscriviController() {
+        return send({ "action": "unsubscribe_controller" });
     }
 
 
@@ -679,16 +712,6 @@ QtObject {
         return send({ "action": "get_windows" });
     }
 
-    /// Dice al demone che si sta trascinando una finestra, o che si è finito.
-    ///
-    /// È l'unica cosa che il compositore non annuncia da sé: mentre si tiene
-    /// premuto il tasto e si sposta, la geometria cambia sessanta volte al
-    /// secondo e nessun evento lo dice. Il demone lo scopriva guardando — sei
-    /// volte al secondo, per sempre, anche a scrivania ferma.
-    function seguiFinestre(vicino) {
-        return send({ "action": "windows_follow", "vicino": vicino === true });
-    }
-
     function requestMonitors() {
         return send({ "action": "get_monitors" });
     }
@@ -758,11 +781,15 @@ QtObject {
         return send({ "action": "foto_cartella_togli", "percorso": percorso });
     }
     function fotoEscludi(percorso, escludi) {
+        // `si`, come lo legge il demone: era `escludi`, e non si escludeva
+        // mai niente.
         return send({ "action": "foto_escludi", "percorso": percorso,
-                      "escludi": escludi === true });
+                      "si": escludi === true });
     }
     function fotoMostraSchermate(si) {
-        return send({ "action": "foto_schermate", "mostra": si === true });
+        // `si`, come lo legge il demone: era `mostra`, e il demone leggeva
+        // sempre «no».
+        return send({ "action": "foto_schermate", "si": si === true });
     }
     function fotoScansiona() { return send({ "action": "foto_scansiona" }); }
     function fotoFermaScansione() { return send({ "action": "foto_scansiona_ferma" }); }
@@ -951,47 +978,6 @@ QtObject {
         return send({ "action": "fs_delete", "paths": paths });
     }
 
-    // ── Minerva Suono ────────────────────────────────────────────────────
-    //
-    // L'onda di un file audio non si può ricavare in QML: `MediaPlayer` lo
-    // suona e basta, non dice che cosa c'è dentro. La calcola il demone con
-    // ffmpeg — vedi `audio_service.dart` — e arriva qui come 1200 numeri da 0
-    // a 100, che è quanto basta per riconoscere a occhio dove comincia il
-    // ritornello.
-
-    signal audioInfoRicevuta(var dati)
-    signal audioOndaRicevuta(var onda)
-    signal audioTagliato(var esito)
-    signal audioFormatiRicevuti(var formati)
-
-    function audioInfo(path) {
-        return send({ "action": "audio_info", "path": path });
-    }
-
-    /// `barre` è quante colonne si vogliono: chi disegna sa quanto è larga la
-    /// propria finestra, il demone no.
-    function audioOnda(path, barre) {
-        return send({ "action": "audio_onda", "path": path,
-                      "barre": barre || 1200 });
-    }
-
-    /// `inizio` e `fine` in secondi. Le dissolvenze pure.
-    function audioTaglia(opzioni) {
-        return send({
-            "action": "audio_taglia",
-            "sorgente": opzioni.sorgente,
-            "destinazione": opzioni.destinazione,
-            "inizio": opzioni.inizio,
-            "fine": opzioni.fine,
-            "formato": opzioni.formato || "mp3",
-            "dissolvenzaIn": opzioni.dissolvenzaIn || 0,
-            "dissolvenzaOut": opzioni.dissolvenzaOut || 0,
-            "normalizza": opzioni.normalizza === true
-        });
-    }
-
-    function audioFormati() { return send({ "action": "audio_formati" }); }
-
     // ── Formattare un disco ──────────────────────────────────────────────
 
     signal formatsReceived(var formati)
@@ -1119,9 +1105,9 @@ QtObject {
         return send({ "action": "icone_installa", "path": path });
     }
 
-    /// Toglie un tema installato da noi. `path` è il nome della cartella in
-    /// `~/.local/share/icons`, non un percorso assoluto: il demone non
-    /// cancella fuori da lì, ed è voluto.
+    /// Toglie un tema dalla cartella dell'utente. `path` è il percorso
+    /// completo che arriva in `iconeInstallate`: il demone controlla che stia
+    /// dentro `~/.local/share/icons`, e fuori da lì non cancella niente.
     function iconeDisinstalla(path) {
         return send({ "action": "icone_disinstalla", "path": path });
     }
@@ -1178,7 +1164,6 @@ QtObject {
     signal volumesReceived(var volumes)
     signal placesReceived(var places)
     signal mimeDescribed(var described)
-    signal mimeDefaultsReceived(var defaults)
     /// I gruppi, e le FAMIGLIE in cui la pagina li raccoglie. La divisione
     /// la decide il demone insieme ai gruppi (vedi `MimeService.famiglie`):
     /// chi aggiunge un gruppo dice anche dove va, e non c'è modo di
@@ -1691,7 +1676,6 @@ QtObject {
         ipc.iconChosen = payload.chosen || "";
         ipc.iconChieste = payload.chieste || 0;
         ipc.iconMancanti = payload.mancanti || [];
-        ipc.iconsReceived();
     }
 
     // ── Connessione ──────────────────────────────────────────────────────
@@ -2227,8 +2211,7 @@ QtObject {
                 break;
             case "icon_themes":
                 ipc.iconThemes = msg.payload.themes || [];
-                ipc.iconThemeDetected = msg.payload.detected || "";
-                ipc.iconThemesReceived(ipc.iconThemes);
+                ipc.iconeInstallate = msg.payload.installati || [];
                 break;
             // ── Qui c'era un caso vuoto, e cadeva di sotto ───────────────
             //
@@ -2289,7 +2272,12 @@ QtObject {
                                   String((msg.payload || {}).perche || ""));
                 break;
             case "settings_changed":
-                ipc.settings = ipc._conScrittureInVolo(msg.payload);
+                // L'eco di una scrittura nostra arriva identica a quello che
+                // abbiamo già: riassegnarla rifaceva tutte le associazioni
+                // una seconda volta. Si riassegna solo se è diverso.
+                var nuove = ipc._conScrittureInVolo(msg.payload);
+                if (JSON.stringify(nuove) !== JSON.stringify(ipc.settings))
+                    ipc.settings = nuove;
                 ipc.settingsReceived(ipc.settings);
                 break;
             case "scorciatoie_compositore":
@@ -2308,9 +2296,6 @@ QtObject {
             case "matrix_nodes":
                 ipc.matrixNodesReceived(msg.payload.fixed, msg.payload.dynamic);
                 break;
-            case "matrix_results":
-                ipc.matrixResultsReceived(msg.payload);
-                break;
             // Il ramo della finestra attiva è uscito insieme al comando che
             // la chiedeva: il demone non la manda più, e il segnale non lo
             // ascoltava nessuno.
@@ -2319,8 +2304,7 @@ QtObject {
             // passare dal demone voleva dire due salti per una cosa che
             // cambia a ogni clic.
             case "windows_state":
-                var pWin = msg.payload;
-                ipc.windowsStateReceived(typeof pWin === "string" ? pWin : JSON.stringify(pWin));
+                ipc.windowsStateReceived(msg.payload);
                 break;
             case "monitors_state":
                 var pMon = msg.payload;
@@ -2426,17 +2410,8 @@ QtObject {
             case "system_audio_select":
                 ipc.systemAudioSelected(msg.payload);
                 break;
-            case "audio_info":
-                ipc.audioInfoRicevuta(msg.payload);
-                break;
-            case "audio_onda":
-                ipc.audioOndaRicevuta(msg.payload);
-                break;
-            case "audio_result":
-                ipc.audioTagliato(msg.payload);
-                break;
-            case "audio_formati":
-                ipc.audioFormatiRicevuti(msg.payload.formati || []);
+            case "controller_state":
+                ipc.controllerState(msg.payload);
                 break;
             case "fs_info":
                 ipc.fileInfoReceived(msg.payload);
@@ -2603,9 +2578,6 @@ QtObject {
             case "mime_categories":
                 ipc.mimeCategoriesReceived(msg.payload.categories || [],
                                            msg.payload.famiglie || []);
-                break;
-            case "mime_defaults":
-                ipc.mimeDefaultsReceived(msg.payload);
                 break;
             }
         }

@@ -63,6 +63,7 @@ Item {
         height: page.subtitle !== "" ? 52 : 36
 
         Text {
+            textFormat: Text.PlainText
             id: titleText
             anchors.top: parent.top
             anchors.left: parent.left

@@ -273,6 +273,7 @@ Rectangle {
                             }
 
                             Text {
+                                textFormat: Text.PlainText
                                 id: nomeCartella
                                 anchors.left: iconaCartella.right
                                 anchors.leftMargin: 6

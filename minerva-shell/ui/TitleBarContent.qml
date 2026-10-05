@@ -231,6 +231,7 @@ Item {
     // Da ogni lato si toglie il PIÙ INGOMBRANTE dei due, che è quanto basta a
     // non finirci sotto.
     Text {
+        textFormat: Text.PlainText
         readonly property int ostacolo: Math.max(
             controls.width + content.side_,
             appIcon.width + Theme.Effects.space2)

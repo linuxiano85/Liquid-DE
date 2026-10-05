@@ -43,6 +43,19 @@ done
 # Per un binario da portare altrove: MINERVA_MARCH=x86-64-v3.
 MARCH="${MINERVA_MARCH:-native}"
 OTTIMIZZA="-Dbuildtype=debugoptimized -Db_lto=true -Dc_args=-march=$MARCH -Dc_link_args=-march=$MARCH"
+# ── Una build fatta da un'altra cartella ─────────────────────────────────
+#
+# meson scrive nella build il percorso ASSOLUTO dei sorgenti. Spostato il
+# progetto (il 4 ottobre 2026, da Scaricati a Documenti), `--reconfigure`
+# moriva con un «Unhandled python OSError» su un file temporaneo nella
+# cartella vecchia, e non diceva perché. Una build è tutta rigenerabile: se
+# non è di QUESTI sorgenti si rifà da capo. Si cancella solo se è davvero
+# una build di meson (`coredata.dat`), qualunque cosa dica MINERVA_BUILD_DIR.
+if [ -f "$BUILD/meson-private/coredata.dat" ] && [ -f "$BUILD/build.ninja" ] \
+   && ! grep -qF "$QUI/" "$BUILD/build.ninja"; then
+    echo "La build in $BUILD era di un'altra cartella dei sorgenti: la rifaccio da capo."
+    rm -rf -- "$BUILD"
+fi
 if [ -f "$BUILD/meson-private/coredata.dat" ]; then
     # shellcheck disable=SC2086
     meson setup --reconfigure "$BUILD" "$QUI" --wrap-mode=nofallback $OTTIMIZZA \

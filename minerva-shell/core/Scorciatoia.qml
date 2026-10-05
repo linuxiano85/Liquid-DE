@@ -69,9 +69,10 @@ Item {
     // e con trentasei scorciatoie erano settantadue righe a ogni avvio. Il
     // `Loader` le spegneva; toglierlo del tutto toglie anche il `Loader`.
     //
-    // `released` non arriva: il compositore annuncia la pressione, e le due
-    // scorciatoie che aspettano il rilascio (l'Alt che conferma l'Alt+Tab)
-    // restano da fare.
+    // `released` non arriva: il compositore annuncia solo la pressione. Il
+    // rilascio che serve — l'Alt che conferma l'Alt+Tab — è una scorciatoia
+    // a sé, `Alt_L [al-rilascio] -> minerva: switchercommit`
+    // (`config/scorciatoie.minerva`), che scatta quando Alt si alza.
     Connections {
         target: Compositore
         function onScorciatoiaPremuta(nome) {

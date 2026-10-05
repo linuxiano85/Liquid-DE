@@ -43,6 +43,29 @@ class TemaIconeService {
   /// soprattutto non deve poter rompere l'installazione di tutti.
   static String cartellaUtente(String home) => '$home/.local/share/icons';
 
+  /// I temi nella cartella dell'utente, cioè quelli che `disinstalla` può
+  /// togliere: `{nome, cartella}`, in ordine di nome. I temi di sistema non
+  /// ci sono, di proposito — vedi `disinstalla`.
+  /// Cartelle che stanno in `~/.local/share/icons` ma non sono temi da
+  /// togliere: `hicolor` è dove le APP installano le proprie icone (Steam, i
+  /// giochi, i Flatpak), e toglierla le lascerebbe tutte senza icona.
+  static const _intoccabili = {'hicolor', 'default', 'locolor'};
+
+  static List<Map<String, String>> installati(String home) {
+    final d = Directory(cartellaUtente(home));
+    if (!d.existsSync()) return const [];
+    final fuori = <Map<String, String>>[];
+    for (final e in d.listSync(followLinks: false)) {
+      if (e is! Directory) continue;
+      if (_intoccabili.contains(e.path.split('/').last)) continue;
+      if (!File('${e.path}/index.theme').existsSync()) continue;
+      fuori.add({'nome': e.path.split('/').last, 'cartella': e.path});
+    }
+    fuori.sort((a, b) =>
+        a['nome']!.toLowerCase().compareTo(b['nome']!.toLowerCase()));
+    return fuori;
+  }
+
   /// Quello che un tema di icone può contenere.
   static const Set<String> _estensioniBuone = {
     '.png', '.svg', '.svgz', '.xpm', '.jpg', '.jpeg', '.gif', '.webp',
@@ -222,6 +245,13 @@ class TemaIconeService {
     // Confronto sul percorso RISOLTO: un collegamento simbolico che punta
     // altrove passerebbe un controllo fatto sulla stringa.
     final vero = await d.exists() ? d.resolveSymbolicLinksSync() : cartella;
+    if (_intoccabili.contains(vero.split('/').last)) {
+      return {
+        'ok': false,
+        'error': 'Quella cartella non è un tema: ci sono le icone dei '
+            'programmi installati, e non la tocco.',
+      };
+    }
     if (!vero.startsWith('$base/')) {
       return {
         'ok': false,

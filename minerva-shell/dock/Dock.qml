@@ -1197,6 +1197,7 @@ PanelWindow {
                         border.color: Qt.alpha(Theme.Colors.accent, 0.35)
 
                         Text {
+                            textFormat: Text.PlainText
                             anchors.centerIn: parent
                             text: (slot.modelData.name || "?").charAt(0).toUpperCase()
                             color: Theme.Colors.accent
@@ -1556,6 +1557,15 @@ PanelWindow {
     /// Ridurre resta a portata di mano in due posti dove è quello che si sta
     /// chiedendo: il pulsante sulla barra del titolo e il menu del tasto
     /// destro qui sulla dock.
+    ///
+    /// ── E il clic che riduce, ma solo sulla finestra che hai in mano ─────
+    ///
+    /// Giacomo, 4 ottobre 2026: «se clicco su una app aperta in dock posso
+    /// minimizzarla con un click e reingrandirla». Torna, con la differenza
+    /// che spiega il difetto di prima: si riduce SOLO la finestra che ha il
+    /// fuoco adesso (`activeAddress`, la prima della pila del compositore).
+    /// Una finestra aperta ma dietro le altre viene davanti, come in ogni
+    /// dock; un secondo clic la riduce; un terzo la riporta su.
     function activate(item) {
         var addrs = item.addresses;
         if (addrs.length === 0) {
@@ -1563,10 +1573,13 @@ PanelWindow {
             return;
         }
         if (addrs.length === 1) {
-            if (addrs[0].minimized)
-                Core.Windows.restore(addrs[0].address);
+            var sola = addrs[0];
+            if (sola.minimized)
+                Core.Windows.restore(sola.address);
+            else if (sola.address === Core.Windows.activeAddress)
+                Core.Windows.minimize(sola.address);
             else
-                Core.Windows.focus(addrs[0].address);
+                Core.Windows.focus(sola.address);
             return;
         }
         var active = Core.Windows.activeAddress;

@@ -16,6 +16,20 @@
 
 SELF="$(readlink -f "$0")"
 MINERVA_DIR="$(dirname "$(dirname "$SELF")")"
+
+# ── Dai sorgenti si passa per la radice ───────────────────────────────────
+#
+# La sessione gira dalla radice installata (`minerva-installa-radice`), non
+# dai sorgenti. Ricaricare da qui senza copiare vorrebbe dire ricaricare i
+# file VECCHI della radice — o, peggio, far ripartire demone e shell dai
+# sorgenti e tornare a dipendere da loro. Si copia, e si ricarica da là.
+. "$MINERVA_DIR/scripts/minerva-cartelle.sh"
+if [ -d "$CARTELLA_RADICE" ] \
+   && [ "$MINERVA_DIR" != "$(readlink -f "$CARTELLA_RADICE")" ]; then
+    "$MINERVA_DIR/scripts/minerva-installa-radice" || exit 1
+    exec "$CARTELLA_RADICE/scripts/minerva-reload.sh" "$@"
+fi
+
 # I registri sono di questa sessione: vedi `scripts/minerva-posti.sh`.
 . "$MINERVA_DIR/scripts/minerva-posti.sh"
 SHELL_QML="$MINERVA_DIR/minerva-shell/shell.qml"
@@ -29,7 +43,7 @@ bad() { printf '\033[31m✗\033[0m %s\n' "$1"; }
 #
 # Una sessione di prova ha la stessa riga di comando di quella vera: la
 # differenza sta solo nel suo ambiente (vedi la regola «mai pkill»).
-di_prova() { tr '\0' '\n' < "/proc/$1/environ" 2>/dev/null | grep -qx 'MINERVA_PROVA=1'; }
+di_prova() { tr '\0' '\n' 2>/dev/null < "/proc/$1/environ" | grep -qx 'MINERVA_PROVA=1'; }
 
 # ── L'ambiente della SESSIONE, non quello di chi lancia ────────────────────
 #
@@ -47,14 +61,14 @@ compositore_della_sessione() {
         di_prova "$c" && continue
         # Da un terminale che non sa la sua sessione: il primo vero.
         [ -z "${MINERVA_SESSIONE:-}" ] && { echo "$c"; return; }
-        tr '\0' '\n' < "/proc/$c/environ" 2>/dev/null \
+        tr '\0' '\n' 2>/dev/null < "/proc/$c/environ" \
             | grep -qx "MINERVA_SESSIONE=${MINERVA_SESSIONE:-}" && { echo "$c"; return; }
     done
 }
 AMBIENTE=()
 MODELLO=$(compositore_della_sessione)
 if [ -n "$MODELLO" ]; then
-    mapfile -d '' AMBIENTE < "/proc/$MODELLO/environ"
+    { mapfile -d '' AMBIENTE < "/proc/$MODELLO/environ"; } 2>/dev/null
     for v in WAYLAND_DISPLAY DISPLAY MINERVA_CANALE WLR_RENDERER; do
         [ -n "${!v:-}" ] && AMBIENTE+=("$v=${!v}")
     done
@@ -192,7 +206,7 @@ if [ "$MODE" = "tutto" ]; then
     # che esiste apposta. È anche il guardiano a scegliere fra il compilato e
     # `dart run` (vedi `scripts/minerva-demone`).
     come_la_sessione nohup "$MINERVA_DIR/scripts/minerva-demone" >/dev/null 2>&1 &
-    say "compilazione in corso, ~10 secondi"
+    say "il demone riparte, ~10 secondi"
     # Il socket lo scrive il demone stesso nel file del canale, e ci scrive
     # DOPO averlo preso: se la riga c'e', dall'altra parte c'e' qualcuno.
     # Cercare un percorso fisso vorrebbe dire indovinare la sessione.

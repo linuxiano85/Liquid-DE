@@ -41,6 +41,7 @@ Rectangle {
         spacing: 1
 
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             elide: Text.ElideRight
             text: riga.titolo

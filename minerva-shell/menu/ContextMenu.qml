@@ -306,6 +306,7 @@ PanelWindow {
                           + (tasti.text !== "" ? Theme.Effects.space4 : 0)
                         : 0
                     Text {
+                        textFormat: Text.PlainText
                         id: etichetta
                         text: (modelData && modelData.label) || ""
                         font.family: Theme.Typography.fontDisplay
@@ -425,6 +426,7 @@ PanelWindow {
                     }
 
                     Text {
+                        textFormat: Text.PlainText
                         anchors.left: entryIcon.right
                         anchors.leftMargin: Theme.Effects.space3
                         anchors.right: shortcutText.left

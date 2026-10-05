@@ -118,6 +118,7 @@ Item {
                 spacing: 1
 
                 Text {
+                    textFormat: Text.PlainText
                     text: voce.titolo
                     color: Theme.Colors.textFaint
                     font.family: Theme.Typography.fontDisplay

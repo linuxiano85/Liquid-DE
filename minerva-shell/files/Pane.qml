@@ -2126,6 +2126,7 @@ Item {
             // ── Il nome ──────────────────────────────────────────────────
 
             Text {
+                textFormat: Text.PlainText
                 id: nameText
                 x: cell.gridMode ? pane.gridPadding
                                  : thumb.x + thumb.width + Theme.Effects.space2

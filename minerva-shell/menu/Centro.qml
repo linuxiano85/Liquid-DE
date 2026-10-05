@@ -223,6 +223,7 @@ PanelWindow {
                     anchors.rightMargin: Theme.Effects.space2
                     anchors.verticalCenter: parent.verticalCenter
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         elide: Text.ElideRight
                         text: Core.Media.titolo
@@ -232,6 +233,7 @@ PanelWindow {
                         font.weight: Theme.Typography.weightMedium
                     }
                     Text {
+                        textFormat: Text.PlainText
                         width: parent.width
                         elide: Text.ElideRight
                         text: Core.Media.artista

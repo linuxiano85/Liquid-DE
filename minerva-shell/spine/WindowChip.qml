@@ -1,20 +1,15 @@
 import QtQuick
 import "../theme" as Theme
 import "../core" as Core
-import "../ui" as Ui
 
-// WindowChip — La finestra attiva, con i suoi tre pulsanti.
+// WindowChip — Il titolo della finestra attiva, nella barra della scrivania.
 //
-// Riduci a icona, ingrandisci, chiudi: i tre comandi che chiunque abbia usato
-// un computer si aspetta di trovare, e che in un compositore a piastrelle non
-// esistono da nessuna parte.
+// Clic destro: il menu della finestra. I pulsanti riduci, ingrandisci e
+// chiudi stanno sulla barra del titolo nativa di ogni finestra, una volta
+// sola (5 ottobre 2026: qui c'erano dei doppioni che si vedevano solo con
+// le barre spente, e le barre non si spengono più).
 //
-// Stanno nella barra e non sulla finestra, e la differenza è a favore della
-// barra: sono sempre nello stesso punto (il muscolo se lo ricorda), non
-// coprono mai il contenuto, e valgono anche per le finestre affiancate, che
-// una cornice non ce l'hanno.
-//
-// Si spengono dalle Impostazioni: chi vive di scorciatoie li trova rumore.
+// Si spegne dalle Impostazioni: chi vive di scorciatoie lo trova rumore.
 Item {
     id: chip
 
@@ -88,66 +83,6 @@ Item {
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 onClicked: function(m) {
                     chip.menuRequested(mapToGlobal(m.x, m.y));
-                }
-            }
-        }
-
-        // ── I tre pulsanti ───────────────────────────────────────────────
-        //
-        // Spariscono quando ogni finestra ha la sua barra del titolo. Non per
-        // risparmiare spazio: perché gli stessi tre comandi in due punti dello
-        // schermo, con due aspetti diversi, sono la cosa che fa sembrare
-        // un'interfaccia messa insieme da pezzi. Uno solo, e sulla finestra.
-        Row {
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 2
-            visible: !Core.Ipc.get("windows.titleBars", true)
-
-            Repeater {
-                model: [
-                    { "id": "minimize", "icon": "minimize", "danger": false },
-                    { "id": "maximize", "icon": "maximize", "danger": false },
-                    { "id": "close",    "icon": "close",    "danger": true }
-                ]
-
-                delegate: Rectangle {
-                    id: btn
-                    required property var modelData
-
-                    width: 22; height: 22
-                    radius: 11
-
-                    readonly property color tone: modelData.danger ? Theme.Colors.danger
-                                                                   : Theme.Colors.accent
-
-                    color: btnMouse.pressed ? Qt.alpha(tone, 0.32)
-                         : btnMouse.containsMouse ? Qt.alpha(tone, 0.18)
-                         : "transparent"
-                    Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
-
-                    Ui.Icon {
-                        anchors.centerIn: parent
-                        width: 12; height: 12
-                        thickness: 1.9
-                        name: btn.modelData.id === "maximize" && Core.Windows.activeMaximized
-                              ? "restore" : btn.modelData.icon
-                        color: btnMouse.containsMouse ? btn.tone : Theme.Colors.textFaint
-                        Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
-                    }
-
-                    MouseArea {
-                        id: btnMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            switch (btn.modelData.id) {
-                            case "minimize": Core.Windows.minimize(); break;
-                            case "maximize": Core.Windows.toggleMaximize(); break;
-                            case "close":    Core.Windows.close(); break;
-                            }
-                        }
-                    }
                 }
             }
         }

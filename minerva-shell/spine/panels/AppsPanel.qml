@@ -658,6 +658,7 @@ Item {
                 color: Theme.Colors.raisedHigh
 
                 Text {
+                    textFormat: Text.PlainText
                     anchors.centerIn: parent
                     text: (row.modelData.name || "?").charAt(0).toUpperCase()
                     color: Theme.Colors.textMuted
@@ -668,6 +669,7 @@ Item {
             }
 
             Text {
+                textFormat: Text.PlainText
                 anchors.left: appIcon.right
                 anchors.leftMargin: Theme.Effects.space3
                 anchors.right: favStar.left

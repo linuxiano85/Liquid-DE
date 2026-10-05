@@ -570,3 +570,39 @@ test('Login transport and ownership errors cannot acknowledge cancellation', () 
         assert.equal(f.greeter.canalePerso, true); assert.equal(f.campo.text, '');
     }
 });
+
+// Untrusted strings (window and terminal titles, notifications, media
+// metadata, file/app/device names) must never reach a Text in AutoText: a
+// title like `<img src=https://…>` would make the shell fetch a URL and draw
+// fake UI. Every Text whose own `text:` binding names such data has to
+// declare a textFormat (5 October 2026 security review).
+test('Text items showing outside data declare a textFormat', () => {
+    const esterni = /\b(title|titolo|titoloDi|summary|appName|artist|artista|album)\b|Media\.titolo|modelData\.name\b|\.ssid\b/;
+    const fuori = [];
+    const giro = d => {
+        for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+            const p = path.join(d, e.name);
+            if (e.isDirectory()) giro(p);
+            else if (p.endsWith('.qml')) controlla(p);
+        }
+    };
+    const controlla = f => {
+        const L = fs.readFileSync(f, 'utf8').split('\n');
+        for (let i = 0; i < L.length; i++) {
+            const m = L[i].match(/^(\s*)Text\s*\{\s*$/);
+            if (!m) continue;
+            const ind = m[1];
+            let k = i + 1;
+            while (k < L.length && !L[k].startsWith(ind + '}')) k++;
+            const proprie = L.slice(i + 1, k).filter(r => r.startsWith(ind + '    ') && !r.startsWith(ind + '     '));
+            if (proprie.some(r => /textFormat\s*:/.test(r))) continue;
+            const t = proprie.findIndex(r => /^\s*text\s*:/.test(r));
+            if (t < 0) continue;
+            let valore = proprie[t];
+            for (let j = t + 1; j < proprie.length && !/^\s*[A-Za-z][\w.]*\s*:/.test(proprie[j]); j++) valore += proprie[j];
+            if (esterni.test(valore)) fuori.push(`${path.relative(root, f)}:${i + 1}`);
+        }
+    };
+    giro(path.join(root, 'minerva-shell'));
+    assert.deepEqual(fuori, []);
+});

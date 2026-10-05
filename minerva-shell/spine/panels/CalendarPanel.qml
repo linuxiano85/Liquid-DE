@@ -353,6 +353,7 @@ Item {
                 spacing: 3
 
                 Text {
+                    textFormat: Text.PlainText
                     text: misura.titolo
                     color: Theme.Colors.textFaint
                     font.family: Theme.Typography.fontDisplay

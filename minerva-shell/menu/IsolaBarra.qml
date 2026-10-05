@@ -346,7 +346,12 @@ PanelWindow {
                                 color: Theme.Colors.accent
                                 height: 6
                                 SequentialAnimation on height {
+                                    // Ferme quando l'isola non si vede o è coperta
+                                    // (uno schermo intero): un'animazione
+                                    // infinita ridisegna la barra sessanta
+                                    // volte al secondo anche se nessuno guarda.
                                     running: musica.visible && Theme.Motion.liquido
+                                             && isolaBarra.su && !isolaBarra.coperta
                                     loops: Animation.Infinite
                                     NumberAnimation { to: 14 - barretta.index * 3; duration: 380 + barretta.index * 90; easing.type: Easing.InOutSine }
                                     NumberAnimation { to: 5; duration: 420 + barretta.index * 70; easing.type: Easing.InOutSine }
@@ -355,6 +360,7 @@ PanelWindow {
                         }
                     }
                     Text {
+                        textFormat: Text.PlainText
                         anchors.verticalCenter: parent.verticalCenter
                         width: Math.min(implicitWidth, 200)
                         elide: Text.ElideRight

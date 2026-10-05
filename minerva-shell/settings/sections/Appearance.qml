@@ -913,6 +913,9 @@ Page {
             function onConnectedChanged() {
                 if (Core.Ipc.connected) Core.Ipc.requestIconThemes();
             }
+            // Un tema tolto (o installato dal gestore file): si rilegge
+            // l'elenco, o la riga resterebbe lì a promettere un tema che non c'è.
+            function onIconeEsito(esito) { Core.Ipc.requestIconThemes(); }
         }
 
         Item {
@@ -997,6 +1000,102 @@ Page {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: Core.Ipc.setSetting("icons.theme",
                                                            themeChip.modelData)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── I temi nella tua cartella, e toglierli ───────────────────────
+        //
+        // Si installano dal gestore file (tasto destro su un archivio) e fino
+        // al 5 ottobre 2026 non si toglievano da nessuna parte: il demone lo
+        // sapeva fare, mancava il pulsante. Solo quelli in
+        // `~/.local/share/icons`: i temi di sistema non sono nostri.
+        //
+        // Togliere cancella una cartella, e non si torna indietro: il primo
+        // clic chiede «Sicuro?», il secondo — entro quattro secondi — toglie.
+        Column {
+            width: parent.width
+            spacing: 6
+            visible: Core.Ipc.iconeInstallate.length > 0
+
+            Text {
+                width: parent.width
+                text: page.it ? "Temi nella tua cartella" : "Themes in your folder"
+                color: Theme.Colors.text
+                font.family: Theme.Typography.fontDisplay
+                font.pixelSize: Theme.Typography.sizeMD
+                font.weight: Theme.Typography.weightMedium
+            }
+
+            Repeater {
+                model: Core.Ipc.iconeInstallate
+
+                delegate: Item {
+                    id: installato
+                    required property var modelData
+                    property bool armato: false
+
+                    width: parent.width
+                    height: 32
+
+                    Timer {
+                        id: disarma
+                        interval: 4000
+                        onTriggered: installato.armato = false
+                    }
+
+                    Text {
+                        textFormat: Text.PlainText
+                        anchors.left: parent.left
+                        anchors.right: togli.left
+                        anchors.rightMargin: Theme.Effects.space2
+                        anchors.verticalCenter: parent.verticalCenter
+                        elide: Text.ElideRight
+                        text: installato.modelData.nome
+                        color: Theme.Colors.textMuted
+                        font.family: Theme.Typography.fontDisplay
+                        font.pixelSize: Theme.Typography.sizeSM
+                    }
+
+                    Rectangle {
+                        id: togli
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: togliTesto.implicitWidth + 20
+                        height: 26
+                        radius: Theme.Effects.radiusSM
+                        color: installato.armato || togliArea.containsMouse
+                               ? Qt.alpha(Theme.Colors.danger, 0.16) : Theme.Colors.raised
+                        border.width: 1
+                        border.color: installato.armato ? Theme.Colors.danger : Theme.Colors.edge
+
+                        Text {
+                            id: togliTesto
+                            anchors.centerIn: parent
+                            text: installato.armato ? (page.it ? "Sicuro?" : "Sure?")
+                                                    : (page.it ? "Togli" : "Remove")
+                            color: installato.armato || togliArea.containsMouse
+                                   ? Theme.Colors.danger : Theme.Colors.textMuted
+                            font.family: Theme.Typography.fontDisplay
+                            font.pixelSize: Theme.Typography.sizeSM
+                        }
+
+                        MouseArea {
+                            id: togliArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (!installato.armato) {
+                                    installato.armato = true;
+                                    disarma.restart();
+                                    return;
+                                }
+                                installato.armato = false;
+                                Core.Ipc.iconeDisinstalla(installato.modelData.cartella);
+                            }
                         }
                     }
                 }

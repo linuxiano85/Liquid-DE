@@ -250,6 +250,7 @@ PanelWindow {
         // Il nome, sotto e in mezzo. Uno solo — quello scelto — perché sei
         // titoli affiancati non si leggono, si guardano.
         Text {
+            textFormat: Text.PlainText
             anchors.bottom: parent.bottom
             anchors.bottomMargin: Theme.Effects.space4
             anchors.horizontalCenter: parent.horizontalCenter

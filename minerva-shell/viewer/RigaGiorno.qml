@@ -39,7 +39,7 @@ Item {
     property var scelti: ({})
 
     signal apri(string percorso)
-    signal menu(string percorso, real x, real y)
+    signal menu(string percorso, real x, real y, bool preferito)
     signal scegli(string percorso, bool conCtrl, bool conShift)
 
     readonly property bool senzaData: riga.giorno === ""
@@ -76,6 +76,23 @@ Item {
             if (!p || p.ok !== true || String(p.giorno) !== riga.giorno)
                 return;
             riga.voci = p.voci || [];
+        }
+        // La stella messa o tolta: se la foto è di questo giorno, si aggiorna
+        // la sua voce sul posto invece di rileggere il giorno intero.
+        function onFotoPreferito(p) {
+            if (!p || p.ok !== true || !p.percorso)
+                return;
+            var v = riga.voci;
+            for (var i = 0; i < v.length; i++) {
+                if (String(v[i].percorso) !== String(p.percorso))
+                    continue;
+                var copia = v.slice();
+                var voce = Object.assign({}, v[i]);
+                voce.preferito = p.preferito === true;
+                copia[i] = voce;
+                riga.voci = copia;
+                return;
+            }
         }
     }
 
@@ -152,7 +169,8 @@ Item {
                 voce: modelData
                 scelta: riga.scelti[String(modelData.percorso)] === true
                 onApri: riga.apri(String(modelData.percorso))
-                onMenu: (x, y) => riga.menu(String(modelData.percorso), x, y)
+                onMenu: (x, y) => riga.menu(String(modelData.percorso), x, y,
+                                            modelData.preferito === true)
                 onSceltaCambiata: (c, s) => riga.scegli(String(modelData.percorso), c, s)
             }
         }

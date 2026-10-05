@@ -72,9 +72,11 @@ ShellRoot {
     /// che compare già pronta.
     property bool pronta: false
 
-    /// Cosa si sta chiedendo il permesso di fare, per esteso. Non si mostra —
-    /// «org.freedesktop.udisks2.filesystem-mount» non dice niente a nessuno —
-    /// ma finisce nel registro, che è dove serve quando qualcosa non torna.
+    /// Cosa si sta chiedendo il permesso di fare, per esteso. Si mostra in
+    /// piccolo sotto il messaggio. Dice poco a chi legge, ma è l'unica riga
+    /// che il programma che chiede NON sceglie: il messaggio di `pkexec`
+    /// contiene il percorso del programma, e un percorso lo decide chi lo
+    /// crea (5 ottobre 2026, revisione di sicurezza).
     readonly property string azione:
         Quickshell.env("MINERVA_POLKIT_AZIONE") || ""
 
@@ -166,6 +168,31 @@ ShellRoot {
                     if (riga.charAt(i) === "\\" && i + 1 < riga.length) {
                         i++;
                         var c = riga.charAt(i);
+                        // ── Le lettere accentate ──────────────────────────
+                        //
+                        // L'agente scrive con `g_strescape`, che manda ogni
+                        // byte non ASCII come ottale: «è» arriva `\303\250`.
+                        // Qui si leggevano le cifre, e il messaggio diceva
+                        // «303250». Si raccolgono i byte di fila e si
+                        // rileggono come UTF-8.
+                        if (c >= "0" && c <= "7") {
+                            var hex = "";
+                            for (;;) {
+                                var o = riga.substr(i, 3).match(/^[0-7]{1,3}/)[0];
+                                hex += "%" + ("0" + parseInt(o, 8).toString(16)).slice(-2);
+                                i += o.length;
+                                var dopo = riga.charAt(i + 1);
+                                if (riga.charAt(i) !== "\\" || dopo < "0" || dopo > "7")
+                                    break;
+                                i++;
+                            }
+                            try {
+                                s += decodeURIComponent(hex);
+                            } catch (e) {
+                                s += "?";
+                            }
+                            continue;
+                        }
                         s += c === "n" ? "\n" : c === "t" ? "\t" : c;
                     } else {
                         s += riga.charAt(i);
@@ -188,6 +215,14 @@ ShellRoot {
     function rispondi() {
         if (radice.inCorso || !radice.pronta)
             return;
+        // Una riga sola: un a capo dentro la password incollata diventerebbe
+        // una seconda risposta, o un «annulla», per l'agente.
+        if (/[\r\n\u0000]/.test(campo.text)) {
+            radice.avviso = radice.it ? "La password non può contenere un a capo."
+                                      : "The password can't contain a line break.";
+            campo.text = "";
+            return;
+        }
         radice.avviso = "";
         radice.inCorso = true;
         canale.write("risposta " + campo.text + "\n");
@@ -296,6 +331,7 @@ ShellRoot {
                 }
 
                 Text {
+                    textFormat: Text.PlainText
                     width: parent.width
                     visible: radice.messaggio !== ""
                     text: radice.messaggio
@@ -306,6 +342,18 @@ ShellRoot {
                 }
 
                 Text {
+                    textFormat: Text.PlainText
+                    width: parent.width
+                    visible: radice.azione !== ""
+                    text: (radice.it ? "Azione: " : "Action: ") + radice.azione
+                    color: Theme.Colors.textFaint
+                    font.family: Theme.Typography.fontMono
+                    font.pixelSize: Theme.Typography.sizeXS
+                    wrapMode: Text.WrapAnywhere
+                }
+
+                Text {
+                    textFormat: Text.PlainText
                     width: parent.width
                     visible: radice.nota !== ""
                     text: radice.nota
@@ -364,6 +412,7 @@ ShellRoot {
                         onAccepted: radice.rispondi()
 
                         Text {
+                            textFormat: Text.PlainText
                             anchors.verticalCenter: parent.verticalCenter
                             visible: campo.text === ""
                             text: radice.domanda !== "" ? radice.domanda
@@ -375,6 +424,7 @@ ShellRoot {
                 }
 
                 Text {
+                    textFormat: Text.PlainText
                     width: parent.width
                     visible: radice.avviso !== ""
                     text: radice.avviso

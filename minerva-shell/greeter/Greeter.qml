@@ -695,6 +695,8 @@ Item {
     }
 
     Image {
+        // Alla larghezza dello schermo: si sfoca, la piena risoluzione è memoria buttata.
+        sourceSize.width: Math.max(1, Math.round(width))
         id: sfondo
         anchors.fill: parent
         fillMode: Image.PreserveAspectCrop
@@ -886,6 +888,9 @@ Item {
             }
 
             Image {
+                // Il doppio della misura a cui si vede: nitido, senza decodificare
+                // una fotografia da dodici megapixel per un cerchio.
+                sourceSize.width: Math.max(64, Math.round(width * 2))
                 id: ritratto
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectCrop
@@ -1063,6 +1068,7 @@ Item {
                 }
 
                 Text {
+                    textFormat: Text.PlainText
                     anchors.verticalCenter: parent.verticalCenter
                     text: greeter.domanda !== ""
                           ? greeter.domanda.replace(/:\s*$/, "")
@@ -1131,6 +1137,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
 
             Text {
+                textFormat: Text.PlainText
                 anchors.centerIn: parent
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter

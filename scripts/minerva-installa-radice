@@ -1,0 +1,121 @@
+#!/bin/sh
+# minerva-installa-radice — Copia Liquid DE dai sorgenti al posto da cui gira.
+#
+# ── Perché esiste (4 ottobre 2026) ──────────────────────────────────────────
+#
+# Fino a oggi la sessione girava DALLA cartella dei sorgenti: il lanciatore
+# della sessione, i comandi delle app e lo sfondo salvato puntavano tutti a
+# `~/Scaricati/Liquid-DE-principale`. Giacomo ha spostato la cartella in
+# `~/Documenti/Progetti` e da quel momento nessuna app di Minerva si apriva
+# più — Impostazioni, File, il cambio dello sfondo — mentre quelle degli altri
+# ambienti sì. Al riavvio non sarebbe partita nemmeno la sessione.
+#
+# Adesso i sorgenti sono il posto da cui si COSTRUISCE, e basta. Quello che
+# serve a runtime si copia qui, in `$CARTELLA_RADICE` (di serie
+# `~/.local/opt/liquid-de/radice`), con la stessa forma che ha nei sorgenti:
+# ogni script ricava la radice da dove sta, quindi una copia fedele funziona
+# senza toccare niente. Spostare, rinominare o cancellare i sorgenti non
+# rompe più la scrivania.
+#
+# ── Cosa si copia ──────────────────────────────────────────────────────────
+#
+#   scripts/ minerva-shell/ assets/ config/ desktop/   come sono
+#   minervad/build/                                    solo i compilati
+#
+# I sorgenti del demone NO: il guardiano (`minerva-demone`) li cerca per
+# decidere se ricompilare, e nella radice installata non ci sono di proposito
+# — si usa il compilato, sempre. Per questo il compilato deve esserci: lo fa
+# `minerva-compila`, e senza di lui qui ci si ferma.
+#
+# Si può rilanciare quante volte si vuole: copia solo ciò che è cambiato, e
+# toglie dalla radice quello che nei sorgenti non c'è più.
+set -eu
+
+SELF=$(readlink -f "$0")
+SORGENTI=$(dirname "$(dirname "$SELF")")
+. "$SORGENTI/scripts/minerva-cartelle.sh"
+RADICE="$CARTELLA_RADICE"
+
+if [ "$SORGENTI" = "$(readlink -f "$RADICE" 2>/dev/null || echo "$RADICE")" ]; then
+    echo "minerva-installa-radice: questa È la radice installata." >&2
+    echo "  Lancialo dalla cartella dei sorgenti." >&2
+    exit 1
+fi
+
+for compilato in minervad/build/minervad minervad/build/minerva-terminale-motore; do
+    if [ ! -x "$SORGENTI/$compilato" ]; then
+        echo "minerva-installa-radice: manca $compilato." >&2
+        echo "  Compila prima il demone: $SORGENTI/scripts/minerva-compila" >&2
+        exit 1
+    fi
+done
+
+command -v rsync >/dev/null 2>&1 || {
+    echo "minerva-installa-radice: serve rsync (pacman -S rsync)." >&2
+    exit 1
+}
+
+mkdir -p "$RADICE"
+# `--delay-updates`: i file nuovi si mettono al loro posto tutti insieme alla
+# fine. La sessione che sta girando da qui carica i QML quando apre una
+# finestra, e non deve trovare metà file nuovi e metà vecchi.
+# `--delete-excluded`: la radice è ESATTAMENTE la parte scelta dei sorgenti;
+# quello che si toglie dall'elenco sparisce anche da qui.
+rsync -a --delete --delete-excluded --delay-updates \
+    --include='/scripts/***' \
+    --include='/minerva-shell/***' \
+    --include='/assets/***' \
+    --include='/config/***' \
+    --include='/desktop/***' \
+    --include='/minervad/' \
+    --include='/minervad/build/' \
+    --include='/minervad/build/minervad' \
+    --include='/minervad/build/minerva-terminale-motore' \
+    --include='/LICENSE' \
+    --exclude='*' \
+    "$SORGENTI/" "$RADICE/"
+
+# ── I percorsi vecchi nelle impostazioni ───────────────────────────────────
+#
+# Lo sfondo scelto fra quelli di Minerva si salva come percorso assoluto
+# dentro `minerva-shell/assets/`: cioè dentro i sorgenti di allora. Si porta
+# nella radice. La shell corregge comunque da sé ogni percorso così
+# (`Core.Wallpaper.risolvi`), perché il demone tiene le impostazioni in
+# memoria e, se è acceso, può riscrivere il valore vecchio: questo è solo per
+# lasciare il file pulito.
+IMPOSTAZIONI="$CARTELLA_CONFIG/settings.json"
+if [ -f "$IMPOSTAZIONI" ] && command -v python3 >/dev/null 2>&1; then
+    python3 - "$IMPOSTAZIONI" "$RADICE" <<'PY'
+import json, os, sys
+
+percorso, radice = sys.argv[1], sys.argv[2].rstrip('/')
+segno = '/minerva-shell/assets/'
+
+def sistema(v):
+    if isinstance(v, dict):
+        return {k: sistema(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [sistema(x) for x in v]
+    if isinstance(v, str) and v.startswith('/') and segno in v \
+            and not v.startswith(radice + '/'):
+        nuovo = radice + v[v.index(segno):]
+        if os.path.exists(nuovo):
+            return nuovo
+    return v
+
+try:
+    with open(percorso) as f:
+        dati = json.load(f)
+except (OSError, ValueError):
+    sys.exit(0)
+nuovi = sistema(dati)
+if nuovi != dati:
+    accanto = percorso + '.nuovo'
+    with open(accanto, 'w') as f:
+        json.dump(nuovi, f, indent=2, ensure_ascii=False)
+    os.replace(accanto, percorso)
+    print('  impostazioni: percorsi portati nella radice')
+PY
+fi
+
+echo "Radice installata in $RADICE"

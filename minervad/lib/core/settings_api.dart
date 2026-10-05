@@ -1347,6 +1347,14 @@ class SettingsApi {
           'disableWhileTyping': true,
           'sensitivity': 0,
           'touchpadOn': true,
+          // I pad di gioco passano da InputPlumber, che li presenta a ogni
+          // gioco come un pad del tipo scelto (`ControllerService`).
+          'controllerAutomatico': true,
+          'controllerTipo': 'xbox-series',
+          // Per ogni pad, con chiave il suo indirizzo: preset, mappa dei
+          // tasti, «scambia ✕ e ○» e i colori della barra luminosa. Mappa
+          // libera: i pad sono quelli che uno collega.
+          'controllerPad': <String, dynamic>{},
         },
         'power': {
           // Minuti. 0 = mai.

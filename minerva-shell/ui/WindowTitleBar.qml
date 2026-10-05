@@ -240,12 +240,8 @@ Item {
         // il difetto per cui il terminale ingrandito copriva la barra.
         //
         // «Ingrandisci» in Minerva vuol dire arrivare ai bordi dello spazio
-        // UTILE e fermarsi lì. Lo calcola `Core.Windows` leggendo le zone
-        // riservate dal compositore.
-        //
-        // Che la barra di questa finestra sia DENTRO di lei — e che quindi
-        // non le serva spazio sopra — non si dice più qui: lo sa
-        // `Core.Windows.barSopra()`, che è anche l'unico posto in cui lo sa.
+        // UTILE e fermarsi lì. Lo fa il compositore (`ingrandisci`), che le
+        // zone riservate le conosce.
         //
         // Fuori da Minerva lo spazio utile lo conosce il compositore ospite,
         // ed è lui a fermarsi al bordo giusto: `set_maximized` è precisamente

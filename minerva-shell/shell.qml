@@ -46,6 +46,9 @@ ShellRoot {
     // Chi sviluppa lo riaccende dalle Impostazioni, ed è l'unico che lo vuole.
     Component.onCompleted: {
         Quickshell.watchFiles = false;
+        // I pad: vedi `onControllerState` più sotto.
+        if (Core.Ipc.connected)
+            Core.Ipc.iscriviController();
         // ── Chi comanda le impostazioni di SISTEMA è uno solo ────────────
         //
         // Stessa ragione dello sfondo qui sotto, e lo stesso schema: Minerva è
@@ -486,73 +489,26 @@ ShellRoot {
     }
     readonly property bool dockInAlto: Core.Posizioni.dockInAlto
 
-    readonly property bool titleBarsOn: Core.Ipc.get("windows.titleBars", true)
     readonly property int titleBarHeight: Core.Ipc.get("windows.titleHeight", 34)
 
-    // ── Chi disegna le barre del titolo, davvero ─────────────────────────
-    //
-    // Qui c'era `!barreCompositore.attiva`, e `attiva` vuol dire una cosa
-    // sola: **il plugin di Hyprland è caricato**. Sotto minerva-wayland quel
-    // plugin non esiste e non esisterà mai — quindi risultava falso, e la
-    // shell si rimetteva a disegnare le barre.
-    //
-    // Ma il nostro compositore le disegna già, native, in `src/barra.c`. Il
-    // risultato, fotografato il 30 agosto 2026 aprendo un terminale dentro la
-    // sessione: **due barre del titolo, una sopra l'altra**, con lo stesso
-    // titolo e due file di pulsanti. Sono le «barre sovrapposte» della lista
-    // di Giacomo, ed è il caso che si vede tutti i giorni.
-    //
-    // E non costava solo brutto: `TitleBars.qml` insegue la geometria delle
-    // finestre per stare loro addosso, quindi teneva la shell a ridipingere
-    // di continuo. Misurato nella sessione annidata, a scrivania ferma:
-    // **329 risvegli al secondo** e un ridisegno a ogni fotogramma.
-    //
-    // Le barre le disegna il compositore in DUE casi, non uno: il plugin sotto
-    // Hyprland, e nativamente sotto il nostro. La shell disegna solo quando non
-    // lo fa nessuno dei due.
-    //
-    // ── E dal 1º settembre 2026 il caso è uno solo ───────────────────────
-    //
-    // Il secondo era il plugin di Hyprland, sorvegliato da
-    // `core/BarreCompositore.qml`: una ronda ogni trenta secondi con dentro
-    // due `hyprctl`, perché il plugin poteva sparire senza dirlo. Con
-    // Hyprland se ne va anche quella — le barre native del nostro compositore
-    // non si scaricano da sole, e non c'è niente da sorvegliare.
-    readonly property bool barreDalCompositore: Core.Compositore.nostro
-
-    TitleBars {
-        id: titleBars
-        enabled: root.titleBarsOn && !root.barreDalCompositore
-        titleHeight: root.titleBarHeight
-
-        onMenuRequested: function(address, where) {
-            Core.Windows.focus(address);
-            windowMenu.openAt(where.x, where.y, root.windowMenuItems());
-        }
-    }
+    // Le barre del titolo le disegna il compositore, native (`src/barra.c`).
+    // Qui c'era `TitleBars`, le barre disegnate dalla shell sopra ogni
+    // finestra: servivano sotto Hyprland, e sotto minerva-wayland erano
+    // sempre spente. Tolte il 5 ottobre 2026, con 1355 righe.
 
     // La via d'uscita dallo schermo intero. Sta su `overlay` perché è l'unico
     // livello che una finestra a schermo intero non copre — vedi il file, dove
     // c'è scritto come è stato misurato.
     FullscreenBar {
+        screen: root.schermoAttivo
         mode: Core.Ipc.get("windows.fullscreenBar", "hover")
         barHeight: root.titleBarHeight
     }
 
-    // Le barre del titolo hanno bisogno che il compositore lasci il posto in
-    // cui disegnarle: senza, coprirebbero il contenuto del programma. Qui si
-    // scrive la regola, e da qui passa anche la scelta fra finestre affiancate
-    // e finestre libere.
+    // L'aspetto delle finestre scelto nelle Impostazioni, mandato al
+    // compositore: vedi il file.
     Core.WindowRules {
         id: windowRules
-
-        // Con il plugin il posto per la barra se lo riserva il compositore
-        // (`reserved = true` nella decorazione): chiedere ANCHE il margine in
-        // cima a `gaps_in` lo conterebbe due volte, e ogni finestra
-        // nascerebbe con una fascia vuota alta quanto una barra sopra la
-        // barra.
-        titleBars:      root.titleBarsOn && !root.barreDalCompositore
-        titleHeight:    root.titleBarHeight
         effetto:        Core.Ipc.get("windows.effetto", "nessuno")
         effettoOpacita: Core.Ipc.get("windows.effettoOpacita", 0.88)
         rigidita: Core.Ipc.get("windows.rigidita", 1)
@@ -599,8 +555,16 @@ ShellRoot {
         root.scrivanieCambiate();
     }
 
-    function cancellaScrivania(nome) {
+    /// Cancella la registrazione di uno schermo, ma solo se è ancora QUELLA:
+    /// quando uno schermo viene ricreato col suo stesso nome (lo schermo
+    /// provvisorio dell'avvio che diventa quello vero), la copia nuova si
+    /// iscrive prima che la vecchia muoia, e la vecchia morendo cancellava la
+    /// nuova. Restavano riferimenti a pannelli distrutti, e le scorciatoie
+    /// che passano di qui trovavano oggetti morti.
+    function cancellaScrivania(nome, barra) {
         if (!nome || root.scrivanie[nome] === undefined)
+            return;
+        if (barra !== undefined && root.scrivanie[nome].barra !== barra)
             return;
         var m = root.scrivanie;
         delete m[nome];
@@ -617,8 +581,28 @@ ShellRoot {
     /// mezzo di un attacca-e-stacca — si prende la prima che c'è, perché una
     /// scorciatoia che non fa niente è peggio di una che agisce sullo schermo
     /// sbagliato.
+    /// Lo schermo attivo come oggetto di Quickshell, per le finestre che
+    /// nascono UNA volta e non una per schermo: menu, avvisi, Alt+Tab, OSD.
+    /// Senza uno schermo detto restavano su quello provvisorio dell'avvio
+    /// («There are no outputs - creating placeholder screen»), e ogni volta
+    /// che si aprivano il registro diceva «Layershell screen does not
+    /// correspond to a real screen» — 472 volte in una sessione. Quale sia
+    /// lo dice il compositore (`"attivo"` nell'elenco degli schermi).
+    readonly property var schermoAttivo: {
+        var nome = Core.Windows.usable ? Core.Windows.usable.nome : "";
+        var tutti = Quickshell.screens;
+        for (var i = 0; i < tutti.length; i++)
+            if (tutti[i].name === nome)
+                return tutti[i];
+        return tutti.length > 0 ? tutti[0] : null;
+    }
+
     function scrivaniaAttiva() {
-        var nome = Core.Compositore.monitorAttivo;
+        // Lo schermo col fuoco lo dice l'elenco degli schermi del compositore
+        // (`"attivo"`), che `Windows` tiene già in `usable`. Prima si leggeva
+        // `Compositore.monitorAttivo`, che sotto minerva-wayland valeva sempre
+        // "" — e con due schermi la scorciatoia agiva sul primo che capitava.
+        var nome = Core.Windows.usable ? Core.Windows.usable.nome : "";
         if (nome && root.scrivanie[nome])
             return root.scrivanie[nome];
         for (var k in root.scrivanie)
@@ -741,7 +725,7 @@ ShellRoot {
     /// conferma: la ricerca non deve poter spegnere il computer con un Invio.
     function azioneDalMenu(id) {
         switch (id) {
-        case "blocca":       root.run(["minerva-blocca"]); break;
+        case "blocca":       root.run([root.minervaRoot + "/scripts/minerva-blocca"]); break;
         case "notte":        Core.Ipc.setSetting("display.nightLight",
                                                  !Core.Ipc.get("display.nightLight", false)); break;
         case "dnd":          Core.Ipc.setSetting("notifications.doNotDisturb",
@@ -775,7 +759,7 @@ ShellRoot {
             return;
         }
         switch (id) {
-        case "blocca":   root.run(["minerva-blocca"]); break;
+        case "blocca":   root.run([root.minervaRoot + "/scripts/minerva-blocca"]); break;
         case "sospendi": root.run(["systemctl", "suspend"]); break;
         case "esci":     Core.Compositore.esciDallaSessione(); break;
         case "riavvia":  root.run(["systemctl", "reboot"]); break;
@@ -1191,11 +1175,12 @@ ShellRoot {
                 centroControllo, cassettoAppunti, isolaGiorno, isolaBarra, stanzeLato,
                 attivitaPannello)
             Component.onDestruction: root.cancellaScrivania(
-                scrivania.modelData ? scrivania.modelData.name : "")
+                scrivania.modelData ? scrivania.modelData.name : "", spine)
         }
     }
 
     ContextMenu {
+        screen: root.schermoAttivo
         id: dockMenu
         property int index: -1
         /// La dock che ha aperto questo menu: con più schermi non è più
@@ -1213,6 +1198,7 @@ ShellRoot {
     // Alt e si guarda un posto solo. Due riquadri identici su due monitor
     // sarebbero due cose da guardare per una scelta sola.
     Switcher {
+        screen: root.schermoAttivo
         id: selettore
     }
 
@@ -1261,6 +1247,7 @@ ShellRoot {
     // Il cartello. Compare due secondi e se ne va: serve a dire «lo so, ci
     // penso io», non a restare lì mentre si gioca.
     PanelWindow {
+        screen: root.schermoAttivo
         id: cartelloGioco
 
         // In BASSO, non in alto. In alto c'è già la barra che compare sulle
@@ -1400,6 +1387,7 @@ ShellRoot {
     }
 
     ContextMenu {
+        screen: root.schermoAttivo
         id: windowMenu
 
         onTriggered: function(action) {
@@ -1417,11 +1405,11 @@ ShellRoot {
 
     // Con l'Isola gli avvisi li racconta lei, allargandosi: due avvisi per la
     // stessa notifica sarebbero la stessa cosa detta due volte.
-    Toasts { inBasso: root.barraInBasso; spenti: root.barraIsola }
+    Toasts { inBasso: root.barraInBasso; spenti: root.barraIsola; screen: root.schermoAttivo }
 
     // Avviso a schermo di volume e luminosità: senza, premere i tasti
     // funzione non produce nessun segno e non si sa se hanno funzionato.
-    Osd { id: osd }
+    Osd { id: osd; screen: root.schermoAttivo }
 
     // ── Scrivania: lo sfondo e il tasto destro ───────────────────────────
     //
@@ -1653,6 +1641,7 @@ ShellRoot {
     }
 
     ContextMenu {
+        screen: root.schermoAttivo
         id: desktopDropMenu
         onTriggered: function(azione) {
             var arrivo = root.desktopDrop.arrivo;
@@ -1675,6 +1664,7 @@ ShellRoot {
     }
 
     ContextMenu {
+        screen: root.schermoAttivo
         id: desktopConflictMenu
         onTriggered: function(scelta) {
             var a = root._desktopInAttesa;
@@ -1712,6 +1702,7 @@ ShellRoot {
     }
 
     ContextMenu {
+        screen: root.schermoAttivo
         id: desktopIconMenu
         onTriggered: function(azione) {
             var ic = root.icone;
@@ -1760,6 +1751,7 @@ ShellRoot {
     // livello di sovrapposizione e tastiera a richiesta. Resta spenta finché
     // non serve, quindi non si mangia i clic della scrivania.
     PanelWindow {
+        screen: root.schermoAttivo
         id: sovrapposizioneScrivania
 
         anchors { top: true; bottom: true; left: true; right: true }
@@ -1890,6 +1882,7 @@ ShellRoot {
     }
 
     ContextMenu {
+        screen: root.schermoAttivo
         id: desktopMenu
 
         onTriggered: function(action) {
@@ -1916,7 +1909,7 @@ ShellRoot {
                 break;
             case "wallpaper":     root.openSettings("appearance"); break;
             case "wallpaperNext": Core.Wallpaper.next(1); break;
-            case "lock":       root.run(["minerva-blocca"]); break;
+            case "lock":       root.run([root.minervaRoot + "/scripts/minerva-blocca"]); break;
             case "power":      root.pannello("power"); break;
             }
         }
@@ -1940,6 +1933,7 @@ ShellRoot {
     }
 
     ContextMenu {
+        screen: root.schermoAttivo
         id: disposizioneMenu
         onTriggered: function(azione) {
             if (root.icone)
@@ -1957,10 +1951,13 @@ ShellRoot {
         id: cheatsheetLoader
         active: false
         source: "help/Cheatsheet.qml"
-        onLoaded: item.requestClose.connect(function() {
-            cheatsheetLoader.active = false;
-            Core.Overlays.release("cheatsheet");
-        })
+        onLoaded: {
+            item.screen = root.schermoAttivo;
+            item.requestClose.connect(function() {
+                cheatsheetLoader.active = false;
+                Core.Overlays.release("cheatsheet");
+            });
+        }
     }
 
     function toggleCheatsheet() {
@@ -1999,6 +1996,7 @@ ShellRoot {
         active: false
         source: "search/Palette.qml"
         onLoaded: {
+            item.screen = root.schermoAttivo;
             item.requestClose.connect(function() {
                 paletteLoader.active = false;
                 Core.Overlays.release("palette");
@@ -2105,7 +2103,7 @@ ShellRoot {
         case "cheatsheet": root.toggleCheatsheet(); break;
         case "clipboard":  root.apriCassetto(); break;
         case "files":      root.openFiles(); break;
-        case "lock":       root.run(["minerva-blocca"]); break;
+        case "lock":       root.run([root.minervaRoot + "/scripts/minerva-blocca"]); break;
         case "suspend":    if (!Quickshell.env("MINERVA_PROVA")) Core.Compositore._nostro("sospendi", []); break;
         case "reboot":     root.run(["systemctl", "reboot"]); break;
         case "poweroff":   root.run(["systemctl", "poweroff"]); break;
@@ -2181,31 +2179,13 @@ ShellRoot {
     Connections {
         target: Core.Compositore
 
-        // ── Il menu del tasto destro, chiesto dal PLUGIN ──────────────────
+        // ── Il menu del tasto destro sulla barra del titolo ──────────────
         //
-        // Quando le barre le disegna il compositore, `spine/TitleBars.qml` è
-        // spenta — ed è lei che porta `onMenuRequested`. Il risultato era che
-        // sulla configurazione normale di Minerva il tasto destro sulla barra
-        // del titolo non faceva niente, e questo menu, che esiste da sempre,
-        // era irraggiungibile dal posto dove tutti lo cercano.
-        //
-        // Il plugin manda `minervamenu>>x,y` (`plugins/minerva-bars/src/barra.cpp`)
-        // e il menu lo apre chi lo sa fare: la shell. Stesso canale del
-        // trascinamento (`minervadrag`), che passa di qui da agosto.
-        //
-        // Le voci agiscono sulla finestra ATTIVA, e il fuoco glielo ha già
-        // dato il plugin prima di mandare l'evento: qui non si tocca, o si
-        // rischia di spostarlo mentre il menu si apre.
-        function onEvento(nome, dati) {
-            if (nome !== "minervamenu")
-                return;
-            var p = String(dati || "").split(",");
-            if (p.length !== 2)
-                return;
-            var x = parseInt(p[0]);
-            var y = parseInt(p[1]);
-            if (isNaN(x) || isNaN(y))
-                return;
+        // La barra la disegna il compositore, e il clic destro lo annuncia
+        // lui (`menufinestra`): il menu lo apre chi lo sa fare, la shell. Le
+        // voci agiscono sulla finestra ATTIVA, e il fuoco il compositore
+        // gliel'ha già dato.
+        function onMenuFinestra(x, y, schermo) {
             windowMenu.openAt(x, y, root.windowMenuItems());
         }
 
@@ -2260,7 +2240,7 @@ ShellRoot {
             if (azione === "suspend")
                 Core.Compositore._nostro("sospendi", []);
             else if (azione === "lock")
-                root.run(["minerva-blocca"]);
+                root.run([root.minervaRoot + "/scripts/minerva-blocca"]);
             // Terzo caso: niente. Ed è un caso vero, non un buco — c'è chi
             // chiude il coperchio e vuole che il computer continui a
             // scaricare.
@@ -2286,7 +2266,7 @@ ShellRoot {
                 root.run(["brightnessctl", "-s", "set", "20%"]);
             }
             if (secondi === root.sogliaBlocco && root.sogliaBlocco > 0)
-                root.run(["minerva-blocca"]);
+                root.run([root.minervaRoot + "/scripts/minerva-blocca"]);
             if (secondi === root.sogliaSospensione
                     && root.sogliaSospensione > 0) {
                 // ── La riga che non si discute ──────────────────────────
@@ -2427,6 +2407,38 @@ ShellRoot {
                 Core.Notifications.daMinerva(
                     it ? "Effetti di nuovo pieni" : "Effects back to full",
                     it ? "Il risparmio è finito." : "Power saving is over.");
+            }
+        }
+    }
+
+    // ── Un pad pronto si DICE ────────────────────────────────────────────
+    //
+    // Il demone affida da solo a InputPlumber ogni pad che si accende
+    // (`ControllerService`). Una volta per pad e per sessione si dice che è
+    // pronto, così chi accende il DualShock prima di aprire un gioco sa che
+    // non deve fare nient'altro. L'iscrizione si rinnova a ogni saluto: un
+    // demone riavviato non si ricorda di chi era iscritto.
+    property var _padDetti: ({})
+    Connections {
+        target: Core.Ipc
+        function onConnectedChanged() {
+            if (Core.Ipc.connected)
+                Core.Ipc.iscriviController();
+        }
+        function onControllerState(data) {
+            var it = Core.Strings.lang === "it";
+            var pad = data.pad || [];
+            for (var i = 0; i < pad.length; i++) {
+                var p = pad[i];
+                var chiave = p.nome + "|" + p.collegamento;
+                if (!p.gestito || root._padDetti[chiave])
+                    continue;
+                root._padDetti[chiave] = true;
+                Core.Notifications.daMinerva(
+                    it ? "Controller pronto per tutti i giochi"
+                       : "Controller ready for every game",
+                    p.nome + (it ? ": funziona anche nei giochi fuori da Steam."
+                                 : ": it works in games outside Steam too."));
             }
         }
     }

@@ -337,6 +337,9 @@ Item {
             }
 
             Image {
+                // Il doppio della misura a cui si vede: nitido, senza decodificare
+                // una fotografia da dodici megapixel per un cerchio.
+                sourceSize.width: Math.max(64, Math.round(width * 2))
                 id: ritratto
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectCrop

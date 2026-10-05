@@ -1,0 +1,13 @@
+# I LED dei pad PlayStation, scrivibili da chi è nel gruppo `input`.
+#
+# La barra luminosa di un DualShock 4 o di un DualSense è un LED del kernel
+# (`hid_playstation`, o `hid_sony` per i più vecchi): `…:red`, `…:green`,
+# `…:blue`, o un solo `…:rgb:indicator` a più colori. Di serie li scrive solo
+# root, e uaccess non vale per sysfs. Il demone di Minerva li colora — un
+# colore a riposo, uno quando un gioco usa il pad (`ControllerService`) — e
+# gira come utente: questa regola gli dà il permesso, e a nessun altro fuori
+# dal gruppo `input`.
+#
+# Installata da `scripts/install-minerva.sh` in /etc/udev/rules.d.
+ACTION=="add|change", SUBSYSTEM=="leds", DRIVERS=="playstation|sony", \
+  RUN+="/bin/sh -c 'for a in brightness multi_intensity; do [ -e /sys%p/$$a ] || continue; chgrp input /sys%p/$$a; chmod g+w /sys%p/$$a; done'"

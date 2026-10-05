@@ -82,7 +82,11 @@ Item {
 
     function execute(id) {
         switch (id) {
-        case "lock":     panel.run(["minerva-blocca"]); break;
+        // Per percorso, non per nome: il blocco non si cerca nel PATH, dove
+        // chiunque scriva in una cartella che viene prima potrebbe metterne
+        // uno finto. `shellDir` è `…/minerva-shell`, gli script stanno accanto.
+        case "lock":     panel.run([String(Quickshell.shellDir).replace(/^file:\/\//, "")
+                                    .replace(/\/[^\/]*$/, "") + "/scripts/minerva-blocca"]); break;
         case "suspend":  panel.run(["systemctl", "suspend"]); break;
         case "logout":   Core.Compositore.esciDallaSessione(); break;
         case "reboot":   panel.run(["systemctl", "reboot"]); break;

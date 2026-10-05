@@ -416,19 +416,6 @@ Page {
 
         S.SettingRow {
             width: parent.width
-            label: page.it ? "Barra del titolo su ogni finestra"
-                           : "A title bar on every window"
-            description: page.it
-                ? "Nome, icona e i tre pulsanti sopra ogni finestra. Serve anche per spostarle e agganciarle ai bordi"
-                : "Name, icon and the three buttons above every window. Also how you move and snap them"
-            control: S.ToggleSwitch {
-                checked: Core.Ipc.get("windows.titleBars", true)
-                onToggled: function(v) { Core.Ipc.setSetting("windows.titleBars", v); }
-            }
-        }
-
-        S.SettingRow {
-            width: parent.width
             label: page.it ? "Altezza della barra del titolo" : "Title bar height"
             controlWidth: 220
             control: S.ValueSlider {
@@ -444,11 +431,6 @@ Page {
         }
 
         // ── Da che parte stanno i pulsanti ───────────────────────────────
-        //
-        // Qui c'era la scelta fra finestre affiancate e libere. Non c'è più:
-        // in Minerva le finestre sono libere e basta. Il perché sta in
-        // `core/WindowRules.qml`, e in breve è che una finestra poteva
-        // diventare libera in cinque modi che non si conoscevano fra loro.
         S.SettingRow {
             width: parent.width
             label: page.it ? "Pulsanti della finestra"

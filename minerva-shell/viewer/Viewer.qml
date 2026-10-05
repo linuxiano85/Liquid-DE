@@ -735,8 +735,7 @@ FloatingWindow {
             onApri: (p) => viewer.show(p)
             // Il percorso NON si butta via: era il difetto per cui nella
             // galleria il tasto destro non apriva niente.
-            onMenu: (p, x, y) => viewer.apriMenuGalleria(p, x, y)
-            onCercaCartelle: Core.Ipc.fotoCerca()
+            onMenu: (p, x, y, pr) => viewer.apriMenuGalleria(p, x, y, pr)
         }
     }
 
@@ -1252,7 +1251,8 @@ FloatingWindow {
     Timer {
         interval: 120000
         repeat: true
-        running: true
+        // Solo con Anteprima davanti: in secondo piano non apre nessun menu.
+        running: Qt.application.state === Qt.ApplicationActive
         triggeredOnStart: true
         onTriggered: Core.Ipc.trasmettiCerca()
     }
@@ -1285,6 +1285,9 @@ FloatingWindow {
     /// subito perché `percorso` era vuoto: nella galleria il menu **non si
     /// apriva affatto**. Trovato rileggendo, il 4 settembre 2026.
     property string menuSu: ""
+    /// La foto su cui si è aperto il menu della galleria è fra le preferite?
+    /// Decide se la voce dice «aggiungi» o «togli».
+    property bool menuPreferito: false
 
     readonly property string bersaglio:
         viewer.menuSu !== "" ? viewer.menuSu : viewer.percorso
@@ -1318,6 +1321,12 @@ FloatingWindow {
         var v = [];
         v.push({ "label": viewer.it ? "Apri" : "Open",
                  "icon": "image", "action": "apri-questo" });
+        // La stella: la galleria la disegnava già sulle preferite, ma non
+        // c'era modo di metterla (5 ottobre 2026).
+        v.push({ "label": viewer.menuPreferito
+                          ? (viewer.it ? "Togli dai preferiti" : "Remove from favourites")
+                          : (viewer.it ? "Aggiungi ai preferiti" : "Add to favourites"),
+                 "icon": "star", "action": "preferito" });
         var tv = viewer.vociTrasmetti(quale);
         for (var i = 0; i < tv.length; i++)
             v.push(tv[i]);
@@ -1377,10 +1386,11 @@ FloatingWindow {
     ///
     /// Il percorso arriva e **si tiene**: prima veniva scartato, e il menu non
     /// si apriva affatto.
-    function apriMenuGalleria(quale, x, y) {
+    function apriMenuGalleria(quale, x, y, preferito) {
         if (!quale || quale === "")
             return;
         viewer.menuSu = quale;
+        viewer.menuPreferito = preferito === true;
         // ── Perché NON si usa `openAt` con queste coordinate ────────────
         //
         // Perché non sono coordinate dello schermo. `Miniatura.qml` fa un
@@ -1454,6 +1464,9 @@ FloatingWindow {
                                          "sh", viewer.bersaglio]);
                 break;
             case "cestina":  viewer.cestina(viewer.bersaglio); break;
+            case "preferito":
+                Core.Ipc.fotoSegnaPreferito(viewer.bersaglio, !viewer.menuPreferito);
+                break;
             }
         }
     }

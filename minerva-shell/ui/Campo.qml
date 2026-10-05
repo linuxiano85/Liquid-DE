@@ -69,6 +69,7 @@ Item {
         }
 
         Text {
+            textFormat: Text.PlainText
             anchors.fill: parent
             anchors.leftMargin: Theme.Effects.space3
             anchors.rightMargin: Theme.Effects.space3

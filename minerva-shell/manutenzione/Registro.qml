@@ -88,6 +88,7 @@ Item {
     }
 
     Text {
+        textFormat: Text.PlainText
         id: intestazione
         anchors.top: pista.bottom
         anchors.topMargin: registro.attivo ? Theme.Effects.space3 : 0

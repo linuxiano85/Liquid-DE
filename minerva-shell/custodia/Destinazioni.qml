@@ -75,7 +75,13 @@ Column {
                 dest.ghCodice = String(r.codice);
                 dest.ghNostro = String(r.nostro);
                 dest.ghAspettaConferma = true;
-                Quickshell.execDetached(["xdg-open", String(r.dove || "https://github.com/login/device")]);
+                // Solo una pagina di GitHub: `dove` arriva dalla risposta di
+                // GitHub attraverso il demone, e `xdg-open` aprirebbe anche
+                // un `file://` (revisione di sicurezza, 5 ottobre 2026).
+                var dove = String(r.dove || "");
+                if (dove.indexOf("https://github.com/") !== 0)
+                    dove = "https://github.com/login/device";
+                Quickshell.execDetached(["xdg-open", dove]);
                 Core.Ipc.custodiaGithubAttendi(dest.ghNostro, r.ogni, r.scadeFra);
                 return;
             }
@@ -411,6 +417,7 @@ Column {
                                 color: Theme.Colors.textMuted
                             }
                             Text {
+                                textFormat: Text.PlainText
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: modelData.name
                                 color: Theme.Colors.text

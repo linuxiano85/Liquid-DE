@@ -106,6 +106,7 @@ Rectangle {
         spacing: 2
 
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: Core.Media.titolo
             elide: Text.ElideRight
@@ -116,6 +117,7 @@ Rectangle {
         }
 
         Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: Core.Media.artista
             visible: text.length > 0

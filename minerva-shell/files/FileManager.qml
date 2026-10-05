@@ -406,10 +406,17 @@ FloatingWindow {
     // Ogni due minuti, e solo mentre la finestra c'è: un televisore acceso
     // adesso può essere spento fra un'ora, e una voce di menu che manda a un
     // apparecchio spento è peggio di una voce che manca.
+    //
+    // «Mentre la finestra c'è» voleva dire SEMPRE: il gestore file parte
+    // dormiente con la sessione (`MINERVA_FILES_DORMIENTE`), e da lì
+    // interrogava la rete ogni due minuti per tutto il giorno senza che
+    // nessuno l'avesse aperto. Adesso solo mentre è davanti, e tornandoci
+    // si guarda subito (5 ottobre 2026).
     Timer {
         interval: 120000
         repeat: true
-        running: true
+        running: Qt.application.state === Qt.ApplicationActive
+        triggeredOnStart: true
         onTriggered: Core.Ipc.trasmettiCerca()
     }
 
@@ -2999,7 +3006,10 @@ FloatingWindow {
         function accept() {
             var name = promptInput.text.trim();
             prompt.visible = false;
-            if (name === "" || name.indexOf("/") !== -1 || !manager.current)
+            // «.» e «..» non sono nomi: sono la cartella stessa e quella
+            // sopra. Rinominare in «..» spostava il file di un piano.
+            if (name === "" || name === "." || name === ".."
+                || name.indexOf("/") !== -1 || !manager.current)
                 return;
             if (prompt.mode === "newFile") {
                 Core.Ipc.fsTouch(manager.current.path + "/" + name);

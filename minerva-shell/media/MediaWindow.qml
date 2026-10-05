@@ -2326,6 +2326,7 @@ FloatingWindow {
                 spacing: Theme.Effects.space1
 
                 Text {
+                    textFormat: Text.PlainText
                     width: parent.width
                     text: parent.parent.parent.titolo
                     elide: Text.ElideRight

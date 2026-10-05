@@ -193,7 +193,14 @@ const List<Scorta> scorte = [
       [
         'xpad', 'hid_playstation', 'hid_sony', 'hid_nintendo', 'hid_steam',
         'hid_microsoft', 'joydev', 'uinput', 'ff_memless',
-      ]),
+        // I pad Bluetooth passano da BlueZ attraverso uhid: senza, un
+        // DualShock si accoppia e poi non esiste.
+        'uhid',
+      ],
+      // Di serie, come le chiavette: un pad si collega il giorno in cui si
+      // gioca, e quel giorno il kernel non si ricompila. È anche quello su
+      // cui conta `ControllerService` — InputPlumber vuole uinput.
+      predefinita: true),
   Scorta(
       'bluetooth',
       'Bluetooth',

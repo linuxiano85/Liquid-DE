@@ -26,7 +26,7 @@ QtObject {
     id: paper
 
     readonly property string mode: Core.Ipc.get("desktop.wallpaperMode", "minerva")
-    readonly property string current: Core.Ipc.get("desktop.wallpaper", "")
+    readonly property string current: paper.risolvi(Core.Ipc.get("desktop.wallpaper", ""))
     readonly property string folder: Core.Ipc.get("desktop.wallpaperFolder", "")
     /// Ogni quanti minuti cambia. Zero: mai.
     readonly property int rotateMinutes: Core.Ipc.get("desktop.rotateMinutes", 0)
@@ -45,6 +45,22 @@ QtObject {
 
     function ownPath(file) {
         return paper.ownDir + file;
+    }
+
+    /// Uno sfondo di Minerva vive dove vive QUESTA shell.
+    ///
+    /// Si salva come percorso assoluto, e quel percorso porta con sé la
+    /// cartella da cui la shell girava quel giorno. Il 4 ottobre 2026 era
+    /// `~/Scaricati/Liquid-DE-principale`: spostata la cartella, lo sfondo
+    /// puntava al vuoto. Qualunque percorso dentro `minerva-shell/assets/`
+    /// si legge quindi dalla shell che sta girando adesso. Le immagini
+    /// dell'utente restano come sono.
+    function risolvi(path) {
+        var segno = "/minerva-shell/assets/";
+        var i = String(path).indexOf(segno);
+        if (i === -1)
+            return path;
+        return Quickshell.shellDir + "/assets/" + path.slice(i + segno.length);
     }
 
     // ── Applicare ────────────────────────────────────────────────────────

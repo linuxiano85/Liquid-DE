@@ -42,6 +42,7 @@ import '../services/ricerca_service.dart';
 import '../services/audio_service.dart';
 import '../services/system_audio_service.dart';
 import '../services/condivisione_service.dart';
+import '../services/controller_service.dart';
 import '../services/bluetooth_pairing_service.dart';
 import '../services/tema_icone_service.dart';
 import '../services/foto_service.dart';
@@ -221,6 +222,21 @@ class WebSocketServer {
   final AudioService _audio = AudioService();
   final SystemAudioService _systemAudio = SystemAudioService();
   StreamSubscription<Map<String, dynamic>>? _systemAudioSub;
+
+  /// I pad di gioco, resi uguali per tutti i giochi da InputPlumber. Parte
+  /// con il demone e non alla prima iscrizione come l'audio: il lavoro vero
+  /// è accorgersi da soli di un pad che si accende, anche a pagina chiusa.
+  late final ControllerService _controller = ControllerService(
+    automatico: () =>
+        _settingsApi.getValue('input.controllerAutomatico', true) == true,
+    tipo: () => _settingsApi.getString(
+        'input.controllerTipo', ControllerService.tipoPredefinito),
+    perPad: () {
+      final v = _settingsApi.getValue('input.controllerPad');
+      return v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
+    },
+  );
+  StreamSubscription<Map<String, dynamic>>? _controllerSub;
 
   /// I programmi che partono con la sessione. Legge le due cartelle a ogni
   /// richiesta: sono una manciata di file e cambiano da fuori (un pacchetto
@@ -696,7 +712,10 @@ class WebSocketServer {
       // è la rete per la prossima.
       _eventBusSubscription = _eventBus.stream.listen((event) {
         try {
-          if (event.type == 'settings_changed') _applyIconThemeFromSettings();
+          if (event.type == 'settings_changed') {
+            _applyIconThemeFromSettings();
+            _controller.applica();
+          }
           _broadcastEvent(event);
         } catch (e, dove) {
           print('[MINERVA][IPC][ERRORE] Non sono riuscito a inoltrare '
@@ -708,6 +727,14 @@ class WebSocketServer {
       // L'avanzamento dei trasferimenti va a TUTTI i client, senza passare dal
       // bus: è un flusso continuo e ad alta frequenza, e il bus è pensato per
       // eventi rari a cui ci si iscrive.
+      // I pad: chi guarda la pagina riceve i cambi, e il servizio parte
+      // subito per accorgersi da solo dei pad che si accendono.
+      _controllerSub = _controller.changes.stream.listen((stato) {
+        _aTutti({'event': 'controller_state', 'payload': stato},
+            solo: (c) => c.isSubscribed('controller_state'));
+      });
+      unawaited(_controller.start());
+
       _transferSubscription = _fileService.progress.listen((job) {
         _aTutti({'event': 'fs_job', 'payload': job});
       });
@@ -1518,6 +1545,10 @@ class WebSocketServer {
           'payload': {
             'themes': _iconResolver.listThemes(),
             'detected': _iconResolver.detectedTheme,
+            // Quelli che si possono togliere: stanno nella cartella
+            // dell'utente (Impostazioni › Aspetto, «Togli»).
+            'installati': TemaIconeService.installati(
+                Platform.environment['HOME'] ?? ''),
           },
         });
         break;
@@ -2317,6 +2348,25 @@ class WebSocketServer {
           client.subscribedEvents =
               [...client.subscribedEvents, 'system_audio_state'];
         }
+        break;
+      // `subscribe_controller` — come l'audio, ma il servizio è già acceso
+      // da `start()`: iscriversi vuol solo dire ricevere i cambi.
+      case 'controller_state':
+        client.send({'event': 'controller_state',
+            'payload': await _controller.status()});
+        break;
+      case 'subscribe_controller':
+        if (!client.subscribedEvents.contains('controller_state')) {
+          client.subscribedEvents =
+              [...client.subscribedEvents, 'controller_state'];
+        }
+        client.send({'event': 'controller_state',
+            'payload': await _controller.status()});
+        break;
+      case 'unsubscribe_controller':
+        client.subscribedEvents = client.subscribedEvents
+            .where((e) => e != 'controller_state')
+            .toList();
         break;
       case 'unsubscribe_audio':
         client.subscribedEvents = client.subscribedEvents
@@ -3843,6 +3893,8 @@ class WebSocketServer {
   Future<void> stop() async {
     await _systemAudioSub?.cancel();
     await _systemAudio.close();
+    await _controllerSub?.cancel();
+    await _controller.close();
     await _eventBusSubscription?.cancel();
     await _transferSubscription?.cancel();
     await _statoFinestreSub?.cancel();

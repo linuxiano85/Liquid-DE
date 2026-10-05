@@ -23,6 +23,17 @@
 SELF="$(readlink -f "$0")"
 ROOT="$(dirname "$(dirname "$SELF")")"
 
+# ── Le porte delle prove si aprono solo nelle prove ─────────────────────────
+#
+# `MINERVA_PAM` sceglie chi controlla la password, `MINERVA_BLOCCO_PROVA` fa
+# sbloccare lo schermo da solo dopo N secondi. Servono alle prove, e
+# arrivavano qui dall'ambiente della shell: un programma dell'utente che le
+# avesse messe lì avrebbe avuto un blocco che si apre da sé. Fuori da
+# `MINERVA_PROVA=1` non valgono (revisione di sicurezza, 5 ottobre 2026).
+if [ "${MINERVA_PROVA:-}" != "1" ]; then
+    unset MINERVA_PAM MINERVA_BLOCCO_PROVA
+fi
+
 # Qual è il servizio PAM da usare. La scelta sta QUI e in nessun altro posto:
 # `prove-blocco.qml` la chiede con `--quale-pam` invece di ripeterla, perché
 # una prova che indovina da sé quale servizio useresti non prova niente — è

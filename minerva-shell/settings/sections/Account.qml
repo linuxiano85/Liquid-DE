@@ -120,7 +120,15 @@ Page {
         // Google, quella vera. Si apre nel browser e il resto succede lì.
         function onAccountApriGoogle(r) {
             if (!r || !r.url) return;
-            Quickshell.execDetached(["xdg-open", r.url]);
+            // Solo la pagina di Google: l'indirizzo arriva dal demone e dalla
+            // rete, e `xdg-open` apre qualunque cosa — anche un `file://` o
+            // un programma registrato per uno schema (revisione di
+            // sicurezza, 5 ottobre 2026).
+            if (String(r.url).indexOf("https://accounts.google.com/") !== 0) {
+                console.warn("[MINERVA][ACCOUNT] indirizzo inatteso, non lo apro: " + r.url);
+                return;
+            }
+            Quickshell.execDetached(["xdg-open", String(r.url)]);
             page.avvisoBuono = true;
             page.avviso = page.it
                 ? "Ho aperto la pagina di Google nel browser. Entra col tuo account e dai il permesso: quando torni, l'account è collegato. Se il browser non si è aperto, la pagina è ancora lì che aspetta per cinque minuti."

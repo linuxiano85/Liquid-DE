@@ -121,6 +121,7 @@ Item {
             }
 
             Text {
+                textFormat: Text.PlainText
                 anchors.left: entryGlyph.right
                 anchors.leftMargin: Theme.Effects.space3
                 anchors.right: parent.right

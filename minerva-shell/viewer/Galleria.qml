@@ -31,7 +31,7 @@ Item {
     readonly property bool it: Core.Strings.lang === "it"
 
     signal apri(string percorso)
-    signal menu(string percorso, real x, real y)
+    signal menu(string percorso, real x, real y, bool preferito)
 
     /// I giorni: `[{giorno, quante}, …]`, dal più recente.
     property var giorni: []
@@ -91,9 +91,11 @@ Item {
             galleria.mostraSchermate = p.mostraSchermate !== false;
             galleria.arrivata = true;
         }
-        // Finita una scansione, il catalogo è un altro: si richiede.
+        // Finita una scansione, il catalogo è un altro: si richiede. Il demone
+        // dice `fine`, non `finita`: con `finita` la galleria non si
+        // ricaricava mai dopo una scansione.
         function onFotoScansione(p) {
-            if (p && p.finita === true)
+            if (p && p.fine === true)
                 galleria.ricarica();
         }
         function onFotoPreferito(p) {
@@ -138,7 +140,7 @@ Item {
             larghezzaUtile: lista.width
             scelti: galleria.scelti
             onApri: (p) => galleria.apri(p)
-            onMenu: (p, x, y) => galleria.menu(p, x, y)
+            onMenu: (p, x, y, pr) => galleria.menu(p, x, y, pr)
             onScegli: (p, c, s) => galleria._scegli(p, c, s)
         }
 
@@ -276,7 +278,7 @@ Item {
         // fa la stessa scelta per la barra degli strumenti.
         Ui.SpineButton {
             anchors.horizontalCenter: parent.horizontalCenter
-            onClicked: galleria.cercaCartelle()
+            onClicked: cartelleFoto.apri()
             content: Text {
                 color: Theme.Colors.accent
                 font.family: Theme.Typography.fontDisplay
@@ -287,8 +289,28 @@ Item {
         }
     }
 
-    /// Chiede al demone dove sembrano esserci foto. Costa — cammina la casa,
-    /// 0,4 secondi misurati — ed è per questo che è un gesto e non una cosa
-    /// che succede da sola a ogni apertura.
-    signal cercaCartelle()
+    // ── Le cartelle ──────────────────────────────────────────────────────
+    //
+    // Sempre a portata, non solo a galleria vuota: le foto del telefono si
+    // copiano in una cartella nuova, e la galleria deve poterla imparare.
+    Ui.SpineButton {
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: Theme.Effects.space3
+        visible: galleria.arrivata && galleria.giorni.length > 0
+        onClicked: cartelleFoto.apri()
+        content: Text {
+            color: Theme.Colors.textMuted
+            font.family: Theme.Typography.fontDisplay
+            font.pixelSize: 13
+            text: galleria.it ? "Cartelle" : "Folders"
+        }
+    }
+
+    CartelleFoto {
+        id: cartelleFoto
+        anchors.fill: parent
+        visible: false
+        z: 20
+    }
 }

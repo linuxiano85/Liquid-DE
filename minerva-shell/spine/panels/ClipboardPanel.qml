@@ -190,6 +190,7 @@ Item {
             }
 
             Text {
+                textFormat: Text.PlainText
                 anchors.left: ordinal.right
                 anchors.leftMargin: Theme.Effects.space2
                 anchors.right: parent.right

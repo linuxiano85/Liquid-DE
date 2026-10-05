@@ -10,6 +10,5 @@ Toasts        1.0 Toasts.qml
 WindowChip    1.0 WindowChip.qml
 ListaFinestre 1.0 ListaFinestre.qml
 Osd           1.0 Osd.qml
-TitleBars     1.0 TitleBars.qml
 FullscreenBar 1.0 FullscreenBar.qml
 WidgetBarra   1.0 WidgetBarra.qml

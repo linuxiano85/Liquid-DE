@@ -20,9 +20,6 @@ import "." as Core
 QtObject {
     id: windows
 
-    /// Nome della scrivania speciale che fa da «barra delle applicazioni».
-    readonly property string minimizedWorkspace: "special:minimized"
-
     // ── Qual è la finestra attiva ────────────────────────────────────────
     //
     // Qui c'era `Hyprland.activeToplevel`, il modello di quickshell. Ed era
@@ -134,12 +131,6 @@ QtObject {
             || windows.ownClasses.indexOf(C) !== -1;
     }
 
-    /// Geometria della finestra attiva: `{ x, y, w, h }` in pixel dello
-    /// schermo. Serve a disegnarci sopra la barra del titolo, che è l'unico
-    /// modo di avere i tre pulsanti dove sta la finestra invece che in cima
-    /// allo schermo — Hyprland non disegna cornici, e nessuno può obbligarlo.
-    property var activeGeometry: null
-
     // ── Interrogazione ───────────────────────────────────────────────────
     //
     // L'elenco arriva da `hyprctl -j clients` e non da `Hyprland.toplevels`.
@@ -151,20 +142,37 @@ QtObject {
 
     // _query rimosso: l'elenco arriva in push dal demone.
 
-    function _parse(text) {
-        var list;
-        try {
-            list = JSON.parse(text);
-        } catch (e) {
-            return;
+    /// L'ultimo elenco ricevuto, come testo: solo per accorgersi che il
+    /// prossimo è uguale.
+    property string _firma: ""
+
+    function _parse(dati) {
+        var list = dati;
+        if (typeof dati === "string") {
+            try {
+                list = JSON.parse(dati);
+            } catch (e) {
+                return;
+            }
         }
         if (!Array.isArray(list))
             return;
 
+        // ── Uguale a prima: non si tocca niente ──────────────────────────
+        //
+        // Il demone manda l'elenco a ogni cambio e, a riposo, circa una volta
+        // al secondo anche se non è cambiato niente. Ogni assegnazione di
+        // `all` rifà i conti in dock, barra, stanze, schermo intero e barre
+        // del titolo, su ogni schermo e in ogni finestra di Minerva. Un
+        // confronto costa meno di tutto questo (5 ottobre 2026).
+        var firma = JSON.stringify(list);
+        if (firma === windows._firma)
+            return;
+        windows._firma = firma;
+
         var out = [];
         var addrs = [];
         var every = [];
-        var geo = null;
         var attiva = "";
 
         for (var i = 0; i < list.length; i++) {
@@ -193,35 +201,18 @@ QtObject {
         windows.all = every;
         windows._niente_ingranditi_dal_compositore();
 
-        // ── La garanzia sullo spazio, che qui non c'era ───────────────────
+        // ── La garanzia sullo spazio ─────────────────────────────────────
         //
         // `assicuraSpazio()` tiene ogni finestra dentro lo spazio utile, con
-        // la sua maniglia sotto la barra della scrivania e non sopra. La
-        // chiamava UN SOLO posto: `spine/TitleBars.qml`, che è SPENTA quando
-        // le barre le disegna il plugin — cioè nella configurazione normale
-        // di Minerva.
-        //
-        // Quindi la garanzia non girava. Dimostrato il 12 agosto 2026
-        // mettendo una finestra a `y = 10`: la sua barra del titolo finiva a
-        // `y = -32`, fuori dallo schermo, e nessuno la spostava.
-        //
-        // È lo stesso difetto della guardia qui sopra e del controllo del
-        // demone che cercava la forma sbagliata: **codice giusto in un ramo
-        // che quella configurazione non percorre**. Da qui in poi la garanzia
-        // sta dove l'elenco delle finestre viene riletto, e vale sempre.
-        //
+        // la sua barra del titolo sotto la barra della scrivania e non sopra.
+        // Sta qui, dove l'elenco delle finestre viene riletto, e vale sempre.
         // Chi trascina è protetto da dentro: `assicuraSpazio` salta le
         // finestre che si sono mosse dall'ultimo giro, e una trascinata si
-        // muove a ogni fotogramma. Il controllo su `drag.active` che resta in
-        // `TitleBars` è una cintura in più, non l'unica.
+        // muove a ogni fotogramma.
         windows.assicuraSpazio();
         windows.activeAddress = attiva;
-        var a = windows.find("address:" + attiva);
-        if (a && !a.minimized)
-            geo = { "x": a.x, "y": a.y, "w": a.w, "h": a.h };
         windows.minimized = out;
         windows._minimizedAddresses = addrs;
-        windows.activeGeometry = geo;
     }
 
     function refresh() {
@@ -270,11 +261,7 @@ QtObject {
             return;
 
         // La FORMA della risposta la conosce solo la porta: qui arriva già
-        // in lingua nostra, come per le finestre. `sx,sy,sw,sh` è il contorno
-        // VERO dello schermo, zone riservate comprese — serve all'aggancio ai
-        // bordi, la cui fascia sensibile si misura fino al bordo fisico
-        // (sopra c'è la barra della scrivania, e il puntatore può arrivarci)
-        // mentre il bersaglio sta nello spazio utile. Vedi `spazioPerPunto`.
+        // in lingua nostra, come per le finestre.
         var tutti = [];
         for (var i = 0; i < list.length; i++)
             tutti.push(Compositore.schermoDaCompositore(list[i], i));
@@ -323,50 +310,10 @@ QtObject {
         return migliore || windows.usable;
     }
 
-    /// Lo spazio utile del monitor che contiene un PUNTO dello schermo.
-    ///
-    /// Serve all'aggancio ai bordi: la zona deve essere quella del monitor
-    /// sotto il puntatore, non quella del monitor attivo — con due schermi
-    /// il puntatore può benissimo stare su quello senza fuoco. Il punto si
-    /// cerca dentro il contorno VERO (`s*`), non dentro lo spazio utile:
-    /// sopra la barra della scrivania è ancora «quel monitor».
-    ///
-    /// Se il punto non sta su nessuno schermo — il puntatore può sconfinare
-    /// di qualche pixel — si prende quello col centro più vicino, così
-    /// l'anteprima dell'aggancio non sparisce di colpo proprio sul bordo.
-    function spazioPerPunto(x, y) {
-        var tutti = windows.spaziPerMonitor || [];
-        if (tutti.length === 0)
-            return windows.usable;
-        if (tutti.length === 1)
-            return tutti[0];
-        for (var i = 0; i < tutti.length; i++) {
-            var u = tutti[i];
-            var sx = u.sx !== undefined ? u.sx : u.x;
-            var sy = u.sy !== undefined ? u.sy : u.y;
-            var sw = u.sw !== undefined ? u.sw : u.w;
-            var sh = u.sh !== undefined ? u.sh : u.h;
-            if (x >= sx && x < sx + sw && y >= sy && y < sy + sh)
-                return u;
-        }
-        var migliore = null;
-        var distanza = Infinity;
-        for (i = 0; i < tutti.length; i++) {
-            u = tutti[i];
-            var cx = (u.sx !== undefined ? u.sx : u.x)
-                   + (u.sw !== undefined ? u.sw : u.w) / 2;
-            var cy = (u.sy !== undefined ? u.sy : u.y)
-                   + (u.sh !== undefined ? u.sh : u.h) / 2;
-            var d = (cx - x) * (cx - x) + (cy - y) * (cy - y);
-            if (d < distanza) { distanza = d; migliore = u; }
-        }
-        return migliore || windows.usable;
-    }
-
     property Connections _ipcState: Connections {
         target: Core.Ipc
-        function onWindowsStateReceived(clientsJson) {
-            windows._parse(clientsJson);
+        function onWindowsStateReceived(clients) {
+            windows._parse(clients);
         }
         function onMonitorsStateReceived(monitorsJson) {
             windows._parseMonitors(monitorsJson);
@@ -439,73 +386,6 @@ QtObject {
         return false;
     }
 
-    /// Quanti pixel occupa la barra del titolo SOPRA questa finestra, o zero
-    /// se sopra non ha niente — perché la barra ce l'ha dentro (le nostre),
-    /// perché se la disegna da sola (i browser), o perché le barre del titolo
-    /// sono spente.
-    /// La cornice che Hyprland disegna INTORNO alla finestra.
-    ///
-    /// Sta fuori dal rettangolo della finestra, e va tolta da ogni conto che
-    /// pretende di riempire uno spazio esatto: una finestra larga quanto lo
-    /// spazio utile ha la cornice per metà fuori dallo schermo. È la linea
-    /// accesa che segue la finestra attiva — quella che sparisce, e che a
-    /// vedersi sparire sembra un difetto del colore.
-    ///
-    /// Misurato l'11 agosto: una finestra ingrandita dalla shell arrivava a
-    /// `[0, 86] 1536×778` e la stessa ingrandita dal pulsante della barra a
-    /// `[2, 88] 1532×774`. Due modi di dire «ingrandita», e solo il secondo
-    /// mostrava la cornice.
-    ///
-    /// È lo stesso numero di `general:border_size` in `hyprland.conf` e di
-    /// `borderSize` in `spine/TitleBars.qml`: se cambia lì, cambia qui.
-    readonly property int bordo: 2
-
-    /// Quanto spazio serve SOPRA la finestra perché la sua barra del titolo
-    /// resti visibile — cioè quanto la garanzia deve tenerla staccata dal
-    /// bordo alto dello spazio utile.
-    ///
-    /// ── E sotto minerva-wayland la risposta è ZERO ────────────────────────
-    ///
-    /// Giacomo, 2 settembre 2026: «bisogna sistemare lo snap perché funziona
-    /// malissimo perché posiziona male le finestre».
-    ///
-    /// Era questa riga, ed è una compensazione di Hyprland sopravvissuta al
-    /// distacco. Sotto Hyprland `w.y` era la posizione del CLIENT, e la barra
-    /// del titolo la disegnava la shell **sopra di lui**, fuori dalla
-    /// finestra: perché quella barra si vedesse, il client doveva cominciare
-    /// un'altezza di barra più in basso del bordo utile. Da qui il numero.
-    ///
-    /// Sotto minerva-wayland la barra è NATIVA e sta **dentro la cornice**
-    /// (`compositore/src/barra.c`), e la geometria che il compositore riporta
-    /// è quella della cornice — barra compresa. Chiedere lo stesso spazio in
-    /// più vuol dire chiederlo due volte.
-    ///
-    /// Il difetto misurato il 3 settembre 2026, in sessione annidata: il
-    /// compositore agganciava correttamente a `y = 44` (il bordo utile), e
-    /// trecento millisecondi dopo la shell mandava `sposta 0 86`. Quarantadue
-    /// pixel più in basso **senza accorciare la finestra**, che quindi
-    /// sporgeva di altrettanti sotto il bordo dello schermo. Succedeva a tutti
-    /// e cinque gli agganci che toccano il bordo alto, e a nessuno di quelli
-    /// in basso — ed è esattamente la faccia che aveva il difetto: «posiziona
-    /// male le finestre».
-    ///
-    /// La garanzia resta e serve: una finestra trascinata troppo in su deve
-    /// restare prendibile. Solo che qui la maniglia è già dentro il rettangolo
-    /// che si sta guardando.
-    function barSopra(w) {
-        if (!w || w.own)
-            return 0;
-        if (!Core.Ipc.get("windows.titleBars", true))
-            return 0;
-        if (windows.disegnaLaSua(w.appClass))
-            return 0;
-        // La barra la disegna il compositore, dentro la cornice: la geometria
-        // che stiamo guardando la comprende già.
-        if (Compositore.nostro)
-            return 0;
-        return Core.Ipc.get("windows.titleHeight", 34);
-    }
-
     /// Vero quando la finestra riempie già tutto lo spazio che le compete.
     ///
     /// Si guarda la GEOMETRIA e non un interruttore nostro: così resta giusto
@@ -521,20 +401,6 @@ QtObject {
         return !!w && w.modoSchermo === 1;
     }
 
-    /// Il confronto geometrico di `isMaximized`: la finestra è già al posto
-    /// che le compete, cornice e barra comprese. Separato perché serva anche
-    /// alle prove, che gli passano numeri.
-    function _riempieLoSpazio(w, u) {
-        if (!w || !u)
-            return false;
-        var m = windows.barSopra(w);
-        var b = windows.bordo;
-        return Math.abs(w.x - (u.x + b)) <= 1
-            && Math.abs(w.y - (u.y + m + b)) <= 1
-            && Math.abs(w.w - (u.w - 2 * b)) <= 1
-            && Math.abs(w.h - (u.h - m - 2 * b)) <= 1;
-    }
-
     // ── Nessuna finestra sotto la barra della scrivania ──────────────────
     //
     // La barra della scrivania sta su un livello che copre tutte le finestre.
@@ -544,26 +410,13 @@ QtObject {
     // mouse. Parole di Giacomo: «le finestre sono incollate alla barra e non
     // hanno la barra del titolo, devo chiuderle con super+C».
     //
-    // ── Perché la garanzia vale per TUTTE e non solo per le altrui ───────
+    // ── Per TUTTE le finestre ────────────────────────────────────────────
     //
-    // Questa stessa cosa esisteva in `spine/TitleBars.qml` sotto il nome di
-    // `abbassa()`, e girava su `bars.shown` — cioè sull'elenco di chi riceve
-    // una barra DA NOI. Ne restavano fuori due categorie, e per la stessa
-    // ragione sbagliata: «la barra ce l'hanno già, non gli serve spazio
-    // sopra».
-    //
-    //  · le finestre di Minerva, che la barra ce l'hanno dentro;
-    //  · i programmi che se la disegnano da soli — Firefox, Chrome, le
-    //    applicazioni GNOME.
-    //
-    // Avere la barra dentro non serve a niente se la finestra sta sotto quella
-    // della scrivania: la barra c'è, e non si vede. Sono esattamente i due casi
-    // che Giacomo ha incontrato, il gestore file e le finestre «incollate».
-    //
-    // La differenza vera fra le due categorie non è se la garanzia si applica:
-    // è QUANTO spazio serve. Sopra chi riceve una barra da noi ci vuole anche
-    // l'altezza della barra; sopra chi ce l'ha dentro basta che il bordo alto
-    // stia sotto la linea. Ed è precisamente ciò che risponde `barSopra()`.
+    // Anche per quelle di Minerva e per i programmi che si disegnano la barra
+    // da soli (Firefox, Chrome, le app GNOME): avere la barra dentro non
+    // serve a niente se la finestra sta sotto quella della scrivania. La
+    // barra nativa del compositore sta dentro la geometria della finestra,
+    // quindi per tutte basta che il bordo alto stia sotto la linea.
     //
     // Va chiamata da UN SOLO processo — la shell — o i tre processi di Minerva
     // manderebbero lo stesso comando tre volte.
@@ -574,19 +427,10 @@ QtObject {
     /// essere la pausa di una mano che trascina piano, o una lettura arrivata
     /// a metà di un movimento che il compositore non ci ha ancora annunciato.
     property var _ferme: ({})
-    /// Vero mentre un trascinamento passa dalle mani della shell: lì non si
-    /// corregge niente, la posizione la decidiamo noi.
-    property bool _trascinando: false
-
-    /// Lo dice chi trascina (`spine/TitleBars.qml`): durante il trascinamento
-    /// la garanzia sta zitta, o la finestra verrebbe tirata da due parti.
-    function avvisaTrascinamento(si) {
-        windows._trascinando = si === true;
-    }
 
     function assicuraSpazio() {
         var u = windows.usable;
-        if (!u || windows._trascinando)
+        if (!u)
             return;
         var all = windows.all || [];
         var adesso = {};
@@ -652,8 +496,7 @@ QtObject {
 
             // Lo spazio del monitor su cui sta QUESTA finestra, non quello
             // del monitor attivo: vedi `spazioPer()`.
-            var r = windows.dentroLoSpazio(w, windows.spazioPer(w),
-                                           windows.barSopra(w));
+            var r = windows.dentroLoSpazio(w, windows.spazioPer(w), 0);
             if (!r)
                 continue;
             // Prima la dimensione e poi la posizione: al contrario, una
@@ -717,13 +560,6 @@ QtObject {
     // indietro — sempre. Una cosa che a volte succede e a volte no è peggio
     // di una che non c'è: tolta. Chi vuole la finestra grande preme
     // Super+M, che è il nostro «ingrandisci» e funziona sempre.
-    //
-    // ── Perché sta QUI e non in `assicuraSpazio` ─────────────────────────
-    //
-    // Perché `assicuraSpazio` la chiama `spine/TitleBars.qml`, che è SPENTA
-    // quando le barre le disegna il plugin — cioè nella configurazione
-    // normale di Minerva. Una guardia in un posto che di solito non gira non
-    // è una guardia. Qui si passa a ogni lettura delle finestre.
     //
     // Si dice ad alta voce: se un giorno scatta di continuo, il registro dirà
     // chi lo mette e si potrà smettere di indovinare.
@@ -792,45 +628,6 @@ QtObject {
             return null;
 
         return { "x": nx, "y": ny, "w": nw, "h": nh };
-    }
-
-    /// Il rettangolo di una finestra INGRANDITA: lo spazio utile meno la
-    /// barra del titolo (se sta sopra) e i due bordi. È il conto di
-    /// `maximize` estratto in una funzione pura, così le prove in
-    /// `prove-finestre.qml` gli passano numeri senza aprire finestre vere.
-    function rectMassimo(u, margine, bordo) {
-        if (!u)
-            return null;
-        var m = margine || 0;
-        var b = bordo || 0;
-        return {
-            "x": u.x + b,
-            "y": u.y + m + b,
-            "w": u.w - 2 * b,
-            "h": u.h - m - 2 * b
-        };
-    }
-
-    /// Il rettangolo di una zona di aggancio, dentro lo spazio utile `u`.
-    /// `zona` è una delle parole di `TitleBars.drag.zone`: "left", "right",
-    /// "top", "tl", "tr", "bl", "br". È lo stesso conto che faceva
-    /// `zoneRect` in `spine/TitleBars.qml`, estratto perché le zone tornino
-    /// identiche dalla shell e dalle prove.
-    function rectZona(zona, u) {
-        if (!u || !zona)
-            return null;
-        var halfW = u.w / 2;
-        var halfH = u.h / 2;
-        switch (zona) {
-        case "left":  return { "x": u.x,         "y": u.y,         "w": halfW,  "h": u.h };
-        case "right": return { "x": u.x + halfW, "y": u.y,         "w": halfW,  "h": u.h };
-        case "top":   return { "x": u.x,         "y": u.y,         "w": u.w,    "h": u.h };
-        case "tl":    return { "x": u.x,         "y": u.y,         "w": halfW,  "h": halfH };
-        case "tr":    return { "x": u.x + halfW, "y": u.y,         "w": halfW,  "h": halfH };
-        case "bl":    return { "x": u.x,         "y": u.y + halfH, "w": halfW,  "h": halfH };
-        case "br":    return { "x": u.x + halfW, "y": u.y + halfH, "w": halfW,  "h": halfH };
-        }
-        return null;
     }
 
     /// La finestra indicata da un selettore di Hyprland (`address:0x…`
@@ -970,75 +767,6 @@ QtObject {
         refreshSoon.restart();
     }
 
-    /// Mette una finestra al centro dello spazio utile — di quello che si
-    /// VEDE, non del rettangolo della finestra.
-    ///
-    /// ── Perché non basta `centerwindow` del compositore ───────────────────
-    ///
-    /// La barra del titolo di Minerva sta FUORI dalla finestra, sopra di lei
-    /// (vedi `barSopra`). Hyprland centra il rettangolo che conosce, cioè la
-    /// finestra senza barra; ma la barra aggiunge altezza SOPRA, quindi il
-    /// blocco che l'occhio vede sporge in alto e il suo centro sale di mezza
-    /// barra — **ventun pixel più in ALTO** del centro vero.
-    ///
-    /// Misurato il 12 agosto 2026 su pavucontrol: finestra 254..654, centro
-    /// 454 = centro dello spazio utile; blocco visibile 212..654, centro 433.
-    /// Rimediando si scende: la finestra va a 275, il blocco a 233..677,
-    /// centro 455. Vale identico per la regola `center = true` e per il
-    /// dispatcher `centerwindow`: tutti e due centrano la finestra, nessuno
-    /// dei due sa della barra.
-    ///
-    /// Ventun pixel non si notano in una schermata; si notano in un dialogo
-    /// che si apre cento volte al giorno sempre un po' alto.
-    ///
-    /// Stesso conto di `maximize`, e per la stessa ragione — vedi
-    /// `Windows.bordo` e `barSopra`.
-    function centra(address) {
-        var a = address || windows.activeAddress;
-        if (a === "")
-            return;
-        var w = windows.find("address:" + a);
-        if (!w)
-            return;
-        // Lo spazio del monitor su cui sta LA FINESTRA: centrare sullo spazio
-        // del monitor attivo manderebbe le finestre dell'altro schermo sul
-        // monitor sbagliato.
-        var u = windows.spazioPer(w);
-        if (!u)
-            return;
-
-        var margine = windows.barSopra(w);
-        var b = windows.bordo;
-
-        // Il blocco visibile è alto `barra + finestra + due bordi`: lo si
-        // centra intero, e poi si dice dove va la FINESTRA — che è quello che
-        // il compositore sa spostare.
-        var altezzaBlocco = margine + w.h + 2 * b;
-        var larghezzaBlocco = w.w + 2 * b;
-
-        var x = u.x + Math.round((u.w - larghezzaBlocco) / 2) + b;
-        var y = u.y + Math.round((u.h - altezzaBlocco) / 2) + margine + b;
-
-        Compositore.sposta(a, x, y);
-        refreshSoon.restart();
-    }
-
-    /// Il gesto della dock: se è ridotta la riporta su, se è già davanti la
-    /// riduce, altrimenti ci va sopra. È quello che fa ogni barra delle
-    /// applicazioni del mondo, e la ragione per cui ci si clicca senza pensare.
-    function toggleWindow(address) {
-        if (!address)
-            return;
-        if (windows._minimizedAddresses.indexOf(address) !== -1) {
-            windows.restore(address);
-            return;
-        }
-        if (address === windows.activeAddress)
-            windows.minimize(address);
-        else
-            windows.focus(address);
-    }
-
     /// Massimizza o rimette a posto. Accetta un indirizzo, come tutti gli
     /// altri: il pulsante sulla barra del titolo di una finestra QUALSIASI
     /// deve agire su quella finestra, non su quella che ha il fuoco. Erano la
@@ -1106,100 +834,6 @@ QtObject {
         // finestra: interrogarlo subito restituisce lo stato precedente.
         interval: 150
         onTriggered: windows.refresh()
-    }
-
-    // ── L'ultimo posto che guarda gli eventi grezzi ──────────────────────
-    //
-    // `Compositore` traduce quasi tutto in fatti (`finestreCambiate`,
-    // `scrivanieCambiate`), e a quasi tutti basta quello. Qui no: la politica
-    // delle finestre distingue casi che non varrebbe la pena nominare uno per
-    // uno, e ha bisogno del DATO — l'indirizzo dentro `activewindowv2`.
-    // Passa comunque dal segnale della porta: cambiando compositore c'è un
-    // solo posto che traduce, e un solo posto che legge questi nomi.
-    property Connections _events: Connections {
-        target: Compositore
-        function onEvento(nome, dati) {
-            var n = nome;
-
-            // Il cambio di fuoco si prende AL VOLO e non alla prossima lettura.
-            //
-            // Fra l'evento e la risposta di `hyprctl clients` passano almeno
-            // centocinquanta millisecondi, e in quel tempo si vedrebbe la barra
-            // vecchia ancora accesa e la nuova ancora spenta: due finestre nello
-            // stesso stato, che è lo stato che non esiste.
-            //
-            // `activewindowv2>>INDIRIZZO` — senza il prefisso `0x`, che i
-            // comandi invece vogliono. Un indirizzo vuoto vuol dire che il fuoco
-            // è andato a qualcosa che non è una finestra: un nostro pannello,
-            // il menu delle applicazioni. Lì NON si spegne niente — la finestra
-            // con cui si sta lavorando è ancora quella, e vederle spegnere
-            // tutte ogni volta che si apre il pannello del volume sarebbe un
-            // lampeggio senza significato.
-            if (n === "activewindowv2") {
-                var a = String(dati || "").trim();
-                if (a !== "")
-                    windows.activeAddress = "0x" + a.replace(/^0x/, "");
-            }
-            // ── Il trascinamento annunciato dal COMPOSITORE ───────────────
-            //
-            // Lo manda il plugin (`minervadrag>>1` / `minervadrag>>0`), una
-            // volta a ogni cambio. Senza questo annuncio la garanzia sullo
-            // spazio crede la finestra parcheggiata e la sposta mentre la
-            // mano la tiene: il compositore la riporta dov'era un fotogramma
-            // dopo, e quello è lo sfarfallio del trascinamento. Vale per
-            // TUTTI i trascinamenti — la nostra barra, Super+trascina, la
-            // barra di Chrome — perché chi parla è il controllore del
-            // compositore, non una barra in particolare.
-            if (n === "minervadrag") {
-                windows.avvisaTrascinamento(dati === "1");
-                if (dati !== "1")
-                    refreshSoon.restart();
-            }
-            // ── Perché qui NON si ascolta il «riduci» dei programmi ───────
-            //
-            // Sarebbe il posto giusto: un programma che preme il proprio
-            // pulsante «riduci» chiede al compositore di ridurlo, e ridurre lo
-            // sappiamo fare noi (spostare la finestra sulla scrivania di
-            // servizio, come fa il nostro pulsante).
-            //
-            // Ma Hyprland non riduce a icona — non ce l'ha proprio, è la
-            // richiesta più vecchia aperta sul progetto (hyprwm/Hyprland #995)
-            // — e in 0.56 non annuncia nemmeno la richiesta: provato il 30
-            // luglio 2026 ascoltando `.socket2.sock` mentre un mouse vero
-            // premeva il pulsante di Chrome, e non è arrivato NIENTE. Un
-            // gestore per un evento che non esiste è peggio di niente: sembra
-            // che il caso sia coperto.
-            //
-            // Il difetto resta, ed è quello che Giacomo ha visto: Chrome si
-            // mette nello stato «sto per essere ridotto», smette di disegnare
-            // e aspetta una conferma che non arriverà mai.
-            //
-            // Si toglie in due modi, e nessuno dei due passa da qui:
-            //  · dire a Chrome di usare la barra di sistema — allora quel
-            //    pulsante è NOSTRO e funziona (Impostazioni → Aspetto → «Usa
-            //    la barra del titolo e i bordi di sistema»);
-            //  · intercettare la richiesta dentro il compositore, cioè nel
-            //    plugin `plugins/minerva-bars`.
-            //
-            // `changefloatingmode` e `fullscreen` non c'erano, e sono i due che
-            // cambiano la GEOMETRIA senza spostare niente: ogni finestra nuova
-            // viene resa libera appena nasce (vedi `core/WindowRules.qml`), e
-            // passare da affiancata a libera la ricolloca. Senza questi due
-            // eventi il primo elenco che leggevamo era quello di prima —
-            // ed è per questo che la garanzia sullo spazio in cima arrivava
-            // tardi o non arrivava affatto sulla PRIMA finestra aperta.
-            if (n === "openwindow" || n === "closewindow" || n === "movewindow"
-                    || n === "movewindowv2" || n === "activewindow"
-                    || n === "activewindowv2" || n === "workspace"
-                    || n === "changefloatingmode" || n === "fullscreen")
-                refreshSoon.restart();
-            // Le zone riservate cambiano solo quando cambiano i monitor, ma
-            // quando cambiano si portano dietro dove si ferma ogni finestra
-            // ingrandita e dove sta ogni barra del titolo.
-            if (n === "monitoradded" || n === "monitorremoved"
-                    || n === "focusedmon")
-                windows.refreshUsable();
-        }
     }
 
     property Timer _initial: Timer {

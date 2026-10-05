@@ -222,6 +222,7 @@ FloatingWindow {
                     }
 
                     Text {
+                        textFormat: Text.PlainText
                         id: etichetta
                         anchors.left: parent.left
                         anchors.leftMargin: Theme.Effects.space2

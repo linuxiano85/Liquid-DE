@@ -63,6 +63,13 @@ PKGS=(
     # Servizi usati dai widget della barra
     cliphist wl-clipboard brightnessctl networkmanager
     pipewire pipewire-pulse wireplumber bluez bluez-utils
+    # ── I pad di gioco, uguali per tutti i giochi ──────────────────────
+    #
+    # InputPlumber nasconde il pad vero e ne presenta uno virtuale (Xbox di
+    # serie) che ogni gioco capisce, anche fuori da Steam: Faugus, Heroic,
+    # Lutris. Il demone lo accende da solo quando compare un pad
+    # (`minervad/lib/services/controller_service.dart`).
+    inputplumber
     # Terminale predefinito + utilità
     alacritty papirus-icon-theme
     # ── Chi apre la finestrella della password ─────────────────────────
@@ -158,8 +165,13 @@ c_head "Dipendenze del backend"
 # dell'aspetto della scrivania.
 c_head "Caratteri"
 for f in "Adwaita Sans" "Noto Sans Mono"; do
+    # `grep -ix … >/dev/null` e non `grep -q`: con `pipefail` (riga 7) il
+    # `-q` esce alla prima riga trovata, `fc-list` muore di SIGPIPE scrivendo
+    # il resto, e la condizione risulta FALSA proprio perché il carattere
+    # c'è. Il 4 ottobre 2026 diceva «manca Noto Sans Mono» con il carattere
+    # installato: Adwaita passava solo perché sta in fondo all'elenco.
     if fc-list : family 2>/dev/null | tr ',' '\n' | sed 's/^ *//' \
-       | grep -qix "$f"; then
+       | grep -ix "$f" >/dev/null; then
         c_ok "$f"
     else
         c_warn "manca «$f»: Minerva userà un carattere di ripiego"
@@ -168,6 +180,37 @@ for f in "Adwaita Sans" "Noto Sans Mono"; do
 done
 
 # ── 3. Sessione Wayland registrata in SDDM/GDM ────────────────────────────
+# ── 2-ter. Il demone, compilato ──────────────────────────────────────────
+#
+# `dart run` compila ed esegue ogni volta, con la macchina virtuale e dentro
+# il compilatore. Compilato una volta sola, il demone si accende cinque volte
+# più in fretta e occupa undici volte meno memoria (1317 ms / 210 MB contro
+# 261 ms / 19 MB, misurati). L’installazione richiede una build riuscita;
+# il ripiego interpretato della sessione non nasconde errori di installazione.
+c_head "Demone di Minerva"
+if "$MINERVA_DIR/scripts/minerva-compila"; then
+    c_ok "demone compilato in minervad/build/minervad"
+else
+    c_err "Compilazione del demone fallita."
+    exit 1
+fi
+
+# ── 2-quater. La radice installata ────────────────────────────────────────
+#
+# Liquid DE non gira più dalla cartella dei sorgenti: si copia in
+# `$CARTELLA_RADICE` (`~/.local/opt/liquid-de/radice`) e tutto — la voce
+# della schermata di accesso, i comandi delle app — punta lì. Il 4 ottobre
+# 2026 i sorgenti sono stati spostati da Scaricati a Documenti e nessuna app
+# di Minerva si apriva più. Si fa PRIMA di registrare la sessione: una voce
+# di accesso che punta a una radice ancora vuota è una sessione che non parte.
+c_head "Radice di Liquid DE"
+if "$MINERVA_DIR/scripts/minerva-installa-radice"; then
+    c_ok "Liquid DE gira da $CARTELLA_RADICE: i sorgenti si possono spostare"
+else
+    c_err "Non riesco a copiare Liquid DE in $CARTELLA_RADICE."
+    exit 1
+fi
+
 c_head "Registrazione della sessione «Liquid DE» nel display manager"
 # Il gestore di accessi non riesce a eseguire uno script il cui
 # percorso contiene uno spazio. `/usr/share/plasmalogin/scripts/wayland-session`
@@ -178,19 +221,19 @@ c_head "Registrazione della sessione «Liquid DE» nel display manager"
 #
 # Si SOSTITUISCE il segno `@MINERVA_DIR@` invece di copiare il file com'è: il
 # ponte viene copiato e non collegato, quindi non può risalire da solo a dove
-# sta Minerva, e l'unico che lo sa con certezza è questo script. È l'unico
-# percorso assoluto che Minerva scrive da qualche parte, ed è scritto qui,
-# adesso, sapendolo.
+# sta Minerva, e l'unico che lo sa con certezza è questo script. Dal 4
+# ottobre 2026 il segno diventa la RADICE INSTALLATA, non i sorgenti:
+# spostare i sorgenti non deve spegnere la sessione.
 # ── E il ponte per la sessione sul NOSTRO compositore ────────────────────
 #
 # Si installa sempre, anche se `minerva-wayland` non è ancora costruito: la
 # voce nella schermata di accesso c'è, e chi la sceglie senza aver costruito
 # il compositore trova scritto nel registro della sessione cosa lanciare.
 # Meglio una voce che spiega di una voce che non c'è.
-sed "s|@MINERVA_DIR@|$MINERVA_DIR|g" \
+sed "s|@MINERVA_DIR@|$CARTELLA_RADICE|g" \
     "$MINERVA_DIR/scripts/minerva-session-wayland" \
     | sudo install -Dm755 /dev/stdin /usr/local/bin/liquid-de-sessione
-c_ok "/usr/local/bin/liquid-de-sessione installato ($MINERVA_DIR)"
+c_ok "/usr/local/bin/liquid-de-sessione installato ($CARTELLA_RADICE)"
 
 # ── E il ponte del RECUPERO ──────────────────────────────────────────────
 #
@@ -202,10 +245,10 @@ c_ok "/usr/local/bin/liquid-de-sessione installato ($MINERVA_DIR)"
 # Si installa sempre e per prima, e non è un dettaglio d'ordine: una via di
 # ritorno che si installa dopo la cosa da cui deve proteggere è una via di
 # ritorno che manca proprio nel giro in cui serve.
-sed "s|@MINERVA_DIR@|$MINERVA_DIR|g" \
+sed "s|@MINERVA_DIR@|$CARTELLA_RADICE|g" \
     "$MINERVA_DIR/scripts/minerva-session-recupero" \
     | sudo install -Dm755 /dev/stdin /usr/local/bin/liquid-de-recupero
-c_ok "/usr/local/bin/liquid-de-recupero installato ($MINERVA_DIR)"
+c_ok "/usr/local/bin/liquid-de-recupero installato ($CARTELLA_RADICE)"
 
 # ── Il cambio password, e la sua regola ───────────────────────────────────
 #
@@ -356,20 +399,6 @@ c_ok "/usr/share/wayland-sessions/liquid-de-recupero.desktop creato"
 # Il collegamento in ~/.local/bin non è una comodità: `minerva-files` scopre
 # dov'è installata Minerva SEGUENDO quel collegamento. Copiare lo script
 # invece di collegarlo lo lascerebbe senza radici.
-# ── 3-zero. Il demone, compilato ──────────────────────────────────────────
-#
-# `dart run` compila ed esegue ogni volta, con la macchina virtuale e dentro
-# il compilatore. Compilato una volta sola, il demone si accende cinque volte
-# più in fretta e occupa undici volte meno memoria (1317 ms / 210 MB contro
-# 261 ms / 19 MB, misurati). L’installazione richiede una build riuscita;
-# il ripiego interpretato della sessione non nasconde errori di installazione.
-c_head "Demone di Minerva"
-if "$MINERVA_DIR/scripts/minerva-compila"; then
-    c_ok "demone compilato in minervad/build/minervad"
-else
-    c_err "Compilazione del demone fallita."
-    exit 1
-fi
 
 c_head "Applicazioni di Minerva"
 # Tutto nel prefisso di Liquid DE: `~/.local/bin`, `~/.local/share/applications`
@@ -412,9 +441,10 @@ mkdir -p "$ICONE"
 for app in minerva-files minerva-settings minerva-monitor minerva-viewer \
            minerva-editor minerva-calcolatrice minerva-media minerva-custodia \
            minerva-manutenzione minerva-terminale minerva-fucina; do
-    # Un collegamento e non una copia: il file nel progetto resta l'unico da
-    # correggere, e una modifica vale subito senza reinstallare niente.
-    ln -sf "$MINERVA_DIR/scripts/$app" "$CARTELLA_BIN/$app"
+    # Un collegamento alla RADICE INSTALLATA, non ai sorgenti: fino al 4
+    # ottobre 2026 puntava al progetto, e spostando il progetto tutti questi
+    # comandi sono diventati collegamenti rotti in un colpo solo.
+    ln -sf "$CARTELLA_RADICE/scripts/$app" "$CARTELLA_BIN/$app"
     install -Dm644 "$MINERVA_DIR/desktop/$app.desktop" "$APPLICAZIONI/$app.desktop"
     install -Dm644 "$MINERVA_DIR/assets/icons/$app.svg" "$ICONE/$app.svg"
     c_ok "$app installato"
@@ -499,6 +529,35 @@ if [ -d /etc/ananicy.d ]; then
     c_ok "priorità di scheduling registrate in /etc/ananicy.d"
 fi
 
+# ── 3a-ter. I pad di gioco ─────────────────────────────────────────────────
+#
+# InputPlumber di suo parte solo sulle console portatili (una regola udev
+# guarda il modello del PC): qui lo si accende sempre, perché il demone
+# possa affidargli il primo pad che compare. Le regole udev di Steam
+# (`steam-devices`, in multilib) danno all'utente hidraw e uinput dei pad:
+# servono a Steam Input e non fanno male a nessun altro, ma multilib non è
+# acceso dappertutto e non vale un'installazione fallita.
+if systemctl cat inputplumber.service >/dev/null 2>&1; then
+    sudo systemctl enable --now inputplumber.service >/dev/null 2>&1 \
+        && c_ok "InputPlumber acceso: i pad valgono in tutti i giochi" \
+        || c_warn "InputPlumber non parte: i pad restano quelli grezzi"
+fi
+# I colori della barra luminosa dei pad PlayStation: il demone li cambia
+# (blu a riposo, bianco quando un gioco usa il pad), ma di serie i LED li
+# scrive solo root. La regola li apre al gruppo `input`. Si riapplica subito
+# ai pad già collegati, senza doverli spegnere e riaccendere.
+if sudo install -Dm644 "$MINERVA_DIR/config/udev/70-liquid-de-pad-led.rules" \
+        /etc/udev/rules.d/70-liquid-de-pad-led.rules; then
+    sudo udevadm control --reload >/dev/null 2>&1 || true
+    sudo udevadm trigger --subsystem-match=leds --action=change >/dev/null 2>&1 || true
+    c_ok "colori dei pad: regola udev installata"
+fi
+if ! pacman -Q steam-devices >/dev/null 2>&1 \
+        && pacman -Si steam-devices >/dev/null 2>&1; then
+    sudo pacman -S --needed --noconfirm steam-devices >/dev/null 2>&1 \
+        && c_ok "regole udev dei pad di Steam installate" || true
+fi
+
 # ── 3b. Configurazioni che devono stare in ~/.config/hypr ─────────────────
 #
 # Qui c'era `hypridle`, che non accettava il percorso della propria
@@ -568,6 +627,16 @@ for bin in qs dart cliphist wl-copy brightnessctl nmcli pactl bluetoothctl alacr
         c_ok "$bin"
     else
         c_err "$bin MANCANTE"
+        ALL_OK=0
+    fi
+done
+
+for f in scripts/start-minerva-wayland.sh minerva-shell/shell.qml \
+         minervad/build/minervad; do
+    if [ -e "$CARTELLA_RADICE/$f" ]; then
+        c_ok "radice: $f"
+    else
+        c_err "radice: $f manca"
         ALL_OK=0
     fi
 done

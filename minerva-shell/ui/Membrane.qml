@@ -189,6 +189,10 @@ Item {
         visible: membrane.vetroVisibile
 
         Image {
+            // Si decodifica alla larghezza dello schermo e non a quella della
+            // fotografia: sotto la barra è sfocato, e un 6000 pixel teneva in
+            // memoria decine di megabyte per ogni schermo.
+            sourceSize.width: membrane.schermoLargo
             x: -membrane.origineX
             y: -membrane.origineY - membrane._bandaY
             width: membrane.schermoLargo

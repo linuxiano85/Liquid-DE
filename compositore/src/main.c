@@ -382,6 +382,13 @@ struct minerva {
 	// dare il fuoco alla successiva invece che al vuoto.
 	struct wl_list finestre_elenco;
 	struct wl_list appoggiate;
+	/// La finestra che scriveva quando un pannello ESCLUSIVO — il menù di
+	/// Super, la ricerca — si è preso la tastiera. Quando il pannello se ne
+	/// va il fuoco torna a lei, e non alla prima che capita: un gioco che nel
+	/// frattempo si è ridotto da solo non è «la prima visibile», e senza
+	/// questo nome restava giù per sempre. NULL se non c'è nessuno da
+	/// ricordare.
+	struct finestra *fuoco_prima_del_pannello;
 	struct wl_list schermi_elenco;
 
 	struct wlr_seat *seat;
@@ -903,6 +910,11 @@ struct sovrapposta {
 	struct wl_listener smappata;
 	struct wl_listener distrutta;
 	struct wl_listener spostata;
+	/// Il programma ha tolto `override_redirect`: è diventata una finestra
+	/// vera. Vedi `sovrapposta_cambia_forma`.
+	struct wl_listener cambia_forma;
+	/// Una richiesta di misura: una vera sovrapposta non la manda mai.
+	struct wl_listener chiede_misura;
 };
 
 struct schermo {
@@ -1050,6 +1062,11 @@ struct finestra {
 	/// trascinandola deve tornare della misura di prima.
 	bool agganciata;
 	bool ridotta;
+	/// Si è ridotta DA SOLA mentre la tastiera era di un pannello. È quello
+	/// che fa un gioco sotto Wine quando perde il fuoco a schermo intero:
+	/// quando il pannello se ne va la si riporta su. Una riduzione chiesta
+	/// dall'utente — la dock, il pulsante — non ha il segno, e resta giù.
+	bool ridotta_senza_fuoco;
 	bool schermo_intero;
 	/// Su quale scrivania sta, da 1 a SCRIVANIE. Una finestra sta sempre su
 	/// una sola: nasce su quella in uso quando è nata, e ci resta finché
@@ -1144,6 +1161,8 @@ struct finestra {
 	struct wl_listener x_dissocia;
 	struct wl_listener x_configura;
 	struct wl_listener x_attiva;
+	/// Il contrario di `sovrapposta.cambia_forma`.
+	struct wl_listener x_cambia_forma;
 
 	// ── I pezzi della striscia LED ──────────────────────────────────────
 	//
@@ -1205,6 +1224,10 @@ static void molla_avvia(struct finestra *f);
 static void disponi(struct minerva *m, struct wlr_output *out);
 static void annuncia(struct minerva *m, const char *che, struct finestra *f);
 static bool finestra_visibile(struct finestra *f);
+static void finestra_riduci(struct finestra *f, bool si);
+static void x11_cambia_forma(struct wl_listener *l, void *dati);
+static void sovrapposta_cambia_forma(struct wl_listener *l, void *dati);
+static void sovrapposta_chiede_misura(struct wl_listener *l, void *dati);
 static void freno_aggiorna(struct minerva *m);
 static bool inibitori_visibili(struct minerva *m,
 		const struct wlr_idle_inhibitor_v1 *escluso);
@@ -1355,6 +1378,11 @@ static void fuoco_finestra(struct minerva *m, struct finestra *f) {
 			break;
 		}
 	}
+
+	// Il fuoco l'ha deciso qualcuno — un clic, un'app appena aperta dal
+	// menù, il ritorno da un pannello: quello che si ricordava da prima del
+	// pannello non vale più.
+	m->fuoco_prima_del_pannello = NULL;
 
 	finestra_di_attiva(f, true);
 	fuoco_tastiera(m, finestra_superficie(f));
@@ -2006,6 +2034,25 @@ static void appoggiata_aggiorna_fuoco(struct minerva *m) {
 	}
 
 	if (scelta != NULL) {
+		// ── Chi scriveva va SPENTO, non solo scavalcato ──────────────────
+		//
+		// Spostare la tastiera e basta lasciava la finestra «attiva» per
+		// tutti tranne che per la tastiera. Per una X11 è peggio di così:
+		// lo xwm la tiene come `focus_surface`, e al ritorno
+		// `wlr_xwayland_surface_activate` vede che è già lei e NON rifà il
+		// fuoco dentro X — niente FocusIn, niente WM_TAKE_FOCUS. Un gioco
+		// sotto Wine a schermo intero non si risvegliava più: restava
+		// l'ultimo fotogramma, fermo come uno sfondo. Spegnendola qui, lo
+		// xwm dimentica il fuoco e al ritorno lo ridà davvero.
+		//
+		// Si fa solo quando il fuoco è di una finestra: ai commit seguenti
+		// del pannello il fuoco è già suo, e chi ricordare è già ricordato.
+		struct finestra *v = finestra_attiva(m);
+		if (v != NULL && v->scrivania == m->scrivania_attiva) {
+			m->fuoco_prima_del_pannello = v;
+			finestra_di_attiva(v, false);
+			barra_aggiorna(v);
+		}
 		fuoco_tastiera(m, scelta->ls->surface);
 		return;
 	}
@@ -2014,9 +2061,29 @@ static void appoggiata_aggiorna_fuoco(struct minerva *m) {
 	// ce l'aveva un pannello — se il fuoco è già di una finestra non glielo
 	// si toglie di mano per poi ridarglielo.
 	struct wlr_surface *ora = m->seat->keyboard_state.focused_surface;
-	if (ora != NULL
-	    && wlr_layer_surface_v1_try_from_wlr_surface(ora) != NULL)
-		fuoco_alla_prossima(m);
+	if (ora == NULL
+	    || wlr_layer_surface_v1_try_from_wlr_surface(ora) == NULL)
+		return;
+
+	// ── Torna a chi scriveva, anche se nel frattempo è sceso ─────────────
+	//
+	// Un gioco che perde il fuoco a schermo intero spesso si riduce da solo
+	// (Wine lo fa per i giochi che lo chiedono). `fuoco_alla_prossima`
+	// salta le ridotte, e il gioco restava giù senza che nessuno l'avesse
+	// voluto. Se si è ridotto DA SOLO mentre il pannello era aperto, lo si
+	// riporta su; se l'ha ridotto l'utente, no.
+	struct finestra *torna = m->fuoco_prima_del_pannello;
+	m->fuoco_prima_del_pannello = NULL;
+	if (torna != NULL && torna->ridotta && torna->ridotta_senza_fuoco)
+		finestra_riduci(torna, false);
+	if (torna != NULL && finestra_visibile(torna)) {
+		struct wlr_surface *sup = finestra_superficie(torna);
+		if (sup != NULL && sup->mapped) {
+			fuoco_finestra(m, torna);
+			return;
+		}
+	}
+	fuoco_alla_prossima(m);
 }
 
 // ── Il fondo sfocato dei pannelli ────────────────────────────────────────
@@ -3260,6 +3327,8 @@ static void finestra_riduci(struct finestra *f, bool si) {
 	if (f->ridotta == si)
 		return;
 	f->ridotta = si;
+	if (!si)
+		f->ridotta_senza_fuoco = false;
 	// Riducendo, prima il risucchio: la finestra si nasconde davvero alla
 	// fine (`respiro_fine`). Riportandola, si accende e ne esce.
 	if (!(si && respiro_avvia(f, RESPIRO_RISUCCHIO)))
@@ -3735,6 +3804,16 @@ static void finestra_sparisce(struct finestra *f) {
 	f->mappata_ora = false;
 	finestra_mostra_o_nascondi(f);
 
+	// Non è più qualcuno a cui tornare quando il pannello si chiude.
+	if (f->m->fuoco_prima_del_pannello == f)
+		f->m->fuoco_prima_del_pannello = NULL;
+
+	// E lo si DICE: una finestra che si nasconde senza chiudersi non
+	// mandava niente, e chi tiene l'elenco (il demone, e da lui dock e
+	// Alt+Tab) continuava a mostrarla. «stato» e non «chiusa»: non è
+	// chiusa, e quando ricompare `finestra_appare` annuncia «aperta».
+	annuncia(f->m, "stato", f);
+
 	// Se si stava trascinando proprio questa, la presa muore con lei: senza,
 	// il puntatore resta agganciato a una finestra che non c'è più.
 	if (f->m->presa_di == f) {
@@ -3773,6 +3852,11 @@ static void finestra_distrutta(struct wl_listener *l, void *dati) {
 	// riceverlo, perché sembra buono.
 	annuncia(f->m, "chiusa", f);
 
+	// Una X11 può morire senza passare da `finestra_sparisce`: il nome
+	// ricordato non deve sopravviverle.
+	if (f->m->fuoco_prima_del_pannello == f)
+		f->m->fuoco_prima_del_pannello = NULL;
+
 	if (f->m->presa_di == f) {
 		f->m->presa = PRESA_NIENTE;
 		f->m->presa_di = NULL;
@@ -3799,6 +3883,7 @@ static void finestra_distrutta(struct wl_listener *l, void *dati) {
 		wl_list_remove(&f->x_dissocia.link);
 		wl_list_remove(&f->x_configura.link);
 		wl_list_remove(&f->x_attiva.link);
+		wl_list_remove(&f->x_cambia_forma.link);
 		f->xsup->data = NULL;
 	} else {
 		f->toplevel->base->data = NULL;
@@ -3875,6 +3960,17 @@ static void chiede_schermo(struct wl_listener *l, void *dati) {
 		? f->xsup->fullscreen : f->toplevel->requested.fullscreen);
 }
 
+/// Una riduzione che il programma chiede mentre la tastiera è di un pannello,
+/// e lui era quello che scriveva prima: non l'ha voluta nessuno, è la sua
+/// risposta all'aver perso il fuoco. Si segna, perché quando il pannello se
+/// ne va `appoggiata_aggiorna_fuoco` lo riporti su.
+static void chiede_riduci_segna(struct finestra *f, bool riduci) {
+	struct wlr_surface *ora = f->m->seat->keyboard_state.focused_surface;
+	if (riduci && f->m->fuoco_prima_del_pannello == f && ora != NULL
+	    && wlr_layer_surface_v1_try_from_wlr_surface(ora) != NULL)
+		f->ridotta_senza_fuoco = true;
+}
+
 static void chiede_riduci(struct wl_listener *l, void *dati) {
 	struct finestra *f = wl_container_of(l, f, chiede_riduci);
 	if (!finestra_pronta(f))
@@ -3883,7 +3979,9 @@ static void chiede_riduci(struct wl_listener *l, void *dati) {
 		// Qui il «cosa» viaggia nell'evento e non nello stato: X manda
 		// «riducimi» e «riportami su» sullo stesso segnale.
 		const struct wlr_xwayland_minimize_event *e = dati;
-		finestra_riduci(f, e != NULL ? e->minimize : true);
+		bool riduci = e != NULL ? e->minimize : true;
+		chiede_riduci_segna(f, riduci);
+		finestra_riduci(f, riduci);
 		return;
 	}
 	(void)dati;
@@ -3891,6 +3989,7 @@ static void chiede_riduci(struct wl_listener *l, void *dati) {
 	//
 	// Chrome la manda e poi ASPETTA la risposta: ignorarla lo blocca, ed è
 	// un difetto vero con un numero (hyprwm/Hyprland #995). Qui si risponde.
+	chiede_riduci_segna(f, f->toplevel->requested.minimized);
 	finestra_riduci(f, f->toplevel->requested.minimized);
 }
 
@@ -4661,6 +4760,8 @@ static void finestra_x11_nuova(struct minerva *m, struct wlr_xwayland_surface *x
 	wl_signal_add(&x->events.request_fullscreen, &f->chiede_schermo);
 	f->chiede_riduci.notify = chiede_riduci;
 	wl_signal_add(&x->events.request_minimize, &f->chiede_riduci);
+	f->x_cambia_forma.notify = x11_cambia_forma;
+	wl_signal_add(&x->events.set_override_redirect, &f->x_cambia_forma);
 }
 
 // ── Le sovrapposte ───────────────────────────────────────────────────────
@@ -4751,6 +4852,8 @@ static void sovrapposta_distrutta(struct wl_listener *l, void *dati) {
 	wl_list_remove(&s->smappata.link);
 	wl_list_remove(&s->distrutta.link);
 	wl_list_remove(&s->spostata.link);
+	wl_list_remove(&s->cambia_forma.link);
+	wl_list_remove(&s->chiede_misura.link);
 	wl_list_remove(&s->link);
 	s->xsup->data = NULL;
 	free(s);
@@ -4777,17 +4880,97 @@ static void sovrapposta_nuova(struct minerva *m, struct wlr_xwayland_surface *x)
 	wl_signal_add(&x->events.destroy, &s->distrutta);
 	s->spostata.notify = sovrapposta_spostata;
 	wl_signal_add(&x->events.set_geometry, &s->spostata);
+	s->cambia_forma.notify = sovrapposta_cambia_forma;
+	wl_signal_add(&x->events.set_override_redirect, &s->cambia_forma);
+	s->chiede_misura.notify = sovrapposta_chiede_misura;
+	wl_signal_add(&x->events.request_configure, &s->chiede_misura);
 }
 
-// ── Il bivio, e il limite dichiarato ─────────────────────────────────────
+/// Il cambio di forma a finestra già VISIBILE. X non annuncia un
+/// `override_redirect` cambiato su una finestra mappata, e wlroots lo legge
+/// solo dal prossimo `ConfigureNotify`. Ma una sovrapposta vera non chiede
+/// mai una misura — si sposta da sé, senza passare dal gestore — quindi se
+/// la chiede vuol dire che non lo è più. Si risponde, X manda il
+/// `ConfigureNotify` col flag nuovo, e `sovrapposta_cambia_forma` fa il
+/// resto.
+static void sovrapposta_chiede_misura(struct wl_listener *l, void *dati) {
+	struct sovrapposta *s = wl_container_of(l, s, chiede_misura);
+	struct wlr_xwayland_surface_configure_event *e = dati;
+	wlr_xwayland_surface_configure(s->xsup, e->x, e->y, e->width, e->height);
+}
+
+// ── Quando una finestra X11 cambia forma ─────────────────────────────────
+//
+// Qui c'era scritto che `override_redirect` si legge alla nascita e basta,
+// «finché non si vede un programma vero che ne ha bisogno». Il 4 ottobre
+// 2026 si è visto: GTA V sotto Wine. Wine crea la finestra override
+// redirect e la fa diventare una finestra vera poco dopo; qui restava una
+// sovrapposta, cioè un menù. Il gioco stava nel piano delle finestre ma
+// senza essere una finestra: niente schermo intero, la barra e la dock
+// sopra, gli angoli attivi, il fuoco a nessuno — e il tocco di Super apriva
+// il menù sopra il gioco come sopra la scrivania.
+//
+// Si fa quello che fanno sway e labwc: si smonta una rappresentazione e si
+// costruisce l'altra, ripetendo a mano associazione e mappatura se la
+// finestra era già viva. I gestori sono quelli di sempre, chiamati con
+// `dati` NULL come fa chi li usa già così.
+static void sovrapposta_cambia_forma(struct wl_listener *l, void *dati) {
+	(void)dati;
+	struct sovrapposta *s = wl_container_of(l, s, cambia_forma);
+	struct wlr_xwayland_surface *x = s->xsup;
+	struct minerva *m = s->m;
+	if (x->override_redirect)
+		return;
+
+	bool associata = x->surface != NULL;
+	bool mappata = associata && x->surface->mapped;
+	if (mappata)
+		sovrapposta_smappata(&s->smappata, NULL);
+	if (associata)
+		sovrapposta_dissocia(&s->dissocia, NULL);
+	sovrapposta_distrutta(&s->distrutta, NULL);
+
+	finestra_x11_nuova(m, x);
+	struct finestra *f = x->data;
+	if (f == NULL)
+		return;
+	if (associata)
+		x11_associa(&f->x_associa, NULL);
+	if (mappata)
+		x11_mappata(&f->mappata, NULL);
+}
+
+static void x11_cambia_forma(struct wl_listener *l, void *dati) {
+	(void)dati;
+	struct finestra *f = wl_container_of(l, f, x_cambia_forma);
+	struct wlr_xwayland_surface *x = f->xsup;
+	struct minerva *m = f->m;
+	if (!x->override_redirect)
+		return;
+
+	bool associata = x->surface != NULL;
+	bool mappata = associata && x->surface->mapped;
+	if (mappata)
+		x11_smappata(&f->smappata, NULL);
+	if (associata)
+		x11_dissocia(&f->x_dissocia, NULL);
+	finestra_distrutta(&f->distrutta, NULL);
+
+	sovrapposta_nuova(m, x);
+	struct sovrapposta *s = x->data;
+	if (s == NULL)
+		return;
+	if (associata)
+		sovrapposta_associa(&s->associa, NULL);
+	if (mappata)
+		sovrapposta_mappata(&s->mappata, NULL);
+}
+
+// ── Il bivio ─────────────────────────────────────────────────────────────
 //
 // `override_redirect` si legge alla nascita — X lo porta nell'evento di
-// creazione della finestra — e da lì non si guarda più. Un programma può
-// cambiarlo dopo (`set_override_redirect`): succede raramente, e quando
-// succede qui la finestra resta della forma con cui è nata. È un limite
-// noto, scritto invece che nascosto: sistemarlo vuol dire smontare una
-// rappresentazione e ricostruire l'altra a finestra viva, e non vale il
-// rischio finché non si vede un programma vero che ne ha bisogno.
+// creazione della finestra. Se il programma lo cambia dopo, la finestra
+// cambia forma: vedi `sovrapposta_cambia_forma`.
 static void xwayland_superficie_nuova(struct wl_listener *l, void *dati) {
 	struct minerva *m = wl_container_of(l, m, x_superficie_nuova);
 	struct wlr_xwayland_surface *x = dati;
@@ -5304,6 +5487,12 @@ static void tieni_lasciato(struct minerva *m, uint32_t keycode) {
 	m->tieni_scattato = false;
 }
 
+/// La tastiera è di una finestra a schermo intero che si vede?
+static bool fuoco_su_schermo_intero(struct minerva *m) {
+	struct finestra *f = finestra_attiva(m);
+	return f != NULL && f->schermo_intero && finestra_visibile(f);
+}
+
 /// Cerca una scorciatoia per questo tasto. Torna vero se l'ha eseguita.
 static bool scorciatoia_prova(struct minerva *m, struct wlr_keyboard *kb,
                               uint32_t keycode, bool rilascio) {
@@ -5341,6 +5530,16 @@ static bool scorciatoia_prova(struct minerva *m, struct wlr_keyboard *kb,
 			// «Premuto e lasciato DA SOLO»: senza questa riga il menù delle
 			// applicazioni si aprirebbe alla fine di ogni Super+qualcosa.
 			if (s->da_solo && !era_solo)
+				continue;
+			// ── A schermo intero il tocco è dell'app ─────────────────────
+			//
+			// In un gioco un modificatore toccato da solo fa parte del
+			// gioco, o è scappato: aprire il menù lì strappa la tastiera
+			// al gioco nel mezzo di una partita. Il tasto passa all'app
+			// com'è sempre passato. La scrivania resta raggiungibile col
+			// gesto voluto, Super TENUTO, che ha la sua strada
+			// (`tieni_premuto`) e qui non arriva.
+			if (s->da_solo && fuoco_su_schermo_intero(m))
 				continue;
 			if (s->tasto != sim
 			    || s->modificatori != (mods & ~modificatore_del_tasto(sim)))
@@ -6409,10 +6608,37 @@ static void respiro_disegna(struct finestra *f, double p) {
 	f->m->respiro_passi++;
 }
 
+/// Occupa uno schermo intero, col segno o senza? Un gioco sotto Wine che si
+/// riduce spesso toglie PRIMA lo schermo intero e POI chiede di ridursi: a
+/// quel punto `schermo_intero` è già falso, ma la finestra è ancora grande
+/// quanto lo schermo.
+static bool finestra_copre_schermo(struct finestra *f) {
+	if (f->schermo_intero)
+		return true;
+	struct wlr_box b;
+	finestra_box(f, &b);
+	struct wlr_output *out = wlr_output_layout_output_at(f->m->schermi,
+		b.x + b.width / 2.0, b.y + b.height / 2.0);
+	if (out == NULL)
+		return false;
+	struct wlr_box tutto;
+	wlr_output_layout_get_box(f->m->schermi, out, &tutto);
+	return b.width >= tutto.width && b.height >= tutto.height;
+}
+
 static bool respiro_avvia(struct finestra *f, int tipo) {
 	struct minerva *m = f->m;
 	if (!m->respiro_acceso || m->risparmio_attivo || f->wobbly_fallita
 	    || f->molla.viva || m->bloccato)
+		return false;
+	// ── Uno schermo intero non respira ───────────────────────────────────
+	//
+	// Il respiro disegna una COPIA ferma della finestra. Per un gioco
+	// quella copia è l'ultimo fotogramma prima di perdere il fuoco: al
+	// ritorno restava sullo schermo, immobile, e sembrava che il gioco
+	// fosse diventato lo sfondo. È la stessa esclusione della chiusura
+	// (`chiusura_puo_respirare`): compare e sparisce secca.
+	if (finestra_copre_schermo(f))
 		return false;
 	if (f->respiro != RESPIRO_NIENTE)
 		respiro_fine(f);
@@ -7611,6 +7837,33 @@ static void cursore_premuto(struct wl_listener *l, void *dati) {
 	}
 
 	// ── La barra: pulsanti, trascinamento, doppio clic ───────────────────
+	// ── Il tasto destro sulla barra: il menu della finestra ──────────────
+	//
+	// Riduci, ingrandisci, schermo intero, manda a un'altra scrivania,
+	// chiudi: il menu c'è nella shell da sempre, ma dalla barra del titolo
+	// ci arrivava solo il plugin di Hyprland (`minervamenu`). Con le barre
+	// native il clic destro qui non faceva niente — passava al programma
+	// sotto, che sulla barra non c'è. Il fuoco l'ha già preso la finestra,
+	// due righe sopra: il menu agisce su quella attiva. Le coordinate sono
+	// dello SCHERMO sotto il puntatore, che è il modo in cui la shell apre
+	// i suoi menu (5 ottobre 2026).
+	if (s.finestra != NULL && s.sulla_barra && e->button == BTN_RIGHT) {
+		struct wlr_output *out = wlr_output_layout_output_at(m->schermi,
+			m->cursore->x, m->cursore->y);
+		struct wlr_box b = {0};
+		if (out != NULL)
+			wlr_output_layout_get_box(m->schermi, out, &b);
+		if (m->canale != NULL) {
+			char riga[160];
+			snprintf(riga, sizeof(riga),
+				"evento menufinestra {\"x\":%d,\"y\":%d,\"schermo\":\"%s\"}",
+				(int)(m->cursore->x - b.x), (int)(m->cursore->y - b.y),
+				out != NULL && out->name != NULL ? out->name : "");
+			canale_annuncia(m->canale, "menufinestra", riga);
+		}
+		return;
+	}
+
 	if (s.finestra != NULL && s.sulla_barra && e->button == BTN_LEFT) {
 		struct finestra *f = s.finestra;
 		int nx = 0, ny = 0;
@@ -8193,7 +8446,16 @@ static void comando_finestre(struct minerva *m, char *risposta, size_t n) {
 
 	struct finestra *f;
 	wl_list_for_each(f, &m->finestre_elenco, link) {
-		if (!f->comparsa)
+		// ── Solo quelle che ci sono adesso ───────────────────────────────
+		//
+		// Qui bastava `comparsa`, cioè «mappata almeno una volta». Ma un
+		// ordine a una finestra smappata `finestra_da_indirizzo` lo
+		// rifiuta: la dock mostrava il Rockstar Launcher finito nell'area
+		// di notifica come una finestra aperta, e ogni clic tornava «no
+		// nessuna finestra con l'indirizzo» (quaranta volte nei registri,
+		// 4 ottobre 2026). L'elenco e gli ordini adesso usano la stessa
+		// regola. Le RIDOTTE restano: sono mappate, solo spente.
+		if (!f->comparsa || !f->mappata_ora)
 			continue;
 		size_t spazio = n > o ? n - o : 0;
 		if (!prima && spazio > 1) {

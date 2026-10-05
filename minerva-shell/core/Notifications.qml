@@ -73,13 +73,30 @@ QtObject {
     // dentro una frase è una cosa che si somiglia, non una cosa che è, e
     // aprire il file sbagliato perché il testo conteneva una barra sarebbe
     // peggio di non aprire niente.
+    //
+    // ── Solo nostro, e solo un percorso vero ─────────────────────────────
+    //
+    // Il suggerimento lo può mettere CHIUNQUE mandi una notifica, e il clic
+    // apre il file col suo programma predefinito: un'app qualunque poteva
+    // fingersi una schermata e farci aprire quello che voleva, anche un
+    // percorso relativo che il programma avrebbe letto come un'opzione
+    // (`--…`). Si accetta quindi solo da notifiche di Minerva, e solo un
+    // percorso assoluto senza caratteri di controllo (revisione di
+    // sicurezza, 5 ottobre 2026).
     function fileDi(notif) {
         try {
+            if (String(notif.appName || "") !== "Minerva")
+                return "";
             var h = notif.hints;
             if (!h)
                 return "";
             var v = h["x-minerva-file"];
-            return v === undefined || v === null ? "" : String(v);
+            if (v === undefined || v === null)
+                return "";
+            var f = String(v);
+            if (f.charAt(0) !== "/" || /[\u0000-\u001f\u007f]/.test(f))
+                return "";
+            return f;
         } catch (e) {
             return "";
         }
