@@ -26,6 +26,15 @@ if ! pkg-config --exists polkit-agent-1; then
     exit 1
 fi
 
+# Una build fatta da un'altra cartella dei sorgenti si rifà da capo: meson
+# ci scrive i percorsi ASSOLUTI, e dopo lo spostamento del progetto (da
+# Scaricati a Documenti, 4 ottobre 2026) la prima modifica a meson.build
+# l'avrebbe fatta rigenerare dalla cartella vecchia, fermando l'installazione
+# all'agente delle password. Stessa regola di `compositore/costruisci.sh`.
+if [ -f "$QUI/build/build.ninja" ] && ! grep -qF "$QUI/" "$QUI/build/build.ninja"; then
+    echo "La build era di un'altra cartella dei sorgenti: la rifaccio da capo."
+    rm -rf -- "$QUI/build"
+fi
 [ -d "$QUI/build" ] || meson setup "$QUI/build" "$QUI"
 ninja -C "$QUI/build"
 
