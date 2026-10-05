@@ -760,12 +760,6 @@ ShellRoot {
             s.barra.toggle(nome);
     }
 
-    function apriPannello(nome) {
-        var s = root.scrivaniaAttiva();
-        if (s && s.barra)
-            s.barra.open(nome);
-    }
-
     function chiudiPannelli() {
         for (var k in root.scrivanie)
             if (root.scrivanie[k].barra)

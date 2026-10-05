@@ -1265,6 +1265,9 @@ FloatingWindow {
             onTextChanged: {
                 editor.suTestoCambiato(testo.text);
             }
+            // La riga di stato diceva sempre «Riga 1, colonna 1»: la funzione
+            // che la calcola c'era, ma non la chiamava nessuno (5 ottobre 2026).
+            onCursorPositionChanged: editor.aggiornaPosizione()
         }
     }
 

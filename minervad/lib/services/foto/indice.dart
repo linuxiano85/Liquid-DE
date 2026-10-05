@@ -213,6 +213,29 @@ class Indice {
     t.renameSync(f.path);
   }
 
+  /// Toglie dal catalogo i file che non ci sono più.
+  ///
+  /// Si chiama dopo un cestino: senza, la galleria mostrava una casella vuota
+  /// al posto della foto buttata fino alla scansione successiva. Si guarda il
+  /// disco e non l'esito del cestino, così un file che non è partito resta.
+  /// Una CARTELLA buttata porta via tutte le foto che stavano dentro.
+  /// Torna quante voci ha tolto.
+  int dimenticaSpariti(Iterable<String> percorsi) {
+    final via = [
+      for (final p in percorsi)
+        if (p.startsWith('/') && FileSystemEntity.typeSync(p) == FileSystemEntityType.notFound)
+          p.endsWith('/') ? p.substring(0, p.length - 1) : p
+    ];
+    if (via.isEmpty) return 0;
+    bool sparita(String percorso) =>
+        via.any((p) => percorso == p || percorso.startsWith('$p/'));
+    final prima = voci.length;
+    _voci = [for (final v in _voci) if (!sparita(v.percorso)) v];
+    final tolte = prima - _voci.length;
+    if (tolte > 0) _salva();
+    return tolte;
+  }
+
   // ── I preferiti ────────────────────────────────────────────────────────
 
   Set<String> preferiti() {

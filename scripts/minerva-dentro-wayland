@@ -17,6 +17,12 @@ MINERVA_DIR="${MINERVA_ROOT:?minerva-dentro-wayland: manca MINERVA_ROOT}"
 # partire ciechi. Insieme al display va `MINERVA_CANALE`, che è come si
 # trova il nostro compositore.
 #
+# E il `PATH`, come fa Plasma: GIO considera esistente un'app solo se trova
+# il programma del suo `Exec`, e i portali partivano con `/usr/bin` e basta.
+# Le nostre app stanno nella cartella di Liquid DE, quindi per il portale
+# non esistevano: «App info not found for 'minerva-viewer'» a ogni avvio di
+# un'app (5 ottobre 2026).
+#
 # ── Ma NON dentro una prova ──────────────────────────────────────────────
 #
 # Una prova annidata gira sullo stesso bus della sessione vera: scrivere qui
@@ -27,7 +33,7 @@ MINERVA_DIR="${MINERVA_ROOT:?minerva-dentro-wayland: manca MINERVA_ROOT}"
 # prove sul PC di prova).
 if [ "${MINERVA_PROVA:-}" != "1" ]; then
     dbus-update-activation-environment --systemd \
-        WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE \
+        WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE PATH \
         MINERVA_CANALE MINERVA_COMPOSITORE MINERVA_IPC_SOCKET \
         XDG_DATA_DIRS XDG_DATA_HOME XDG_CONFIG_HOME \
         >/dev/null 2>&1

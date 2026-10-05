@@ -370,10 +370,6 @@ QtObject {
         Core.Ipc.setSetting("input.touchpadOn", acceso === true);
     }
 
-    function toggleTouchpad() {
-        sys.setTouchpad(!sys.touchpadOn);
-    }
-
     // ── Qui c'erano quattro processi e due cadenze ───────────────────────
     //
     // `batteryProc`, `brightnessProc`, `networkProc`, `bluetoothProc`, più il

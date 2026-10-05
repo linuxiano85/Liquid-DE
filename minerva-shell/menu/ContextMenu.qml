@@ -129,15 +129,6 @@ PanelWindow {
         senzaRisposta.restart();
     }
 
-    /// Come sopra, ma il menu cresce verso l'alto e centrato.
-    function openAboveCursor(menuItems) {
-        menu._inArrivo = menuItems;
-        menu._versoAlto = true;
-        menu._centrato = true;
-        Core.Compositore.chiedi("puntatore");
-        senzaRisposta.restart();
-    }
-
     property var _inArrivo: null
     property bool _versoAlto: false
     property bool _centrato: false

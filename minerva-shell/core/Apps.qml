@@ -128,34 +128,6 @@ QtObject {
         return null;
     }
 
-    /// I nomi che le nostre finestre si danno quando NON hanno un documento
-    /// aperto: «Custodia», «Attività», «Calcolatrice»…
-    ///
-    /// ── Perché esiste questa lista ─────────────────────────────────────
-    ///
-    /// Il prefisso dell'editor è «Minerva · », che è anche l'inizio del titolo
-    /// di OGNI nostra finestra. Finché ogni finestra aveva la sua riga qui
-    /// sopra la cosa reggeva, perché i titoli interi si provano tutti prima;
-    /// ma la prima finestra nuova che si dimentica di aggiungere cade nel
-    /// prefisso e diventa l'editor.
-    ///
-    /// È successo davvero: la Custodia, aperta, nella dock e nell'Alt+Tab si
-    /// chiamava «Editor di testi» e ne prendeva l'icona. Il difetto non si
-    /// vede leggendo il codice — si vede guardando lo schermo — e non è un
-    /// caso limite: capita a ogni applicazione nuova.
-    ///
-    /// La prova `prove.sh` controlla che ogni `//@ pragma AppId minerva-app`
-    /// abbia la sua riga in `ownApps`, così la prossima volta si rompe una
-    /// prova invece di rompersi un nome.
-    function nomeConosciuto(titolo) {
-        var t = String(titolo || "");
-        for (var i = 0; i < apps.ownApps.length; i++)
-            for (var j = 0; j < (apps.ownApps[i].titles || []).length; j++)
-                if (t === apps.ownApps[i].titles[j])
-                    return true;
-        return false;
-    }
-
     /// Il programma di una finestra qualunque. È questa che va usata: sa già
     /// distinguere le finestre della shell da quelle di tutti gli altri.
     function forWindow(w) {

@@ -73,10 +73,9 @@ Rectangle {
 
     function chiudi() {
         pannello.visible = false;
-        // Il catalogo ricorda ancora le copie buttate: si rifà, così la
-        // galleria non mostra riquadri vuoti al posto loro.
+        // Il demone le ha già tolte dal catalogo: la galleria lo rilegge.
         if (pannello.buttate > 0)
-            Core.Ipc.fotoScansiona();
+            Core.Ipc.fotoChiediPanoramica();
         pannello.chiuso();
     }
 

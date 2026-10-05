@@ -1653,7 +1653,9 @@ class WebSocketServer {
             client.send({'event': 'foto_doppioni_scarta', 'payload': via});
             break;
           }
-          final r = await _fileService.trash((via['butta'] as List).cast<String>());
+          final buttate = (via['butta'] as List).cast<String>();
+          final r = await _fileService.trash(buttate);
+          _foto.indice.dimenticaSpariti(buttate);
           client.send({
             'event': 'foto_doppioni_scarta',
             'payload': {...r, 'tenuta': via['tieni']},
@@ -1874,6 +1876,9 @@ class WebSocketServer {
           final paths = (msg['paths'] as List?)?.cast<String>() ?? [];
           if (paths.isNotEmpty) {
             final r = await _fileService.trash(paths);
+            // Una foto del catalogo buttata non deve restare nella galleria
+            // come casella vuota fino alla prossima scansione.
+            _foto.indice.dimenticaSpariti(paths);
             client.send({'event': 'fs_result', 'payload': r});
           }
         }

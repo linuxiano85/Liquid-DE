@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import "../theme" as Theme
 import "../core" as Core
 import "../ui" as Ui
@@ -49,14 +50,40 @@ Item {
     /// scansione ogni volta.
     property var scelti: ({})
     property string ultimoScelto: ""
+    readonly property int quanteScelte: Object.keys(galleria.scelti).length
 
     function svuotaScelta() {
         galleria.scelti = ({});
         galleria.ultimoScelto = "";
+        galleria.confermaCestino = false;
+    }
+
+    /// Un intervallo dentro un giorno (Shift+clic). Con Ctrl si aggiunge a
+    /// quello che c'era; senza, lo sostituisce. L'àncora resta dov'era, come
+    /// in ogni gestore di file.
+    function _scegliIntervallo(percorsi, conCtrl) {
+        var s = {};
+        if (conCtrl)
+            for (var k in galleria.scelti)
+                s[k] = true;
+        for (var i = 0; i < percorsi.length; i++)
+            s[percorsi[i]] = true;
+        galleria.scelti = s;
     }
 
     function _scegli(percorso, conCtrl, conShift) {
         var s = galleria.scelti;
+        // Shift fuori dal giorno dell'àncora: si aggiunge e basta, che è meno
+        // sorprendente di perdere quello che si era scelto.
+        if (conShift && !conCtrl) {
+            var piu = {};
+            for (var j in s)
+                piu[j] = true;
+            piu[percorso] = true;
+            galleria.scelti = piu;
+            galleria.ultimoScelto = percorso;
+            return;
+        }
         if (conCtrl) {
             var copia = {};
             for (var k in s)
@@ -139,9 +166,11 @@ Item {
             lato: galleria.lato
             larghezzaUtile: lista.width
             scelti: galleria.scelti
+            ultimoScelto: galleria.ultimoScelto
             onApri: (p) => galleria.apri(p)
             onMenu: (p, x, y, pr) => galleria.menu(p, x, y, pr)
             onScegli: (p, c, s) => galleria._scegli(p, c, s)
+            onScegliIntervallo: (l, c) => galleria._scegliIntervallo(l, c)
         }
 
         // ── Ctrl + rotellina cambia la misura ────────────────────────────
@@ -304,6 +333,109 @@ Item {
             font.family: Theme.Typography.fontDisplay
             font.pixelSize: 13
             text: galleria.it ? "Cartelle" : "Folders"
+        }
+    }
+
+    // ── Più foto scelte: cosa farne ──────────────────────────────────────
+    //
+    // La scelta multipla c'era — Ctrl+clic, e ora Shift+clic dentro un
+    // giorno — ma non serviva a niente: ogni voce del menu agiva su una foto
+    // sola (5 ottobre 2026). Da due in su compare questa striscia.
+    property bool confermaCestino: false
+    Timer {
+        running: galleria.confermaCestino
+        interval: 4000
+        onTriggered: galleria.confermaCestino = false
+    }
+
+    function _sceltiInElenco() {
+        return Object.keys(galleria.scelti);
+    }
+
+    function cestinaScelti() {
+        if (!galleria.confermaCestino) {
+            galleria.confermaCestino = true;
+            return;
+        }
+        Core.Ipc.fsTrash(galleria._sceltiInElenco());
+        galleria.svuotaScelta();
+        // Il demone le toglie dal catalogo quando le butta: si rilegge.
+        galleria.ricarica();
+    }
+
+    function copiaScelti() {
+        // Un percorso per riga, passato come argomento e non dentro la riga
+        // di comando: un nome di file non deve poter diventare un comando.
+        Quickshell.execDetached(["sh", "-c", "printf %s \"$1\" | wl-copy", "sh",
+                                 galleria._sceltiInElenco().join("\n")]);
+    }
+
+    Rectangle {
+        id: striscia
+        visible: galleria.quanteScelte >= 2
+        z: 10
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Theme.Effects.space4
+        width: fila.implicitWidth + Theme.Effects.space4 * 2
+        height: 44
+        radius: height / 2
+        color: Theme.Colors.panel
+        border.width: 1
+        border.color: Theme.Colors.edge
+
+        Row {
+            id: fila
+            anchors.centerIn: parent
+            spacing: Theme.Effects.space3
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: galleria.it ? galleria.quanteScelte + " scelte"
+                                  : galleria.quanteScelte + " selected"
+                color: Theme.Colors.text
+                font.family: Theme.Typography.fontDisplay
+                font.pixelSize: 13
+                font.weight: Theme.Typography.weightMedium
+            }
+            Ui.SpineButton {
+                anchors.verticalCenter: parent.verticalCenter
+                height: 32
+                horizontalPadding: Theme.Effects.space3
+                onClicked: galleria.copiaScelti()
+                content: Text {
+                    text: galleria.it ? "Copia i percorsi" : "Copy paths"
+                    color: Theme.Colors.textMuted
+                    font.family: Theme.Typography.fontDisplay
+                    font.pixelSize: 13
+                }
+            }
+            Ui.SpineButton {
+                anchors.verticalCenter: parent.verticalCenter
+                height: 32
+                horizontalPadding: Theme.Effects.space3
+                onClicked: galleria.cestinaScelti()
+                content: Text {
+                    text: galleria.confermaCestino
+                          ? (galleria.it ? "Sicuro? Tocca di nuovo" : "Sure? Tap again")
+                          : (galleria.it ? "Nel cestino" : "To the trash")
+                    color: Theme.Colors.danger
+                    font.family: Theme.Typography.fontDisplay
+                    font.pixelSize: 13
+                }
+            }
+            Ui.SpineButton {
+                anchors.verticalCenter: parent.verticalCenter
+                height: 32
+                horizontalPadding: Theme.Effects.space3
+                onClicked: galleria.svuotaScelta()
+                content: Text {
+                    text: galleria.it ? "Annulla (Esc)" : "Clear (Esc)"
+                    color: Theme.Colors.textMuted
+                    font.family: Theme.Typography.fontDisplay
+                    font.pixelSize: 13
+                }
+            }
         }
     }
 

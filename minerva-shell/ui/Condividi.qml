@@ -101,16 +101,6 @@ Rectangle {
         }
     }
 
-    /// Trova la destinazione col Bluetooth per prenderne l'elenco dei
-    /// dispositivi già accoppiati.
-    function _bluetooth() {
-        for (var i = 0; i < chiedi.destinazioni.length; i++) {
-            if (chiedi.destinazioni[i].id === "bluetooth")
-                return chiedi.destinazioni[i];
-        }
-        return null;
-    }
-
     function scegli(d) {
         if (!d.disponibile) return;
         // Le destinazioni con un elenco chiedono «a chi?» prima di mandare.

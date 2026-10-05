@@ -34,7 +34,6 @@ Item {
     /// `playlist` dice se l'elenco era quello della cartella dei download.
     signal elencoPronto(var file, bool playlist)
     signal elencoError(string messaggio)
-    signal durataPronta(real secondi)
 
     /// La cartella dove finiscono i download.
     readonly property string cartella: "$HOME/Musica/Minerva_YT"
@@ -236,23 +235,6 @@ Item {
             if (code !== 0)
                 backend.waveformError(
                     backend.ultimoErrore || "Non riesco a disegnare l'onda.");
-        }
-    }
-
-    /// La durata di un file, in secondi. Per i file locali che non hanno
-    /// ancora un'onda.
-    function durataDi(percorso) {
-        durataProc.command = ["sh", "-c",
-            'ffprobe -v error -show_entries format=duration '
-            + '-of default=noprint_wrappers=1:nokey=1 -- "$1" 2>/dev/null',
-            "sh", String(percorso || "")];
-        durataProc.running = true;
-    }
-
-    Process {
-        id: durataProc
-        stdout: StdioCollector {
-            onStreamFinished: backend.durataPronta(parseFloat(text.trim()) || 0)
         }
     }
 

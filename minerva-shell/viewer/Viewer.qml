@@ -1509,6 +1509,8 @@ FloatingWindow {
             // che tutti premono per «torna indietro».
             if (viewer.mostraGriglia)
                 viewer.mostraGriglia = false;
+            else if (galleriaLoader.item && galleriaLoader.item.quanteScelte > 0)
+                galleriaLoader.item.svuotaScelta();
             else if (viewer.aTuttoSchermo)
                 viewer.schermoIntero();
             else

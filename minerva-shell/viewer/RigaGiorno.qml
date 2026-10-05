@@ -37,10 +37,34 @@ Item {
     property int larghezzaUtile: 800
     /// I percorsi scelti, per marcare le celle. Lo tiene la galleria.
     property var scelti: ({})
+    /// L'ultima scelta, da cui parte uno Shift+clic.
+    property string ultimoScelto: ""
 
     signal apri(string percorso)
     signal menu(string percorso, real x, real y, bool preferito)
     signal scegli(string percorso, bool conCtrl, bool conShift)
+    /// Shift+clic con l'ultima scelta in questo stesso giorno: tutte quelle
+    /// in mezzo, estremi compresi.
+    signal scegliIntervallo(var percorsi, bool conCtrl)
+
+    function _scelta(percorso, conCtrl, conShift) {
+        if (conShift && riga.ultimoScelto !== "") {
+            var da = -1, a = -1;
+            for (var i = 0; i < riga.voci.length; i++) {
+                var p = String(riga.voci[i].percorso);
+                if (p === riga.ultimoScelto) da = i;
+                if (p === percorso) a = i;
+            }
+            if (da !== -1 && a !== -1) {
+                var fuori = [];
+                for (var k = Math.min(da, a); k <= Math.max(da, a); k++)
+                    fuori.push(String(riga.voci[k].percorso));
+                riga.scegliIntervallo(fuori, conCtrl);
+                return;
+            }
+        }
+        riga.scegli(percorso, conCtrl, conShift);
+    }
 
     readonly property bool senzaData: riga.giorno === ""
 
@@ -171,7 +195,7 @@ Item {
                 onApri: riga.apri(String(modelData.percorso))
                 onMenu: (x, y) => riga.menu(String(modelData.percorso), x, y,
                                             modelData.preferito === true)
-                onSceltaCambiata: (c, s) => riga.scegli(String(modelData.percorso), c, s)
+                onSceltaCambiata: (c, s) => riga._scelta(String(modelData.percorso), c, s)
             }
         }
     }
