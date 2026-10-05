@@ -340,6 +340,28 @@ class PuntiMotore {
   //     progetto è fermo da un anno, il suo unico punto è tutto ciò che ha;
   //   · non si butta mai l'ultimo rimasto.
 
+  /// Butta i punti che la regola qui sotto non tiene, e dice quanti.
+  ///
+  /// C'era la regola e non c'era chi la applicava: i punti si accumulavano
+  /// per sempre, e su copy-on-write un punto vecchio trattiene tutti i dati
+  /// cambiati dopo di lui (5 ottobre 2026). Non fallisce mai: un punto che
+  /// non si riesce a togliere resta, e ci si riprova al prossimo.
+  ///
+  /// **Mai dentro `ripristina`**: lì il punto a cui si torna deve esserci
+  /// fino alla fine. La chiama chi prende un punto per conto suo.
+  Future<int> pota(String progetto, {DateTime? adesso}) async {
+    var tolti = 0;
+    try {
+      final via = daPotare(await elenca(progetto), adesso: adesso);
+      for (final p in via) {
+        if ((await elimina(progetto, p.id)).riuscito) tolti++;
+      }
+    } catch (e) {
+      stderr.writeln('[MINERVA][CUSTODIA] Potatura dei punti saltata: $e');
+    }
+    return tolti;
+  }
+
   static List<Punto> daPotare(List<Punto> tutti, {DateTime? adesso}) {
     if (tutti.length <= 1) return const [];
     final ora = adesso ?? DateTime.now();

@@ -1,7 +1,5 @@
 import 'dart:io';
 
-import 'exif.dart';
-
 /// Quanto crediamo alla data che abbiamo trovato.
 ///
 /// L'ordine conta: `Fiducia.values.indexOf` è la graduatoria, e più in alto
@@ -123,31 +121,6 @@ class Datatore {
   /// scattate. Con la finestra da un minuto, quei sei minuti coprono 801 file
   /// su 826 e la fonte viene dichiarata inutilizzabile, che è la verità.
   static const int finestraSecondi = 60;
-
-  /// Decide per un lotto intero, perché la regola 2 si può applicare solo
-  /// guardando tutti insieme.
-  ///
-  /// [candidati] è `{percorso: {exif, video, mtime}}` già raccolto da chi legge
-  /// i file: qui non si tocca il disco, così questa parte si prova senza avere
-  /// una fotografia.
-  static Map<String, DataScatto> perLotto(Map<String, Candidato> candidati) {
-    final sospetti = secondiDiCopia([
-      for (final c in candidati.values)
-        if (c.mtime != null) c.mtime!.millisecondsSinceEpoch ~/ 1000,
-    ]);
-
-    return {
-      for (final e in candidati.entries)
-        e.key: decidi(
-          percorso: e.key,
-          exif: e.value.exif,
-          video: e.value.video,
-          mtime: e.value.mtime,
-          mtimeUsabile: e.value.mtime == null ||
-              !sospetti.contains(e.value.mtime!.millisecondsSinceEpoch ~/ 1000),
-        ),
-    };
-  }
 
   /// I secondi che sanno di copia: quelli attorno a cui, in una finestra di un
   /// minuto, si affollano troppi file.
@@ -388,32 +361,6 @@ class Datatore {
     }
   }
 
-  /// La data del contenitore di un video.
-  ///
-  /// `ffprobe` risponde in UTC — verificato: `VID_20260222_211501.mp4` dice
-  /// `2026-02-22T20:15:06Z`, che sono le 21:15 qui. Convertirla è obbligatorio,
-  /// e dimenticarsene sposta ogni video di un'ora o due, cioè a volte di un
-  /// giorno.
-  Future<DateTime?> daVideo(String percorso) async {
-    try {
-      final r = await esegui('ffprobe', [
-        '-v', 'quiet',
-        '-show_entries', 'format_tags=creation_time',
-        '-of', 'default=noprint_wrappers=1:nokey=1',
-        '--', percorso,
-      ]);
-      if (r.exitCode != 0) return null;
-      final t = '${r.stdout}'.trim();
-      if (t.isEmpty) return null;
-      final d = DateTime.tryParse(t);
-      if (d == null) return null;
-      // Alcuni contenitori scrivono l'anno zero quando il campo è vuoto.
-      return _seCredibile(d.toLocal());
-    } catch (_) {
-      return null;
-    }
-  }
-
   /// È una schermata, non un ricordo?
   ///
   /// 162 file di questa casa sono schermate di telefono. Senza saperlo
@@ -478,16 +425,4 @@ class Datatore {
     if (d.isAfter(DateTime.now().add(const Duration(days: 2)))) return null;
     return d;
   }
-}
-
-/// Quello che si è riusciti a leggere da un file, prima di decidere.
-class Candidato {
-  final DateTime? exif;
-  final DateTime? video;
-  final DateTime? mtime;
-  const Candidato({this.exif, this.video, this.mtime});
-
-  /// Comodità: da un file già letto.
-  factory Candidato.da(DatiExif e, DateTime? mtime, {DateTime? video}) =>
-      Candidato(exif: e.scattata, video: video, mtime: mtime);
 }

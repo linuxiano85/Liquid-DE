@@ -683,13 +683,6 @@ class FileService {
   String get cartellaCestino => '$radiceCestino/files';
   String get _cartellaInfo => '$radiceCestino/info';
 
-  /// Vero se `percorso` è dentro il cestino. Serve al gestore file per
-  /// mostrare «Ripristina» solo lì.
-  bool nelCestino(String percorso) {
-    final c = cartellaCestino;
-    return percorso == c || percorso.startsWith('$c/');
-  }
-
   /// Rimette dove stavano gli elementi indicati.
   ///
   /// Dove stavano lo dice il file `.trashinfo` scritto al momento del

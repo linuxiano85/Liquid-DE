@@ -209,21 +209,6 @@ class Miniature {
     return h.toRadixString(16).padLeft(16, '0');
   }
 
-  /// Quanto occupa la cache, in byte.
-  int quantoOccupa() {
-    var totale = 0;
-    final d = Directory(cartellaCache);
-    if (!d.existsSync()) return 0;
-    for (final v in d.listSync(recursive: true, followLinks: false)) {
-      if (v is File) {
-        try {
-          totale += v.lengthSync();
-        } catch (_) {}
-      }
-    }
-    return totale;
-  }
-
   /// Butta le più vecchie finché non si rientra sotto il tetto.
   ///
   /// Si guarda l'ultimo **accesso**, non l'ultima scrittura: una miniatura

@@ -93,10 +93,4 @@ class AppUsageTracker {
     return ore[(h + 23) % 24] + ore[h] + ore[(h + 1) % 24];
   }
 
-  /// Restituisce gli ID delle app più frequenti ordinate in modo decrescente.
-  List<String> getMostFrequent({int limit = 12}) {
-    final sorted = _usage.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    return sorted.map((e) => e.key).take(limit).toList();
-  }
 }

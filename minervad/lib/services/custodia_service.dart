@@ -217,6 +217,7 @@ class CustodiaService {
     if (e.riuscito) {
       p.ultimoPunto = e.punto!.quando;
       await registro.salva();
+      await punti.pota(p.chiave);
     }
     return e.toJson();
   }
@@ -339,6 +340,7 @@ class CustodiaService {
     if (e.riuscito) {
       p.ultimoPunto = e.punto!.quando;
       await registro.salva();
+      await punti.pota(p.chiave);
       return null;
     }
     return _no(

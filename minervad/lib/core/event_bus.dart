@@ -66,14 +66,6 @@ class EventBus {
   /// Quanti sono stati pubblicati DOPO la chiusura, cioè buttati.
   int get pubblicatiDopoLaChiusura => _dopoLaChiusura;
 
-  /// Consente di filtrare gli eventi per tipo.
-  ///
-  /// Ogni chiamata crea uno stream derivato: serve a iscriversi una volta, non
-  /// va chiamata dentro un ciclo o a ogni richiesta.
-  Stream<MinervaEvent> filter(String type) {
-    return _streamController.stream.where((event) => event.type == type);
-  }
-
   /// Pubblica un nuovo evento nel bus.
   ///
   /// Restituisce `false` se il bus è chiuso e l'evento è stato buttato: chi
