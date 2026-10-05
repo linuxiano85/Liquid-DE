@@ -766,7 +766,10 @@ Item {
                     if (ordine.cercando) return "Sto guardando…";
                     if (ordine.gruppi.length === 0) return "Cerca i doppioni";
                     if (ordine.sceltiQuanti === 0) return "Scegli cosa togliere";
-                    return "Nel cestino " + ordine.sceltiQuanti + " copie";
+                    // Quanto si libera, accanto a quante: è il numero che fa
+                    // decidere, e `sceltiByte` lo contava già senza mostrarlo.
+                    return "Nel cestino " + ordine.sceltiQuanti + " copie · "
+                           + Misure.peso(ordine.sceltiByte);
                 }
                 onScelto: {
                     if (ordine.gruppi.length === 0) { ordine.cerca(); return; }

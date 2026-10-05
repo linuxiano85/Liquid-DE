@@ -2587,9 +2587,12 @@ FloatingWindow {
                                             : "Restore " + n + " items")
                                       : (it ? "Rimetti a posto" : "Restore"),
                              "icon": "back", "action": "restore" });
-            items.push({ "label": it ? "Svuota il cestino" : "Empty the bin",
-                         "icon": "trash", "action": "emptyTrash",
-                         "danger": true });
+            // Come nella barra degli strumenti: un cestino già vuoto non si
+            // svuota, e la voce non compare.
+            if (manager.current && manager.current.entries.length > 0)
+                items.push({ "label": it ? "Svuota il cestino" : "Empty the bin",
+                             "icon": "trash", "action": "emptyTrash",
+                             "danger": true });
         } else if (puoi && n > 0) {
             items.push({ "separator": true });
             items.push({ "label": n > 1

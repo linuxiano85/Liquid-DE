@@ -150,12 +150,6 @@ QtObject {
         return palette.tinta(v);
     }
 
-    /// I nomi che si possono scavalcare. Uno solo, qui, così le Impostazioni
-    /// non se ne inventano uno che nessuno legge — è già successo con
-    /// `bar.position`, che si poteva scrivere e non faceva niente.
-    readonly property var scavalcabili: [
-        "base", "testo", "membrana", "bordo", "positivo", "avviso", "pericolo"
-    ]
 
     // ── Gli attrezzi della derivazione ───────────────────────────────────
 

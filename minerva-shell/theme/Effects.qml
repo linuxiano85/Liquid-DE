@@ -45,19 +45,6 @@ QtObject {
     readonly property int radiusXL:   32
     readonly property int radiusFull: 999
 
-    /// Il raggio degli angoli di una FINESTRA.
-    ///
-    /// È lo stesso `BARRA_RAGGIO` del compositore (`compositore/src/barra.h`),
-    /// che arrotonda la cima della barra del titolo disegnata da lui. Le
-    /// nostre finestre si disegnano la propria cornice, quelle degli altri
-    /// programmi la ricevono dal compositore: se i due numeri non coincidono,
-    /// sulla stessa scrivania convivono due angoli diversi e si vede.
-    ///
-    /// Dieci e non `radiusMD`: gli altri raggi qui sopra sono per i pannelli e
-    /// le schede, che sono oggetti piccoli dentro una finestra. Una finestra
-    /// intera con l'angolo da sedici sembra un widget ingrandito.
-    readonly property int radiusWindow: 10
-
     /// Raggio del raccordo concavo fra barra e pannello.
     readonly property int shoulder: 22
 

@@ -79,10 +79,6 @@ QtObject {
     property real discoTotale: 0
     property real discoLibero: 0
 
-    readonly property real discoPerCento:
-        macchina.discoTotale > 0
-        ? (macchina.discoTotale - macchina.discoLibero)
-          / macchina.discoTotale * 100 : 0
 
     readonly property real memoriaPerCento:
         macchina.memoriaTotale > 0

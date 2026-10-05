@@ -98,16 +98,6 @@ QtObject {
         return "";
     }
 
-    /// Vero se il cestino non contiene niente, come lo riporta il demone.
-    /// Vale anche prima che la risposta arrivi: una voce spenta per qualche
-    /// istante è meglio di una che si accende e si spegne da sola.
-    readonly property bool trashEmpty: {
-        for (var i = 0; i < files.userPlaces.length; i++)
-            if (files.userPlaces[i].kind === "trash")
-                return files.userPlaces[i].vuoto !== false;
-        return true;
-    }
-
     /// Vero se il percorso è il cestino o sta dentro il cestino.
     function inTrash(path) {
         if (files.trashPath === "" || !path)
