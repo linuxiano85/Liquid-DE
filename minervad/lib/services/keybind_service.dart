@@ -40,26 +40,14 @@ class KeyCombo {
 /// Legge `config/scorciatoie.minerva` e ne ricava l'elenco delle scorciatoie
 /// da mostrare all'utente, tenendolo aggiornato se il file cambia.
 ///
-/// ── Perché NON legge più il file di Hyprland ─────────────────────────────
-///
-/// Fino all'11 agosto 2026 questo servizio faceva il parsing di
-/// `config/hypr/keybinds.conf`: `bind = $mod SHIFT, K, dispatcher, argomenti`.
-/// Cioè il pannello F1 di Minerva sapeva leggere la sintassi di un
-/// compositore. Cambiando compositore sarebbe stato un secondo file da
-/// riscrivere, e ogni cambiamento di quella sintassi lo avrebbe rotto in
-/// silenzio — un promemoria vuoto non dà nessun errore.
-///
-/// Adesso la sorgente è nostra e il file di Hyprland ne è il PRODOTTO
-/// (`scripts/minerva-scorciatoie`, e una prova che li tiene allineati).
-///
-/// Formato atteso nel file:
+/// Formato atteso nel file (vedi `Scorciatoie.leggi`):
 /// ```
-/// #@ Categoria | Descrizione leggibile
-/// bind = $mod SHIFT, K, dispatcher, argomenti
+/// @ Categoria | Descrizione leggibile
+/// $mod SHIFT K -> minerva: cheatsheet
 /// ```
-/// L'annotazione vale per tutti i bind consecutivi che la seguono.
+/// L'annotazione vale per tutte le regole che la seguono, fino a `@-`.
 ///
-/// ── E per NON farne comparire una: `#@-` ─────────────────────────────────
+/// ── E per NON farne comparire una: `@-` ─────────────────────────────────
 ///
 /// Alcune combinazioni non vanno nel promemoria: il rilascio di Alt che
 /// conferma l'Alt+Tab non è una scorciatoia da imparare, è il seguito di
@@ -71,7 +59,7 @@ class KeyCombo {
 /// serve a «tornare indietro nell'elenco delle finestre». Non è vero, ed è il
 /// modo più veloce di rendere un promemoria inaffidabile.
 ///
-/// `#@-` da solo, su una riga, spegne l'annotazione in corso.
+/// `@-` da solo, su una riga, spegne l'annotazione in corso.
 class KeybindService {
   final String _configPath;
   List<KeybindEntry> _entries = [];
@@ -103,8 +91,7 @@ class KeybindService {
   List<String> perMinervaWayland() {
     try {
       return Scorciatoie.daFile(_configPath).perMinervaWayland(
-        // La sorgente non la dichiara perché sotto Hyprland la dichiara il
-        // compositore, in `~/.config/hypr/minerva-paths.conf`.
+        // La sorgente non la dichiara: è la cartella installata.
         anche: {'minerva': MinervaPaths.installRoot},
       );
     } catch (e) {
@@ -165,8 +152,8 @@ class KeybindService {
 
   // ── Dalla sorgente al promemoria ───────────────────────────────────────
   //
-  // Niente più regexp sulla sintassi di Hyprland: `Scorciatoie` legge il
-  // formato nostro e torna oggetti. Qui resta solo il raggruppamento — più
+  // `Scorciatoie` legge il formato e torna oggetti. Qui resta solo il
+  // raggruppamento — più
   // combinazioni che fanno la stessa cosa diventano una riga sola, o
   // l'elenco mostrerebbe tre volte «apri il promemoria».
 
@@ -219,7 +206,7 @@ class KeybindService {
     return out.trim();
   }
 
-  /// Normalizza gli alias dei modificatori accettati da Hyprland.
+  /// Normalizza gli alias dei modificatori (`MOD4` è Super, `MOD1` è Alt).
   String? _canonicalMod(String mod) {
     switch (mod.toUpperCase()) {
       case 'SUPER':
@@ -235,11 +222,6 @@ class KeybindService {
       case 'ALT':
       case 'MOD1':
         return 'ALT';
-      case 'CAPS':
-      case 'MOD2':
-      case 'MOD3':
-      case 'MOD5':
-        return null;
       default:
         return null;
     }

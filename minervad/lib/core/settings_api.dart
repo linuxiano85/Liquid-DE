@@ -817,8 +817,8 @@ class SettingsApi {
           //
           // Qui c'era `'blur': 2`, un numero da 0 a 3 che sceglieva quanta
           // sfocatura chiedere a Hyprland. Sotto minerva-wayland **non faceva
-          // niente**: `Compositore.sfocatura()` è un buco che scrive una riga
-          // e basta. Un'impostazione che si vede, si cambia, e non cambia
+          // niente**: `Compositore.sfocatura()` era un buco che scriveva una
+          // riga e basta. Un'impostazione che si vede, si cambia, e non cambia
           // nulla è il difetto che questo progetto si è messo per iscritto di
           // non commettere — e stava nel nostro pannello.
           //
@@ -926,12 +926,11 @@ class SettingsApi {
           'buttonsSide': 'destra',
           // ── I programmi che la barra se la disegnano da soli ─────────────
           //
-          // Hyprland non ha decorazioni lato server: dice a OGNI programma di
-          // disegnarsi la propria cornice. Quasi nessuno lo fa — ed è il
-          // motivo per cui Minerva gliene disegna una — ma i browser sì, e
-          // anche parecchie applicazioni GNOME. Su quelle la nostra barra
-          // sarebbe la seconda: due titoli, due file di pulsanti, e trenta
-          // pixel di spazio buttati.
+          // Il compositore disegna la barra del titolo a ogni finestra. I
+          // browser e parecchie applicazioni GNOME però se la disegnano da
+          // soli: su quelle la nostra sarebbe la seconda — due titoli, due
+          // file di pulsanti, e trenta pixel di spazio buttati. L'elenco lo
+          // manda la shell al compositore (`Compositore.appConBarraPropria`).
           //
           // Qui stanno le classi da lasciar stare. Si confronta la classe
           // della finestra in minuscolo: basta che la contenga.
@@ -1149,8 +1148,9 @@ class SettingsApi {
         },
         // ── Lo schermo, non i monitor ─────────────────────────────────
         //
-        // La disposizione dei monitor la tiene Hyprland: qui sta solo quello
-        // che Minerva aggiunge sopra, cioè per ora la luce notturna.
+        // La disposizione dei monitor sta in `schermi.conf`, che legge il
+        // compositore: qui sta solo quello che Minerva aggiunge sopra, cioè
+        // per ora la luce notturna.
         'display': {
           // Il filtro luce blu. Spento di fabbrica: cambia il colore di TUTTO
           // lo schermo, e una cosa che cambia i colori senza che nessuno
@@ -1177,7 +1177,7 @@ class SettingsApi {
         },
         // ── Accessibilità ─────────────────────────────────────────────
         //
-        // Tutte e tre sono cose che Hyprland o la tipografia DIMENTICANO a
+        // Tutte e tre sono cose che il compositore o la tipografia DIMENTICANO a
         // ogni avvio: il posto dove ricordarle è qui, e la shell le riapplica
         // appena il demone risponde.
         'accessibility': {
@@ -1186,7 +1186,8 @@ class SettingsApi {
           'textScale': 1.0,
           // Ingrandimento dello schermo attorno al puntatore. 1 = spento.
           'zoom': 1.0,
-          // Dimensione del puntatore. 24 è quella di serie di Hyprland.
+          // Dimensione del puntatore. 24 è quella di serie dei temi di
+          // puntatori più diffusi.
           'cursorSize': 24,
         },
         // ── Il tempo che fa ───────────────────────────────────────────

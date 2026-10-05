@@ -7,7 +7,7 @@ import 'event_bus.dart';
 ///
 /// Costava questo, a ogni finestra aperta o chiusa e a ogni cambio di
 /// scrivania: un `getWorkspaces()` al compositore — cioè un giro di IPC che
-/// fa elencare a Hyprland tutti i suoi client — e poi l'elenco completo
+/// gli fa elencare tutte le sue finestre — e poi l'elenco completo
 /// spedito in JSON a ognuno dei processi di Minerva collegati.
 ///
 /// Nessuno di quei processi lo apriva. Le finestre la shell le riceve da

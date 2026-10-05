@@ -3,11 +3,10 @@ import 'dart:io';
 /// AutostartService — I programmi che partono con la sessione.
 ///
 /// KDE ha una pagina apposta; Minerva non aveva niente, e non per svista:
-/// **Hyprland non legge `~/.config/autostart`**. Chi arriva da un altro
-/// ambiente si porta dietro quella cartella e quei programmi semplicemente non
-/// partono più, senza che nessuno lo dica. E chi vuole aggiungerne uno oggi
-/// deve modificare a mano `hyprland.conf`, cioè un file di configurazione del
-/// compositore, per una cosa che non riguarda il compositore.
+/// **nessun compositore legge `~/.config/autostart`**: lo fa chi apre la
+/// sessione, e qui è `scripts/minerva-autostart`. Senza, chi arriva da un
+/// altro ambiente si porta dietro quella cartella e quei programmi
+/// semplicemente non partono più, senza che nessuno lo dica.
 ///
 /// ── LA DECISIONE CHE VALE LA PENA SPIEGARE ─────────────────────────────────
 ///
@@ -18,8 +17,8 @@ import 'dart:io';
 ///
 /// **Le voci di sistema NON partono da sole.** Solo quelle dell'utente.
 ///
-/// Non è pigrizia: oggi quelle diciannove voci non partono — Hyprland non
-/// guarda lì — e la sessione funziona benissimo. Metterle in moto tutte perché
+/// Non è pigrizia: quelle diciannove voci non sono mai partite in Minerva, e
+/// la sessione funziona benissimo. Metterle in moto tutte perché
 /// «così fa un desktop completo» vorrebbe dire far comparire dal nulla un
 /// indicizzatore del disco e una seconda barra delle applicazioni, il giorno
 /// in cui si aggiunge una pagina nelle impostazioni. Un'aggiunta non deve

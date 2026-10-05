@@ -56,8 +56,8 @@ class MinervaPaths {
     }
 
     // Ultimo tentativo: si risale dalla cartella di lavoro. Vale quando il
-    // demone viene avviato da dentro `minervad/` (che è come lo avvia
-    // Hyprland) e quando lo esegue il motore delle prove, che sostituisce
+    // demone viene avviato da dentro `minervad/` (con `dart run`, il ripiego
+    // di `scripts/minerva-demone`) e quando lo esegue il motore delle prove, che sostituisce
     // `Platform.script` con un file suo in una cartella temporanea.
     var here = Directory.current;
     for (var i = 0; i < 6; i++) {

@@ -6,32 +6,19 @@ import '../compositor_provider.dart';
 /// Implementazione di [CompositorProvider] per **minerva-wayland**, il
 /// compositore di Minerva.
 ///
-/// ── Perché esiste, e cosa NON fa ─────────────────────────────────────────
+/// ── Cosa fa, e cosa NON fa ───────────────────────────────────────────────
 ///
-/// L'audit del 23 agosto 2026 contava, fra le cose mancanti: «`MinervaProvider`
-/// nel demone: non esiste, c'è solo `hyprland_provider.dart`». Senza, dentro
-/// minerva-wayland la dock è vuota, l'Alt+Tab non ha niente da scorrere e le
-/// barre del titolo non sanno dove sta niente — perché tutto lo stato delle
-/// finestre della shell arriva dal demone, non da un protocollo Wayland.
+/// Tutto lo stato delle finestre della shell arriva dal demone, non da un
+/// protocollo Wayland: senza questo file la dock è vuota e l'Alt+Tab non ha
+/// niente da scorrere.
 ///
-/// È la stessa forma di HyprlandProvider, e deliberatamente: **due letture
-/// grezze e uno stream di eventi.** Nessun verbo. La shell comanda il
-/// compositore da sé, per il suo canale — vedi `core/Compositore.qml` — e il
-/// demone si limita a osservare. Tre metodi invece di sette, esattamente come
-/// era stato scritto in `compositor_provider.dart` quando i verbi sono usciti.
+/// **Due letture grezze e uno stream di eventi.** Nessun verbo: la shell
+/// comanda il compositore da sé, per il suo canale — vedi
+/// `core/Compositore.qml` — e il demone si limita a osservare.
 ///
-/// ── E perché il JSON esce da qui COME ARRIVA ─────────────────────────────
-///
-/// `getClientsRaw()` torna il formato di minerva-wayland senza tradurlo in
-/// quello di Hyprland. La tentazione era forte — così la shell non si accorge
-/// di niente — ed è la strada sbagliata: vorrebbe dire tradurre il nostro
-/// formato NEL PIÙ STRANO dei due (dove «schermo intero» è un numero fra zero
-/// e due, dove «ridotto a icona» è una scrivania di servizio) per poi
-/// ritradurlo in lingua nostra dentro il QML.
-///
-/// Il posto dove le parole di un compositore diventano parole di Minerva è
-/// uno solo, e c'è già: `core/Compositore.qml`. Lì `_due()` fa la stessa cosa
-/// per i verbi. Qui si passa avanti, e basta.
+/// Il JSON esce da qui COME ARRIVA. Il posto dove le parole del compositore
+/// diventano parole di Minerva è uno solo, `core/Compositore.qml`; tradurre
+/// anche qui vorrebbe dire due traduzioni da tenere d'accordo.
 class MinervaProvider implements CompositorProvider {
   final _eventi = StreamController<CompositorEvent>.broadcast();
 
@@ -104,8 +91,8 @@ class MinervaProvider implements CompositorProvider {
   /// Costato il 24 agosto 2026, e vale la pena raccontarlo perché il sintomo
   /// non somigliava alla causa: finita una prova annidata, il demone della
   /// sessione VERA ha visto quel file, ha concluso «gira minerva-wayland», e
-  /// da lì in poi ha chiesto le finestre a un compositore morto. Hyprland
-  /// aveva un terminale aperto; la shell diceva `finestre=0`. Nessun errore,
+  /// da lì in poi ha chiesto le finestre a un compositore morto. Il
+  /// compositore vero aveva un terminale aperto; la shell diceva `finestre=0`. Nessun errore,
   /// da nessuna parte: la scrivania semplicemente non aveva più finestre.
   ///
   /// Non basta guardare se il file esiste: bisogna guardare se qualcuno
@@ -146,8 +133,7 @@ class MinervaProvider implements CompositorProvider {
 
   // ── Chiedere ────────────────────────────────────────────────────────────
   //
-  // Un collegamento per domanda, come fa HyprlandProvider con `.socket.sock`,
-  // e non il collegamento degli eventi. Non è spreco: è ciò che evita di dover
+  // Un collegamento per domanda, e non il collegamento degli eventi. Non è spreco: è ciò che evita di dover
   // distinguere una risposta da un annuncio arrivato nel frattempo — cioè un
   // pezzo di codice che sbaglia una volta ogni mille e non si trova più.
   Future<String> _chiedi(String comando) async {
@@ -328,11 +314,10 @@ class MinervaProvider implements CompositorProvider {
     }
   }
 
-  /// La stessa forma della riconnessione di HyprlandProvider, e per la stessa
-  /// ragione: là il difetto era che `start()` cominciava con
-  /// `if (_running) return;` e la riconnessione lo chiamava senza spegnere il
-  /// flag — cioè non riconnetteva mai. Un socket degli eventi caduto e non
-  /// ripreso vuol dire una dock ferma per il resto della sessione.
+  /// Un socket degli eventi caduto e non ripreso vuol dire una dock ferma per
+  /// il resto della sessione. Il difetto da non rifare: un `start()` che
+  /// comincia con `if (_running) return;` e una riconnessione che lo chiama
+  /// senza spegnere il flag — cioè che non riconnette mai.
   void _riprendi() {
     if (!_acceso || _riconnessioneInCorso) return;
     _riconnessioneInCorso = true;
@@ -368,7 +353,7 @@ class MinervaProvider implements CompositorProvider {
   ///
   /// ── Il carico è JSON, e non è un dettaglio ─────────────────────────────
   ///
-  /// Hyprland manda `attributo>>valore1,valore2`, e questo progetto ci ha già
+  /// Hyprland mandava `attributo>>valore1,valore2`, e questo progetto ci ha
   /// perso mezza giornata: `activewindow` manda `CLASSE,TITOLO` e
   /// `activewindowv2` manda `INDIRIZZO`, il demone leggeva il secondo come il
   /// primo, e il ramo «due campi» non scattava mai perché un indirizzo non ha
@@ -419,8 +404,8 @@ class MinervaProvider implements CompositorProvider {
       // Il carico esce **come intero**, e non come l'oggetto arrivato: è
       // l'unico posto di tutto il provider dove si cambia forma a un dato, e
       // ha una ragione precisa. `minerva_core.dart` fa
-      // `if (payload is int) stateManager.setActiveWorkspace(payload)`, che è
-      // la forma che manda Hyprland; consegnargli una mappa vorrebbe dire un
+      // `if (payload is int) stateManager.setActiveWorkspace(payload)`;
+      // consegnargli una mappa vorrebbe dire un
       // `if` che non scatta mai — un cambio di scrivania che non risulta a
       // nessuno, e nessun errore da nessuna parte. Tradurre è il mestiere di
       // questo file.

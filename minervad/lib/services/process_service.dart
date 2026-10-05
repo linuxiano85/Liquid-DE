@@ -14,8 +14,8 @@ import 'processi_umani.dart';
 /// formatta in colonne e muore. Farlo due volte al secondo per tenere aggiornato
 /// un elenco vuol dire accendere e spegnere un programma centoventi volte al
 /// minuto per leggere dei file che possiamo aprire noi. È la stessa ragione per
-/// cui il provider di Hyprland parla al socket invece di lanciare `hyprctl`
-/// (ottantanove volte più economico, misurato).
+/// cui il demone parla al compositore sul suo socket invece di lanciare un
+/// programma a ogni domanda.
 ///
 /// ── Come si calcola l'uso della CPU ────────────────────────────────────────
 ///

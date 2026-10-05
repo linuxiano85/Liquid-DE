@@ -69,12 +69,6 @@ class FotoService {
 
   Map<String, dynamic> panoramica() => indice.panoramica();
 
-  /// Le fotografie che ci sono due volte.
-  ///
-  /// Non cancella niente e non propone di cancellare: torna i gruppi, col
-  /// primo di ognuno marcato come «quello da tenere». Chi decide è chi guarda
-  /// — ed è il motivo per cui questa azione e quella che sposta nel cestino
-  /// sono due, e non una con un interruttore.
   /// Prepara lo scarto di un gruppo di doppioni.
   ///
   /// **Non cancella: dice che cosa si può buttare.** A buttare è `fs_trash`,
@@ -122,6 +116,12 @@ class FotoService {
     return {'ok': true, 'tieni': t, 'butta': b.toList()};
   }
 
+  /// Le fotografie che ci sono due volte.
+  ///
+  /// Non cancella niente e non propone di cancellare: torna i gruppi, col
+  /// primo di ognuno marcato come «quello da tenere». Chi decide è chi guarda
+  /// — ed è il motivo per cui questa azione e quella che sposta nel cestino
+  /// sono due, e non una con un interruttore.
   Future<Map<String, dynamic>> doppioni() async {
     final gruppi = await Doppioni(indice).esatti();
     return {

@@ -1281,16 +1281,6 @@ class WebSocketServer {
   Future<void> _eseguiAzione(WebSocketClientConnection client, Object? action,
       Map<String, dynamic> msg) async {
     switch (action) {
-      // `whereType` e non `cast`: `cast` è una vista che controlla il tipo
-      // solo quando legge, cioè al primo evento trasmesso — dentro il
-      // listener del bus, dove un `[1, "x"]` faceva uscire il demone
-      // (30 settembre 2026). Un nome che non è una stringa non è un evento.
-      case 'subscribe':
-        final events = msg['events'];
-        if (events is List) {
-          client.subscribedEvents = events.whereType<String>().toList();
-        }
-        break;
       // ── Qui c'era la SECONDA porta verso il compositore ───────────────
       //
       // `switch_workspace`, `close_window`, `focus_window` e
@@ -1303,27 +1293,12 @@ class WebSocketServer {
       // La regola che ne esce, e che vale anche per minerva-wayland:
       // **il demone OSSERVA il compositore, la shell lo COMANDA.**
       // Restano infatti `getClientsRaw`, `getMonitorsRaw` e `getWorkspaces`
-      // — che sono domande, non ordini. Il giorno in cui si scriverà
-      // `MinervaProvider` sarà tre metodi e non sette.
+      // — che sono domande, non ordini.
       //
       // Con loro se n'è andato `publish_event`, che permetteva a chiunque
       // fosse collegato di mettere sul bus del demone un evento inventato,
       // che tutti gli altri poi si bevevano. Non lo usava nessuno; toglierlo
       // è pulizia e insieme una porta in meno.
-      // L'elenco delle finestre si chiede al compositore ADESSO, e non lo si
-      // tiene aggiornato di continuo: era il contrario, e costava un giro di
-      // IPC a ogni finestra aperta o chiusa per una risposta che nessuno
-      // chiedeva mai. Vedi `core/state_manager.dart`.
-      case 'get_state':
-        {
-          final stato = _stateManager.toJson();
-          stato['windows'] = [
-            for (final w in await _compositorProvider.getWorkspaces())
-              w.toJson()
-          ];
-          client.send({'event': 'state_response', 'payload': stato});
-        }
-        break;
       // ── Lanciare un programma, anche quelli da terminale ───────────
       //
       // `Terminal=true` nel file `.desktop` vuol dire «questo programma
@@ -1444,9 +1419,6 @@ class WebSocketServer {
         });
         break;
 
-      case 'get_processes':
-        client.send({'event': 'processes', 'payload': await _processi.leggi()});
-        break;
       case 'kill_process':
         {
           final pid = msg['pid'];

@@ -762,6 +762,10 @@ QtObject {
     signal fotoPreferito(var payload)
     /// Un pezzo di scansione: a mazzetti mentre cammina, e l'ultimo lo dice.
     signal fotoScansione(var payload)
+    /// I gruppi di copie esatte: `{ gruppi: [{ percorsi, byteInPiu }], byteInPiu }`.
+    signal fotoDoppioni(var payload)
+    /// L'esito di uno scarto: `{ ok, error, tenuta }`.
+    signal fotoDoppioniScartati(var payload)
 
     function fotoLeggiCartelle() { return send({ "action": "foto_cartelle" }); }
     function fotoCerca() { return send({ "action": "foto_proposte" }); }
@@ -783,6 +787,12 @@ QtObject {
         return send({ "action": "foto_schermate", "si": si === true });
     }
     function fotoScansiona() { return send({ "action": "foto_scansiona" }); }
+    function fotoCercaDoppioni() { return send({ "action": "foto_doppioni" }); }
+    /// Manda nel cestino le copie `butta` di un gruppo, tenendo `tieni`. Il
+    /// demone rifiuta tutto se `tieni` manca o sta fra quelle da buttare.
+    function fotoScartaDoppioni(tieni, butta) {
+        return send({ "action": "foto_doppioni_scarta", "tieni": tieni, "butta": butta });
+    }
     function fotoFermaScansione() { return send({ "action": "foto_scansiona_ferma" }); }
     function fotoChiediPanoramica() { return send({ "action": "foto_panoramica" }); }
     function fotoChiediGiorno(giorno) {
@@ -2378,6 +2388,12 @@ QtObject {
             // a metà.
             case "foto_scansione":
                 ipc.fotoScansione(msg.payload);
+                break;
+            case "foto_doppioni":
+                ipc.fotoDoppioni(msg.payload);
+                break;
+            case "foto_doppioni_scarta":
+                ipc.fotoDoppioniScartati(msg.payload);
                 break;
             case "trasmetti_schermi":
                 ipc.trasmettiSchermi(msg.payload && msg.payload.schermi

@@ -25,7 +25,8 @@ import 'processo_limitato.dart';
 /// Cambiare l'ora di sistema tocca tutti gli utenti, quindi `systemd-timedated`
 /// chiede a polkit, e polkit chiede la password all'utente con la finestrella
 /// dell'agente. Non lo facciamo noi e non ci proviamo: l'agente è già avviato
-/// dalla sessione (vedi `hyprland.conf`), e se manca il comando resta appeso
+/// dalla sessione (`minerva-polkit`, da `scripts/minerva-dentro-wayland`), e
+/// se manca il comando resta appeso
 /// invece di fallire — motivo per cui l'errore che riportiamo qui distingue
 /// «rifiutato» da «non ha risposto nessuno».
 ///

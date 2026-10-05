@@ -30,8 +30,8 @@ Item {
     //
     // ── Perché non chiede l'elenco dei processi ──────────────────────────
     //
-    // Esiste `get_processes`, e porta anche questi numeri. Ma legge `/proc`
-    // per OGNI processo del computer: farlo ogni tre secondi per riempire una
+    // L'elenco dei processi porta anche questi numeri. Ma legge `/proc` per
+    // OGNI processo del computer: farlo ogni tre secondi per riempire una
     // striscia alta venti pixel vorrebbe dire diventare il consumo che si sta
     // misurando. Il demone ha un'azione apposta che legge solo `/proc/stat`,
     // `/proc/meminfo` e il termometro.

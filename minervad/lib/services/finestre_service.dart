@@ -6,41 +6,24 @@ import '../providers/compositor_provider.dart';
 ///
 /// ── Perché esiste ─────────────────────────────────────────────────────────
 ///
-/// Le barre del titolo di Minerva stanno SOPRA le finestre altrui, su una
-/// superficie separata dal compositore. Per stare al posto giusto devono
-/// sapere, in ogni istante, dove è finita la finestra e quanto è larga. E
-/// finora ognuno se lo andava a cercare da sé: la shell, il gestore file e le
-/// Impostazioni sono tre processi distinti, e ognuno faceva nascere e morire
-/// il suo `hyprctl clients` — la shell fino a diciassette volte al secondo
-/// mentre una finestra si muoveva, gli altri due una volta al secondo.
+/// La shell, il gestore file e le Impostazioni sono processi distinti, e
+/// tutti vogliono l'elenco delle finestre e lo spazio utile degli schermi (la
+/// dock, il pannello delle ridotte, la garanzia che tiene le finestre dentro
+/// lo spazio). Se ognuno lo chiedesse da sé, tre processi chiederebbero la
+/// stessa cosa nello stesso istante, con tre risposte scattate in tre
+/// momenti diversi. Qui la domanda si fa una volta, e chi guarda riceve.
 ///
-/// Tre processi che chiedono la stessa cosa allo stesso compositore nello
-/// stesso istante, e nessuno dei tre sa che gli altri esistono. Il difetto non
-/// era solo lo spreco: era che nessuno dei tre aveva la risposta VERA, avevano
-/// tre risposte scattate in tre momenti diversi.
-///
-/// Qui la domanda si fa una volta. Chi guarda riceve.
-///
-/// ── Le tre cose che non si vedono leggendo il codice ──────────────────────
+/// ── Le due cose che non si vedono leggendo il codice ──────────────────────
 ///
 ///  1. **Il compositore annuncia quasi tutto.** Apertura, chiusura, fuoco,
-///     titolo, spostamento, galleggiamento, schermo intero: sono tutti eventi
-///     su `.socket2.sock`, e reagire a un evento arriva prima che accorgersene
-///     guardando. Il ritardo passa da «fino a novecento millisecondi» a
-///     «trenta».
+///     titolo, schermo intero: sono eventi sul canale di minerva-wayland, e
+///     reagire a un evento arriva prima che accorgersene guardando.
 ///
-///  2. **Ma non annuncia il trascinamento.** Super+trascina muove una finestra
-///     senza emettere niente fino a quando la si lascia. Questa è l'unica
-///     ragione per cui qui dentro c'è ancora un timer, e l'unica ragione per
-///     cui va veloce. Se un giorno Hyprland emetterà qualcosa durante il
-///     trascinamento, il timer si cancella e questo file dimezza.
-///
-///  3. **Il passo veloce si paga solo perché non passiamo da `hyprctl`.**
-///     Misurato: 0,089 ms per lettura sul socket dei comandi contro 7,875 ms
-///     lanciando `hyprctl`. A sessanta millisecondi di passo sono lo 0,15% di
-///     un core invece del 13%. Vedi `_chiedi()` in `hyprland_provider.dart`:
-///     se qualcuno rimette un `Process.run` là dentro, è QUESTO file che
-///     diventa insostenibile.
+///  2. **Ma non annuncia il trascinamento col mouse.** Mentre si tiene
+///     premuto e si sposta, la geometria cambia e il compositore non dice
+///     niente fino a quando la si lascia. È l'unica ragione per cui qui dentro
+///     c'è un timer: lento a riposo, veloce appena una lettura vede qualcosa
+///     muoversi (`motoVero`).
 class FinestreService {
   final CompositorProvider _compositore;
 
@@ -141,13 +124,9 @@ class FinestreService {
   // riportare la CPU da uno stato di riposo profondo. Chiedere MENO non aiuta:
   // l'unica leva è svegliarsi MENO SPESSO.
   //
-  // Perché allora 150 ms e non 400? Perché questo è il tempo che passa fra
-  // l'inizio di un Super+trascina e il momento in cui la barra se ne accorge —
-  // Hyprland non annuncia niente mentre si trascina. A 150 ms sono nove
-  // fotogrammi di barra ferma, che è già al limite di quello che si vede; a
-  // 400 ne sono ventiquattro, e si vede benissimo. Un decimo di percentuale di
-  // core non vale una barra che parte in ritardo ogni volta che si sposta una
-  // finestra.
+  // Per questo il passo di riposo è salito a un secondo e mezzo: il
+  // trascinamento si scopre dalla prima lettura che vede la finestra mossa,
+  // e da lì si va al passo veloce.
   //
   // Come si fa a togliere questo costo per davvero: la barra del titolo come
   // decorazione dentro il compositore. Una decorazione si muove CON la
@@ -169,7 +148,6 @@ class FinestreService {
         case CompositorEventType.windowFocused:
         case CompositorEventType.windowMoved:
         case CompositorEventType.windowTitleChanged:
-        case CompositorEventType.floatingModeChanged:
         case CompositorEventType.fullscreenChanged:
         case CompositorEventType.workspaceChanged:
           _prestoMa(); // le finestre
@@ -310,18 +288,15 @@ class FinestreService {
   /// della riga — dove c'è la geometria — finirebbe dentro al titolo e ogni
   /// spostamento diventerebbe invisibile.
   ///
-  /// `titolo` sta accanto a `title` perché i compositori sono due: Hyprland
-  /// scrive `title`, minerva-wayland scrive `titolo`. Senza il secondo nome
-  /// il filtro non filtrava piu' niente dentro il nostro compositore — e il
-  /// difetto che questo codice esiste per impedire (UNA finestra col titolo
-  /// animato che tiene il demone a sessanta millisecondi per sempre) sarebbe
-  /// tornato in silenzio, perche' un filtro che non trova niente non da'
-  /// errore: lascia solo passare tutto.
+  /// minerva-wayland scrive il titolo come `titolo`. Il difetto che questo
+  /// filtro impedisce è UNA finestra col titolo animato che tiene il demone a
+  /// sessanta millisecondi per sempre — e un filtro che non trova niente non
+  /// dà errore: lascia solo passare tutto.
   static final RegExp _titoli =
-      RegExp(r'"(title|initialTitle|titolo)"\s*:\s*"(?:\\.|[^"\\])*"');
+      RegExp(r'"titolo"\s*:\s*"(?:\\.|[^"\\])*"');
 
   static String senzaTitoli(String json) =>
-      json.replaceAllMapped(_titoli, (m) => '"${m[1]}": ""');
+      json.replaceAll(_titoli, '"titolo": ""');
 
   Future<void> spingiMonitor() async {
     if (_clienti == 0) return;

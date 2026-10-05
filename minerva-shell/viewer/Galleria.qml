@@ -312,5 +312,13 @@ Item {
         anchors.fill: parent
         visible: false
         z: 20
+        onDoppioniChiesti: doppioniFoto.apri()
+    }
+
+    DoppioniFoto {
+        id: doppioniFoto
+        anchors.fill: parent
+        visible: false
+        z: 21
     }
 }

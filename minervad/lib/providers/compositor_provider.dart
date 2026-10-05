@@ -7,18 +7,14 @@ enum CompositorEventType {
   windowClosed,
   windowFocused,
 
-  // ── Perché questi quattro contano quanto i primi ──────────────────────
+  // ── Perché questi tre contano quanto i primi ──────────────────────────
   //
-  // Le barre del titolo della shell stanno SOPRA le finestre altrui, su una
-  // superficie separata: per stare al posto giusto devono sapere dove è
-  // finita la finestra, quanto è larga, come si chiama adesso e se è a
-  // schermo intero. Prima ognuno di questi lo scopriva guardando — un
-  // `hyprctl clients` ogni nove decimi di secondo, per processo. Il
-  // compositore però li annuncia tutti: ascoltarli costa zero e arriva
-  // prima.
+  // La dock, l'Alt+Tab e la garanzia sullo spazio vogliono sapere dove è
+  // finita una finestra, come si chiama adesso e se è a schermo intero. Il
+  // compositore li annuncia: ascoltarli costa zero e arriva prima che
+  // accorgersene guardando.
   windowMoved,
   windowTitleChanged,
-  floatingModeChanged,
   fullscreenChanged,
 
   /// Cambia lo spazio utile: un monitor in più, uno in meno, o una zona
@@ -56,7 +52,8 @@ class WorkspaceState {
       };
 }
 
-/// Interfaccia astratta per il provider del compositor (es. Hyprland, Cosmic, Niri, Sway).
+/// Quello che il demone sa chiedere al compositore. Oggi l'unica
+/// implementazione è `MinervaProvider`.
 abstract class CompositorProvider {
   /// Stream di eventi sollevati dal compositor.
   Stream<CompositorEvent> get events;
@@ -76,9 +73,8 @@ abstract class CompositorProvider {
   // è già successo in questo progetto, e nessuno se ne accorge finché non fa
   // male.
   //
-  // La differenza si vedrà quando si scriverà `MinervaProvider` per
-  // minerva-wayland: tre metodi da implementare invece di sette. Un
-  // compositore nuovo deve saper RISPONDERE, non obbedire.
+  // Per questo `MinervaProvider` ha tre metodi invece di sette: un
+  // compositore deve saper RISPONDERE, non obbedire.
 
   /// Recupera la lista corrente dei workspace con il loro stato.
   Future<List<WorkspaceState>> getWorkspaces();

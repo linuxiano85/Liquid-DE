@@ -22,6 +22,8 @@ Rectangle {
 
     readonly property bool it: Core.Strings.lang === "it"
     signal chiuso()
+    /// «Foto doppie»: le apre la galleria, sopra questo pannello.
+    signal doppioniChiesti()
 
     color: Theme.Colors.scrim
 
@@ -294,6 +296,17 @@ Rectangle {
                         pannello.cambiato = true;
                         Core.Ipc.fotoMostraSchermate(!pannello.mostraSchermate);
                     }
+                }
+
+                // ── Le doppie ────────────────────────────────────────────
+                RigaCartella {
+                    width: colonna.width
+                    visible: pannello.cartelle.length > 0
+                    testo: pannello.it ? "Foto doppie" : "Duplicate photos"
+                    dettaglio: pannello.it ? "Le copie esatte, da mandare nel cestino"
+                                           : "Exact copies, to send to the trash"
+                    azione: pannello.it ? "Cerca" : "Find"
+                    onPremuta: pannello.doppioniChiesti()
                 }
 
                 // ── Il catalogo ──────────────────────────────────────────
