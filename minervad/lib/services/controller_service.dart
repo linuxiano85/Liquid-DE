@@ -105,7 +105,11 @@ class ControllerService {
 
   Process? _ascolto;
   Timer? _presto, _riprova, _ronda;
-  bool _avviato = false, _chiuso = false, _lavora = false, _ancora = false;
+  bool _avviato = false, _chiuso = false, _ancora = false;
+
+  /// Il giro in corso, se c'è: chi chiede lo stato nel frattempo ne aspetta
+  /// la fine invece di tornare a mani vuote.
+  Future<void>? _inCorso;
   // Il rifiuto si dice una volta: la ronda riprova ogni trenta secondi.
   bool _rifiutoDetto = false;
   Map<String, dynamic>? _stato;
@@ -150,7 +154,7 @@ class ControllerService {
     // Nessun evento dice «un programma ha aperto il pad»: si guarda ogni
     // tre secondi, e solo se c'è un pad da colorare.
     _guardaGioco = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (_ledDi.isEmpty || _lavora) return;
+      if (_ledDi.isEmpty || _inCorso != null) return;
       final ora = _qualcunoGioca();
       if (ora == _inGioco) return;
       _inGioco = ora;
@@ -159,9 +163,22 @@ class ControllerService {
     await _aggiorna();
   }
 
+  /// Lo stato da mostrare. Se il primo giro non è ancora finito lo si
+  /// aspetta; se è fallito, si risponde con uno stato vuoto ma ben formato.
+  /// Prima tornava `_stato!`: con un giro già in corso `_aggiorna` usciva
+  /// subito, `_stato` era ancora nullo, e `subscribe_controller` falliva con
+  /// «Null check operator used on a null value» (5 ottobre 2026).
   Future<Map<String, dynamic>> status() async {
     if (_stato == null) await _aggiorna();
-    return _stato!;
+    return _stato ?? <String, dynamic>{
+      'motore': 'assente',
+      'automatico': automatico(),
+      'tipo': _tipoValido(),
+      'tipi': tipi,
+      'tasti': tasti,
+      'inGioco': false,
+      'pad': <Map<String, dynamic>>[],
+    };
   }
 
   /// Le impostazioni sono cambiate: si riguarda tutto.
@@ -214,12 +231,20 @@ class ControllerService {
 
   // ── Il giro ─────────────────────────────────────────────────────────────
 
-  Future<void> _aggiorna() async {
-    if (_lavora) {
+  Future<void> _aggiorna() {
+    final inCorso = _inCorso;
+    if (inCorso != null) {
+      // Un cambio arrivato durante il giro: se ne fa un altro alla fine, e
+      // chi ha chiesto aspetta quello.
       _ancora = true;
-      return;
+      return inCorso;
     }
-    _lavora = true;
+    final giro = _giri();
+    _inCorso = giro;
+    return giro;
+  }
+
+  Future<void> _giri() async {
     try {
       do {
         _ancora = false;
@@ -228,7 +253,7 @@ class ControllerService {
     } catch (e) {
       print('[MINERVA][CONTROLLER] Giro fallito: $e');
     } finally {
-      _lavora = false;
+      _inCorso = null;
     }
   }
 

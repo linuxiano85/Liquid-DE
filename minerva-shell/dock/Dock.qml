@@ -944,7 +944,12 @@ PanelWindow {
                     return;
 
                 var w = vetroDock.width, h = vetroDock.height;
-                var r = Math.min(Theme.Effects.radiusLG, w / 2, h / 2);
+                // Mentre la dock compare, sparisce o cambia misura passa per
+                // larghezze nulle o negative: un raggio negativo `arcTo` lo
+                // rifiuta, e il registro ne contava 355 in tre sessioni.
+                if (w <= 0 || h <= 0)
+                    return;
+                var r = Math.max(0, Math.min(Theme.Effects.radiusLG, w / 2, h / 2));
 
                 // Il ritaglio a forma: è tutto il motivo per cui qui c'è un
                 // Canvas invece di un `clip`.
