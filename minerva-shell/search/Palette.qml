@@ -100,8 +100,8 @@ PanelWindow {
     ]
 
     /// Le applicazioni ordinate UNA VOLTA, col nome già in minuscolo.
-    /// Stessa ragione che in `spine/panels/AppsPanel.qml`: `localeCompare`
-    /// passa da ICU, e qui si scrive a raffica. Ogni voce è `{ app, nome }`.
+    /// `localeCompare` passa da ICU, e qui si scrive a raffica: si ordina
+    /// una volta sola, quando arriva l'elenco. Ogni voce è `{ app, nome }`.
     property var ordinati: []
 
     function riordina() {

@@ -524,7 +524,7 @@ ShellRoot {
 
     // ── Quale schermo è «adesso» ─────────────────────────────────────────
     //
-    // Con un monitor solo la domanda non esisteva: `spine.toggle("apps")` e
+    // Con un monitor solo la domanda non esisteva: `spine.toggle("control")` e
     // via. Con due, ogni scorciatoia deve scegliere — e la risposta giusta è
     // sempre la stessa: **lo schermo dove sta il puntatore**, cioè quello che
     // il compositore chiama attivo. Chi preme Super+A guarda lì.
@@ -609,14 +609,11 @@ ShellRoot {
     /// schermo — succede fra lo stacco di un monitor e l'attacco del
     /// successivo — non deve saltare fuori un errore, deve semplicemente non
     /// succedere niente.
-    /// Il menù delle app dello schermo attivo. Se per qualche ragione quello
-    /// schermo non ce l'ha, resta il pannello di prima.
+    /// Il menù delle app dello schermo attivo.
     function apriSottomarino() {
         var s = root.scrivaniaAttiva();
         if (s && s.sottomarino)
             s.sottomarino.commuta();
-        else
-            root.pannello("apps");
     }
 
     /// Stamp: con l'Isola la scelta della schermata è una faccia della sua
@@ -1878,7 +1875,7 @@ ShellRoot {
 
         onTriggered: function(action) {
             switch (action) {
-            case "apps":       root.pannello("apps"); break;
+            case "apps":       root.apriSottomarino(); break;
             case "terminal":   root.run([Core.Ipc.get("launcher.defaultTerminal", "minerva-terminale")]); break;
             case "files":      root.openFiles(); break;
             case "browser":    root.run(["firefox"]); break;

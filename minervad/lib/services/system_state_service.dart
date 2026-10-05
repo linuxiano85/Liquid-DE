@@ -106,8 +106,7 @@ class SystemStateService {
   final EventBus _eventBus;
 
   /// [scriviLuce] serve alle prove: di serie è `brightnessctl`.
-  SystemStateService(this._eventBus, {Future<void> Function(int)? scriviLuce})
-      : _scriviLuce = scriviLuce;
+  SystemStateService(this._eventBus, {this._scriviLuce});
 
   final Future<void> Function(int)? _scriviLuce;
 

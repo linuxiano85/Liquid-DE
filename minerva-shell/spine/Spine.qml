@@ -126,10 +126,6 @@ PanelWindow {
     /// Registro dei pannelli. Ogni voce dichiara larghezza, altezza massima,
     /// da quale lato si ancora e quale file caricare.
     readonly property var registry: ({
-        "apps": {
-            "width": 620, "height": 560, "align": "left",
-            "source": "panels/AppsPanel.qml"
-        },
         "control": {
             "width": 420, "height": 470, "align": "right",
             "source": "panels/ControlPanel.qml"

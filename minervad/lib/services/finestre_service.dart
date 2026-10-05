@@ -111,8 +111,9 @@ class FinestreService {
   //
   // Quindi il passo veloce serve mentre si trascina, e il passo di riposo non
   // serve a niente. Restava come rete: adesso è una rete a maglie larghe (un
-  // secondo e mezzo invece di un decimo), e il trascinamento lo si sa perché
-  // la shell lo DICE — vedi `segui()`.
+  // secondo e mezzo invece di un decimo), e il trascinamento lo si scopre
+  // dalla prima lettura che vede la finestra mossa (`motoVero`), che fa
+  // passare al passo veloce finché tutto non si ferma.
   static const _riposoMs = 1500;
   static const _calmaMs = 1200;
 
@@ -328,27 +329,6 @@ class FinestreService {
     if (json.isEmpty || json == _ultimiMonitor) return;
     _ultimiMonitor = json;
     _monitor.add(json);
-  }
-
-  /// La shell dice che sta trascinando una finestra, o che ha finito.
-  ///
-  /// Serve perché il trascinamento col mouse è l'unica cosa che il compositore
-  /// non annuncia: mentre si tiene premuto, la geometria cambia in continuazione
-  /// e da fuori non si sa. Prima lo si scopriva guardando — sei volte al secondo,
-  /// per sempre, anche quando nessuno trascinava niente.
-  ///
-  /// Dirlo costa un messaggio e vale l'1% di un core.
-  void segui(bool daVicino) {
-    if (daVicino) {
-      _veloce = true;
-      _calma?.cancel();
-      _riprendi();
-      return;
-    }
-    // Non si smette di colpo: dopo un trascinamento il compositore assesta la
-    // finestra in qualche fotogramma, e smettere di guardare nell'istante in
-    // cui si molla il tasto lascerebbe la barra del titolo un pelo indietro.
-    _acceleraEAspetta();
   }
 
   void _acceleraEAspetta() {

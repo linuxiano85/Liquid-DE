@@ -41,8 +41,9 @@ Future<({String percorso, Set<String> moduli})> leggiModprobed(
           final quote = value[0];
           final end = value.indexOf(quote, 1);
           if (end < 0 ||
-              !RegExp(r'^\s*(?:#.*)?$').hasMatch(value.substring(end + 1)))
+              !RegExp(r'^\s*(?:#.*)?$').hasMatch(value.substring(end + 1))) {
             continue;
+          }
           value = value.substring(1, end);
         } else {
           value = value.split(RegExp(r'\s+#')).first.trim();
@@ -51,8 +52,9 @@ Future<({String percorso, Set<String> moduli})> leggiModprobed(
           RegExp(r'\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)'),
           (m) => variables[m[1] ?? m[2]] ?? m[0]!,
         );
-        if (value == '~' || value.startsWith('~/'))
+        if (value == '~' || value.startsWith('~/')) {
           value = casa + value.substring(1);
+        }
         if (value.startsWith('/') && !value.contains(RegExp(r'[\$`\r\n]'))) {
           configured = value.replaceFirst(RegExp(r'/+$'), '');
         }

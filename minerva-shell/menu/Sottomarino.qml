@@ -65,6 +65,7 @@ PanelWindow {
         }
         sub.cerca = testo || "";
         campo.text = sub.cerca;
+        sub.categoria = sub.categoriaDiApertura();
         sub.aperto = true;
         sub.mostrato = true;
         sub.emerso = false;
@@ -109,16 +110,76 @@ PanelWindow {
 
     // ── Il catalogo ─────────────────────────────────────────────────────
 
+    /// `chiave` è il nome con cui la categoria sta nelle impostazioni
+    /// (`launcher.hiddenCategories`, `launcher.startCategory`): sono i nomi
+    /// del menu di prima, e restano quelli perché le scelte già fatte nelle
+    /// Impostazioni › Dock valgano anche qui.
     readonly property var categorie: [
-        { "id": "internet",   "it": "Internet",   "c": ["Network", "WebBrowser", "Email", "Chat", "InstantMessaging"] },
-        { "id": "ufficio",    "it": "Ufficio",    "c": ["Office", "WordProcessor", "Spreadsheet", "Presentation", "Calendar"] },
-        { "id": "grafica",    "it": "Grafica",    "c": ["Graphics", "Photography", "2DGraphics", "3DGraphics", "VectorGraphics", "RasterGraphics"] },
-        { "id": "multimedia", "it": "Multimedia", "c": ["AudioVideo", "Audio", "Video", "Player", "Music"] },
-        { "id": "sviluppo",   "it": "Sviluppo",   "c": ["Development", "IDE"] },
-        { "id": "giochi",     "it": "Giochi",     "c": ["Game"] },
-        { "id": "sistema",    "it": "Sistema",    "c": ["System", "Settings", "Monitor", "PackageManager", "TerminalEmulator"] },
-        { "id": "accessori",  "it": "Accessori",  "c": ["Utility", "Accessories", "FileTools", "FileManager", "TextEditor", "Calculator"] }
+        { "id": "internet",   "chiave": "internet",    "it": "Internet",   "c": ["Network", "WebBrowser", "Email", "Chat", "InstantMessaging"] },
+        { "id": "ufficio",    "chiave": "office",      "it": "Ufficio",    "c": ["Office", "WordProcessor", "Spreadsheet", "Presentation", "Calendar"] },
+        { "id": "grafica",    "chiave": "graphics",    "it": "Grafica",    "c": ["Graphics", "Photography", "2DGraphics", "3DGraphics", "VectorGraphics", "RasterGraphics"] },
+        { "id": "multimedia", "chiave": "media",       "it": "Multimedia", "c": ["AudioVideo", "Audio", "Video", "Player", "Music"] },
+        { "id": "sviluppo",   "chiave": "development", "it": "Sviluppo",   "c": ["Development", "IDE"] },
+        { "id": "giochi",     "chiave": "games",       "it": "Giochi",     "c": ["Game"] },
+        { "id": "sistema",    "chiave": "system",      "it": "Sistema",    "c": ["System", "Settings", "Monitor", "PackageManager", "TerminalEmulator"] },
+        { "id": "accessori",  "chiave": "utility",     "it": "Accessori",  "c": ["Utility", "Accessories", "FileTools", "FileManager", "TextEditor", "Calculator"] }
     ]
+
+    // ── Le scelte di Impostazioni › Dock › Menu applicazioni ────────────
+
+    /// Le app fissate fra i Preferiti, nell'ordine in cui sono state messe.
+    readonly property var preferiti: Core.Ipc.get("launcher.fixedApps", []) || []
+    readonly property var nascoste: Core.Ipc.get("launcher.hiddenCategories", []) || []
+    /// La rotella sopra le categorie passa dall'una all'altra.
+    readonly property bool rotellaCategorie: Core.Ipc.get("launcher.wheelCategories", true) === true
+    /// Una sosta del puntatore su una categoria o una vista la sceglie.
+    readonly property bool sostaSceglie: Core.Ipc.get("launcher.hoverCategories", true) === true
+
+    /// Le pastiglie della vista Categorie. «Preferiti» e «Tutte» non si
+    /// nascondono: sono le vie d'uscita se si nasconde tutto il resto.
+    readonly property var pastiglie: {
+        var out = [{ "id": "preferiti", "it": "Preferiti" }, { "id": "tutte", "it": "Tutte" }];
+        for (var i = 0; i < sub.categorie.length; i++)
+            if (sub.nascoste.indexOf(sub.categorie[i].chiave) === -1)
+                out.push(sub.categorie[i]);
+        return out;
+    }
+
+    /// La pastiglia accesa all'apertura. La vista resta quella dell'ultima
+    /// volta: questa scelta dice solo da quale categoria si comincia.
+    function categoriaDiApertura() {
+        var v = String(Core.Ipc.get("launcher.startCategory", "favorites"));
+        if (v === "favorites")
+            return "preferiti";
+        for (var i = 0; i < sub.pastiglie.length; i++)
+            if (sub.pastiglie[i].chiave === v)
+                return sub.pastiglie[i].id;
+        return "tutte";
+    }
+
+    /// Quanta rotella si è accumulata senza ancora cambiare categoria: un
+    /// mouse manda più eventi per tacca, un touchpad decine per un dito che
+    /// scorre. Centoventi è una tacca (`QWheelEvent`).
+    property real _rotella: 0
+    function rotella(delta) {
+        if (!sub.rotellaCategorie || delta === 0)
+            return;
+        if ((delta > 0) !== (sub._rotella > 0))
+            sub._rotella = 0;
+        sub._rotella += delta;
+        while (Math.abs(sub._rotella) >= 120) {
+            sub.passaCategoria(sub._rotella < 0);
+            sub._rotella += sub._rotella < 0 ? 120 : -120;
+        }
+    }
+    /// Ci si ferma agli estremi: girando in tondo non si capisce più quando
+    /// si è arrivati in fondo.
+    function passaCategoria(avanti) {
+        var p = sub.pastiglie, i = 0;
+        for (var k = 0; k < p.length; k++)
+            if (p[k].id === sub.categoria) { i = k; break; }
+        sub.categoria = p[Math.max(0, Math.min(p.length - 1, i + (avanti ? 1 : -1)))].id;
+    }
 
     /// Le app appena installate e mai aperte: lo decide il demone
     /// (`isNew`, da `app_novita.dart`), e smettono di esserlo al primo lancio.
@@ -129,7 +190,7 @@ PanelWindow {
     }
     /// Vero se nella categoria c'è almeno un'app nuova.
     function categoriaNuova(id) {
-        if (sub.nuove === 0) return false;
+        if (sub.nuove === 0 || id === "preferiti") return false;
         var cat = null;
         for (var n = 0; n < sub.categorie.length; n++)
             if (sub.categorie[n].id === id) cat = sub.categorie[n];
@@ -392,6 +453,19 @@ PanelWindow {
             return g;
         }
         // Categorie.
+        if (sub.categoria === "preferiti") {
+            var perId = {};
+            for (var t = 0; t < tutte.length; t++)
+                perId[tutte[t].app.appId] = tutte[t];
+            // Un preferito disinstallato non c'è più: si salta, e resta nelle
+            // impostazioni finché non si toglie.
+            var pref = [];
+            for (var f2 = 0; f2 < sub.preferiti.length; f2++)
+                if (perId[sub.preferiti[f2]])
+                    pref.push(perId[sub.preferiti[f2]]);
+            g.push({ "titolo": "", "tipo": "grandi", "voci": pref });
+            return g;
+        }
         var cat = null;
         for (var n = 0; n < sub.categorie.length; n++)
             if (sub.categorie[n].id === sub.categoria) cat = sub.categorie[n];
@@ -416,7 +490,8 @@ PanelWindow {
                 return g[i].tipo === "azioni" ? v.it
                      : g[i].tipo === "risultati" ? v.v.app.name : v.app.name;
             });
-            righe.push((g[i].titolo || "Tutte") + ": " + nomi.join(", "));
+            righe.push((g[i].titolo || (sub.categoria === "preferiti" ? "Preferiti" : "Tutte"))
+                       + ": " + nomi.join(", "));
         }
         return righe.join("\n");
     }
@@ -676,7 +751,7 @@ PanelWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onContainsMouseChanged: containsMouse ? tabSosta.restart() : tabSosta.stop()
+                                onContainsMouseChanged: containsMouse && sub.sostaSceglie ? tabSosta.restart() : tabSosta.stop()
                                 onClicked: tab.scegli()
                             }
                         }
@@ -695,8 +770,13 @@ PanelWindow {
                 visible: sub.vista === "categorie" && sub.cerca === ""
                 height: visible ? implicitHeight : 0
                 spacing: 4
+                WheelHandler {
+                    enabled: sub.rotellaCategorie
+                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                    onWheel: function(ev) { sub.rotella(ev.angleDelta.y); }
+                }
                 Repeater {
-                    model: [{ "id": "tutte", "it": "Tutte" }].concat(sub.categorie)
+                    model: sub.pastiglie
                     delegate: Rectangle {
                         id: chip
                         required property var modelData
@@ -733,7 +813,7 @@ PanelWindow {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onContainsMouseChanged: containsMouse ? chipSosta.restart() : chipSosta.stop()
+                            onContainsMouseChanged: containsMouse && sub.sostaSceglie ? chipSosta.restart() : chipSosta.stop()
                             onClicked: sub.categoria = chip.modelData.id
                         }
                     }
@@ -782,6 +862,18 @@ PanelWindow {
                         font.pixelSize: Theme.Typography.sizeSM
                     }
 
+                    Text {
+                        visible: sub.cerca.trim() === "" && sub.vista === "categorie"
+                                 && sub.categoria === "preferiti"
+                                 && (sub.gruppi.length === 0 || sub.gruppi[0].voci.length === 0)
+                        width: parent.width
+                        wrapMode: Text.WordWrap
+                        text: "Nessun preferito. Tasto destro su un'app, poi «Aggiungi ai preferiti»."
+                        color: Theme.Colors.textFaint
+                        font.family: Theme.Typography.fontDisplay
+                        font.pixelSize: Theme.Typography.sizeSM
+                    }
+
                     Repeater {
                         model: sub.gruppi
                         delegate: Column {
@@ -816,6 +908,7 @@ PanelWindow {
                                         larghezzaCorpo: colonna.width
                                         onLanciata: function(app) { sub.lancia(app); }
                                         onEseguita: function(id) { sub.esegui(id); }
+                                        onMenuChiesto: function(app, x, y) { sub.apriMenuApp(app, x, y); }
                                     }
                                 }
                             }
@@ -823,6 +916,56 @@ PanelWindow {
                     }
                 }
             }
+        }
+    }
+
+    // ── Il tasto destro su un'app ───────────────────────────────────────
+    //
+    // I preferiti e la dock sono due cose diverse: i preferiti stanno in cima
+    // a QUESTO menu e servono a ritrovare un programma fra i duecento
+    // installati; la dock sta sempre a schermo e serve ad avviarlo senza
+    // aprire niente. Qui, dove i programmi si scelgono, si decidono tutte e due.
+    function apriMenuApp(app, x, y) {
+        menuApp.bersaglio = app;
+        var fav = sub.preferiti.indexOf(app.appId) !== -1;
+        var pin = (Core.Ipc.get("dock.pinned", []) || []).indexOf(app.appId) !== -1;
+        menuApp.openAt(x, y, [
+            { "label": "Avvia", "icon": "chevron", "action": "avvia" },
+            { "separator": true },
+            { "label": fav ? "Togli dai preferiti" : "Aggiungi ai preferiti",
+              "icon": "star", "action": "preferito" },
+            { "label": pin ? "Togli dalla dock" : "Fissa nella dock",
+              "icon": "pin", "action": "dock" }
+        ]);
+    }
+
+    /// Aggiunge `id` all'elenco di un'impostazione, o lo toglie se c'è già.
+    function _commuta(chiave, id) {
+        if (!id)
+            return;
+        var l = (Core.Ipc.get(chiave, []) || []).slice();
+        var i = l.indexOf(id);
+        if (i === -1)
+            l.push(id);
+        else
+            l.splice(i, 1);
+        Core.Ipc.setSetting(chiave, l);
+    }
+
+    ContextMenu {
+        id: menuApp
+        screen: sub.screen
+        property var bersaglio: null
+        onTriggered: function(azione) {
+            var a = menuApp.bersaglio;
+            if (!a)
+                return;
+            if (azione === "avvia")
+                sub.lancia(a);
+            else if (azione === "preferito")
+                sub._commuta("launcher.fixedApps", a.appId);
+            else if (azione === "dock")
+                sub._commuta("dock.pinned", a.appId);
         }
     }
 
@@ -892,6 +1035,8 @@ PanelWindow {
         property real larghezzaCorpo: 400
         signal lanciata(var app)
         signal eseguita(string id)
+        /// Tasto destro su un'app, nel punto (x, y) dello schermo.
+        signal menuChiesto(var app, real x, real y)
 
         readonly property bool azione: voce.tipo === "azioni"
         readonly property var app: voce.azione ? null
@@ -1005,8 +1150,20 @@ PanelWindow {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
             onContainsMouseChanged: if (voce.goccia && !voce.azione) voce.goccia.punta(voce, voceMouse.containsMouse)
-            onClicked: voce.azione ? voce.eseguita(voce.modelData.id) : voce.lanciata(voce.app)
+            onClicked: function(ev) {
+                if (ev.button === Qt.RightButton) {
+                    if (!voce.azione && voce.app) {
+                        // Lo scafo sta in una finestra a tutto schermo: le sue
+                        // coordinate sono quelle dello schermo.
+                        var p = voceMouse.mapToItem(null, ev.x, ev.y);
+                        voce.menuChiesto(voce.app, p.x, p.y);
+                    }
+                    return;
+                }
+                voce.azione ? voce.eseguita(voce.modelData.id) : voce.lanciata(voce.app);
+            }
         }
     }
 

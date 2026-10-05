@@ -344,10 +344,6 @@ class SettingsApi {
     return true;
   }
 
-  Future<void> updateFixedApps(List<String> fixedApps) async {
-    await _transazione(() => _applyValue('launcher.fixedApps', fixedApps), 'Salvate nuove app fisse');
-  }
-
   /// Ripristina tutte le impostazioni ai valori di fabbrica.
   Future<void> resetToDefaults() async {
     await _transazione(() { _settings = defaultSettings(); }, 'Impostazioni ripristinate ai valori predefiniti');
@@ -917,9 +913,6 @@ class SettingsApi {
           'smorzamento': 0.42,
           // Che fa la barra a schermo intero: 'hover' compare avvicinandosi.
           'fullscreenBar': 'hover',
-          // Le finestre sono LIBERE, sempre: non c'è più un modo affiancato.
-          // Vedi `minerva-shell/core/WindowRules.qml`.
-          'titleBars': true,
           'titleHeight': 34,
           // ── Chi disegna la barra del titolo ─────────────────────────────
           //

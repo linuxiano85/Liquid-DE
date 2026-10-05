@@ -26,6 +26,18 @@ MINERVA_DIR="$(dirname "$(dirname "$SELF")")"
 . "$MINERVA_DIR/scripts/minerva-cartelle.sh"
 if [ -d "$CARTELLA_RADICE" ] \
    && [ "$MINERVA_DIR" != "$(readlink -f "$CARTELLA_RADICE")" ]; then
+    # Il demone si ricompila QUI, prima della copia: nella radice ci sono
+    # solo i compilati, non i sorgenti, e il controllo «sorgenti più recenti
+    # del compilato» più sotto da là non trova mai niente — ripartiva il
+    # demone vecchio (5 ottobre 2026).
+    ESE="$MINERVA_DIR/minervad/build/minervad"
+    if [ "${1:-shell}" = "tutto" ] && { [ ! -x "$ESE" ] || [ -n "$(find \
+            "$MINERVA_DIR/minervad/lib" "$MINERVA_DIR/minervad/bin" \
+            -name '*.dart' -newer "$ESE" -print -quit 2>/dev/null)" ]; }; then
+        printf '\033[36m·\033[0m %s\n' "sorgenti cambiati: ricompilo il demone"
+        "$MINERVA_DIR/scripts/minerva-compila" >/dev/null 2>&1 \
+            || printf '\033[31m✗\033[0m %s\n' "compilazione fallita: resta il demone di prima"
+    fi
     "$MINERVA_DIR/scripts/minerva-installa-radice" || exit 1
     exec "$CARTELLA_RADICE/scripts/minerva-reload.sh" "$@"
 fi

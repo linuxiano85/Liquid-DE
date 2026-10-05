@@ -51,9 +51,8 @@ Page {
     /// Le categorie del menu applicazioni che si possono nascondere.
     /// «Preferiti» e «Tutte» non ci sono di proposito: sono le vie d'uscita.
     ///
-    /// Stanno anche in `spine/panels/AppsPanel.qml`, e si ripetono qui per una
-    /// ragione sola: quel pannello vive e muore con la propria apertura, e le
-    /// Impostazioni devono poterle elencare anche a menu chiuso.
+    /// Stanno anche in `menu/Sottomarino.qml`, e si ripetono qui perché le
+    /// Impostazioni sono un altro processo. Gli `id` sono le `chiave` di là.
     function categoriaVisibile(id) {
         return Core.Ipc.get("launcher.hiddenCategories", []).indexOf(id) === -1;
     }
@@ -89,13 +88,13 @@ Page {
     }
     readonly property var categorieMenu: [
         { "id": "internet",    "it": "Internet",   "en": "Internet" },
-        { "id": "development", "it": "Sviluppo",   "en": "Development" },
         { "id": "office",      "it": "Ufficio",    "en": "Office" },
         { "id": "graphics",    "it": "Grafica",    "en": "Graphics" },
         { "id": "media",       "it": "Multimedia", "en": "Media" },
+        { "id": "development", "it": "Sviluppo",   "en": "Development" },
         { "id": "games",       "it": "Giochi",     "en": "Games" },
         { "id": "system",      "it": "Sistema",    "en": "System" },
-        { "id": "utility",     "it": "Utility",    "en": "Utility" }
+        { "id": "utility",     "it": "Accessori",  "en": "Accessories" }
     ]
     // ── Dove stanno ──────────────────────────────────────────────────────
     //
@@ -960,8 +959,8 @@ Page {
             label: page.it ? "La rotellina cambia categoria"
                            : "Wheel switches category"
             description: page.it
-                ? "Girando la rotellina sul menu si passa da una categoria all'altra, invece di doverle cliccare"
-                : "Scrolling over the menu moves between categories instead of clicking them"
+                ? "Girando la rotellina sopra le categorie si passa dall'una all'altra, invece di doverle cliccare"
+                : "Scrolling over the categories moves between them instead of clicking them"
             controlWidth: 60
             control: S.ToggleSwitch {
                 checked: Core.Ipc.get("launcher.wheelCategories", true)
@@ -971,17 +970,15 @@ Page {
             }
         }
 
-        // La sorella della riga qui sopra, e stava nei valori di fabbrica
-        // senza un posto da cui toccarla: `AppsPanel.qml` la legge, e chi
-        // trovava le categorie che cambiano al solo passaggio del mouse non
-        // aveva modo di spegnerle.
+        // La sorella della riga qui sopra: chi trova le categorie che
+        // cambiano al solo passaggio del mouse deve poterle spegnere.
         S.SettingRow {
             width: parent.width
             label: page.it ? "Basta passarci sopra"
                            : "Hovering is enough"
             description: page.it
-                ? "La categoria cambia al solo passaggio del mouse, senza cliccare"
-                : "The category changes on hover, without clicking"
+                ? "Categorie e viste cambiano al solo passaggio del mouse, senza cliccare"
+                : "Categories and views change on hover, without clicking"
             controlWidth: 60
             control: S.ToggleSwitch {
                 checked: Core.Ipc.get("launcher.hoverCategories", true)
@@ -995,8 +992,8 @@ Page {
             width: parent.width
             label: page.it ? "Categoria all'apertura" : "Category on opening"
             description: page.it
-                ? "Con quale categoria si apre il menu"
-                : "Which category the menu opens on"
+                ? "Quale categoria è scelta quando il menu si apre"
+                : "Which category is selected when the menu opens"
             controlWidth: 320
             control: S.ChoicePicker {
                 value: Core.Ipc.get("launcher.startCategory", "favorites")

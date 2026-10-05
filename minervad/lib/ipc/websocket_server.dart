@@ -39,7 +39,6 @@ import '../services/data_ora_service.dart';
 import '../services/lingua_service.dart';
 import '../services/meteo_service.dart';
 import '../services/ricerca_service.dart';
-import '../services/audio_service.dart';
 import '../services/system_audio_service.dart';
 import '../services/condivisione_service.dart';
 import '../services/controller_service.dart';
@@ -162,14 +161,6 @@ class WebSocketServer {
   final FinestreService _finestre;
   final RicercaService _ricerca = RicercaService();
 
-  /// I preferiti che puntano a programmi che non esistono più, già segnalati.
-  ///
-  /// Detto una volta sola per nome: il menù delle applicazioni si riapre
-  /// decine di volte al giorno, e una riga per apertura riempirebbe il
-  /// registro di una notizia sola ripetuta — che è il modo in cui un registro
-  /// smette di servire. Vedi lo stesso schema in `core/Compositore.qml`.
-  final Set<String> _preferitiSpariti = {};
-
   /// La galleria. Non tiene stato fra una richiesta e l'altra tranne il
   /// catalogo, che è esattamente il punto: caricarlo una volta e riusarlo.
   final FotoService _foto = FotoService();
@@ -217,9 +208,6 @@ class WebSocketServer {
   /// Comprimere ed estrarre. Non tiene stato: è un guscio attorno a `bsdtar`.
   final ArchiveService _archivi = const ArchiveService();
 
-  /// L'onda, il cartellino e il taglio di un file audio, per Minerva Suono.
-  /// Come `_archivi`: non tiene stato, è un guscio attorno a ffmpeg.
-  final AudioService _audio = AudioService();
   final SystemAudioService _systemAudio = SystemAudioService();
   StreamSubscription<Map<String, dynamic>>? _systemAudioSub;
 
@@ -363,8 +351,9 @@ class WebSocketServer {
   late final _greetdConversation = GreetdConversation<WebSocketClientConnection>(
     GreetdService(),
     (client, reply) {
-      if (_clients.contains(client))
+      if (_clients.contains(client)) {
         client.send({'event': 'greeter_message', 'payload': reply});
+      }
     },
   );
 
@@ -1335,16 +1324,6 @@ class WebSocketServer {
           client.send({'event': 'state_response', 'payload': stato});
         }
         break;
-      // ── La ricerca universale ─────────────────────────────────────
-      //
-      // L'unico ramo di questo switch che non stava in una schermata: 109
-      // righe di codice contro le dieci della media. Un `case` così lungo
-      // non è solo scomodo da leggere — le variabili che dichiara sono
-      // visibili ai rami vicini, perché in Dart i casi di uno switch
-      // condividono lo scopo se non hanno graffe proprie.
-      case 'matrix_search':
-        await _ricercaUniversale(client, msg);
-        break;
       // ── Lanciare un programma, anche quelli da terminale ───────────
       //
       // `Terminal=true` nel file `.desktop` vuol dire «questo programma
@@ -1387,13 +1366,6 @@ class WebSocketServer {
       case 'launch_desktop':
       case 'cancel_desktop':
         await _launcherRequest(client, action as String, msg);
-        break;
-      case 'update_fixed_apps':
-        final apps = msg['apps'];
-        if (apps is List) {
-          final List<String> list = apps.cast<String>();
-          await _settingsApi.updateFixedApps(list);
-        }
         break;
       // ── Scorciatoie ────────────────────────────────────────────────
       // Le scorciatoie già tradotte per minerva-wayland. È la SHELL a
@@ -1773,10 +1745,6 @@ class WebSocketServer {
         });
         break;
 
-      case 'windows_follow':
-        _finestre.segui(msg['vicino'] == true);
-        break;
-
       // ── Controllo finestre (menu contestuali della shell) ──────────
 
       // Rilegge i file `.desktop` da zero. Serve quando ne compare uno
@@ -1819,13 +1787,6 @@ class WebSocketServer {
         // dire non vedere mai un programma appena installato.
         _categorieRicordate.dimentica();
         _aTutti({'event': 'all_apps', 'payload': _allAppsPayload});
-        break;
-
-      case 'app_seen':
-        final idVista = msg['id'];
-        if (idVista is String && await _appScanner.novita.vista(idVista)) {
-          _aTutti({'event': 'all_apps', 'payload': _allAppsPayload});
-        }
         break;
 
       case 'get_all_apps':
@@ -2310,15 +2271,6 @@ class WebSocketServer {
         }
         break;
 
-      // ── Minerva Suono ─────────────────────────────────────────────────
-      //
-      // Tre richieste e nessun abbonamento: il lettore chiede quando apre un
-      // file e quando salva un pezzo, e fra un gesto e l'altro non arriva
-      // niente. Non c'è nulla da seguire nel tempo — la posizione della
-      // riproduzione la conosce la finestra, che è quella che suona.
-      //
-      // `client.send` e non un evento a tutti: due finestre di Suono aperte
-      // su due canzoni diverse riceverebbero l'onda l'una dell'altra.
       // ── L'audio di sistema: uscite, ingressi, profili delle schede ────
       //
       // Una sorgente sola (`system_audio_service.dart`, `pactl` in JSON) per
@@ -2373,68 +2325,6 @@ class WebSocketServer {
             .where((e) => e != 'system_audio_state')
             .toList();
         break;
-      case 'audio_info':
-        {
-          final path = msg['path'];
-          if (path is String && path.isNotEmpty) {
-            client.send({
-              'event': 'audio_info',
-              'payload': await _audio.info(path),
-            });
-          }
-        }
-        break;
-
-      case 'audio_onda':
-        {
-          final path = msg['path'];
-          if (path is String && path.isNotEmpty) {
-            final barre = msg['barre'] is num
-                ? (msg['barre'] as num).toInt()
-                : 1200;
-            client.send({
-              'event': 'audio_onda',
-              'payload': await _audio.onda(path, barre: barre),
-            });
-          }
-        }
-        break;
-
-      case 'audio_taglia':
-        {
-          final sorgente = msg['sorgente'];
-          final destinazione = msg['destinazione'];
-          if (sorgente is String &&
-              sorgente.isNotEmpty &&
-              destinazione is String &&
-              destinazione.isNotEmpty) {
-            final r = await _audio.taglia(
-              sorgente: sorgente,
-              destinazione: destinazione,
-              inizio: (msg['inizio'] as num?)?.toDouble() ?? 0,
-              fine: (msg['fine'] as num?)?.toDouble() ?? 0,
-              formato: msg['formato'] is String ? msg['formato'] : 'mp3',
-              dissolvenzaIn:
-                  (msg['dissolvenzaIn'] as num?)?.toDouble() ?? 0,
-              dissolvenzaOut:
-                  (msg['dissolvenzaOut'] as num?)?.toDouble() ?? 0,
-              normalizza: msg['normalizza'] == true,
-            );
-            client.send({'event': 'audio_result', 'payload': r});
-          }
-        }
-        break;
-
-      case 'audio_formati':
-        {
-          client.send({
-            'event': 'audio_formati',
-            'payload': {'formati': AudioService.formati},
-          });
-        }
-        break;
-
-      // ── Proprietà di un file ──────────────────────────────────────────
       // ── Leggere e scrivere un documento ───────────────────────────────
       //
       // L'editor di testi legge e salva da qui, come ogni altra cosa che
@@ -3499,23 +3389,6 @@ class WebSocketServer {
         }
         break;
 
-      case 'mime_defaults':
-        {
-          // Per il pannello delle applicazioni predefinite: per ogni tipo
-          // chiesto, chi lo apre adesso e chi potrebbe.
-          final types = (msg['types'] as List?)?.cast<String>() ?? [];
-          final out = <Map<String, dynamic>>[];
-          for (final t in types) {
-            out.add({
-              'mime': t,
-              'defaultApp': await _mime.defaultFor(t),
-              'candidates': _withIcons(await _mime.candidatesFor(t)),
-            });
-          }
-          client.send({'event': 'mime_defaults', 'payload': {'types': out}});
-        }
-        break;
-
       case 'mime_categories':
         {
           client.send({
@@ -3656,150 +3529,6 @@ class WebSocketServer {
         _nonSonoRiuscito(client, action, 'azione sconosciuta');
         break;
     }
-  }
-
-  /// La ricerca universale: app, impostazioni, file, azioni.
-  ///
-  /// Sta qui e non dentro lo switch perché era lungo undici volte la media
-  /// degli altri rami. Vedi il commento accanto al suo `case`.
-  Future<void> _ricercaUniversale(
-      WebSocketClientConnection client, Map<String, dynamic> msg) async {
-      final query = (msg['query'] as String? ?? '').trim().toLowerCase();
-      if (query.isEmpty) {
-        // Recupera la lista di app fisse configurate (o fallback a default)
-        final fixedIdsRaw = _settingsApi.settings['launcher']?['fixedApps'];
-        final List<String> defaultFixedApps = [
-          'firefox.desktop',
-          'org.gnome.Nautilus.desktop',
-          'Alacritty.desktop',
-          'steam.desktop',
-          'org.gnome.Settings.desktop',
-          'org.gnome.gedit.desktop'
-        ];
-        final List<String> fixedIds = (fixedIdsRaw is List)
-            ? fixedIdsRaw.cast<String>()
-            : defaultFixedApps;
-
-        final List<Map<String, dynamic>> fixedApps = [];
-        final Set<String> addedFixed = {};
-
-        // 1. Aggiunge le app fisse configurate
-        //
-        // ── E DICE quali non ci sono più ─────────────────────────────
-        //
-        // Qui c'era solo `if (app != null)`: un preferito che punta a un
-        // programma disinstallato spariva, e basta. Sembra innocuo e non
-        // lo è — il 30 agosto 2026 Giacomo ha scritto «nel menù start non
-        // si vedono più le applicazioni», e la causa era esattamente
-        // questa: `pacman -Rns plasma` si era portato via Dolphin e Kate,
-        // due dei suoi cinque preferiti, e il menù — che si apre sui
-        // preferiti — mostrava tre voci dove prima ce n'erano cinque.
-        //
-        // Niente era rotto. Ma per saperlo è servito aprire il menù dentro
-        // una sessione annidata e guardarlo, perché **il programma non lo
-        // diceva**. Una cosa che sparisce senza dire niente è il modo di
-        // rompersi che questo progetto paga più caro, ed è già costata una
-        // notte di terminale d'emergenza.
-        for (final id in fixedIds) {
-          final app = _appScanner.getAppById(id);
-          if (app == null) {
-            if (_preferitiSpariti.add(id)) {
-              print('[MINERVA][MATRIX][WARN] Il preferito «$id» non '
-                  'esiste più: quel programma è stato disinstallato. '
-                  'Resta nelle impostazioni (launcher.fixedApps) finché '
-                  'non lo togli, ma nel menù non si vede.');
-            }
-            continue;
-          }
-          if (!addedFixed.contains(app.id)) {
-            addedFixed.add(app.id);
-            fixedApps.add({
-              'appId': app.id,
-              'name': app.name,
-              'exec': app.exec,
-              'icon': _iconResolver.resolve(app.icon),
-            });
-          }
-        }
-
-        // Riempie fino a 6 nel caso in cui alcune app fisse non fossero installate (solo al primo avvio se la configurazione è vuota)
-        if (fixedIdsRaw == null && fixedApps.length < 6) {
-          for (final app in _appScanner.apps) {
-            if (!addedFixed.contains(app.id)) {
-              addedFixed.add(app.id);
-              fixedApps.add({
-                'appId': app.id,
-                'name': app.name,
-                'exec': app.exec,
-                'icon': _iconResolver.resolve(app.icon),
-              });
-              if (fixedApps.length >= 6) break;
-            }
-          }
-        }
-
-        // 2. Recupera le app dinamiche (ordinate per frequenza di utilizzo, senza doppioni con le fisse)
-        final List<Map<String, dynamic>> dynamicApps = [];
-        final Set<String> excludedIds = Set.from(addedFixed);
-        final Set<String> addedDynamic = {};
-
-        final frequentIds = _appUsageTracker.getMostFrequent(limit: 50);
-        for (final id in frequentIds) {
-          if (excludedIds.contains(id)) continue;
-          final app = _appScanner.getAppById(id);
-          if (app != null && !addedDynamic.contains(app.id)) {
-            addedDynamic.add(app.id);
-            dynamicApps.add({
-              'appId': app.id,
-              'name': app.name,
-              'exec': app.exec,
-              'icon': _iconResolver.resolve(app.icon),
-            });
-            if (dynamicApps.length >= 12) break;
-          }
-        }
-
-        // Riempie fino a 12 con altre app disponibili
-        if (dynamicApps.length < 12) {
-          for (final app in _appScanner.apps) {
-            if (!excludedIds.contains(app.id) && !addedDynamic.contains(app.id)) {
-              addedDynamic.add(app.id);
-              dynamicApps.add({
-                'appId': app.id,
-                'name': app.name,
-                'exec': app.exec,
-                'icon': _iconResolver.resolve(app.icon),
-              });
-              if (dynamicApps.length >= 12) break;
-            }
-          }
-        }
-
-        client.send({
-          'event': 'matrix_nodes',
-          'payload': {
-            'fixed': fixedApps,
-            'dynamic': dynamicApps,
-          }
-        });
-      } else {
-        final List<Map<String, dynamic>> results = [];
-        for (final app in _appScanner.apps) {
-          if (app.name.toLowerCase().contains(query)) {
-            final iconPath = _iconResolver.resolve(app.icon);
-            results.add({
-              'appId': app.id,
-              'name': app.name,
-              'exec': app.exec,
-              'icon': iconPath,
-            });
-          }
-        }
-        client.send({
-          'event': 'matrix_results',
-          'payload': results,
-        });
-      }
   }
 
   /// Dice a chi ha chiesto che la sua richiesta non è andata.

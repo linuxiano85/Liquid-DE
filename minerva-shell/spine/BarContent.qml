@@ -44,7 +44,6 @@ Item {
             var left = item.mapToItem(bar, 0, 0).x;
             bar.spine.registerAnchor(name, left, left + item.width);
         }
-        put("apps",          launcherButton);
         put("minimized",     minimizedButton);
         put("calendar",      clockButton);
         put("meteo",         clockButton);
@@ -79,7 +78,6 @@ Item {
             // questo file condanna per iscritto a proposito di
             // `bar.position`.
             visible: Core.Ipc.get("bar.showAppMenuButton", true) === true
-            active: bar.spine.activePanel === "apps"
             tooltip: Core.Strings.t("apps")
             horizontalPadding: Theme.Effects.space2
             onClicked: bar.spine.menuAppChiesto()

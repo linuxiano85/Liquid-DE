@@ -205,7 +205,6 @@ QtObject {
     /// porta categorie e descrizioni; queste sono righe per un compositore.
     signal scorciatoieCompositoreArrivate(var righe)
     signal allAppsReceived(var apps)
-    signal matrixNodesReceived(var fixed, var dynamicApps)
     /// L'elenco delle finestre, già oggetto: prima lo si trasformava in
     /// testo qui e lo si rileggeva in `Windows`, fino a sedici volte al
     /// secondo mentre una finestra si muove.
@@ -586,10 +585,6 @@ QtObject {
         return send({ "action": "kill_process", "pid": pid, "force": forza === true });
     }
 
-    function searchApps(query) {
-        return send({ "action": "matrix_search", "query": query });
-    }
-
     function launchApp(execCmd, appId) {
         return send({ "action": "launch_app", "exec": execCmd, "id": appId || "" });
     }
@@ -702,10 +697,6 @@ QtObject {
     }
 
     onConnectedChanged: if (!connected) ipc._cancelLauncher()
-
-    function updateFixedApps(appIds) {
-        return send({ "action": "update_fixed_apps", "apps": appIds });
-    }
 
 
     function requestWindows() {
@@ -2292,9 +2283,6 @@ QtObject {
             case "all_apps":
                 ipc.allApps = msg.payload;
                 ipc.allAppsReceived(ipc.allApps);
-                break;
-            case "matrix_nodes":
-                ipc.matrixNodesReceived(msg.payload.fixed, msg.payload.dynamic);
                 break;
             // Il ramo della finestra attiva è uscito insieme al comando che
             // la chiedeva: il demone non la manda più, e il segnale non lo
