@@ -1,6 +1,5 @@
 import QtQuick
 import QtMultimedia
-import Quickshell
 
 import "../theme" as Theme
 import "../ui" as Ui
@@ -164,7 +163,7 @@ Item {
         width: 30
         height: 30
         radius: Theme.Effects.radiusFull
-        color: presaPiP.hovered ? Qt.rgba(1, 1, 1, 0.16) : "transparent"
+        color: presaPiP.containsMouse ? Qt.rgba(1, 1, 1, 0.16) : "transparent"
         Ui.Icon {
             anchors.centerIn: parent
             width: 16

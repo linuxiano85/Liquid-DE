@@ -1,6 +1,5 @@
 import QtQuick
 import Quickshell
-import "../theme" as Theme
 import "../core" as Core
 
 // WindowTitleBar — La barra del titolo DENTRO le finestre di Minerva.

@@ -1,5 +1,4 @@
 import QtQuick
-import Quickshell
 import "../theme" as Theme
 import "../core" as Core
 

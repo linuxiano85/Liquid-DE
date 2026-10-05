@@ -3,7 +3,6 @@ import Quickshell
 import Quickshell.Wayland
 import "../theme" as Theme
 import "../core" as Core
-import "../ui" as Ui
 
 // ── I tasti sulla scrivania ──────────────────────────────────────────────
 //

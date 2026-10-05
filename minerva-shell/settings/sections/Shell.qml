@@ -1,8 +1,6 @@
 import QtQuick
-import Quickshell
 import "../../theme" as Theme
 import "../../core" as Core
-import "../../ui" as Ui
 import ".." as S
 
 // Minerva — l'aiuto e il ripristino. Il resto che stava qui (le finestre, il

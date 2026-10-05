@@ -1,6 +1,5 @@
 import QtQuick
 import "../theme" as Theme
-import "../core" as Core
 import "../ui" as Ui
 
 // Tabellone — La forma dei widget «grandi»: un'intestazione, un numero in

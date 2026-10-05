@@ -227,11 +227,18 @@ FloatingWindow {
     // campo dell'indirizzo metterebbe in pausa invece di scrivere uno spazio.
     // Si riconosce un campo di testo da `cursorPosition`, che hanno solo
     // loro.
+    //
+    // L'elemento col fuoco si chiede a un elemento DENTRO la finestra
+    // (`Window.activeFocusItem`, agganciata): la finestra di Quickshell una
+    // proprietà `activeFocusItem` non ce l'ha, valeva sempre `undefined`, e
+    // spazio e K scritti nel campo dell'indirizzo mettevano in pausa invece
+    // di scrivere (provato il 5 ottobre 2026).
     readonly property bool _scrivendo: {
-        var f = finestra.activeFocusItem;
+        var f = sondaFuoco.Window.activeFocusItem;
         return f !== null && f !== undefined
                && f.cursorPosition !== undefined;
     }
+    Item { id: sondaFuoco; visible: false }
 
     Shortcut {
         sequences: ["Space", "K"]
@@ -1137,7 +1144,7 @@ FloatingWindow {
                             radius: Theme.Effects.radiusXS
                             color: vis.modo === index
                                    ? Qt.alpha(Theme.Colors.accent, 0.22)
-                                   : (presaModo.hovered ? Theme.Colors.hover
+                                   : (presaModo.containsMouse ? Theme.Colors.hover
                                                         : "transparent")
                             Text {
                                 anchors.centerIn: parent
@@ -2013,7 +2020,7 @@ FloatingWindow {
         Rectangle {
             anchors.fill: parent
             radius: Theme.Effects.radiusSM
-            color: presa.hovered && !presa.pressed
+            color: presa.containsMouse && !presa.pressed
                    ? (finestra.pagina === parent.pagina
                       ? Qt.alpha(Theme.Colors.accent, 0.22)
                       : Theme.Colors.hover)
@@ -2072,7 +2079,7 @@ FloatingWindow {
                    ? Qt.alpha(Theme.Colors.accent,
                               presaTasto.pressed ? 0.55 : 0.35)
                    : presaTasto.pressed ? Theme.Colors.pressed
-                     : presaTasto.hovered ? Theme.Colors.hover
+                     : presaTasto.containsMouse ? Theme.Colors.hover
                        : Theme.Colors.raised
         }
         Text {
@@ -2108,7 +2115,7 @@ FloatingWindow {
         Rectangle {
             anchors.fill: parent
             radius: Theme.Effects.radiusFull
-            color: presaControllo.hovered && !presaControllo.pressed
+            color: presaControllo.containsMouse && !presaControllo.pressed
                    ? Theme.Colors.hover
                    : presaControllo.pressed ? Theme.Colors.pressed
                      : "transparent"
@@ -2160,7 +2167,7 @@ FloatingWindow {
         width: 30
         height: 30
         radius: Theme.Effects.radiusFull
-        color: presaRiga.hovered ? Theme.Colors.hover : "transparent"
+        color: presaRiga.containsMouse ? Theme.Colors.hover : "transparent"
         Ui.Icon {
             anchors.centerIn: parent
             width: 15
@@ -2202,7 +2209,7 @@ FloatingWindow {
         Rectangle {
             anchors.fill: parent
             radius: Theme.Effects.radiusSM
-            color: presaVoce.hovered
+            color: presaVoce.containsMouse
                    ? Theme.Colors.hover
                    : parent.selezionata ? Qt.alpha(Theme.Colors.accent, 0.10)
                      : "transparent"
@@ -2275,7 +2282,7 @@ FloatingWindow {
         Rectangle {
             anchors.fill: parent
             radius: Theme.Effects.radiusSM
-            color: presaRisultato.hovered ? Theme.Colors.hover : "transparent"
+            color: presaRisultato.containsMouse ? Theme.Colors.hover : "transparent"
         }
 
         MouseArea {

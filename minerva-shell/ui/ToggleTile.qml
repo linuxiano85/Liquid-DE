@@ -1,6 +1,5 @@
 import QtQuick
 import "../theme" as Theme
-import "../core" as Core
 
 // ToggleTile — Interruttore a piastrella, con etichetta e stato.
 //

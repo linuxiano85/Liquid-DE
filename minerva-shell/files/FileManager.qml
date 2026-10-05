@@ -1,6 +1,5 @@
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import "../theme" as Theme
 import "../core" as Core
 import "../ui" as Ui

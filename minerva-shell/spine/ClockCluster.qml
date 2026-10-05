@@ -52,7 +52,7 @@ Row {
     /// `implicitWidth` di un `Text` non dipende dal fatto che si veda.
     readonly property real larghezzaPiena:
         ora.implicitWidth + cluster.spacing + 1
-        + cluster.spacing + data.implicitWidth
+        + cluster.spacing + dataTesto.implicitWidth
 
     /// 24 ore oppure AM/PM. Sta nelle impostazioni e non fisso nel codice: era
     /// scritto `"HH:mm"` qui dentro, e chi arriva da un paese dove l'orologio
@@ -103,7 +103,7 @@ Row {
     }
 
     Text {
-        id: data
+        id: dataTesto
         anchors.verticalCenter: parent.verticalCenter
         visible: !cluster.compatto
         text: cluster.dateText

@@ -1,7 +1,6 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import "../theme" as Theme
 import "../core" as Core
 
 // WidgetLayer — I widget della scrivania, su una superficie loro.

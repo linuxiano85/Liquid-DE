@@ -1,7 +1,6 @@
 import QtQuick
 import "../../theme" as Theme
 import "../../core" as Core
-import "../../ui" as Ui
 import ".." as S
 
 // Controller — I pad di gioco, uguali per tutti i giochi.
