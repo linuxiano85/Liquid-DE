@@ -1,35 +1,17 @@
 #!/bin/bash
-# start-minerva-wayland.sh — La sessione Minerva sul NOSTRO compositore.
+# start-minerva-wayland.sh — La sessione Liquid DE.
 #
-# È il gemello di `start-minerva.sh`, e la differenza è una riga sola in
-# fondo: là si esegue Hyprland, qui `minerva-wayland`. Tutto quello che sta in
-# mezzo — l'identità della sessione, il registro, i percorsi — è identico
-# apposta: due sessioni che si comportano diversamente su cose che non
-# c'entrano col compositore renderebbero impossibile capire quale delle due
-# differenze conta.
+# Prepara l'identità della sessione, il registro e l'ambiente, e alla fine
+# esegue `minerva-wayland`, il nostro compositore, che avvia
+# `minerva-dentro-wayland` e da lì tutto il resto.
 #
-# ── Come si torna indietro ────────────────────────────────────────────────
+# ── Se qualcosa non va ────────────────────────────────────────────────────
 #
-# **La sessione «Minerva» resta dov'era.** Questa si aggiunge accanto, non al
-# suo posto: se qui dentro qualcosa non va, si esce (Super+M, o si spegne il
-# computer col pulsante) e alla schermata di accesso si sceglie di nuovo
-# «Minerva». Niente di quello che c'è qui può impedire di rientrare nell'altra.
-#
-# E se non si arrivasse nemmeno alla schermata di accesso: **Ctrl+Alt+Fn+F3**
-# apre una console testuale. Su questa tastiera il tasto Fn è obbligatorio —
-# vedi la memoria `minerva-console-fn`.
-#
-# ── Che cosa NON c'è ancora, e va saputo prima di entrare ─────────────────
-#
-#  · le animazioni: le finestre compaiono e spariscono di scatto;
-#  · lo sfondo sfocato dietro i pannelli, che è di Hyprland;
-#  · venti delle novantacinque scorciatoie (i gruppi, la scrivania speciale,
-#    i gesti col mouse): sono di Hyprland e non si mandano apposta;
-#  · la luce notturna è cablata ma **non l'ha mai vista funzionare nessuno**:
-#    è la prima cosa da guardare.
-#
-# Tutto il resto — finestre, barre del titolo, scrivanie, dock, blocco
-# schermo, Steam e i giochi, schermi, tastiera e touchpad — è provato.
+# Alla schermata di accesso c'è anche la sessione di recupero
+# (`minerva-dentro-recupero`: un terminale e nient'altro). E se non si
+# arrivasse nemmeno lì: **Ctrl+Alt+Fn+F3** apre una console testuale. Su
+# questa tastiera il tasto Fn è obbligatorio — vedi la memoria
+# `minerva-console-fn`.
 
 SELF="$(readlink -f "$0")"
 MINERVA_DIR="$(dirname "$(dirname "$SELF")")"
@@ -77,22 +59,14 @@ export QS_NO_RELOAD_POPUP=1
 
 # ── L'ambiente dei programmi ──────────────────────────────────────────────
 #
-# Sotto Hyprland queste righe stanno in `config/hyprland.conf` come `env =`, e
-# **valgono solo dentro Hyprland**: qui non le metteva nessuno. Ce n'è una che
-# si vede a occhio nudo — `QT_WAYLAND_DISABLE_WINDOWDECORATION`: senza, ogni
-# programma Qt disegna la propria barra del titolo **sopra la nostra**, e ti
-# ritrovi due barre sulla stessa finestra.
-#
-# `minervad/test/ambiente_sessione_test.dart` verifica che questo elenco e
-# quello di `hyprland.conf` restino la stessa cosa: due sessioni che danno
-# ambienti diversi renderebbero impossibile capire quale differenza conta.
+# Ce n'è una che si vede a occhio nudo — `QT_WAYLAND_DISABLE_WINDOWDECORATION`:
+# senza, ogni programma Qt disegna la propria barra del titolo **sopra la
+# nostra**, e ti ritrovi due barre sulla stessa finestra.
 export QT_QPA_PLATFORM="wayland;xcb"
 export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
 export QT_AUTO_SCREEN_SCALE_FACTOR=1
 export GDK_BACKEND=wayland,x11
 export MOZ_ENABLE_WAYLAND=1
-# `HYPRCURSOR_SIZE` no: è il formato di cursori di Hyprland, e qui dentro non
-# lo legge nessuno. Metterla sarebbe copiare invece di capire.
 
 # ── Il puntatore per CHI SE LO DISEGNA DA SÉ ─────────────────────────────
 #
@@ -158,9 +132,8 @@ export MINERVA_COMPOSITORE=minerva-wayland
 
 # ── XDG_DATA_DIRS per la sessione wayland ────────────────────────────────
 #
-# Sotto Hyprland questa variabile la porta systemd --user; sotto il nostro
-# compositore il figlio (minerva-dentro-wayland) non la esportava a D-Bus e
-# AppScanner finiva a 71 app invece di 89. Se non è già impostata, la si
+# Il figlio (minerva-dentro-wayland) non la esportava a D-Bus, e AppScanner
+# finiva a 71 app invece di 89. Se non è già impostata, la si
 # recupera una volta sola.
 if [ -z "${XDG_DATA_DIRS:-}" ]; then
     if command -v systemctl >/dev/null 2>&1; then
@@ -178,8 +151,7 @@ export XDG_DATA_DIRS="$PREFISSO/share${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
 
 # ── Un registro da leggere quando qualcosa non parte ──────────────────────
 #
-# Stesso posto della sessione Hyprland, e per la stessa ragione: se la
-# sessione muore all'avvio, il gestore di accesso ributta al login senza dire
+# Se la sessione muore all'avvio, il gestore di accesso ributta al login senza dire
 # niente. Con questo file si può almeno sapere perché.
 LOG="$STATO/session.log"
 
@@ -225,8 +197,7 @@ fi
 
 # ── E si parte ────────────────────────────────────────────────────────────
 #
-# L'argomento è il programma da avviare dentro, ed è il nostro equivalente
-# degli `exec-once` di Hyprland: da lì nascono il demone, la scrivania e i
+# L'argomento è il programma da avviare dentro: da lì nascono il demone, la scrivania e i
 # servizi di contorno.
 #
 # ── E si può chiedere di avviarne un ALTRO ───────────────────────────────

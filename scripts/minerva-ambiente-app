@@ -43,7 +43,7 @@
 #
 # ── Quello che NON si perde ────────────────────────────────────────────────
 #
-# Il vetro. La sfocatura dietro alle nostre finestre la fa Hyprland, non noi:
+# Il vetro. La sfocatura dietro alle nostre finestre la fa il compositore, non noi:
 # a noi basta avere pixel trasparenti, e quelli ci sono anche col processore.
 # Verificato guardando: gestore file e Impostazioni aperti così sono identici,
 # vetro, angoli, icone, e zero avvisi nel registro.

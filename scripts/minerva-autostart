@@ -1,15 +1,13 @@
 #!/bin/sh
 # minerva-autostart — Fa partire i programmi che l'utente ha messo all'avvio.
 #
-# Lo chiama `hyprland.conf` con un `exec-once`, una volta per sessione.
+# Lo chiama `minerva-dentro-wayland`, una volta per sessione.
 #
 # ── Perché esiste ─────────────────────────────────────────────────────────
 #
-# Perché **Hyprland non legge `~/.config/autostart`**. Chi arriva da un altro
-# ambiente si porta dietro quella cartella e i suoi programmi smettono di
-# partire senza che niente lo dica; e chi ne vuole aggiungere uno oggi deve
-# modificare a mano la configurazione del compositore, per una cosa che col
-# compositore non c'entra.
+# Perché **nessun compositore legge `~/.config/autostart`**: lo fa chi apre
+# la sessione. Senza, chi arriva da un altro ambiente si porta dietro quella
+# cartella e i suoi programmi smettono di partire senza che niente lo dica.
 #
 # ── Perché SOLO la cartella dell'utente ───────────────────────────────────
 #
@@ -32,14 +30,10 @@ CARTELLA="${XDG_CONFIG_HOME:-$HOME/.config}/autostart"
 
 # I nostri nomi di ambiente, per `OnlyShowIn` e `NotShowIn`.
 #
-# Sono TRE perché tanti ne dichiara la sessione (vedi `DesktopNames` nelle voci
-# create da `install-minerva.sh`): `MinervaWayland` sul nostro compositore,
-# `Minerva` sempre, e `Hyprland` finché la sessione di recupero vecchia c'è.
-# Una voce scritta per uno qualunque dei tre vale.
-#
-# `minervawayland` mancava, ed era un difetto silenzioso di quelli che questo
-# progetto conosce bene: un programma dichiarato `OnlyShowIn=MinervaWayland;`
-# non sarebbe partito, e non l'avrebbe detto nessuno.
+# Sono DUE perché tanti ne dichiara la sessione (`DesktopNames=LiquidDE;Minerva;`
+# nelle voci create da `install-minerva.sh`). Una voce scritta per uno
+# qualunque dei due vale; un nome che manca qui è un programma dichiarato
+# `OnlyShowIn=` per noi che non parte, e non lo dice nessuno.
 NOSTRI="liquidde minerva"
 
 # Legge un campo dalla sola sezione [Desktop Entry].

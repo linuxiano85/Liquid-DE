@@ -302,7 +302,7 @@ prepara_stato() {
 # greetd apre la sessione del PROCESSO della schermata con il servizio
 # `greetd-greeter`, separato da `greetd` che verifica la password di chi entra.
 # Il pacchetto Arch installa solo il secondo: senza il primo, appena la console
-# diventa attiva il greeter muore prima ancora di lanciare Hyprland.
+# diventa attiva il greeter muore prima ancora di lanciare il compositore.
 prepara_pam() {
     [ -r /etc/pam.d/greetd-greeter ] && return 0
 
@@ -369,7 +369,7 @@ scrivi_config() {
 
     # ── La tastiera deve essere quella giusta ──────────────────────────────
     #
-    # Senza `kb_layout` Hyprland usa l'inglese: il campo password risponde,
+    # Senza la disposizione il compositore usa l'inglese: il campo password risponde,
     # ma i caratteri non sono quelli stampati sui tasti. Il 5 agosto 2026
     # questa differenza ha contribuito a una schermata che «non prendeva la
     # tastiera»: la prendeva, ma parlava un'altra lingua. Si copia il layout

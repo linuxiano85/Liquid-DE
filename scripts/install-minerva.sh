@@ -558,12 +558,6 @@ if ! pacman -Q steam-devices >/dev/null 2>&1 \
         && c_ok "regole udev dei pad di Steam installate" || true
 fi
 
-# ── 3b. Configurazioni che devono stare in ~/.config/hypr ─────────────────
-#
-# Qui c'era `hypridle`, che non accettava il percorso della propria
-# configurazione: l'opzione `-c` veniva ignorata e il programma moriva dicendo
-# che non ne trovava nessuna. Leggeva solo da ~/.config/hypr, e quindi bisognava
-# mettergliela lì. Non c'è più.
 # ── Il file PAM del blocco schermo ─────────────────────────────────────────
 #
 # `scripts/minerva-blocca` chiede a PAM se la password è giusta, e PAM vuole
@@ -591,10 +585,6 @@ else
     c_err "Impossibile installare /etc/pam.d/liquid-de: blocco schermo non pronto."
     exit 1
 fi
-
-# Qui si creava `~/.config/hypr`, la cartella di Hyprland: vuota da quando
-# l'inattività la conta il compositore (1º settembre 2026), e comunque non di
-# Liquid DE. Tolta il 27 settembre.
 
 # ── L'agente delle password ───────────────────────────────────────────────
 #

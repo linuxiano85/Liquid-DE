@@ -1,20 +1,9 @@
 #!/bin/sh
-# minerva-dentro-wayland — Quello che Hyprland fa con gli `exec-once`.
+# minerva-dentro-wayland — I programmi che partono con la sessione.
 #
 # Lo lancia `minerva-wayland` come primo (e unico) programma, e da qui nascono
-# il demone, la scrivania e i servizi di contorno.
-#
-# ── Perché un file e non una riga ─────────────────────────────────────────
-#
-# Perché il nostro compositore avvia UN programma e basta (`argv[1]`), mentre
-# Hyprland ne avvia otto con altrettanti `exec-once`. Quella lista non si può
-# duplicare in una riga di comando, e soprattutto non si vuole duplicare
-# altrove: chi aggiunge un servizio in `config/hyprland.conf` deve trovare
-# qui accanto lo stesso elenco, o il giorno dello scambio scoprirà che manca
-# la metà delle cose e non saprà quale.
-#
-# **Se aggiungi un `exec-once` là, aggiungilo qui.** Non c'è una guardia che
-# lo controlli — sarebbe da scrivere, e per adesso è un promemoria.
+# il demone, la scrivania e i servizi di contorno. Il compositore avvia UN
+# programma e basta (`argv[1]`): l'elenco sta qui, in un posto solo.
 set -u
 
 MINERVA_DIR="${MINERVA_ROOT:?minerva-dentro-wayland: manca MINERVA_ROOT}"
@@ -25,11 +14,8 @@ MINERVA_DIR="${MINERVA_ROOT:?minerva-dentro-wayland: manca MINERVA_ROOT}"
 # I servizi che partono su richiesta — i portali, l'agente delle password, la
 # condivisione dello schermo — non ereditano l'ambiente da noi: li avvia
 # D-Bus, che senza questa riga non sa quale sia il display Wayland e li fa
-# partire ciechi. È la prima riga anche in `config/hyprland.conf`, e per la
-# stessa ragione.
-#
-# `HYPRLAND_INSTANCE_SIGNATURE` qui non c'è e non si nomina: al suo posto va
-# `MINERVA_CANALE`, che è come si trova il NOSTRO compositore.
+# partire ciechi. Insieme al display va `MINERVA_CANALE`, che è come si
+# trova il nostro compositore.
 #
 # ── Ma NON dentro una prova ──────────────────────────────────────────────
 #

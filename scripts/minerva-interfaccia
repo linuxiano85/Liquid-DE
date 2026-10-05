@@ -46,8 +46,6 @@
 # Adesso è un verbo nostro sul canale del compositore:
 #
 #     messaggio <millisecondi> <testo>
-#
-# e il ripiego su `hyprctl` resta solo per la sessione Hyprland, finché c'è.
 
 # ── Come si dice una cosa quando l'interfaccia non c'è ────────────────────
 #
@@ -128,9 +126,8 @@ PIDFILE="$STATO/interfaccia.pid"
 
 # ── Un guardiano per sessione ─────────────────────────────────────────────
 #
-# `hyprctl reload` riesegue gli `exec-once`, e a chiamarlo è anche il plugin
-# delle barre quando si carica: senza questo controllo ogni caricamento
-# faceva nascere una SECONDA interfaccia — due shell, due barre, due dock,
+# Sotto Hyprland `hyprctl reload` rieseguiva gli `exec-once`, e senza questo
+# controllo ogni ricarica faceva nascere una SECONDA interfaccia — due shell, due barre, due dock,
 # e l'uscita del secondo `qs` che si mescola col registro del primo. Chi
 # arriva dopo e trova un guardiano vivo, vivo e davvero lui, si fa da parte.
 if [ -f "$PIDFILE" ]; then

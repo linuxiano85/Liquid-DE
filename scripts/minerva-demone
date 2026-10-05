@@ -239,9 +239,9 @@ PIDFILE="$STATO/demone.pid"
 
 # ── Un guardiano per sessione ─────────────────────────────────────────────
 #
-# `hyprctl reload` riesegue gli `exec-once`, e a chiamarlo è anche il plugin
-# delle barre quando si carica: senza questo controllo ogni caricamento
-# faceva nascere un secondo guardiano. Il demone in più muore da solo (la
+# Sotto Hyprland `hyprctl reload` rieseguiva gli `exec-once`, e senza questo
+# controllo ogni ricarica faceva nascere un secondo guardiano; oggi può
+# succedere con un `minerva-reload.sh` lanciato due volte. Il demone in più muore da solo (la
 # porta è una sola) ma il guardiano resta: si fa da parte subito.
 if [ -f "$PIDFILE" ]; then
     VECCHIO=$(cat "$PIDFILE" 2>/dev/null)
