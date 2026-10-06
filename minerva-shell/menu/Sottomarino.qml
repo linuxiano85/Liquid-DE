@@ -31,6 +31,29 @@ import "../ui" as Ui
 PanelWindow {
     id: sub
 
+    readonly property bool it: Core.Strings.lang === "it"
+
+    /// Il nome di una voce (`{it, en}`) nella lingua di chi guarda.
+    function detto(o) {
+        return !o ? "" : (sub.it ? o.it : (o.en || o.it));
+    }
+
+    /// I titoli dei gruppi restano in italiano nei dati — li legge anche
+    /// `riassunto()`, che è delle prove — e si traducono solo a vederli.
+    function titoloDi(t) {
+        if (sub.it || t === "")
+            return t;
+        var fissi = { "Azioni": "Actions", "App": "Apps", "Altro": "Other",
+                      "Adesso, di solito": "Usually, around now",
+                      "Le più usate": "Most used", "Poi": "Then" };
+        if (fissi[t])
+            return fissi[t];
+        for (var i = 0; i < sub.attivita.length; i++)
+            if (sub.attivita[i].it === t)
+                return sub.attivita[i].en;
+        return t;
+    }
+
     /// Vero da quando si apre a quando si chiude.
     property bool aperto: false
     /// Vero mentre la finestra c'è: resta vero durante l'immersione.
@@ -115,14 +138,14 @@ PanelWindow {
     /// del menu di prima, e restano quelli perché le scelte già fatte nelle
     /// Impostazioni › Dock valgano anche qui.
     readonly property var categorie: [
-        { "id": "internet",   "chiave": "internet",    "it": "Internet",   "c": ["Network", "WebBrowser", "Email", "Chat", "InstantMessaging"] },
-        { "id": "ufficio",    "chiave": "office",      "it": "Ufficio",    "c": ["Office", "WordProcessor", "Spreadsheet", "Presentation", "Calendar"] },
-        { "id": "grafica",    "chiave": "graphics",    "it": "Grafica",    "c": ["Graphics", "Photography", "2DGraphics", "3DGraphics", "VectorGraphics", "RasterGraphics"] },
-        { "id": "multimedia", "chiave": "media",       "it": "Multimedia", "c": ["AudioVideo", "Audio", "Video", "Player", "Music"] },
-        { "id": "sviluppo",   "chiave": "development", "it": "Sviluppo",   "c": ["Development", "IDE"] },
-        { "id": "giochi",     "chiave": "games",       "it": "Giochi",     "c": ["Game"] },
-        { "id": "sistema",    "chiave": "system",      "it": "Sistema",    "c": ["System", "Settings", "Monitor", "PackageManager", "TerminalEmulator"] },
-        { "id": "accessori",  "chiave": "utility",     "it": "Accessori",  "c": ["Utility", "Accessories", "FileTools", "FileManager", "TextEditor", "Calculator"] }
+        { "id": "internet",   "chiave": "internet",    "it": "Internet", "en": "Internet",   "c": ["Network", "WebBrowser", "Email", "Chat", "InstantMessaging"] },
+        { "id": "ufficio",    "chiave": "office",      "it": "Ufficio", "en": "Office",    "c": ["Office", "WordProcessor", "Spreadsheet", "Presentation", "Calendar"] },
+        { "id": "grafica",    "chiave": "graphics",    "it": "Grafica", "en": "Graphics",    "c": ["Graphics", "Photography", "2DGraphics", "3DGraphics", "VectorGraphics", "RasterGraphics"] },
+        { "id": "multimedia", "chiave": "media",       "it": "Multimedia", "en": "Multimedia", "c": ["AudioVideo", "Audio", "Video", "Player", "Music"] },
+        { "id": "sviluppo",   "chiave": "development", "it": "Sviluppo", "en": "Development",   "c": ["Development", "IDE"] },
+        { "id": "giochi",     "chiave": "games",       "it": "Giochi", "en": "Games",     "c": ["Game"] },
+        { "id": "sistema",    "chiave": "system",      "it": "Sistema", "en": "System",    "c": ["System", "Settings", "Monitor", "PackageManager", "TerminalEmulator"] },
+        { "id": "accessori",  "chiave": "utility",     "it": "Accessori", "en": "Accessories",  "c": ["Utility", "Accessories", "FileTools", "FileManager", "TextEditor", "Calculator"] }
     ]
 
     // ── Le scelte di Impostazioni › Dock › Menu applicazioni ────────────
@@ -138,7 +161,7 @@ PanelWindow {
     /// Le pastiglie della vista Categorie. «Preferiti» e «Tutte» non si
     /// nascondono: sono le vie d'uscita se si nasconde tutto il resto.
     readonly property var pastiglie: {
-        var out = [{ "id": "preferiti", "it": "Preferiti" }, { "id": "tutte", "it": "Tutte" }];
+        var out = [{ "id": "preferiti", "it": "Preferiti", "en": "Favourites" }, { "id": "tutte", "it": "Tutte", "en": "All" }];
         for (var i = 0; i < sub.categorie.length; i++)
             if (sub.nascoste.indexOf(sub.categorie[i].chiave) === -1)
                 out.push(sub.categorie[i]);
@@ -208,17 +231,17 @@ PanelWindow {
     /// Quello che si FA con un'app, dalle sue categorie: la vista «Cosa vuoi
     /// fare» e metà della ricerca per funzione. Vale la prima che combacia.
     readonly property var attivita: [
-        { "id": "navigare",    "it": "Navigare",    "c": ["WebBrowser"] },
-        { "id": "comunicare",  "it": "Comunicare",  "c": ["Email", "InstantMessaging", "Chat", "Telephony", "IRCClient"] },
-        { "id": "scrivere",    "it": "Scrivere",    "c": ["WordProcessor", "TextEditor"] },
-        { "id": "calcolare",   "it": "Calcolare",   "c": ["Calculator", "Spreadsheet"] },
-        { "id": "creare",      "it": "Creare",      "c": ["Graphics", "2DGraphics", "3DGraphics", "VectorGraphics", "RasterGraphics", "AudioVideoEditing", "Photography"] },
-        { "id": "ascoltare",   "it": "Ascoltare",   "c": ["Audio", "Music"] },
-        { "id": "guardare",    "it": "Guardare",    "c": ["Video", "Viewer", "TV"] },
-        { "id": "programmare", "it": "Programmare", "c": ["Development", "IDE", "TerminalEmulator"] },
-        { "id": "organizzare", "it": "Organizzare", "c": ["FileManager", "Calendar", "Archiving", "Office"] },
-        { "id": "giocare",     "it": "Giocare",     "c": ["Game"] },
-        { "id": "sistemare",   "it": "Sistemare",   "c": ["Settings", "System", "Monitor", "PackageManager"] }
+        { "id": "navigare",    "it": "Navigare", "en": "Browse",    "c": ["WebBrowser"] },
+        { "id": "comunicare",  "it": "Comunicare", "en": "Talk",  "c": ["Email", "InstantMessaging", "Chat", "Telephony", "IRCClient"] },
+        { "id": "scrivere",    "it": "Scrivere", "en": "Write",    "c": ["WordProcessor", "TextEditor"] },
+        { "id": "calcolare",   "it": "Calcolare", "en": "Calculate",   "c": ["Calculator", "Spreadsheet"] },
+        { "id": "creare",      "it": "Creare", "en": "Create",      "c": ["Graphics", "2DGraphics", "3DGraphics", "VectorGraphics", "RasterGraphics", "AudioVideoEditing", "Photography"] },
+        { "id": "ascoltare",   "it": "Ascoltare", "en": "Listen",   "c": ["Audio", "Music"] },
+        { "id": "guardare",    "it": "Guardare", "en": "Watch",    "c": ["Video", "Viewer", "TV"] },
+        { "id": "programmare", "it": "Programmare", "en": "Code", "c": ["Development", "IDE", "TerminalEmulator"] },
+        { "id": "organizzare", "it": "Organizzare", "en": "Organise", "c": ["FileManager", "Calendar", "Archiving", "Office"] },
+        { "id": "giocare",     "it": "Giocare", "en": "Play",     "c": ["Game"] },
+        { "id": "sistemare",   "it": "Sistemare", "en": "Tune up",   "c": ["Settings", "System", "Monitor", "PackageManager"] }
     ]
 
     /// Le parole che vogliono dire la stessa cosa. È quello che fa trovare
@@ -259,15 +282,15 @@ PanelWindow {
         "con", "su", "per", "un", "una", "e", "del", "della", "voglio", "vorrei", "apri"]
 
     readonly property var azioni: [
-        { "id": "blocca",       "it": "Blocca lo schermo",   "p": "blocca bloccare lock schermo" },
-        { "id": "notte",        "it": "Luce notturna",       "p": "luce notturna notte occhi sera" },
-        { "id": "dnd",          "it": "Non disturbare",      "p": "non disturbare silenzio notifiche" },
-        { "id": "impostazioni", "it": "Impostazioni",        "p": "impostazioni settings preferenze" },
-        { "id": "appunti",      "it": "Appunti",             "p": "appunti clipboard copiato copia incolla" },
-        { "id": "sospendi",     "it": "Sospendi",            "p": "sospendi dormire sleep" },
-        { "id": "riavvia",      "it": "Riavvia",             "p": "riavvia riavviare reboot" },
-        { "id": "spegni",       "it": "Spegni",              "p": "spegni spegnere arresta shutdown" },
-        { "id": "esci",         "it": "Esci dalla sessione", "p": "esci uscire logout sessione" }
+        { "id": "blocca",       "it": "Blocca lo schermo", "en": "Lock the screen",   "p": "blocca bloccare lock schermo" },
+        { "id": "notte",        "it": "Luce notturna", "en": "Night light",       "p": "luce notturna notte occhi sera" },
+        { "id": "dnd",          "it": "Non disturbare", "en": "Do not disturb",      "p": "non disturbare silenzio notifiche" },
+        { "id": "impostazioni", "it": "Impostazioni", "en": "Settings",        "p": "impostazioni settings preferenze" },
+        { "id": "appunti",      "it": "Appunti", "en": "Clipboard",             "p": "appunti clipboard copiato copia incolla" },
+        { "id": "sospendi",     "it": "Sospendi", "en": "Sleep",            "p": "sospendi dormire sleep" },
+        { "id": "riavvia",      "it": "Riavvia", "en": "Restart",             "p": "riavvia riavviare reboot" },
+        { "id": "spegni",       "it": "Spegni", "en": "Shut down",              "p": "spegni spegnere arresta shutdown" },
+        { "id": "esci",         "it": "Esci dalla sessione", "en": "Log out", "p": "esci uscire logout sessione" }
     ]
 
     function norma(t) {
@@ -300,7 +323,7 @@ PanelWindow {
                 "parole": sub.norma((a.parole || []).join(" ")),
                 "descrizione": sub.norma(a.descrizione || ""),
                 "fa": fa ? fa.id : "",
-                "faNome": fa ? fa.it : "",
+                "faNome": fa ? sub.detto(fa) : "",
                 "lanci": a.lanci || 0,
                 // Quante volte intorno a quest'ora (il demone conta anche
                 // l'ora di ogni lancio): «adesso, di solito».
@@ -336,12 +359,16 @@ PanelWindow {
                 var x = termini[k];
                 var peso = k === 0 ? 1 : 0.55;
                 var campi = t.length === 1
-                    ? [[100, v.nome, "per nome"]]
-                    : [[100, v.nome, "per nome"],
-                       [90, v.fa, "perché serve a " + v.faNome.toLowerCase()],
-                       [70, v.generico, "perché è un «" + (v.app.generico || "").toLowerCase() + "»"],
-                       [50, v.parole, "per «" + x + "»"],
-                       [25, v.descrizione, "per quello che dice di sé"]];
+                    ? [[100, v.nome, sub.it ? "per nome" : "by name"]]
+                    : [[100, v.nome, sub.it ? "per nome" : "by name"],
+                       [90, v.fa, (sub.it ? "perché serve a " : "because it helps you ")
+                                  + v.faNome.toLowerCase()],
+                       [70, v.generico, sub.it
+                            ? "perché è un «" + (v.app.generico || "").toLowerCase() + "»"
+                            : "because it is a “" + (v.app.generico || "").toLowerCase() + "”"],
+                       [50, v.parole, sub.it ? "per «" + x + "»" : "for “" + x + "”"],
+                       [25, v.descrizione, sub.it ? "per quello che dice di sé"
+                                                  : "for what it says about itself"]];
                 for (var c = 0; c < campi.length; c++) {
                     var testo = campi[c][1];
                     if (!testo) continue;
@@ -353,7 +380,8 @@ PanelWindow {
             }
             if (sub.concetti[t] && sub.concetti[t] === v.fa && 110 > meglio) {
                 meglio = 110;
-                qui = "perché serve a " + v.faNome.toLowerCase();
+                qui = (sub.it ? "perché serve a " : "because it helps you ")
+                      + v.faNome.toLowerCase();
             }
             if (meglio > 0) { prese++; punti += meglio; if (!perche) perche = qui; }
         }
@@ -380,7 +408,8 @@ PanelWindow {
             if (parole.length === 0) return [];
             var az = [];
             for (var a = 0; a < sub.azioni.length; a++) {
-                var testoAz = sub.norma(sub.azioni[a].it + " " + sub.azioni[a].p);
+                var testoAz = sub.norma(sub.azioni[a].it + " " + (sub.azioni[a].en || "")
+                                       + " " + sub.azioni[a].p);
                 var tutteLe = true;
                 for (var p = 0; p < parole.length; p++)
                     if (!sub._inizia(testoAz, parole[p])) { tutteLe = false; break; }
@@ -650,7 +679,8 @@ PanelWindow {
                         }
                     }
                     Ui.ToolTipHint {
-                        text: sub.verticale ? "Orizzontale" : "Verticale"
+                        text: sub.verticale ? (sub.it ? "Orizzontale" : "Horizontal")
+                                            : (sub.it ? "Verticale" : "Vertical")
                         shown: versoMouse.containsMouse
                     }
                 }
@@ -674,7 +704,8 @@ PanelWindow {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: campo.text === ""
-                        text: "Nome dell'app o cosa vuoi fare: «navigare il web», «foto», «spegni»…"
+                        text: sub.it ? "Nome dell'app o cosa vuoi fare: «navigare il web», «foto», «spegni»…"
+                                     : "App name or what you want to do: “browse the web”, “photos”, “shut down”…"
                         color: Theme.Colors.textFaint
                         font: campo.font
                         elide: Text.ElideRight
@@ -705,9 +736,9 @@ PanelWindow {
                     spacing: 2
                     Repeater {
                         model: [
-                            { "id": "categorie", "it": "Categorie" },
-                            { "id": "attivita",  "it": "Cosa vuoi fare" },
-                            { "id": "frequenti", "it": "Frequenti" },
+                            { "id": "categorie", "it": "Categorie", "en": "Categories" },
+                            { "id": "attivita",  "it": "Cosa vuoi fare", "en": "What to do" },
+                            { "id": "frequenti", "it": "Frequenti", "en": "Frequent" },
                             { "id": "az",        "it": "A–Z" }
                         ]
                         delegate: Item {
@@ -732,7 +763,7 @@ PanelWindow {
                                 Text {
                                     id: tabTesto
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: tab.modelData.it
+                                    text: sub.detto(tab.modelData)
                                     color: tab.attiva ? Theme.Colors.text : Theme.Colors.textMuted
                                     font.family: Theme.Typography.fontDisplay
                                     font.pixelSize: Theme.Typography.sizeSM
@@ -741,7 +772,7 @@ PanelWindow {
                                     id: tabNuove
                                     anchors.verticalCenter: parent.verticalCenter
                                     visible: tab.conNuove
-                                    testo: sub.nuove === 1 ? "Nuova" : "Nuove"
+                                    testo: sub.it ? (sub.nuove === 1 ? "Nuova" : "Nuove") : "New"
                                 }
                             }
                             // Col solo puntatore, dopo una sosta breve: passarci
@@ -795,7 +826,7 @@ PanelWindow {
                             Text {
                                 id: chipTesto
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: chip.modelData.it
+                                text: sub.detto(chip.modelData)
                                 color: chip.scelta ? Theme.Colors.text : Theme.Colors.textMuted
                                 font.family: Theme.Typography.fontDisplay
                                 font.pixelSize: Theme.Typography.sizeSM
@@ -804,7 +835,7 @@ PanelWindow {
                                 id: chipNuova
                                 anchors.verticalCenter: parent.verticalCenter
                                 visible: chip.conNuove
-                                testo: "Nuova"
+                                testo: sub.it ? "Nuova" : "New"
                             }
                         }
                         Timer { id: chipSosta; interval: 140; onTriggered: sub.categoria = chip.modelData.id }
@@ -855,8 +886,11 @@ PanelWindow {
                         visible: sub.cerca.trim() !== "" && sub.gruppi.length === 0
                         width: parent.width
                         wrapMode: Text.WordWrap
-                        text: "Nessuna app per «" + sub.cerca.trim()
-                              + "». Prova con quello che vuoi fare: «ascoltare», «disegnare», «conti»."
+                        text: sub.it
+                              ? "Nessuna app per «" + sub.cerca.trim()
+                                + "». Prova con quello che vuoi fare: «ascoltare», «disegnare», «conti»."
+                              : "No app for “" + sub.cerca.trim()
+                                + "”. Try what you want to do: “listen”, “draw”, “accounts”."
                         color: Theme.Colors.textFaint
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeSM
@@ -868,7 +902,8 @@ PanelWindow {
                                  && (sub.gruppi.length === 0 || sub.gruppi[0].voci.length === 0)
                         width: parent.width
                         wrapMode: Text.WordWrap
-                        text: "Nessun preferito. Tasto destro su un'app, poi «Aggiungi ai preferiti»."
+                        text: sub.it ? "Nessun preferito. Tasto destro su un'app, poi «Aggiungi ai preferiti»."
+                                     : "No favourites. Right-click an app, then “Add to favourites”."
                         color: Theme.Colors.textFaint
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeSM
@@ -886,7 +921,7 @@ PanelWindow {
                                 visible: gruppo.modelData.titolo !== ""
                                 text: gruppo.modelData.tipo === "righe"
                                       ? gruppo.modelData.titolo
-                                      : gruppo.modelData.titolo.toUpperCase()
+                                      : sub.titoloDi(gruppo.modelData.titolo).toUpperCase()
                                 color: gruppo.modelData.tipo === "righe" ? Theme.Colors.accent
                                                                          : Theme.Colors.textFaint
                                 font.family: gruppo.modelData.tipo === "righe" ? Theme.Typography.fontMono
@@ -930,11 +965,13 @@ PanelWindow {
         var fav = sub.preferiti.indexOf(app.appId) !== -1;
         var pin = (Core.Ipc.get("dock.pinned", []) || []).indexOf(app.appId) !== -1;
         menuApp.openAt(x, y, [
-            { "label": "Avvia", "icon": "chevron", "action": "avvia" },
+            { "label": sub.it ? "Avvia" : "Open", "icon": "chevron", "action": "avvia" },
             { "separator": true },
-            { "label": fav ? "Togli dai preferiti" : "Aggiungi ai preferiti",
+            { "label": fav ? (sub.it ? "Togli dai preferiti" : "Remove from favourites")
+                           : (sub.it ? "Aggiungi ai preferiti" : "Add to favourites"),
               "icon": "star", "action": "preferito" },
-            { "label": pin ? "Togli dalla dock" : "Fissa nella dock",
+            { "label": pin ? (sub.it ? "Togli dalla dock" : "Unpin from the dock")
+                           : (sub.it ? "Fissa nella dock" : "Pin to the dock"),
               "icon": "pin", "action": "dock" }
         ]);
     }
@@ -1061,7 +1098,7 @@ PanelWindow {
             Text {
                 id: azioneTesto
                 anchors.centerIn: parent
-                text: voce.azione ? voce.modelData.it : ""
+                text: voce.azione ? sub.detto(voce.modelData) : ""
                 color: Theme.Colors.text
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeSM
@@ -1126,7 +1163,7 @@ PanelWindow {
                 text: !voce.app ? ""
                       : voce.tipo === "risultati"
                         ? ((voce.app.generico || "") + (voce.app.generico ? " · " : "")
-                           + "trovata " + voce.modelData.perche)
+                           + (sub.it ? "trovata " : "found ") + voce.modelData.perche)
                         : (voce.app.generico || "")
                 horizontalAlignment: voce.riga ? Text.AlignLeft : Text.AlignHCenter
                 elide: Text.ElideRight
@@ -1138,7 +1175,7 @@ PanelWindow {
 
         Nuova {
             visible: !voce.azione && !!voce.app && !!voce.app.isNew
-            testo: "Nuova"
+            testo: sub.it ? "Nuova" : "New"
             anchors.top: parent.top
             anchors.right: parent.right
             anchors.topMargin: voce.riga ? (voce.height - height) / 2 : 4

@@ -23,6 +23,8 @@ import "../ui" as Ui
 PanelWindow {
     id: cassetto
 
+    readonly property bool it: Core.Strings.lang === "it"
+
     property bool aperto: false
     property bool mostrato: false
     /// Spazio da lasciare in alto (la barra) e in basso (la dock).
@@ -341,7 +343,7 @@ PanelWindow {
                 Text {
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "Appunti"
+                    text: cassetto.it ? "Appunti" : "Clipboard"
                     color: Theme.Colors.text
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeLG
@@ -362,7 +364,8 @@ PanelWindow {
                     Text {
                         id: svuotaTesto
                         anchors.centerIn: parent
-                        text: cassetto.armato ? "Ancora, per svuotare" : "Svuota"
+                        text: cassetto.armato ? (cassetto.it ? "Ancora, per svuotare" : "Again, to clear")
+                                              : (cassetto.it ? "Svuota" : "Clear")
                         color: cassetto.armato ? Theme.Colors.textOnAccent : Theme.Colors.textMuted
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeXS
@@ -431,7 +434,7 @@ PanelWindow {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: campo.text === ""
-                        text: "Cerca negli appunti"
+                        text: cassetto.it ? "Cerca negli appunti" : "Search the clipboard"
                         color: Theme.Colors.textFaint
                         font: campo.font
                     }
@@ -477,10 +480,13 @@ PanelWindow {
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.WordWrap
                         text: !cassetto.disponibile
-                              ? "Manca cliphist: senza, gli appunti non hanno memoria."
+                              ? (cassetto.it ? "Manca cliphist: senza, gli appunti non hanno memoria."
+                                             : "cliphist is missing: without it the clipboard has no memory.")
                               : cassetto.voci.length === 0
-                                ? "Niente negli appunti. Quello che copi finisce qui."
-                                : "Niente negli appunti per «" + cassetto.cerca.trim() + "»."
+                                ? (cassetto.it ? "Niente negli appunti. Quello che copi finisce qui."
+                                               : "Nothing in the clipboard. What you copy ends up here.")
+                                : (cassetto.it ? "Niente negli appunti per «" + cassetto.cerca.trim() + "»."
+                                               : "Nothing in the clipboard for “" + cassetto.cerca.trim() + "”.")
                         color: Theme.Colors.textFaint
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeSM
@@ -509,7 +515,8 @@ PanelWindow {
                 anchors.right: parent.right
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-                text: "Tocca per rimettere negli appunti · Canc toglie · Super+V apre e chiude"
+                text: cassetto.it ? "Tocca per rimettere negli appunti · Canc toglie · Super+V apre e chiude"
+                                 : "Tap to copy again · Delete removes · Super+V opens and closes"
                 color: Theme.Colors.textFaint
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeXS
@@ -593,7 +600,7 @@ PanelWindow {
             spacing: Theme.Effects.space2
             Ui.Icon { width: 16; height: 16; name: "image"; color: Theme.Colors.textMuted }
             Text {
-                text: "Immagine"
+                text: cassetto.it ? "Immagine" : "Image"
                 color: Theme.Colors.textMuted
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeSM
