@@ -20,6 +20,17 @@ import "../menu"
 FloatingWindow {
     id: manager
 
+    // Tornando alla finestra si rileggono gli appunti di sistema: è il
+    // momento in cui «Incolla» deve sapere cosa ha copiato un altro programma.
+    // `Window.active` agganciato a un elemento: la finestra di Quickshell non
+    // ha una proprietà `active` sua.
+    Item {
+        id: sondaAttiva
+        visible: false
+        readonly property bool attiva: sondaAttiva.Window.active
+        onAttivaChanged: if (sondaAttiva.attiva) Files.leggiAppunti()
+    }
+
     /// Il vuoto fra le isole di Liquid DE (la colonna, i riquadri, le
     /// capsule dei comandi) e fra loro e il bordo della finestra.
     readonly property int isola: Theme.Effects.space2
@@ -768,16 +779,26 @@ FloatingWindow {
     }
 
     function doPaste() {
-        if (Files.clipboard.length === 0 || !manager.current)
+        if (!manager.current)
             return;
         if (!manager.scriviQui())
             return;
-        manager.trasferisci(Files.clipboard, manager.current.path,
-                            Files.clipboardIsCut);
-        // Dopo un taglio gli appunti si svuotano: incollarli due volte
-        // sposterebbe file che non sono più dove erano.
-        if (Files.clipboardIsCut)
-            Files.clearClipboard();
+        // Si rileggono gli appunti di sistema PRIMA di incollare: quello che
+        // c'è adesso può averlo messo un altro programma un attimo fa (vedi
+        // «Appunti dei file» in `Files.qml`). La cartella si fissa ora, non
+        // a lettura finita: nel frattempo si può essere già andati altrove.
+        var dove = manager.current.path;
+        Files.leggiAppunti(function () {
+            var d = Files.daIncollare();
+            if (d.percorsi.length === 0)
+                return;
+            manager.trasferisci(d.percorsi, dove, d.tagliati);
+            // Dopo un taglio gli appunti si svuotano, anche quelli di
+            // sistema: i file non sono più dove dicono, e incollarli una
+            // seconda volta cercherebbe file spariti.
+            if (d.tagliati)
+                Files.clearClipboard(true);
+        });
     }
 
     /// Con più di due schede la destinazione non è più ovvia, e allora si
@@ -1333,7 +1354,7 @@ FloatingWindow {
         // «Incolla» compare solo con qualcosa negli appunti. È l'unico comando
         // della barra che dipende da un'azione fatta PRIMA e altrove, quindi è
         // anche l'unico che vale la pena mostrare come promemoria.
-        if (puoi && Files.clipboard.length > 0)
+        if (puoi && Files.puoiIncollare)
             voci.push({ "id": "paste", "icon": "check",
                         "it": "Incolla", "en": "Paste" });
 
@@ -1567,7 +1588,7 @@ FloatingWindow {
                     // selezione cambi nell'istante fra il disegno e il clic.
                     readonly property bool usable: {
                         switch (modelData.id) {
-                        case "paste":  return Files.clipboard.length > 0;
+                        case "paste":  return Files.puoiIncollare;
                         case "newFile":  return true;
                         case "impostazioni": return true;
                         case "newTab":   return manager.tabs.count < manager.maxTabs;
@@ -2483,7 +2504,7 @@ FloatingWindow {
         // «Incolla» invece non dipende dalla selezione ma dagli APPUNTI, ed è
         // il comando che sul vuoto serve di più: si clicca proprio lì per
         // mettere dentro quello che si è copiato altrove.
-        if (puoi && Files.clipboard.length > 0)
+        if (puoi && Files.puoiIncollare)
             items.push({ "label": it ? "Incolla" : "Paste", "icon": "check",
                          "action": "paste", "shortcut": "Ctrl+V" });
 

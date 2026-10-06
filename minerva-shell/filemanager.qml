@@ -262,6 +262,19 @@ ShellRoot {
                        + c.selection.join(", ") : "nessuna scheda";
         }
 
+        /// Per le prove: «Copia» sulla selezione della scheda attiva, come
+        /// Ctrl+C. Risponde con quanti file sono andati negli appunti.
+        function copia(): string {
+            manager.doCopy();
+            return String(Files.clipboard.length);
+        }
+
+        /// Per le prove: «Incolla» nella scheda attiva, come Ctrl+V.
+        function incolla(): string {
+            manager.doPaste();
+            return "ok";
+        }
+
         /// Per le prove: dove sta l'icona di un file nella finestra («x y»).
         function posto(nome: string): string {
             var p = manager.current ? manager.current.centroDi(nome) : null;

@@ -474,25 +474,153 @@ QtObject {
     }
 
     // ── Appunti dei file ─────────────────────────────────────────────────
+    //
+    // ── Quelli di tutti, non solo i nostri ───────────────────────────────
+    //
+    // Fino al 6 ottobre 2026 «Copia» scriveva in questa proprietà e basta:
+    // un file copiato qui non si incollava in Dolphin, in Telegram o nel
+    // caricamento di Chrome, e uno copiato là non si incollava qui. Adesso
+    // copiare e tagliare PUBBLICANO negli appunti di sistema, nel formato che
+    // leggono tutti (`text/uri-list`, che `wl-copy` offre anche come testo:
+    // incollato in un editor dà i percorsi), e incollare LEGGE gli appunti di
+    // sistema — col «tagliato» di GNOME (`x-special/gnome-copied-files`) e di
+    // KDE (`application/x-kde-cutselection`).
+    //
+    // `clipboard` resta: dice se la copia è NOSTRA e se l'abbiamo tagliata,
+    // che negli appunti di sistema scritti da `wl-copy` non si può dire.
 
     /// Percorsi in attesa di essere incollati.
     property var clipboard: []
     /// Vero se sono stati TAGLIATI: incollarli li sposta invece di copiarli.
     property bool clipboardIsCut: false
 
+    /// I file negli appunti di sistema, letti l'ultima volta con
+    /// `leggiAppunti`, e se chi li ha messi li aveva tagliati.
+    property var appuntiDiSistema: []
+    property bool appuntiDiSistemaTagliati: false
+
+    /// C'è qualcosa da incollare: nostro o di un altro programma.
+    readonly property bool puoiIncollare: files.clipboard.length > 0
+                                          || files.appuntiDiSistema.length > 0
+
+    /// Il testo che abbiamo messo noi negli appunti di sistema: se ci si
+    /// ritrova lo stesso, la copia è ancora la nostra.
+    property string _nostri: ""
+
+    function _uriDi(percorso) {
+        return "file://" + String(percorso).split("/").map(encodeURIComponent).join("/");
+    }
+
+    function _percorsoDi(uri) {
+        var u = String(uri).trim();
+        if (u.indexOf("file://") !== 0)
+            return "";
+        u = u.substring(7);
+        // `file://localhost/…` e `file:///…` sono la stessa cosa; un altro
+        // host è un file di un'altra macchina, e non si incolla.
+        if (u.indexOf("localhost/") === 0)
+            u = u.substring(9);
+        if (u.charAt(0) !== "/")
+            return "";
+        try {
+            return decodeURIComponent(u);
+        } catch (e) {
+            return "";
+        }
+    }
+
+    function _pubblica(paths) {
+        var testo = paths.map(files._uriDi).join("\r\n") + "\r\n";
+        files._nostri = testo;
+        files.appuntiDiSistema = paths.slice();
+        files.appuntiDiSistemaTagliati = false;
+        scriviAppunti.start(["wl-copy", "--type", "text/uri-list", "--", testo]);
+    }
+
     function copyToClipboard(paths) {
         files.clipboard = paths.slice();
         files.clipboardIsCut = false;
+        files._pubblica(paths);
     }
 
     function cutToClipboard(paths) {
         files.clipboard = paths.slice();
         files.clipboardIsCut = true;
+        files._pubblica(paths);
     }
 
-    function clearClipboard() {
+    /// Svuota gli appunti dopo un taglio incollato. `ancheDiSistema`: la
+    /// copia negli appunti di sistema era la nostra, e i file non sono più
+    /// dove dice — si toglie, così un secondo «incolla» altrove non cerca
+    /// file spariti. Quella di un altro programma non si tocca.
+    function clearClipboard(ancheDiSistema) {
         files.clipboard = [];
         files.clipboardIsCut = false;
+        files.appuntiDiSistema = [];
+        files.appuntiDiSistemaTagliati = false;
+        if (ancheDiSistema === true) {
+            files._nostri = "";
+            scriviAppunti.start(["wl-copy", "--clear"]);
+        }
+    }
+
+    property var scriviAppunti: Core.Exec {}
+
+    /// Rilegge gli appunti di sistema. `poi`, se c'è, si chiama a lettura
+    /// finita con `(percorsi, tagliati)`.
+    property var _dopoLettura: []
+    function leggiAppunti(poi) {
+        if (poi)
+            files._dopoLettura = files._dopoLettura.concat([poi]);
+        if (leggi.busy)
+            return;
+        // Una riga col tipo, una con «cut» o «copy», poi gli indirizzi.
+        leggi.sh("t=$(wl-paste -l 2>/dev/null); "
+            + "if printf '%s\\n' \"$t\" | grep -qx 'x-special/gnome-copied-files'; then "
+            + "  echo gnome; wl-paste -n -t x-special/gnome-copied-files; "
+            + "elif printf '%s\\n' \"$t\" | grep -qx 'text/uri-list'; then "
+            + "  echo uri; "
+            + "  if printf '%s\\n' \"$t\" | grep -qx 'application/x-kde-cutselection' "
+            + "     && [ \"$(wl-paste -n -t application/x-kde-cutselection)\" = 1 ]; then echo cut; else echo copy; fi; "
+            + "  wl-paste -n -t text/uri-list; "
+            + "fi");
+    }
+
+    property var leggi: Core.Exec {
+        onDone: function (uscita) {
+            var righe = String(uscita).split(/\r?\n/);
+            var percorsi = [];
+            var tagliati = false;
+            if (righe.length >= 2 && (righe[0] === "gnome" || righe[0] === "uri")) {
+                tagliati = righe[1].trim() === "cut";
+                for (var i = 2; i < righe.length; i++) {
+                    var p = files._percorsoDi(righe[i]);
+                    if (p !== "")
+                        percorsi.push(p);
+                }
+            }
+            files.appuntiDiSistema = percorsi;
+            files.appuntiDiSistemaTagliati = tagliati;
+            var chi = files._dopoLettura;
+            files._dopoLettura = [];
+            for (var k = 0; k < chi.length; k++)
+                chi[k](percorsi, tagliati);
+        }
+    }
+
+    /// Cosa incollare adesso: `{percorsi, tagliati}`. Se negli appunti di
+    /// sistema c'è ancora la nostra copia vale il nostro «tagliato», che lì
+    /// non si può scrivere; se c'è quella di un altro programma, vale la sua.
+    function daIncollare() {
+        var sistema = files.appuntiDiSistema;
+        if (sistema.length === 0)
+            return { "percorsi": files.clipboard.slice(), "tagliati": files.clipboardIsCut,
+                     "nostra": true };
+        var nostra = sistema.length === files.clipboard.length
+            && sistema.every(function (p, i) { return p === files.clipboard[i]; });
+        return { "percorsi": sistema.slice(),
+                 "tagliati": nostra ? files.clipboardIsCut : files.appuntiDiSistemaTagliati,
+                 "nostra": nostra };
     }
 
     // ── Lo sfondo che una cartella si merita da sola ─────────────────────
