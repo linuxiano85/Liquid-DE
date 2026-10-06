@@ -32,6 +32,16 @@ import gi
 gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
 
+
+def registra(con, percorso, interfaccia, chiamata, proprieta=None):
+    """`register_object` con la firma nuova quando c'è (GLib 2.84, dove quella
+    vecchia è deprecata e lo scrive sul registro a ogni avvio), la vecchia
+    altrimenti."""
+    nuova = getattr(con, "register_object_with_closures2", None)
+    if nuova is not None:
+        return nuova(percorso, interfaccia, chiamata, proprieta, None)
+    return con.register_object(percorso, interfaccia, chiamata, proprieta, None)
+
 NOME = "org.freedesktop.FileManager1"
 PERCORSO = "/org/freedesktop/FileManager1"
 INTERFACCIA = """
@@ -124,7 +134,7 @@ def main() -> int:
     # chiamata che ci ha fatto partire arriva appena il nome è nostro, e deve
     # trovare qualcuno.
     def bus_pronto(con, _nome):
-        con.register_object(PERCORSO, nodo.interfaces[0], chiamata, None, None)
+        registra(con, PERCORSO, nodo.interfaces[0], chiamata)
 
     def perso(_con, _nome):
         # Il nome ce l'ha già qualcun altro (Dolphin acceso prima di noi):

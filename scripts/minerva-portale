@@ -39,6 +39,16 @@ import gi
 gi.require_version("Gio", "2.0")
 from gi.repository import Gio, GLib  # noqa: E402
 
+
+def registra(con, percorso, interfaccia, chiamata, proprieta=None):
+    """`register_object` con la firma nuova quando c'è (GLib 2.84, dove quella
+    vecchia è deprecata e lo scrive sul registro a ogni avvio), la vecchia
+    altrimenti."""
+    nuova = getattr(con, "register_object_with_closures2", None)
+    if nuova is not None:
+        return nuova(percorso, interfaccia, chiamata, proprieta, None)
+    return con.register_object(percorso, interfaccia, chiamata, proprieta, None)
+
 NOME = "org.freedesktop.impl.portal.desktop.liquidde"
 PERCORSO = "/org/freedesktop/portal/desktop"
 GTK = "org.freedesktop.impl.portal.desktop.gtk"
@@ -208,8 +218,7 @@ def main() -> int:
             chiedi_alla_shell("apriConChiudi", handle)
             rispondi(handle, ANNULLATO, {})
 
-        reg = bus[0].register_object(handle, nodo_richiesta.interfaces[0],
-                                     chiudi_richiesta, None, None)
+        reg = registra(bus[0], handle, nodo_richiesta.interfaces[0], chiudi_richiesta)
         in_sospeso[handle] = (invocazione, reg)
         riarma()
         # Col file in mano la finestrella chiede i candidati al demone, come
@@ -248,8 +257,8 @@ def main() -> int:
 
     def bus_pronto(con, _nome):
         bus[0] = con
-        con.register_object(PERCORSO, nodo.interfaces[0], chiamata, proprieta, None)
-        con.register_object(PERCORSO, nodo.interfaces[1], chiamata, None, None)
+        registra(con, PERCORSO, nodo.interfaces[0], chiamata, proprieta)
+        registra(con, PERCORSO, nodo.interfaces[1], chiamata)
 
     def perso(_con, _nome):
         ciclo.quit()

@@ -504,6 +504,21 @@ Exec=$CARTELLA_RADICE/scripts/minerva-portale
 FINE_DBUS
 c_ok "«Con che cosa lo apro?» dei programmi passa da Minerva"
 
+# ── «Non spegnere lo schermo, sto guardando un video» ────────────────────
+#
+# SDL2, VLC e quasi tutto ciò che gira in XWayland lo chiedono al servizio
+# D-Bus `org.freedesktop.ScreenSaver`, non al protocollo Wayland che il
+# compositore già onora; senza nessuno che lo tenesse, un film in finestra
+# finiva con lo schermo spento. Il servizio gira la richiesta al compositore
+# (`frena`) e fuori da Liquid DE esce senza prendere il nome, che sotto KDE è
+# di Plasma.
+cat > "$SERVIZI_DBUS/org.freedesktop.ScreenSaver.service" <<FINE_DBUS
+[D-BUS Service]
+Name=org.freedesktop.ScreenSaver
+Exec=$CARTELLA_RADICE/scripts/minerva-salvaschermo
+FINE_DBUS
+c_ok "«Non spegnere lo schermo» dei programmi arriva al compositore"
+
 gtk-update-icon-cache -f -t "$PREFISSO/share/icons/hicolor" >/dev/null 2>&1 || true
 
 # ── Chi apre le immagini ──────────────────────────────────────────────────

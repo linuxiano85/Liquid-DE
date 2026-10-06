@@ -513,6 +513,14 @@ struct minerva {
 	/// superfici. Vedi `inibitori_visibili`.
 	struct wlr_idle_inhibit_manager_v1 *inibizione;
 	struct wl_listener inibitore_nuovo;
+	/// Il freno chiesto da FUORI, col verbo `frena`: fino a quando vale, in
+	/// millisecondi monotoni (0 = nessuno). Lo chiede `scripts/minerva-salvaschermo`
+	/// per i programmi che parlano `org.freedesktop.ScreenSaver` invece del
+	/// protocollo Wayland — SDL2, VLC, quasi tutto ciò che gira in XWayland.
+	/// È a SCADENZA e si rinnova: se chi l'ha chiesto muore, il freno finisce
+	/// da sé invece di tenere lo schermo acceso per sempre.
+	uint64_t freno_fuori_fino_ms;
+	struct wl_event_source *freno_fuori_timer;
 
 	// ── Il blocco schermo ────────────────────────────────────────────
 	//
@@ -1239,6 +1247,7 @@ static void freno_aggiorna(struct minerva *m);
 static bool inibitori_visibili(struct minerva *m,
 		const struct wlr_idle_inhibitor_v1 *escluso);
 static bool schermo_intero_visibile(struct minerva *m);
+static bool frenato(struct minerva *m, const struct wlr_idle_inhibitor_v1 *escluso);
 static pid_t finestra_pid(struct finestra *f);
 // Il confine fra «finestra» e «xdg-shell». Vedi il blocco che le definisce.
 static struct wlr_surface *finestra_superficie(struct finestra *f);
@@ -5753,7 +5762,7 @@ static int inattivo_scatta(void *dati) {
 	// si conta. Non si SOSPENDE il conto — lo si azzera: uscendo dal video
 	// è giusto ripartire dai cinque minuti pieni, non dai trenta secondi
 	// che restavano.
-	if (inibitori_visibili(m, NULL) || schermo_intero_visibile(m)) {
+	if (frenato(m, NULL)) {
 		inattivo_riparti(m);
 		return 0;
 	}
@@ -5898,8 +5907,25 @@ static bool schermo_intero_visibile(struct minerva *m) {
 /// sé a ogni scatto; questo serve a chi usa `ext-idle-notify`.
 static void freno_aggiorna(struct minerva *m) {
 	if (m->inattivita != NULL)
-		wlr_idle_notifier_v1_set_inhibited(m->inattivita,
-			inibitori_visibili(m, NULL) || schermo_intero_visibile(m));
+		wlr_idle_notifier_v1_set_inhibited(m->inattivita, frenato(m, NULL));
+}
+
+/// Tutti i motivi per non contare l'inattività, in un posto solo: gli
+/// inibitori Wayland visibili (tranne `escluso`, che se ne sta andando), una
+/// finestra a schermo intero, e il freno chiesto da fuori finché non scade.
+static bool frenato(struct minerva *m, const struct wlr_idle_inhibitor_v1 *escluso) {
+	return inibitori_visibili(m, escluso) || schermo_intero_visibile(m)
+		|| (m->freno_fuori_fino_ms != 0 && ora_ms() < m->freno_fuori_fino_ms);
+}
+
+/// Il freno da fuori è scaduto senza rinnovo: lo si toglie e il conto riparte
+/// da capo, come quando un video finisce.
+static int freno_fuori_scade(void *dati) {
+	struct minerva *m = dati;
+	m->freno_fuori_fino_ms = 0;
+	freno_aggiorna(m);
+	inattivo_riparti(m);
+	return 0;
 }
 
 static void inibitore_distrutto(struct wl_listener *l, void *dati) {
@@ -5910,8 +5936,7 @@ static void inibitore_distrutto(struct wl_listener *l, void *dati) {
 		m->inibitori--;
 	// Non `freno_aggiorna`: quello conterebbe anche questo, ancora in elenco.
 	if (m->inattivita != NULL)
-		wlr_idle_notifier_v1_set_inhibited(m->inattivita,
-			inibitori_visibili(m, i->inib) || schermo_intero_visibile(m));
+		wlr_idle_notifier_v1_set_inhibited(m->inattivita, frenato(m, i->inib));
 	wl_list_remove(&i->distrutto.link);
 	free(i);
 	// Uscendo dal video il conto riparte da capo, non da dov'era.
@@ -10703,6 +10728,38 @@ void minerva_comando(struct minerva *m, const char *riga,
 	//
 	// Chiederla è mestiere della shell, che è dove sta la politica: vedi il
 	// blocco di commenti sui campi `inattivo_*` in `struct minerva`.
+	// ── Il freno chiesto da fuori ────────────────────────────────────
+	//
+	//     frena 90    →  ok    (non contare l'inattività per 90 secondi)
+	//     frena 0     →  ok    (tolto subito)
+	//
+	// Va rinnovato prima che scada: vedi `freno_fuori_fino_ms`.
+	if (strcmp(verbo, "frena") == 0) {
+		char *quanto = parola(&resto);
+		char *fine = NULL;
+		const long sec = quanto != NULL ? strtol(quanto, &fine, 10) : -1;
+		if (quanto == NULL || fine == quanto || *fine != '\0'
+		    || sec < 0 || sec > 600) {
+			snprintf(risposta, n, "no frena <secondi da 0 a 600>");
+			return;
+		}
+		if (m->freno_fuori_timer == NULL)
+			m->freno_fuori_timer = wl_event_loop_add_timer(m->loop,
+				freno_fuori_scade, m);
+		if (sec == 0) {
+			if (m->freno_fuori_timer != NULL)
+				wl_event_source_timer_update(m->freno_fuori_timer, 0);
+			freno_fuori_scade(m);
+		} else {
+			m->freno_fuori_fino_ms = ora_ms() + (uint64_t)sec * 1000u;
+			if (m->freno_fuori_timer != NULL)
+				wl_event_source_timer_update(m->freno_fuori_timer,
+					(int)sec * 1000);
+			freno_aggiorna(m);
+		}
+		snprintf(risposta, n, "ok");
+		return;
+	}
 	if (strcmp(verbo, "inattivita") == 0) {
 		if (inattivo_imposta(m, resto)) {
 			snprintf(risposta, n, "ok %d", m->inattivo_quante);
@@ -12709,6 +12766,8 @@ int main(int argc, char *argv[]) {
 		wl_list_remove(&m.inibitore_nuovo.link);
 	if (m.inattivo_timer != NULL)
 		wl_event_source_remove(m.inattivo_timer);
+	if (m.freno_fuori_timer != NULL)
+		wl_event_source_remove(m.freno_fuori_timer);
 	if (m.angolo_timer)
 		wl_event_source_remove(m.angolo_timer);
 	if (m.bordo_alto_timer)

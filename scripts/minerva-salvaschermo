@@ -1,0 +1,195 @@
+#!/usr/bin/env python3
+"""minerva-salvaschermo — «Non spegnere lo schermo, sto guardando un video.»
+
+── Perché esiste ──────────────────────────────────────────────────────────────
+
+Ci sono due modi per un programma di chiedere che lo schermo non si spenga.
+Quello di Wayland (`idle-inhibit`) il compositore lo onora dal 1º settembre
+2026. L'altro è il servizio D-Bus `org.freedesktop.ScreenSaver`, ed è quello
+che usano SDL2 (cioè quasi tutti i giochi nativi), VLC, molti lettori e tutto
+ciò che gira in XWayland. Sotto Liquid DE quel nome non lo teneva nessuno
+(trovato il 6 ottobre 2026): la richiesta falliva in silenzio, e un film in
+finestra guardato senza toccare niente finiva con lo schermo spento.
+
+Questo servizio tiene il nome e traduce: finché almeno un programma ha un
+freno, chiede al compositore `frena 90` e lo rinnova ogni minuto. Il freno del
+compositore SCADE: se questo processo muore, lo schermo torna a spegnersi da
+sé invece di restare acceso per sempre.
+
+Un freno se ne va con `UnInhibit` oppure quando il programma che l'ha chiesto
+esce dal bus: un lettore che si chiude di colpo non deve lasciarlo appeso.
+
+── Fuori da Liquid DE ─────────────────────────────────────────────────────────
+
+Il file di attivazione è dell'utente e vale anche sotto KDE, dove questo nome
+è di Plasma. Lì si esce SUBITO senza prenderlo: Plasma lo prende da sé.
+"""
+
+import os
+import subprocess
+import sys
+
+import gi
+
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib  # noqa: E402
+
+
+def registra(con, percorso, interfaccia, chiamata, proprieta=None):
+    """`register_object` con la firma nuova quando c'è (GLib 2.84, dove quella
+    vecchia è deprecata e lo scrive sul registro a ogni avvio), la vecchia
+    altrimenti."""
+    nuova = getattr(con, "register_object_with_closures2", None)
+    if nuova is not None:
+        return nuova(percorso, interfaccia, chiamata, proprieta, None)
+    return con.register_object(percorso, interfaccia, chiamata, proprieta, None)
+
+NOME = "org.freedesktop.ScreenSaver"
+# Chrome e SDL usano il primo percorso, VLC e i programmi KDE il secondo.
+PERCORSI = ("/org/freedesktop/ScreenSaver", "/ScreenSaver")
+INTERFACCIA = """
+<node>
+  <interface name="org.freedesktop.ScreenSaver">
+    <method name="Inhibit">
+      <arg type="s" name="application_name" direction="in"/>
+      <arg type="s" name="reason_for_inhibit" direction="in"/>
+      <arg type="u" name="cookie" direction="out"/>
+    </method>
+    <method name="UnInhibit">
+      <arg type="u" name="cookie" direction="in"/>
+    </method>
+    <method name="SimulateUserActivity"/>
+    <method name="GetActive">
+      <arg type="b" name="active" direction="out"/>
+    </method>
+  </interface>
+</node>
+"""
+
+# Quanto dura un freno chiesto al compositore, e ogni quanto si rinnova. Il
+# margine fra i due copre un rinnovo in ritardo; la durata corta limita lo
+# schermo acceso per niente se questo processo muore.
+DURATA_SECONDI = 90
+RINNOVO_SECONDI = 60
+# Senza freni da tanto: si esce, D-Bus ci riavvia alla prossima richiesta.
+RIPOSO_SECONDI = 300
+
+QUI = os.path.dirname(os.path.realpath(__file__))
+
+
+def in_liquid() -> bool:
+    nomi = os.environ.get("XDG_CURRENT_DESKTOP", "").lower().split(":")
+    return "liquidde" in nomi or "minerva" in nomi
+
+
+def compositore(*argomenti) -> None:
+    cmd = os.path.join(QUI, "minerva-compositore")
+    if not os.access(cmd, os.X_OK):
+        cmd = "minerva-compositore"
+    try:
+        subprocess.run([cmd, *argomenti], stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        print(f"minerva-salvaschermo: il compositore non risponde: {e}", file=sys.stderr)
+
+
+def main() -> int:
+    if not in_liquid():
+        return 0
+
+    ciclo = GLib.MainLoop()
+    nodo = Gio.DBusNodeInfo.new_for_xml(INTERFACCIA)
+    freni = {}          # cookie → (mittente, programma, motivo)
+    guardati = {}       # mittente → id dell'osservazione sul bus
+    prossimo = [1]
+    rinnovo = [0]
+    scadenza = [0]
+    bus = [None]
+
+    def riposo():
+        if scadenza[0]:
+            GLib.source_remove(scadenza[0])
+            scadenza[0] = 0
+        if not freni:
+            scadenza[0] = GLib.timeout_add_seconds(RIPOSO_SECONDI, lambda: (ciclo.quit(), False)[1])
+
+    def rinnova():
+        compositore("frena", str(DURATA_SECONDI))
+        return True
+
+    def aggiorna():
+        if freni and not rinnovo[0]:
+            rinnova()
+            rinnovo[0] = GLib.timeout_add_seconds(RINNOVO_SECONDI, rinnova)
+        elif not freni and rinnovo[0]:
+            GLib.source_remove(rinnovo[0])
+            rinnovo[0] = 0
+            compositore("frena", "0")
+        riposo()
+
+    def togli_di(mittente):
+        for c in [c for c, v in freni.items() if v[0] == mittente]:
+            del freni[c]
+        oss = guardati.pop(mittente, None)
+        if oss:
+            Gio.bus_unwatch_name(oss)
+        aggiorna()
+
+    def chiamata(_con, mittente, _percorso, _interfaccia, metodo, parametri, invocazione):
+        if metodo == "Inhibit":
+            programma, motivo = parametri.unpack()
+            cookie = prossimo[0]
+            prossimo[0] += 1
+            freni[cookie] = (mittente, programma, motivo)
+            if mittente not in guardati:
+                guardati[mittente] = Gio.bus_watch_name_on_connection(
+                    bus[0], mittente, Gio.BusNameWatcherFlags.NONE, None,
+                    lambda _c, nome: togli_di(nome))
+            aggiorna()
+            invocazione.return_value(GLib.Variant("(u)", (cookie,)))
+        elif metodo == "UnInhibit":
+            (cookie,) = parametri.unpack()
+            voce = freni.get(cookie)
+            # Solo chi l'ha messo lo toglie: un cookie è un numero piccolo e
+            # facile da indovinare.
+            if voce is not None and voce[0] == mittente:
+                del freni[cookie]
+                if not any(v[0] == mittente for v in freni.values()):
+                    oss = guardati.pop(mittente, None)
+                    if oss:
+                        Gio.bus_unwatch_name(oss)
+                aggiorna()
+            invocazione.return_value(None)
+        elif metodo == "SimulateUserActivity":
+            # «Fai come se qualcuno avesse toccato»: un freno di un secondo,
+            # che scadendo fa ripartire il conto da capo. Con un freno vero
+            # già acceso non serve, e accorcerebbe quello.
+            if not freni:
+                compositore("frena", "1")
+            invocazione.return_value(None)
+        elif metodo == "GetActive":
+            # Il salvaschermo «attivo» qui non esiste: c'è lo schermo spento
+            # e c'è il blocco, e né l'uno né l'altro si chiede da qui.
+            invocazione.return_value(GLib.Variant("(b)", (False,)))
+        else:
+            invocazione.return_dbus_error("org.freedesktop.DBus.Error.UnknownMethod", metodo)
+
+    def bus_pronto(con, _nome):
+        bus[0] = con
+        for p in PERCORSI:
+            registra(con, p, nodo.interfaces[0], chiamata)
+
+    def perso(_con, _nome):
+        ciclo.quit()
+
+    Gio.bus_own_name(Gio.BusType.SESSION, NOME, Gio.BusNameOwnerFlags.NONE,
+                     bus_pronto, None, perso)
+    riposo()
+    ciclo.run()
+    if freni:
+        compositore("frena", "0")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
