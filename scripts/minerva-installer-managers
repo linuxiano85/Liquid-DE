@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+"""Elenco di sola lettura dei display manager per l'installer grafico."""
+import os
+from pathlib import Path
+
+NAMES = {
+    "greetd.service": "Minerva",
+    "sddm.service": "SDDM (KDE)",
+    "plasmalogin.service": "KDE Plasma",
+    "gdm.service": "GNOME",
+    "lightdm.service": "LightDM",
+    "cosmic-greeter.service": "COSMIC",
+    "ly.service": "Ly",
+}
+LINK = Path("/etc/systemd/system/display-manager.service")
+current = Path(os.path.realpath(LINK)).name if LINK.is_symlink() else ""
+print(f"current\t{current}", flush=True)
+seen = set()
+for base in (Path("/etc/systemd/system"), Path("/usr/lib/systemd/system"),
+             Path("/lib/systemd/system")):
+    if not base.is_dir():
+        continue
+    for path in sorted(base.glob("*.service")):
+        name = path.name
+        if name == "display-manager.service" or name in seen or not path.is_file():
+            continue
+        try:
+            contents = path.read_text(errors="replace")
+        except OSError:
+            continue
+        if "Alias=display-manager.service" not in contents:
+            continue
+        seen.add(name)
+        print(f"manager\t{name}\t{NAMES.get(name, name.removesuffix('.service'))}", flush=True)

@@ -103,6 +103,20 @@ class LogicTests(unittest.TestCase):
         # 0, 1, 2, the reply pipe and the fd listdir itself opened.
         self.assertLessEqual(len(got["open"]), 5)
 
+    def test_worker_keeps_only_explicit_directory_descriptors(self):
+        with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryFile() as secret:
+            directory = os.open(folder, state.DIRECTORY)
+            try:
+                def seen():
+                    return {"directory": stat.S_ISDIR(os.fstat(directory).st_mode),
+                            "secret": os.path.exists(f"/proc/self/fd/{secret.fileno()}")}
+                with patch.object(state, "drop_privileges"):
+                    got = state.as_user(None, seen, keep_fds=(directory,))
+            finally:
+                os.close(directory)
+        self.assertTrue(got["directory"])
+        self.assertFalse(got["secret"])
+
     def test_oversized_export_does_not_leave_an_orphan_image(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

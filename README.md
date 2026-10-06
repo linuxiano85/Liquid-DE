@@ -42,6 +42,22 @@ compositore costruisce le prove in C solo se lo trova.
 
 ## Costruire e installare
 
+Su Arch Linux e derivate, apri una sessione grafica e avvia l'installer guidato:
+
+```bash
+./install.sh
+```
+
+Mostra le dipendenze mancanti prima di installarle, registra l'avanzamento e
+alla fine propone i gestori di accessi installati. Quello attuale resta
+selezionato: il cambio avviene solo su scelta esplicita e vale dal riavvio.
+Se Qt o Quickshell mancano, il lanciatore prepara prima i componenti grafici.
+I registri si trovano in `~/.local/state/liquid-de/installer/`: `launch-*.log`
+contiene l'avvio della finestra e i passaggi della guida; il registro con data
+e ora contiene tutti i comandi dell'installazione.
+
+Per l'installazione da terminale rimane disponibile:
+
 ```bash
 ./compositore/costruisci.sh        # il compositore
 ./scripts/minerva-compila          # il demone

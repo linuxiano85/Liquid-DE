@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Tiene un registro completo anche se la finestra viene chiusa durante la build.
+set -euo pipefail
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/liquid-de/installer"
+mkdir -p "$STATE"
+chmod 700 "$STATE"
+umask 077
+LOG="$STATE/$(date +%Y%m%d-%H%M%S)-$$.log"
+printf '@@MINERVA_LOG@@%s\n' "$LOG"
+exec 9>"$STATE/install.lock"
+if ! flock -n 9; then
+    echo "Un'altra installazione di Liquid DE è già in corso." >&2
+    exit 1
+fi
+export MINERVA_INSTALL_GUI=1
+export SUDO_ASKPASS="$ROOT/scripts/minerva-install-askpass"
+"$ROOT/scripts/install-minerva.sh" 2>&1 | tee "$LOG"

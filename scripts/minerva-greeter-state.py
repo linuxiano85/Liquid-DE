@@ -81,22 +81,29 @@ def drop_privileges(user):
         raise PermissionError("Riduzione dei privilegi non riuscita")
 
 
-def as_user(user, action, timeout=15):
+def as_user(user, action, timeout=15, keep_fds=()):
     """Bounded JSON IPC; no pickle or code deserialization in the root parent."""
     read_fd, write_fd = os.pipe2(os.O_CLOEXEC)
     pid = os.fork()
     if pid == 0:
         os.close(read_fd)
         try:
-            # Nothing of root's survives the drop but the reply pipe and
-            # stderr: stdout may be the root-only staging file of minerva-greetd.
+            # Nothing of root's survives the drop but the reply pipe, stderr,
+            # and explicitly allowed directory descriptors in keep_fds.
             null = os.open(os.devnull, os.O_RDWR)
             os.dup2(null, 0)
             os.dup2(null, 1)
             if null > 2:
                 os.close(null)
-            os.closerange(3, write_fd)
-            os.closerange(write_fd + 1, os.sysconf("SC_OPEN_MAX"))
+            limit = os.sysconf("SC_OPEN_MAX")
+            keep = sorted(fd for fd in set(keep_fds) | {write_fd}
+                          if 3 <= fd < limit)
+            start = 3
+            for fd in keep:
+                os.closerange(start, fd)
+                start = fd + 1
+            os.closerange(start, limit)
+
             drop_privileges(user)
             result = {"ok": True, "value": action()}
         except BaseException as error:
@@ -324,7 +331,7 @@ def prepare(state, logs, greeter):
     try:
         logs_fd = prepare_directory(logs, greeter, 0o750)
         try:
-            as_user(greeter, lambda: prepare_runtime(state_fd, logs_fd))
+            as_user(greeter, lambda: prepare_runtime(state_fd, logs_fd), keep_fds=(state_fd, logs_fd))
         finally:
             os.close(logs_fd)
     finally:
@@ -335,7 +342,7 @@ def copy_session(state, caller, greeter):
     imported = as_user(caller, lambda: import_session(caller))
     fd = runtime_directory(state, greeter)
     try:
-        as_user(greeter, lambda: write_runtime(fd, state, imported))
+        as_user(greeter, lambda: write_runtime(fd, state, imported), keep_fds=(fd,))
     finally:
         os.close(fd)
     if imported["warning"]:

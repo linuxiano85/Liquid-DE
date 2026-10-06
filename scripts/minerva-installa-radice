@@ -21,6 +21,7 @@
 #
 #   scripts/ minerva-shell/ assets/ config/ desktop/   come sono
 #   minervad/build/                                    solo i compilati
+#   compositore/build-native/minerva-wayland           il binario della login
 #
 # I sorgenti del demone NO: il guardiano (`minerva-demone`) li cerca per
 # decidere se ricompilare, e nella radice installata non ci sono di proposito
@@ -42,10 +43,14 @@ if [ "$SORGENTI" = "$(readlink -f "$RADICE" 2>/dev/null || echo "$RADICE")" ]; t
     exit 1
 fi
 
-for compilato in minervad/build/minervad minervad/build/minerva-terminale-motore; do
+for compilato in minervad/build/minervad minervad/build/minerva-terminale-motore \
+                 compositore/build-native/minerva-wayland; do
     if [ ! -x "$SORGENTI/$compilato" ]; then
         echo "minerva-installa-radice: manca $compilato." >&2
-        echo "  Compila prima il demone: $SORGENTI/scripts/minerva-compila" >&2
+        case "$compilato" in
+            compositore/*) echo "  Compila prima il compositore: $SORGENTI/compositore/costruisci.sh" >&2 ;;
+            *) echo "  Compila prima il demone: $SORGENTI/scripts/minerva-compila" >&2 ;;
+        esac
         exit 1
     fi
 done
@@ -71,6 +76,9 @@ rsync -a --delete --delete-excluded --delay-updates \
     --include='/minervad/build/' \
     --include='/minervad/build/minervad' \
     --include='/minervad/build/minerva-terminale-motore' \
+    --include='/compositore/' \
+    --include='/compositore/build-native/' \
+    --include='/compositore/build-native/minerva-wayland' \
     --include='/LICENSE' \
     --exclude='*' \
     "$SORGENTI/" "$RADICE/"

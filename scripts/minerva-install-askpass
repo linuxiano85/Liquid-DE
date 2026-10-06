@@ -1,0 +1,3 @@
+#!/bin/sh
+# sudo legge solo stdout. La password non passa dalla shell e non entra nel log.
+exec zenity --password --title='Autorizzazione · Liquid DE' --text='Autorizza l’installazione di Liquid DE' 2>/dev/null

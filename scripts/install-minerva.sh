@@ -13,7 +13,22 @@ c_ok()   { printf '\033[1;32m  ✔\033[0m %s\n' "$*"; }
 c_info() { printf '\033[1;36m  ➜\033[0m %s\n' "$*"; }
 c_warn() { printf '\033[1;33m  ⚠\033[0m %s\n' "$*"; }
 c_err()  { printf '\033[1;31m  ✘\033[0m %s\n' "$*"; }
-c_head() { printf '\n\033[1;35m━━ %s ━━\033[0m\n' "$*"; }
+# La GUI usa gli stessi pacchetti e lo stesso installatore del terminale.
+# Gli eventi hanno un prefisso distinto dal normale registro leggibile.
+c_head() {
+    printf '\n\033[1;35m━━ %s ━━\033[0m\n' "$*"
+    if [[ ${MINERVA_INSTALL_GUI:-0} == 1 ]]; then
+        printf '@@MINERVA_STAGE@@%s\n' "$*"
+    fi
+}
+
+sudo() {
+    if [[ ${MINERVA_INSTALL_GUI:-0} == 1 ]]; then
+        command sudo -A "$@"
+    else
+        command sudo "$@"
+    fi
+}
 
 if [[ $EUID -eq 0 ]]; then
     c_err "Non eseguire questo script come root. Usa il tuo utente normale (chiederà sudo)."
@@ -106,6 +121,22 @@ PKGS=(
 if ! command -v ksecretd >/dev/null 2>&1 &&
    ! command -v gnome-keyring-daemon >/dev/null 2>&1; then
     PKGS+=(gnome-keyring)
+fi
+
+# La scansione è priva di effetti e legge l'elenco usato davvero qui sotto.
+if [[ ${1:-} == --scan ]]; then
+    command -v pacman >/dev/null 2>&1 || { c_err "Serve pacman (Arch o derivata)."; exit 1; }
+    ESITO=0
+    MANCANTI=$(pacman -T "${PKGS[@]}" 2>/dev/null) || ESITO=$?
+    if [[ ${ESITO:-0} != 0 && ${ESITO:-0} != 127 ]]; then
+        c_err "Non riesco a controllare le dipendenze con pacman."
+        exit 1
+    fi
+    printf 'total\t%s\n' "${#PKGS[@]}"
+    while IFS= read -r pacchetto; do
+        [[ -z $pacchetto ]] || printf 'missing\t%s\n' "$pacchetto"
+    done <<< "$MANCANTI"
+    exit 0
 fi
 
 c_head "Dipendenze"
@@ -710,12 +741,13 @@ if command -v greetd >/dev/null 2>&1; then
     if sudo "$CARTELLA_RADICE/scripts/minerva-greetd" installa; then
         c_ok "schermata di accesso di Minerva pronta (si sceglie in Impostazioni → Accesso)"
     else
-        c_warn "schermata di accesso di Minerva non installata: si riprova con"
+        c_err "schermata di accesso di Minerva non installata: si riprova con"
         c_info "    sudo $CARTELLA_RADICE/scripts/minerva-greetd installa"
+        ALL_OK=0
     fi
 else
-    c_info "greetd non c'è: la schermata di accesso di Minerva resta da parte"
-    c_info "(sudo pacman -S greetd, poi rilancia questo script)"
+    c_err "greetd non è disponibile dopo l'installazione delle dipendenze"
+    ALL_OK=0
 fi
 
 echo
