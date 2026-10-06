@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 
 import "../theme" as Theme
+import "../core" as Core
 
 // Misure — i byte in parole, e le famiglie in colori.
 //
@@ -56,14 +57,14 @@ QtObject {
 
     function nome(cat) {
         switch (cat) {
-        case "cache":      return "Cache dei programmi";
-        case "sviluppo":   return "Roba di sviluppo";
-        case "pacchetti":  return "Pacchetti scaricati";
-        case "lingue":     return "Lingue che non usi";
-        case "miniature":  return "Miniature";
-        case "registri":   return "Registri";
-        case "temporanei": return "File temporanei";
-        case "cestino":    return "Cestino";
+        case "cache":      return Core.Strings.lang === "it" ? "Cache dei programmi" : "Program caches";
+        case "sviluppo":   return Core.Strings.lang === "it" ? "Roba di sviluppo" : "Development leftovers";
+        case "pacchetti":  return Core.Strings.lang === "it" ? "Pacchetti scaricati" : "Downloaded packages";
+        case "lingue":     return Core.Strings.lang === "it" ? "Lingue che non usi" : "Languages you don't use";
+        case "miniature":  return Core.Strings.lang === "it" ? "Miniature" : "Thumbnails";
+        case "registri":   return Core.Strings.lang === "it" ? "Registri" : "Logs";
+        case "temporanei": return Core.Strings.lang === "it" ? "File temporanei" : "Temporary files";
+        case "cestino":    return Core.Strings.lang === "it" ? "Cestino" : "Trash";
         }
         return cat;
     }
@@ -73,14 +74,14 @@ QtObject {
     /// sviluppo», che sono due decisioni diverse.
     function spiega(cat) {
         switch (cat) {
-        case "cache":      return "I programmi se la rifanno da soli usandoli.";
-        case "sviluppo":   return "Si rifà, ma ci vuole tempo: la prossima compilazione sarà lenta.";
-        case "pacchetti":  return "I file scaricati per installare i programmi. I programmi restano dove sono.";
-        case "lingue":     return "Traduzioni delle altre lingue. Tornano da sole se non si dice a pacman di lasciar perdere.";
-        case "miniature":  return "Le anteprime delle immagini. Tornano riaprendo una cartella.";
-        case "registri":   return "Servono a capire cosa è successo quando qualcosa va storto.";
-        case "temporanei": return "File di lavoro rimasti per terra. Si svuota comunque al riavvio.";
-        case "cestino":    return "Quello che c'è dentro l'hai buttato tu.";
+        case "cache":      return Core.Strings.lang === "it" ? "I programmi se la rifanno da soli usandoli." : "Programs rebuild it by themselves as you use them.";
+        case "sviluppo":   return Core.Strings.lang === "it" ? "Si rifà, ma ci vuole tempo: la prossima compilazione sarà lenta." : "It comes back, but it takes time: the next build will be slow.";
+        case "pacchetti":  return Core.Strings.lang === "it" ? "I file scaricati per installare i programmi. I programmi restano dove sono." : "The files downloaded to install programs. The programs stay where they are.";
+        case "lingue":     return Core.Strings.lang === "it" ? "Traduzioni delle altre lingue. Tornano da sole se non si dice a pacman di lasciar perdere." : "Translations into other languages. They come back unless pacman is told to skip them.";
+        case "miniature":  return Core.Strings.lang === "it" ? "Le anteprime delle immagini. Tornano riaprendo una cartella." : "Image previews. They come back when a folder is reopened.";
+        case "registri":   return Core.Strings.lang === "it" ? "Servono a capire cosa è successo quando qualcosa va storto." : "They help to understand what happened when something goes wrong.";
+        case "temporanei": return Core.Strings.lang === "it" ? "File di lavoro rimasti per terra. Si svuota comunque al riavvio." : "Work files left lying around. It is emptied at restart anyway.";
+        case "cestino":    return Core.Strings.lang === "it" ? "Quello che c'è dentro l'hai buttato tu." : "You put what is in there yourself.";
         }
         return "";
     }

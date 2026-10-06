@@ -54,12 +54,14 @@ import "../ui" as Ui
 FloatingWindow {
     id: finestra
 
+    readonly property bool it: Core.Strings.lang === "it"
+
     // I colori arrivano dal demone: mostrarsi col tema di fabbrica e poi
     // scattare è il difetto che tutte le finestre di Minerva hanno già pagato.
     visible: Core.Ipc.prontoADipingere && !finestra.dormiente
     property bool dormiente: false
 
-    title: "Minerva · Manutenzione"
+    title: finestra.it ? "Minerva · Manutenzione" : "Minerva · Maintenance"
     implicitWidth: 1120
     implicitHeight: 780
     minimumSize: Qt.size(820, 560)
@@ -355,7 +357,7 @@ FloatingWindow {
         if (finestra.caricando) return;
         finestra.caricando = true;
         diario.avanzamento = 0;
-        diario.scrivi("Comincio a guardare.");
+        diario.scrivi(finestra.it ? "Comincio a guardare." : "Starting to look.");
         Core.Ipc.manutenzioneVedi();
     }
 
@@ -378,8 +380,8 @@ FloatingWindow {
             finestra.orfani = info.orfani || [];
             finestra.totale = Number(info.totale) || 0;
             finestra.recuperato = info.recuperato || ({});
-            diario.scrivi("Trovati " + Misure.peso(finestra.totale)
-                          + " in " + finestra.voci.length + " voci.");
+            diario.scrivi((finestra.it ? "Trovati " : "Found ") + Misure.peso(finestra.totale)
+                          + " in " + finestra.voci.length + (finestra.it ? " voci." : " items."));
             // La prima volta si propone una scelta; dopo no, o rileggendo si
             // butterebbe via quello che si era appena spuntato a mano.
             if (finestra._primaVolta) {
@@ -392,12 +394,14 @@ FloatingWindow {
             if (!esito) return;
             finestra.togliendoOrfani = false;
             if (esito.ok !== true) {
-                diario.scrivi(esito.errore || "Non ce l'ho fatta.");
+                diario.scrivi(esito.errore || (finestra.it ? "Non ce l'ho fatta." : "I couldn't do it."));
                 return;
             }
             diario.scrivi(esito.quanti > 0
-                          ? "Tolti " + esito.quanti + " pacchetti. Ricontrollo."
-                          : "Non c'era più niente da togliere.");
+                          ? (finestra.it ? "Tolti " + esito.quanti + " pacchetti. Ricontrollo."
+                                         : "Removed " + esito.quanti + " packages. Checking again.")
+                          : (finestra.it ? "Non c'era più niente da togliere."
+                                         : "There was nothing left to remove."));
             finestra.rileggi();
         }
 
@@ -406,7 +410,7 @@ FloatingWindow {
             finestra.pulendo = false;
             diario.avanzamento = -1;
             if (esito.ok !== true) {
-                diario.scrivi(esito.errore || "Non ce l'ho fatta.");
+                diario.scrivi(esito.errore || (finestra.it ? "Non ce l'ho fatta." : "I couldn't do it."));
                 return;
             }
             // Voce per voce, e solo quelle andate storte: un elenco di
@@ -415,12 +419,13 @@ FloatingWindow {
             var fatte = esito.fatte || [];
             for (var i = 0; i < fatte.length; i++) {
                 if (fatte[i].ok !== true)
-                    diario.scrivi(fatte[i].id + ": " + (fatte[i].perche || "non riuscito"));
+                    diario.scrivi(fatte[i].id + ": " + (fatte[i].perche || (finestra.it ? "non riuscito" : "failed")));
             }
-            diario.scrivi("Tolte " + (esito.quante || 0) + " voci"
+            diario.scrivi((finestra.it ? "Tolte " : "Removed ") + (esito.quante || 0)
+                          + (finestra.it ? " voci" : " items")
                           + ((esito.nonRiuscite || 0) > 0
-                             ? ", " + esito.nonRiuscite + " no" : "")
-                          + ". Adesso ricontrollo.");
+                             ? ", " + esito.nonRiuscite + (finestra.it ? " no" : " not") : "")
+                          + (finestra.it ? ". Adesso ricontrollo." : ". Checking again now."));
             // ── Si rimisura, sempre ─────────────────────────────────────
             //
             // Il numero che conta non è quello promesso prima: è quello che
@@ -439,7 +444,8 @@ FloatingWindow {
             finestra.pulendo = false;
             finestra.caricando = false;
             diario.avanzamento = -1;
-            diario.scrivi("Non ce l'ho fatta: " + (perche || "non so perché"));
+            diario.scrivi(finestra.it ? "Non ce l'ho fatta: " + (perche || "non so perché")
+                                      : "I couldn't do it: " + (perche || "I don't know why"));
         }
     }
 
@@ -485,7 +491,8 @@ FloatingWindow {
         if (finestra.togliendoOrfani || finestra.orfani.length === 0) return;
         finestra.confermoOrfani = false;
         finestra.togliendoOrfani = true;
-        diario.scrivi("Tolgo i pacchetti rimasti soli: "
+        diario.scrivi((finestra.it ? "Tolgo i pacchetti rimasti soli: "
+                                   : "Removing the orphaned packages: ")
                       + finestra.orfani.join(", "));
         Core.Ipc.manutenzioneOrfani();
     }
@@ -495,7 +502,7 @@ FloatingWindow {
         finestra.chiedoConferma = false;
         finestra.pulendo = true;
         diario.avanzamento = 0;
-        diario.scrivi("Comincio a togliere.");
+        diario.scrivi(finestra.it ? "Comincio a togliere." : "Starting to remove.");
         Core.Ipc.manutenzionePulisci(finestra.idScelti);
     }
 
@@ -540,7 +547,7 @@ FloatingWindow {
             spacing: 1
 
             Text {
-                text: "Manutenzione"
+                text: finestra.it ? "Manutenzione" : "Maintenance"
                 color: Theme.Colors.text
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeXL
@@ -548,7 +555,7 @@ FloatingWindow {
             }
 
             Text {
-                text: "Cosa occupa posto su questo computer"
+                text: finestra.it ? "Cosa occupa posto su questo computer" : "What takes up space on this computer"
                 color: Theme.Colors.textFaint
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeXS
@@ -560,8 +567,8 @@ FloatingWindow {
             anchors.centerIn: parent
             spacing: Theme.Effects.space1
 
-            Scheda { quale: "spazio"; testo: "Spazio" }
-            Scheda { quale: "ordine"; testo: "Ordine" }
+            Scheda { quale: "spazio"; testo: finestra.it ? "Spazio" : "Space" }
+            Scheda { quale: "ordine"; testo: finestra.it ? "Ordine" : "Tidy up" }
         }
 
         // ── Quanto hai recuperato da sempre ─────────────────────────────
@@ -611,6 +618,8 @@ FloatingWindow {
                     anchors.baseline: parent.children[0].baseline
                     text: {
                         var v = Number(finestra.recuperato.volte) || 0;
+                        if (!finestra.it)
+                            return v === 1 ? "in one clean-up" : "in " + v + " clean-ups";
                         return v === 1 ? "in una pulizia"
                                        : "in " + v + " pulizie";
                     }
@@ -633,7 +642,8 @@ FloatingWindow {
             anchors.rightMargin: Theme.Effects.space5
             anchors.verticalCenter: parent.verticalCenter
             attivo: !finestra.caricando && !finestra.pulendo
-            testo: finestra.caricando ? "Sto guardando…" : "Rileggi"
+            testo: finestra.caricando ? (finestra.it ? "Sto guardando…" : "Looking…")
+                                       : (finestra.it ? "Rileggi" : "Look again")
             onScelto: finestra.rileggi()
         }
     }
@@ -722,7 +732,7 @@ FloatingWindow {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
                 text: finestra.evidenziata === ""
-                      ? "si possono togliere"
+                      ? (finestra.it ? "si possono togliere" : "can be removed")
                       : Misure.nome(finestra.evidenziata)
                 color: Theme.Colors.textFaint
                 font.family: Theme.Typography.fontDisplay
@@ -805,7 +815,8 @@ FloatingWindow {
             anchors.right: parent.right
             anchors.top: anello.top
             anchors.bottom: anello.bottom
-            titolo: finestra.caricando ? "Sto guardando" : "Registro"
+            titolo: finestra.caricando ? (finestra.it ? "Sto guardando" : "Looking")
+                                        : (finestra.it ? "Registro" : "Log")
         }
     }
 
@@ -864,7 +875,7 @@ FloatingWindow {
                     Text {
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
-                        text: "Niente da pulire"
+                        text: finestra.it ? "Niente da pulire" : "Nothing to clean"
                         color: Theme.Colors.text
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeXL
@@ -875,9 +886,12 @@ FloatingWindow {
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
                         wrapMode: Text.WordWrap
-                        text: "Su questo computer non è rimasto niente che "
-                              + "valga la pena togliere. Le cache si rifanno "
-                              + "usandolo: fra qualche giorno riguarda."
+                        text: finestra.it
+                              ? "Su questo computer non è rimasto niente che "
+                                + "valga la pena togliere. Le cache si rifanno "
+                                + "usandolo: fra qualche giorno riguarda."
+                              : "Nothing worth removing is left on this computer. "
+                                + "Caches come back as you use it: look again in a few days."
                         color: Theme.Colors.textFaint
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeSM
@@ -978,7 +992,7 @@ FloatingWindow {
                                 // cosa che dice se aprirla vale la pena.
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: modelData.voci.length + " voci"
+                                    text: modelData.voci.length + (finestra.it ? " voci" : " items")
                                     color: Theme.Colors.textFaint
                                     font.family: Theme.Typography.fontDisplay
                                     font.pixelSize: Theme.Typography.sizeXS
@@ -1059,7 +1073,7 @@ FloatingWindow {
                 visible: finestra.orfani.length > 0
 
                 Text {
-                    text: "Pacchetti rimasti soli"
+                    text: finestra.it ? "Pacchetti rimasti soli" : "Orphaned packages"
                     color: Theme.Colors.text
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeLG
@@ -1072,9 +1086,13 @@ FloatingWindow {
                     // Il numero di megabyte non si scrive perché **è zero**, e
                     // prometterli sarebbe la prima bugia del programma: gli
                     // orfani si tolgono per ordine, non per spazio.
-                    text: "Installati come dipendenza di qualcosa che non c'è più. "
-                          + "Non liberano spazio: si tolgono per ordine, e per questo "
-                          + "sono scritti per nome — uno di loro potrebbe servirti."
+                    text: finestra.it
+                          ? "Installati come dipendenza di qualcosa che non c'è più. "
+                            + "Non liberano spazio: si tolgono per ordine, e per questo "
+                            + "sono scritti per nome — uno di loro potrebbe servirti."
+                          : "Installed as a dependency of something that is gone. "
+                            + "They free little space: they are removed for tidiness, so "
+                            + "they are listed by name — you might need one of them."
                     color: Theme.Colors.textFaint
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeXS
@@ -1085,12 +1103,13 @@ FloatingWindow {
 
                     Pulsante {
                         testo: finestra.togliendoOrfani
-                               ? "Sto togliendo…"
+                               ? (finestra.it ? "Sto togliendo…" : "Removing…")
                                : (finestra.confermoOrfani
-                                  ? "Sì, togli " + finestra.orfani.length
-                                  : "Togli " + finestra.orfani.length
+                                  ? (finestra.it ? "Sì, togli " : "Yes, remove ") + finestra.orfani.length
+                                  : (finestra.it ? "Togli " : "Remove ") + finestra.orfani.length
                                     + (finestra.orfani.length === 1
-                                       ? " pacchetto" : " pacchetti"))
+                                       ? (finestra.it ? " pacchetto" : " package")
+                                       : (finestra.it ? " pacchetti" : " packages")))
                         primario: finestra.confermoOrfani
                         attivo: !finestra.togliendoOrfani
                         onScelto: {
@@ -1103,14 +1122,14 @@ FloatingWindow {
 
                     Pulsante {
                         visible: finestra.confermoOrfani && !finestra.togliendoOrfani
-                        testo: "Lascia stare"
+                        testo: finestra.it ? "Lascia stare" : "Leave it"
                         onScelto: finestra.confermoOrfani = false
                     }
 
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: finestra.confermoOrfani
-                        text: "Ti chiederà la password."
+                        text: finestra.it ? "Ti chiederà la password." : "It will ask for your password."
                         color: Theme.Colors.warning
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeXS
@@ -1211,7 +1230,7 @@ FloatingWindow {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: "spuntati su " + Misure.peso(finestra.totale)
+                text: (finestra.it ? "spuntati su " : "ticked of ") + Misure.peso(finestra.totale)
                 color: Theme.Colors.textFaint
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeSM
@@ -1220,7 +1239,7 @@ FloatingWindow {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: finestra.vuoleLaPassword
-                text: "· una parte chiederà la password"
+                text: finestra.it ? "· una parte chiederà la password" : "· some of it will ask for the password"
                 color: Theme.Colors.warning
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeSM
@@ -1243,7 +1262,7 @@ FloatingWindow {
                 // larghezza dipende dal figlio e il figlio si centra sulla
                 // larghezza. Qt lo dice a voce alta: «Binding loop detected».
                 content: Text {
-                    text: "Togli le spunte"
+                    text: finestra.it ? "Togli le spunte" : "Untick all"
                     color: Theme.Colors.textMuted
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeSM
@@ -1254,7 +1273,7 @@ FloatingWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 onClicked: finestra.scegliLeSicure()
                 content: Text {
-                    text: "Solo quelle sicure"
+                    text: finestra.it ? "Solo quelle sicure" : "Only the safe ones"
                     color: Theme.Colors.textMuted
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeSM
@@ -1273,10 +1292,10 @@ FloatingWindow {
                 attivo: finestra.spuntati > 0
                         && !finestra.pulendo && !finestra.caricando
                 testo: finestra.pulendo
-                       ? "Sto togliendo…"
+                       ? (finestra.it ? "Sto togliendo…" : "Removing…")
                        : (finestra.spuntati > 0
-                          ? "Pulisci " + Misure.peso(finestra.spuntati)
-                          : "Niente da pulire")
+                          ? (finestra.it ? "Pulisci " : "Clean ") + Misure.peso(finestra.spuntati)
+                          : (finestra.it ? "Niente da pulire" : "Nothing to clean"))
                 onScelto: finestra.chiedoConferma = true
             }
         }
@@ -1306,6 +1325,14 @@ FloatingWindow {
                 wrapMode: Text.WordWrap
                 text: {
                     var quante = finestra.idScelti.length;
+                    if (!finestra.it) {
+                        var en = "Removing " + quante + (quante === 1 ? " item" : " items")
+                                 + " for " + Misure.peso(finestra.spuntati) + ".";
+                        if (finestra.quanteConPassword > 0)
+                            en += " For " + finestra.quanteConPassword
+                                  + " of them it will ask for the administrator password.";
+                        return en;
+                    }
                     var frase = "Tolgo " + quante + (quante === 1 ? " voce" : " voci")
                                 + " per " + Misure.peso(finestra.spuntati) + ".";
                     // Se c'è roba di sistema si dice PRIMA che comparirà la
@@ -1326,14 +1353,14 @@ FloatingWindow {
 
             Pulsante {
                 anchors.verticalCenter: parent.verticalCenter
-                testo: "Lascia stare"
+                testo: finestra.it ? "Lascia stare" : "Leave it"
                 onScelto: finestra.chiedoConferma = false
             }
 
             Pulsante {
                 anchors.verticalCenter: parent.verticalCenter
                 primario: true
-                testo: "Sì, togli"
+                testo: finestra.it ? "Sì, togli" : "Yes, remove"
                 onScelto: finestra.pulisci()
             }
         }
