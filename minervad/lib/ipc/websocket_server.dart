@@ -21,6 +21,7 @@ import '../services/schemi.dart';
 import '../services/app_usage_tracker.dart';
 import '../services/keybind_service.dart';
 import '../services/file_service.dart';
+import '../services/osservatore_cartelle.dart';
 import '../services/system_state_service.dart';
 import '../services/mime_service.dart';
 import '../services/finestre_service.dart';
@@ -159,6 +160,11 @@ class WebSocketServer {
   final FileService _fileService;
   final SystemStateService _systemState;
   final FinestreService _finestre;
+
+  /// Le cartelle aperte nei riquadri del gestore file, guardate con inotify:
+  /// quando cambiano da fuori, il riquadro rilegge (`fs_changed`).
+  late final OsservatoreCartelle _osservatore = OsservatoreCartelle(
+      (client, messaggio) => (client as WebSocketClientConnection).send(messaggio));
   final RicercaService _ricerca = RicercaService();
 
   /// La galleria. Non tiene stato fra una richiesta e l'altra tranne il
@@ -1072,6 +1078,7 @@ class WebSocketServer {
     // La Fucina racconta la compilazione a chi ascolta: chi se ne va smette
     // di essere nell'elenco, o ogni riga di `make` proverebbe a raggiungerlo.
     _fucina.officina.smetti(client);
+    _osservatore.smetti(client);
 
     // Cleanup belongs to the conversation owner; it cannot be stolen by a
     // new client while a reply or cancellation is still outstanding.
@@ -1791,7 +1798,20 @@ class WebSocketServer {
             await _vestiILauncher(result['entries']);
             result['pane'] = msg['pane'] ?? '';
             client.send({'event': 'fs_listing', 'payload': result});
+            // Da qui in poi quello che cambia in questa cartella si dice da
+            // sé: vedi `OsservatoreCartelle`.
+            final riquadro = (msg['pane'] ?? '').toString();
+            if (riquadro.isNotEmpty && (result['error'] ?? '') == '') {
+              _osservatore.guarda(client, riquadro, path);
+            }
           }
+        }
+        break;
+
+      case 'fs_unwatch':
+        {
+          final riquadro = (msg['pane'] ?? '').toString();
+          if (riquadro.isNotEmpty) _osservatore.smettiRiquadro(client, riquadro);
         }
         break;
 

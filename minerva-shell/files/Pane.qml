@@ -18,6 +18,13 @@ Item {
     /// risposte dei due riquadri non si confondono.
     required property string paneId
 
+    /// Di quale cartella è l'elenco che si vede: serve a riconoscere una
+    /// rilettura della stessa cartella (vedi `onFileListingReceived`).
+    property string _elencoDi: ""
+
+    // Chiusa la scheda, il demone smette di guardare la sua cartella.
+    Component.onDestruction: Core.Ipc.fsSmettiDiGuardare(pane.paneId)
+
     /// Vero quando è questo il riquadro che riceve i comandi.
     property bool focused: false
 
@@ -487,10 +494,35 @@ Item {
 
     Connections {
         target: Core.Ipc
+        // ── Quello che cambia da fuori ───────────────────────────────────
+        //
+        // Lo scaricamento di Chrome che arriva in «Scaricati», un file salvato
+        // da un altro programma, uno cancellato dal terminale: il demone guarda
+        // la cartella e lo dice, e il riquadro rilegge come dopo una copia
+        // sua. Prima non si vedeva niente finché non si rientrava.
+        function onCartellaCambiata(info) {
+            if (info.pane === pane.paneId && info.path === pane.path)
+                pane.reload();
+        }
+
         function onFileListingReceived(listing) {
             if (listing.pane !== pane.paneId)
                 return;
+            // ── La stessa cartella riletta non torna in cima ─────────────
+            //
+            // Un elenco nuovo rifà la griglia, e la griglia riparte
+            // dall'alto. Entrando in una cartella è giusto; rileggendo quella
+            // in cui si è — un file arrivato da fuori, una copia finita —
+            // vuol dire perdere il punto a cui si era arrivati, e durante uno
+            // scaricamento saltare in cima a ogni secondo.
+            var stessa = pane._elencoDi === pane.path;
+            var y = view.contentY;
+            pane._elencoDi = pane.path;
             pane.entries = listing.entries || [];
+            if (stessa && y > 0)
+                Qt.callLater(function () {
+                    view.contentY = Math.max(0, Math.min(y, view.contentHeight - view.height));
+                });
             if (pane.daSelezionare !== "")
                 Qt.callLater(pane._selezionaArrivato);
             // Com'è già ordinato quello che è arrivato. Se combacia con

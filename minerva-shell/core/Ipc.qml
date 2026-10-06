@@ -728,6 +728,9 @@ QtObject {
     // risposta da quella dell'altro.
 
     signal fileListingReceived(var listing)
+    /// Una cartella aperta in un riquadro è cambiata da fuori: `{path, pane}`.
+    /// Vedi `OsservatoreCartelle` nel demone.
+    signal cartellaCambiata(var info)
     signal fileJobChanged(var job)
     signal fileJobsReceived(var jobs)
     signal fileResultReceived(var result)
@@ -911,6 +914,11 @@ QtObject {
 
     function fsSearchCancel(id) {
         return send({ "action": "fs_search_cancel", "id": id });
+    }
+
+    /// Il riquadro non c'è più: il demone smette di guardare la sua cartella.
+    function fsSmettiDiGuardare(pane) {
+        return send({ "action": "fs_unwatch", "pane": pane });
     }
 
     function fsList(path, showHidden, pane) {
@@ -2325,6 +2333,9 @@ QtObject {
                 break;
             case "fs_listing":
                 ipc.fileListingReceived(msg.payload);
+                break;
+            case "fs_changed":
+                ipc.cartellaCambiata(msg.payload || {});
                 break;
             case "fs_search":
                 ipc.ricercaAvanza(msg.payload);

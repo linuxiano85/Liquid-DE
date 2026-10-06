@@ -7,6 +7,7 @@ node --test tests/shell-regressions.mjs
 python3 tests/test_greeter_state.py
 dart run tests/desktop_launcher_test.dart
 dart run tests/greetd_conversation_test.dart
+dart run tests/osservatore_cartelle_test.dart
 tests/compila-shell.sh
 (cd tests/fucina_suite && dart test)
 ```
