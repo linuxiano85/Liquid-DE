@@ -150,10 +150,29 @@ Page {
     /// non incollato in una riga di shell — e comunque `minerva-greetd` lo
     /// ricontrolla da capo, perché lo si può lanciare anche a mano e un
     /// controllo che vive solo qui non è un controllo.
+    /// Il comando che manca, da dare una volta in un terminale. Dalla radice
+    /// installata, che è dove sta lo script vero.
+    readonly property string _comandoInstalla: {
+        var dir = String(Quickshell.shellDir).replace(/^file:\/\//, "").replace(/\/+$/, "");
+        return "sudo " + dir.substring(0, dir.lastIndexOf("/")) + "/scripts/minerva-greetd installa";
+    }
+
     function cambiaGestore() {
-        if (page.comandoGreetd === "" || page.gestoreScelto === "")
+        if (page.gestoreScelto === "")
             return;
-        page.esito = "";
+        // Qui usciva in silenzio: senza `/usr/local/bin/minerva-greetd` il
+        // pulsante «Cambia» non faceva niente e non diceva niente (Giacomo,
+        // 6 ottobre 2026). Non si lancia lo script della cartella di casa
+        // con `pkexec` — sarebbe root che esegue un file che qualunque tuo
+        // programma può riscrivere — e allora si dice cosa dare, una volta.
+        if (page.comandoGreetd === "") {
+            page.esitoGestore = page.it
+                ? "Manca il programma che cambia il gestore di accessi. Dallo una volta in un terminale, poi riapri questa pagina:\n" + page._comandoInstalla
+                : "The program that switches the login manager is missing. Run this once in a terminal, then reopen this page:\n" + page._comandoInstalla;
+            page.esitoGestoreGrave = true;
+            return;
+        }
+        page.esitoGestore = "";
         gestore.command = ["pkexec", page.comandoGreetd,
                            "gestore", page.gestoreScelto];
         gestore.running = true;
@@ -271,6 +290,21 @@ Page {
                     onClicked: page.cambiaGestore()
                 }
             }
+        }
+
+        // Selezionabile: quando dice di dare un comando, lo si copia da qui.
+        TextEdit {
+            width: parent.width
+            visible: page.esitoGestore !== ""
+            readOnly: true
+            selectByMouse: true
+            wrapMode: TextEdit.WordWrap
+            textFormat: TextEdit.PlainText
+            text: page.esitoGestore
+            color: page.esitoGestoreGrave ? Theme.Colors.danger : Theme.Colors.textMuted
+            selectionColor: Qt.alpha(Theme.Colors.accent, 0.4)
+            font.family: Theme.Typography.fontDisplay
+            font.pixelSize: Theme.Typography.sizeSM
         }
     }
 
@@ -722,6 +756,11 @@ Page {
     }
 
     property string esito: ""
+    /// L'esito del cambio di gestore di accessi: sta sotto il SUO pulsante,
+    /// in cima alla pagina. Condiviso con «Applica», in fondo, non lo vedeva
+    /// chi aveva appena premuto «Cambia».
+    property string esitoGestore: ""
+    property bool esitoGestoreGrave: false
     property bool esitoGrave: false
 
     /// Dove sta il programma che scrive in `/etc/greetd`. **Quello
@@ -753,8 +792,8 @@ Page {
         stdout: StdioCollector {
             onStreamFinished: {
                 if (text.trim() !== "") {
-                    page.esito = text.trim();
-                    page.esitoGrave = false;
+                    page.esitoGestore = text.trim();
+                    page.esitoGestoreGrave = false;
                 }
                 // Si rilegge chi è acceso invece di darlo per fatto: se
                 // `systemctl enable` è fallito, lo script ha già rimesso
@@ -766,13 +805,13 @@ Page {
             onStreamFinished: {
                 if (text.trim() === "")
                     return;
-                page.esito = text.trim();
-                page.esitoGrave = true;
+                page.esitoGestore = text.trim();
+                page.esitoGestoreGrave = true;
             }
         }
         onExited: function (code) {
             if (code === 126)
-                page.esito = page.it ? "Annullato." : "Cancelled.";
+                page.esitoGestore = page.it ? "Annullato." : "Cancelled.";
         }
     }
 

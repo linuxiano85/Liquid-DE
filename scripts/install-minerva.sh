@@ -692,6 +692,26 @@ for bin in minerva-wayland minerva-cattura minerva-pty minerva-pam minerva-polki
     fi
 done
 
+# ── La schermata di accesso di Minerva, pronta da scegliere ─────────────
+#
+# Impostazioni → Accesso → «Cambia gestore di accessi» passa da
+# `/usr/local/bin/minerva-greetd` (di root, non scrivibile da te: `pkexec`
+# non deve mai eseguire uno script della cartella di casa). Quella copia la fa
+# `minerva-greetd installa`, e qui non lo faceva nessuno: il pulsante «Cambia»
+# restava senza effetto (Giacomo, 6 ottobre 2026). `installa` copia e scrive
+# la configurazione e basta — chi ti fa entrare resta quello di adesso.
+if command -v greetd >/dev/null 2>&1; then
+    if sudo "$CARTELLA_RADICE/scripts/minerva-greetd" installa; then
+        c_ok "schermata di accesso di Minerva pronta (si sceglie in Impostazioni → Accesso)"
+    else
+        c_warn "schermata di accesso di Minerva non installata: si riprova con"
+        c_info "    sudo $CARTELLA_RADICE/scripts/minerva-greetd installa"
+    fi
+else
+    c_info "greetd non c'è: la schermata di accesso di Minerva resta da parte"
+    c_info "(sudo pacman -S greetd, poi rilancia questo script)"
+fi
+
 echo
 if [[ $ALL_OK -eq 1 ]]; then
     c_ok "Installazione completata. Esci e scegli «Liquid DE» nel display manager,"
