@@ -1966,6 +1966,17 @@ FloatingWindow {
 
                 // ── Casa ─────────────────────────────────────────────────
 
+                // I file aperti di recente, da qualunque programma: non è una
+                // cartella, è una ricerca già fatta (vedi `Pane.mostraRecenti`).
+                SideEntry {
+                    goccia: gocciaPosti
+                    attiva: manager.current !== null && manager.current.recenti
+                    width: sideColumn.width
+                    icon: "clock"
+                    label: Core.Strings.lang === "it" ? "Recenti" : "Recent"
+                    onChosen: if (manager.current) manager.current.mostraRecenti()
+                }
+
                 Repeater {
                     model: Files.places
                     delegate: SideEntry {

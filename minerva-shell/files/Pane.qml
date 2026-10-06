@@ -160,7 +160,28 @@ Item {
         Core.Ipc.fsSearch(pane.idRicerca, pane.path, pane.filter, pane.showHidden);
     }
 
+    // ── I recenti ────────────────────────────────────────────────────────
+    //
+    // Sono una ricerca già fatta: file da cartelle diverse, ognuno con la sua
+    // accanto. Il demone li legge da `recently-used.xbel`, lo stesso elenco
+    // di GTK, Chrome e KDE (vedi `RecentiService`).
+    property bool recenti: false
+
+    function mostraRecenti() {
+        pane.fermaRicerca();
+        pane.cercando = true;
+        pane.recenti = true;
+        pane.ricercaFinita = false;
+        pane.ricercaTroppi = false;
+        pane.risultati = [];
+        pane.cursor = 0;
+        pane.cursoreMostrato = false;
+        pane.selection = [];
+        Core.Ipc.send({ "action": "fs_recenti", "id": pane.idRicerca });
+    }
+
     function fermaRicerca() {
+        pane.recenti = false;
         if (!pane.cercando)
             return;
         Core.Ipc.fsSearchCancel(pane.idRicerca);
@@ -441,6 +462,9 @@ Item {
     function navigate(to, record) {
         if (to === "")
             return;
+        // Dai Recenti si torna a una cartella anche quando è quella in cui
+        // si era: lì il percorso non cambia e niente spegnerebbe la vista.
+        pane.fermaRicerca();
         pane.path = to;
         pane.selection = [];
         pane.cursor = 0;
@@ -1249,6 +1273,8 @@ Item {
                 // In ricerca il titolo dice cosa si sta cercando, non dove si
                 // è: la cartella la dicono già le briciole due righe sopra, e
                 // quello che si ha in testa in quel momento è la parola.
+                if (pane.recenti)
+                    return Core.Strings.lang === "it" ? "Recenti" : "Recent";
                 if (pane.cercando)
                     return "«" + pane.filter + "»";
                 var p = String(pane.path || "");
@@ -1277,6 +1303,12 @@ Item {
                 var it = Core.Strings.lang === "it";
                 // In ricerca «50 di 5» non vuol dire niente: il secondo numero
                 // è quanto c'è in QUESTA cartella, e la ricerca guarda altrove.
+                if (pane.recenti) {
+                    if (!pane.ricercaFinita)
+                        return "";
+                    return n === 0 ? (it ? "niente di recente" : "nothing recent")
+                                   : (it ? n + " aperti di recente" : n + " opened recently");
+                }
                 if (pane.cercando) {
                     if (!pane.ricercaFinita)
                         return it ? "cerco in tutte le sottocartelle…"

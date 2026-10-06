@@ -305,6 +305,13 @@ ShellRoot {
             return "ok";
         }
 
+        /// Per le prove: la vista «Recenti» nella scheda attiva.
+        function recenti(): string {
+            if (manager.current)
+                manager.current.mostraRecenti();
+            return "ok";
+        }
+
         /// Per le prove: Ctrl+Z. Risponde con cosa ha annullato.
         function annulla(): string {
             var cosa = Files.cosaAnnullare;

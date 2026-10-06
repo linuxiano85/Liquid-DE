@@ -22,6 +22,7 @@ import '../services/app_usage_tracker.dart';
 import '../services/keybind_service.dart';
 import '../services/file_service.dart';
 import '../services/osservatore_cartelle.dart';
+import '../services/recenti_service.dart';
 import '../services/system_state_service.dart';
 import '../services/mime_service.dart';
 import '../services/finestre_service.dart';
@@ -166,6 +167,7 @@ class WebSocketServer {
   late final OsservatoreCartelle _osservatore = OsservatoreCartelle(
       (client, messaggio) => (client as WebSocketClientConnection).send(messaggio));
   final RicercaService _ricerca = RicercaService();
+  final RecentiService _recenti = RecentiService();
 
   /// La galleria. Non tiene stato fra una richiesta e l'altra tranne il
   /// catalogo, che è esattamente il punto: caricarlo una volta e riusarlo.
@@ -1049,6 +1051,18 @@ class WebSocketServer {
     // scrivania ferma altrimenti resterebbe senza elenco per sempre.
     _finestre.clienti(_clients.length);
     _finestre.spingiTutto();
+  }
+
+  /// Un file aperto da Minerva va fra i recenti, dove lo vedono anche gli
+  /// altri programmi. Le cartelle no: «aperta una cartella» non è un
+  /// documento su cui si stava lavorando.
+  void _ricordaAperti(List<String> paths, String appId, {String mime = ''}) {
+    unawaited(() async {
+      for (final p in paths) {
+        if (FileSystemEntity.typeSync(p) != FileSystemEntityType.file) continue;
+        await _recenti.aggiungi(p, mime: mime, programma: appId);
+      }
+    }());
   }
 
   /// Spegne l'ascolto di PipeWire se non è rimasto nessuno iscritto.
@@ -2163,6 +2177,19 @@ class WebSocketServer {
             final r = await _fileService.collega(paths, prefisso);
             client.send({'event': 'fs_result', 'payload': r});
           }
+        }
+        break;
+
+      // I file aperti di recente, come risultati di una ricerca: il
+      // riquadro li mostra con la cartella accanto. Vedi `RecentiService`.
+      case 'fs_recenti':
+        {
+          final id = '${msg['id'] ?? ''}';
+          final voci = await _recenti.leggi();
+          client.send({
+            'event': 'fs_search',
+            'payload': {'id': id, 'voci': voci, 'fine': true, 'trovati': voci.length},
+          });
         }
         break;
 
@@ -3525,10 +3552,9 @@ class WebSocketServer {
           final appId = msg['appId'];
           final paths = (msg['paths'] as List?)?.cast<String>() ?? [];
           if (appId is String && paths.isNotEmpty) {
-            client.send({
-              'event': 'fs_result',
-              'payload': await _mime.openWith(appId, paths),
-            });
+            final r = await _mime.openWith(appId, paths);
+            client.send({'event': 'fs_result', 'payload': r});
+            if (r['ok'] == true) _ricordaAperti(paths, appId);
           }
         }
         break;
@@ -3555,10 +3581,9 @@ class WebSocketServer {
                 },
               });
             } else {
-              client.send({
-                'event': 'fs_result',
-                'payload': await _mime.openWith(appId, paths),
-              });
+              final r = await _mime.openWith(appId, paths);
+              client.send({'event': 'fs_result', 'payload': r});
+              if (r['ok'] == true) _ricordaAperti(paths, appId, mime: mime);
             }
           }
         }
