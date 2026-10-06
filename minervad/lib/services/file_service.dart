@@ -346,6 +346,34 @@ class FileService {
     };
   }
 
+  /// Rinomina più file in un colpo («Vacanze 01.jpg», «Vacanze 02.jpg»…).
+  /// Ogni coppia `{da, a}`; mai sopra un nome che c'è già. Risponde con
+  /// quelle riuscite, che è quello che serve per annullarle tutte insieme.
+  Future<Map<String, dynamic>> rinominaMolti(List<Map> coppie) async {
+    final fatti = <Map<String, String>>[];
+    final falliti = <String>[];
+    for (final c in coppie) {
+      final da = '${c['da'] ?? ''}';
+      final a = '${c['a'] ?? ''}';
+      if (!da.startsWith('/') || !a.startsWith('/') || _genitoreDi(da) != _genitoreDi(a)) {
+        continue;
+      }
+      try {
+        if (await _sameEntry(da, a)) continue;
+        LinuxFiles.renameNoReplace(da, a);
+        fatti.add({'da': da, 'a': a});
+      } catch (e) {
+        falliti.add(motivo(da.split('/').last, e));
+      }
+    }
+    return {
+      'ok': falliti.isEmpty,
+      'error': falliti.join('\n'),
+      'operazione': 'rinomine',
+      'fatti': fatti,
+    };
+  }
+
   /// Rimette al loro posto dei file spostati: «Annulla» di uno spostamento.
   /// Ogni coppia è `{da, a}` come la scrive `TransferJob.fatti`: il file sta
   /// in `a` e torna in `da`, senza mai scrivere sopra qualcosa che nel

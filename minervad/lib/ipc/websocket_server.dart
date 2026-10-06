@@ -2145,6 +2145,16 @@ class WebSocketServer {
         break;
 
       // ── Cestino ───────────────────────────────────────────────────────
+      case 'fs_rinomina_molti':
+        {
+          final coppie = (msg['coppie'] as List?)?.whereType<Map>().toList() ?? [];
+          if (coppie.isNotEmpty) {
+            final r = await _fileService.rinominaMolti(coppie);
+            client.send({'event': 'fs_result', 'payload': r});
+          }
+        }
+        break;
+
       case 'fs_symlink':
         {
           final paths = (msg['paths'] as List?)?.whereType<String>().toList() ?? [];

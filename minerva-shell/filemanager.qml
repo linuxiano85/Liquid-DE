@@ -292,6 +292,19 @@ ShellRoot {
             return String(ops.length);
         }
 
+        /// Per le prove: Ctrl+A nella scheda attiva.
+        function scegliTutto(): string {
+            if (manager.current)
+                manager.current.selectAll();
+            return String(manager.current ? manager.current.selection.length : 0);
+        }
+
+        /// Per le prove: F2 su più file, col nome già scritto.
+        function rinominaTutti(base: string): string {
+            manager.rinominaInSerie(base);
+            return "ok";
+        }
+
         /// Per le prove: Ctrl+Z. Risponde con cosa ha annullato.
         function annulla(): string {
             var cosa = Files.cosaAnnullare;

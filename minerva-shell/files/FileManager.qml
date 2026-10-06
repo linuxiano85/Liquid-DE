@@ -1271,13 +1271,64 @@ FloatingWindow {
 
     function doRename() {
         var ops = manager.operands();
-        if (ops.length !== 1)
+        if (ops.length === 0)
             return;
         if (!manager.scriviQui())
             return;
+        // ── Più file: un nome e un numero ────────────────────────────────
+        //
+        // F2 su più file non faceva niente (6 ottobre 2026). Adesso si
+        // chiede un nome solo, e i file diventano «Nome 01.jpg», «Nome
+        // 02.jpg»… nell'ordine in cui si vedono, ognuno con la SUA
+        // estensione. Si annulla tutto con un Ctrl+Z.
+        if (ops.length > 1) {
+            var it = Core.Strings.lang === "it";
+            prompt.begin("renameMany",
+                         (it ? "Nuovo nome per " : "New name for ") + ops.length
+                         + (it ? " file — diventano «nome 01», «nome 02»…"
+                               : " files — they become “name 01”, “name 02”…"),
+                         Files.baseName(ops[0]).replace(/\.[^.]*$/, ""));
+            return;
+        }
         prompt.begin("rename",
                      Core.Strings.lang === "it" ? "Nuovo nome" : "New name",
                      Files.baseName(ops[0]));
+    }
+
+    /// L'estensione da tenere: «.jpg», ma anche «.tar.gz», che non è «.gz».
+    function _estensione(nome) {
+        var m = /\.tar\.(gz|xz|bz2|zst|lz4)$/i.exec(nome);
+        if (m)
+            return m[0];
+        var punto = nome.lastIndexOf(".");
+        return punto > 0 ? nome.substring(punto) : "";
+    }
+
+    /// «Nome 01.jpg», «Nome 02.png»… nell'ordine in cui si vedono.
+    function rinominaInSerie(base) {
+        var ops = manager.operands();
+        if (ops.length < 2 || !manager.current)
+            return;
+        var ordine = {};
+        var visti = manager.current.shown;
+        for (var i = 0; i < visti.length; i++)
+            ordine[visti[i].path] = i;
+        ops = ops.slice().sort(function (x, y) {
+            return (ordine[x] !== undefined ? ordine[x] : 1e9)
+                 - (ordine[y] !== undefined ? ordine[y] : 1e9);
+        });
+        var cifre = Math.max(2, String(ops.length).length);
+        var coppie = [];
+        for (var k = 0; k < ops.length; k++) {
+            var numero = String(k + 1);
+            while (numero.length < cifre)
+                numero = "0" + numero;
+            var voce = manager.voceDi(ops[k]);
+            var est = voce && voce.isDir ? "" : manager._estensione(Files.baseName(ops[k]));
+            coppie.push({ "da": ops[k],
+                          "a": Files.parentPath(ops[k]) + "/" + base + " " + numero + est });
+        }
+        Core.Ipc.fsRinominaMolti(coppie);
     }
 
     /// I pulsanti della barra, decisi da ciò che è selezionato adesso.
@@ -2539,6 +2590,9 @@ FloatingWindow {
         if (puoi && n === 1)
             items.push({ "label": it ? "Rinomina" : "Rename", "icon": "document",
                          "action": "rename", "shortcut": "F2" });
+        else if (puoi && n > 1)
+            items.push({ "label": (it ? "Rinomina " : "Rename ") + n + (it ? " file" : " files"),
+                         "icon": "document", "action": "rename", "shortcut": "F2" });
         if (puoi) {
             items.push({ "label": it ? "Nuova cartella" : "New folder",
                          "icon": "plus", "action": "newFolder",
@@ -3093,6 +3147,8 @@ FloatingWindow {
                 if (!manager.radice("crea-cartella",
                                     [manager.current.path + "/" + name]))
                     Core.Ipc.fsMakeDirectory(manager.current.path + "/" + name);
+            } else if (prompt.mode === "renameMany") {
+                manager.rinominaInSerie(name);
             } else if (prompt.mode === "rename") {
                 var ops = manager.operands();
                 if (ops.length === 1) {
@@ -3257,7 +3313,7 @@ FloatingWindow {
                                 var it = Core.Strings.lang === "it";
                                 if (promptBtn.modelData.id === "annulla")
                                     return it ? "Annulla" : "Cancel";
-                                if (prompt.mode === "rename")
+                                if (prompt.mode === "rename" || prompt.mode === "renameMany")
                                     return it ? "Rinomina" : "Rename";
                                 if (prompt.mode === "newFolder")
                                     return it ? "Crea" : "Create";

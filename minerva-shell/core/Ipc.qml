@@ -1076,6 +1076,11 @@ QtObject {
         return send({ "action": "locale_set", "value": value });
     }
 
+    /// Più rinomine in un colpo: `[{da, a}]`, annullabili insieme.
+    function fsRinominaMolti(coppie) {
+        return send({ "action": "fs_rinomina_molti", "coppie": coppie });
+    }
+
     /// Un collegamento simbolico a ciascun percorso, nella sua cartella.
     function fsCollega(paths, prefisso) {
         return send({ "action": "fs_symlink", "paths": paths, "prefisso": prefisso });

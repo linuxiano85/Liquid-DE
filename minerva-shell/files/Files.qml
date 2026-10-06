@@ -640,6 +640,7 @@ QtObject {
         case "rinomina": return (it ? "rinomina di " : "rename of ") + u.a.split("/").pop();
         case "sposta":   return (it ? "sposta " : "move ") + cosa;
         case "copia":    return (it ? "copia di " : "copy of ") + cosa;
+        case "rinomine": return (it ? "rinomina di " : "rename of ") + cosa;
         case "creati":   return (it ? "crea " : "create ") + u.percorsi[0].split("/").pop()
                                 + (n > 1 ? (it ? " e altri " : " and ") + (n - 1) : "");
         }
@@ -671,6 +672,8 @@ QtObject {
                 }
                 files._ricorda({ "tipo": "cestino", "percorsi": r.nelCestino,
                                  "quanti": r.nelCestino.length });
+            } else if (r.operazione === "rinomine" && r.fatti && r.fatti.length > 0) {
+                files._ricorda({ "tipo": "rinomine", "fatti": r.fatti, "quanti": r.fatti.length });
             } else if (r.operazione === "creati" && r.creati && r.creati.length > 0) {
                 files._ricorda({ "tipo": "creati", "percorsi": r.creati, "quanti": r.creati.length });
             } else if (r.operazione === "rinomina") {
@@ -714,6 +717,11 @@ QtObject {
         case "copia":
             files._cestiniDaSaltare++;
             Core.Ipc.fsTrash(u.fatti.map(function (f) { return f.a; }));
+            break;
+        case "rinomine":
+            // `fs_rimetti` porta ogni file da `a` a `da`: è esattamente la
+            // rinomina all'indietro, tutte insieme e senza sovrascrivere.
+            Core.Ipc.fsRimetti(u.fatti);
             break;
         case "creati":
             // Nel cestino e non cancellati: una cartella nuova può essersi
