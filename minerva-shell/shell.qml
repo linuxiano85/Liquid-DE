@@ -2397,6 +2397,8 @@ ShellRoot {
             }
             if (secondi === root.sogliaBlocco && root.sogliaBlocco > 0)
                 root.run([root.minervaRoot + "/scripts/minerva-blocca"]);
+            if (secondi === root.sogliaSchermo && root.sogliaSchermo > 0)
+                Core.Compositore._nostro("riposo", ["si"]);
             if (secondi === root.sogliaSospensione
                     && root.sogliaSospensione > 0) {
                 // ── La riga che non si discute ──────────────────────────
@@ -2452,6 +2454,10 @@ ShellRoot {
     // prima o poi scatta.
     readonly property int sogliaDim: Core.Ipc.get("power.dimAfter", 5) * 60
     readonly property int sogliaBlocco: Core.Ipc.get("power.lockAfter", 10) * 60
+    /// Lo schermo a riposo: il compositore lo spegne e lo riaccende da sé al
+    /// primo tocco. Era il mestiere di `hypridle`, perso quando il conto è
+    /// passato al compositore (vedi `riposo_dormi` in `compositore/src/main.c`).
+    readonly property int sogliaSchermo: Core.Ipc.get("power.screenOffAfter", 15) * 60
     readonly property int sogliaSospensione:
         Core.Ipc.get("power.suspendAfter", 30) * 60
 
@@ -2467,10 +2473,12 @@ ShellRoot {
         // è il campo `inattivita` nella risposta a `stato` del compositore.
         console.debug("[MINERVA] Inattività: chiedo le soglie "
                       + root.sogliaDim + " " + root.sogliaBlocco + " "
+                      + root.sogliaSchermo + " "
                       + root.sogliaSospensione + " (canale aperto: "
                       + Core.Compositore.canaleAperto + ")");
         Core.Compositore.sorvegliaInattivita([root.sogliaDim,
                                               root.sogliaBlocco,
+                                              root.sogliaSchermo,
                                               root.sogliaSospensione]);
     }
 
@@ -2482,6 +2490,7 @@ ShellRoot {
     // tap-to-click per otto ore — vedi `core/Compositore.qml`.
     onSogliaDimChanged: root.applicaInattivita()
     onSogliaBloccoChanged: root.applicaInattivita()
+    onSogliaSchermoChanged: root.applicaInattivita()
     onSogliaSospensioneChanged: root.applicaInattivita()
 
     Connections {

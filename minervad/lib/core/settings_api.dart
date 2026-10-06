@@ -1370,6 +1370,10 @@ class SettingsApi {
           // Minuti. 0 = mai.
           'dimAfter': 5,
           'lockAfter': 10,
+          // Lo schermo a riposo (verbo `riposo` del compositore): su un fisso
+          // è l'unica cosa che spegne davvero il monitor, perché
+          // `brightnessctl` non ci arriva.
+          'screenOffAfter': 15,
           'suspendAfter': 30,
           'lidAction': 'suspend',
           // Il modo risparmio del compositore: «auto» abbassa gli effetti a

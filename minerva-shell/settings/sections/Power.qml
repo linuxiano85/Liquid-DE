@@ -158,6 +158,7 @@ Page {
 
     readonly property int dimAfter:     Core.Ipc.get("power.dimAfter", 5)
     readonly property int lockAfter:    Core.Ipc.get("power.lockAfter", 10)
+    readonly property int screenOffAfter: Core.Ipc.get("power.screenOffAfter", 15)
     readonly property int suspendAfter: Core.Ipc.get("power.suspendAfter", 30)
 
     /// Cambiare una soglia è cambiare un'impostazione, e basta.
@@ -538,6 +539,9 @@ Page {
                 { "key": "lockAfter",
                   "it": "Blocca lo schermo dopo",     "en": "Lock the screen after",
                   "value": page.lockAfter, "max": 60 },
+                { "key": "screenOffAfter",
+                  "it": "Spegni lo schermo dopo",     "en": "Turn the screen off after",
+                  "value": page.screenOffAfter, "max": 120 },
                 { "key": "suspendAfter",
                   "it": "Sospendi il computer dopo",  "en": "Suspend the computer after",
                   "value": page.suspendAfter, "max": 120 }

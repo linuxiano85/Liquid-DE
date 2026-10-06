@@ -414,8 +414,9 @@ Singleton {
         //
         // Anche qui solo il FATTO: «sono passati tanti secondi senza che
         // nessuno tocchi niente». Cosa farne — abbassare la luce, bloccare,
-        // sospendere — lo decide chi ascolta, ed è `shell.qml` leggendo
-        // `power.dimAfter`, `power.lockAfter`, `power.suspendAfter`. Stessa
+        // spegnere lo schermo, sospendere — lo decide chi ascolta, ed è
+        // `shell.qml` leggendo `power.dimAfter`, `power.lockAfter`,
+        // `power.screenOffAfter`, `power.suspendAfter`. Stessa
         // divisione del coperchio, e per la stessa ragione: una sospensione
         // decisa dal compositore è una macchina che sparisce.
         if (t.indexOf("evento inattivo ") === 0) {

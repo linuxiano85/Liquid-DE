@@ -521,6 +521,9 @@ struct minerva {
 	/// da sé invece di tenere lo schermo acceso per sempre.
 	uint64_t freno_fuori_fino_ms;
 	struct wl_event_source *freno_fuori_timer;
+	/// Almeno uno schermo è in riposo: `attivita()` lo guarda a ogni evento
+	/// d'ingresso, quindi dev'essere un booleano e non un giro sugli schermi.
+	bool riposo;
 
 	// ── Il blocco schermo ────────────────────────────────────────────
 	//
@@ -949,6 +952,12 @@ struct schermo {
 	struct wl_listener frame;
 	struct wl_listener distrutto;
 
+	/// Spento per inattività (verbo `riposo`), non per scelta: resta nella
+	/// disposizione e nell'elenco, e al primo tocco si riaccende col modo che
+	/// aveva. Uno schermo spento da `schermi.conf` non ci entra mai.
+	bool riposo;
+	struct wlr_output_mode *riposo_modo;
+
 	/// Per che strada passa la luce notturna su QUESTO schermo.
 	///
 	///     0  non ancora provata
@@ -1244,6 +1253,7 @@ static void x11_cambia_forma(struct wl_listener *l, void *dati);
 static void sovrapposta_cambia_forma(struct wl_listener *l, void *dati);
 static void sovrapposta_chiede_misura(struct wl_listener *l, void *dati);
 static void freno_aggiorna(struct minerva *m);
+static void riposo_sveglia(struct minerva *m);
 static bool inibitori_visibili(struct minerva *m,
 		const struct wlr_idle_inhibitor_v1 *escluso);
 static bool schermo_intero_visibile(struct minerva *m);
@@ -5735,6 +5745,8 @@ static void inattivo_riparti(struct minerva *m) {
 static void attivita(struct minerva *m) {
 	if (m->inattivita != NULL)
 		wlr_idle_notifier_v1_notify_activity(m->inattivita, m->seat);
+	if (m->riposo)
+		riposo_sveglia(m);
 
 	m->ultima_attivita_ms = ora_ms();
 
@@ -5916,6 +5928,71 @@ static void freno_aggiorna(struct minerva *m) {
 static bool frenato(struct minerva *m, const struct wlr_idle_inhibitor_v1 *escluso) {
 	return inibitori_visibili(m, escluso) || schermo_intero_visibile(m)
 		|| (m->freno_fuori_fino_ms != 0 && ora_ms() < m->freno_fuori_fino_ms);
+}
+
+// ── Lo schermo a riposo ──────────────────────────────────────────────────
+//
+// «Dopo tanti minuti spegni lo schermo» lo faceva `hypridle`; quando il conto
+// è passato al compositore (1º settembre 2026) sono rimaste luce, blocco e
+// sospensione, e lo spegnimento si è perso: su un fisso, dove `brightnessctl`
+// non arriva al monitor, lo schermo restava acceso tutta la notte (trovato il
+// 6 ottobre 2026). La shell decide QUANDO (`riposo si` a una sua soglia); qui
+// si spegne e si riaccende.
+//
+// Si spegne l'uscita e basta: niente `wlr_output_layout_remove`, niente
+// `disponi`. Le finestre restano dove sono, e l'uscita resta annunciata ai
+// programmi — toglierla farebbe ricreare alla shell ogni pannello.
+static void riposo_dormi(struct minerva *m) {
+	struct schermo *s;
+	wl_list_for_each(s, &m->schermi_elenco, link) {
+		if (!s->out->enabled || s->riposo)
+			continue;
+		s->riposo_modo = s->out->current_mode;
+		struct wlr_output_state st;
+		wlr_output_state_init(&st);
+		wlr_output_state_set_enabled(&st, false);
+		if (wlr_output_commit_state(s->out, &st)) {
+			s->riposo = true;
+			m->riposo = true;
+			wlr_log(WLR_INFO, "minerva: schermo %s a riposo", s->out->name);
+		}
+		wlr_output_state_finish(&st);
+	}
+}
+
+static void riposo_sveglia(struct minerva *m) {
+	m->riposo = false;
+	struct schermo *s;
+	wl_list_for_each(s, &m->schermi_elenco, link) {
+		if (!s->riposo)
+			continue;
+		s->riposo = false;
+		struct wlr_output_state st;
+		wlr_output_state_init(&st);
+		wlr_output_state_set_enabled(&st, true);
+		if (s->riposo_modo != NULL)
+			wlr_output_state_set_mode(&st, s->riposo_modo);
+		bool ok = wlr_output_commit_state(s->out, &st);
+		wlr_output_state_finish(&st);
+		if (!ok) {
+			// Il modo di prima non lo vuole più (un monitor cambiato mentre
+			// dormiva): quello preferito, che ogni schermo accetta. Uno
+			// schermo che non si riaccende è uno schermo da cui non si
+			// rimedia niente.
+			wlr_output_state_init(&st);
+			wlr_output_state_set_enabled(&st, true);
+			struct wlr_output_mode *sicuro = wlr_output_preferred_mode(s->out);
+			if (sicuro != NULL)
+				wlr_output_state_set_mode(&st, sicuro);
+			ok = wlr_output_commit_state(s->out, &st);
+			wlr_output_state_finish(&st);
+		}
+		s->riposo_modo = NULL;
+		wlr_log(ok ? WLR_INFO : WLR_ERROR, "minerva: schermo %s %s",
+			s->out->name, ok ? "sveglio" : "non si riaccende");
+		if (ok)
+			wlr_output_schedule_frame(s->out);
+	}
 }
 
 /// Il freno da fuori è scaduto senza rinnovo: lo si toglie e il conto riparte
@@ -8726,6 +8803,7 @@ static void comando_stato(struct minerva *m, char *risposta, size_t n) {
 	}
 	snprintf(risposta, n,
 		"ok {\"bloccato\":%s,%s,\"scrivania\":%d,\"inattivita\":%d,"
+		"\"riposo\":%s,\"frenato\":%s,"
 		"\"cornice\":\"%s\",\"cornicePeriodo\":%d,"
 		"\"corniceSpessore\":%d,\"corniceTinte\":%d,"
 		"\"corniceSpente\":%.2f,"
@@ -8736,7 +8814,9 @@ static void comando_stato(struct minerva *m, char *risposta, size_t n) {
 		"\"presentati\":%u,\"mercurio\":%s,\"ponti\":%d,\"fantasmi\":%d,"
 		"\"risparmio\":%s}",
 		m->bloccato ? "true" : "false", code, m->scrivania_attiva,
-		m->inattivo_quante, corn, m->cornice_periodo, m->cornice_spessore,
+		m->inattivo_quante, m->riposo ? "true" : "false",
+		frenato(m, NULL) ? "true" : "false",
+		corn, m->cornice_periodo, m->cornice_spessore,
 		m->cornice_quante_tinte, m->cornice_spente,
 		eff, (double)m->effetto_alfa, m->elastico, m->rigidita, m->smorzamento,
 		m->tinta_rgb[0], m->tinta_rgb[1], m->tinta_rgb[2], strada,
@@ -10734,6 +10814,24 @@ void minerva_comando(struct minerva *m, const char *riga,
 	//     frena 0     →  ok    (tolto subito)
 	//
 	// Va rinnovato prima che scada: vedi `freno_fuori_fino_ms`.
+	// ── Lo schermo a riposo ──────────────────────────────────────────
+	//
+	//     riposo si   →  ok    (spegne gli schermi accesi)
+	//     riposo no   →  ok    (li riaccende; lo fa da sé anche al primo tocco)
+	if (strcmp(verbo, "riposo") == 0) {
+		char *cosa = parola(&resto);
+		if (cosa != NULL && strcmp(cosa, "si") == 0) {
+			riposo_dormi(m);
+			snprintf(risposta, n, "ok");
+		} else if (cosa != NULL && strcmp(cosa, "no") == 0) {
+			if (m->riposo)
+				riposo_sveglia(m);
+			snprintf(risposta, n, "ok");
+		} else {
+			snprintf(risposta, n, "no riposo si|no");
+		}
+		return;
+	}
 	if (strcmp(verbo, "frena") == 0) {
 		char *quanto = parola(&resto);
 		char *fine = NULL;
