@@ -341,13 +341,15 @@ FloatingWindow {
     /// Apre una scheda nuova. Parte dalla cartella che si sta guardando: si
     /// apre una scheda per andare da qualche altra parte PARTENDO da qui,
     /// quasi mai per ricominciare dalla home.
-    function addTab(path) {
+    /// `seleziona`: un file della cartella da trovare già scelto («Mostra
+    /// nella cartella»). Viaggia con la scheda perché la scheda nasce dopo.
+    function addTab(path, seleziona) {
         if (manager.tabs.count >= manager.maxTabs)
             return;
         var start = path
                     || (manager.current ? manager.current.path : Files.home)
                     || Files.home;
-        manager.tabs.append({ "startPath": start });
+        manager.tabs.append({ "startPath": start, "seleziona": String(seleziona || "") });
         // Il fuoco va sulla scheda appena aperta: è quella che si è chiesta.
         focusLater.index = manager.tabs.count - 1;
         focusLater.restart();
@@ -384,11 +386,30 @@ FloatingWindow {
     /// aperta anche la scheda di casa, che nessuno aveva chiesto — si finiva
     /// con due riquadri per una cartella sola.
     property string initialPath: ""
+    /// Il file da trovare già scelto nella prima scheda (`minerva-files
+    /// --mostra`, avviato a freddo).
+    property string initialSeleziona: ""
+
+    /// «Mostra nella cartella»: la cartella di `file`, con `file` scelto. In
+    /// una finestra che dorme si riusa la scheda che c'è, come per `open`;
+    /// altrimenti se ne apre una.
+    function mostraFile(file) {
+        var f = String(file || "");
+        if (f === "")
+            return;
+        var i = f.lastIndexOf("/");
+        var cartella = i > 0 ? f.substring(0, i) : "/";
+        if (manager.dormiente && manager.current)
+            manager.current.mostraFile(f);
+        else
+            manager.addTab(cartella, f);
+    }
 
     Component.onCompleted: {
         manager.tabs.append({
             "startPath": manager.initialPath !== "" ? manager.initialPath
-                                                    : Files.home
+                                                    : Files.home,
+            "seleziona": manager.initialSeleziona
         });
         // Vedi `watchers` in Files.qml: i dischi si ricontrollano solo
         // mentre c'è una finestra che li guarda.
@@ -2110,6 +2131,7 @@ FloatingWindow {
                 id: tabPane
                 required property int index
                 required property string startPath
+                required property string seleziona
 
                 solo: manager.tabs.count === 1
                 // Lo stato è della finestra: tutte le schede lo mostrano, così
@@ -2128,6 +2150,8 @@ FloatingWindow {
                 Component.onCompleted: {
                     manager.registerPane(index, tabPane);
                     navigate(tabPane.startPath);
+                    if (tabPane.seleziona !== "")
+                        tabPane.daSelezionare = tabPane.seleziona;
                 }
                 Component.onDestruction: manager.forgetPane(tabPane)
 

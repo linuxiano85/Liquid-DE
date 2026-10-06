@@ -34,6 +34,9 @@ PKGS=(
     desktop-file-utils libpulse qt6-5compat
     # Custodia, dispositivi e strumenti invocati dai servizi/applicazioni.
     git rsync libsecret udisks2 upower python
+    # `minerva-filemanager1` («Mostra nella cartella» dei browser) parla
+    # D-Bus con Gio, dal Python di sistema.
+    python-gobject
     # ── I portali, e perché ce ne vogliono due ─────────────────────────
     #
     # `-wlr` è quello che serve DAVVERO sotto minerva-wayland: parla i
@@ -467,6 +470,23 @@ for app in minerva-blocco minerva-permessi; do
 done
 
 update-desktop-database "$APPLICAZIONI" >/dev/null 2>&1 || true
+
+# ── «Mostra nella cartella» ──────────────────────────────────────────────
+#
+# Chrome, Firefox e quasi tutti gli altri, per aprire la cartella di uno
+# scaricamento, chiamano il servizio D-Bus `org.freedesktop.FileManager1`, non
+# l'app predefinita delle cartelle: senza questo file rispondeva Dolphin anche
+# dentro Liquid DE. Sta nella cartella dell'UTENTE perché è quella che vince
+# sui file di sistema; fuori da Liquid DE il servizio passa la mano a Dolphin.
+SERVIZI_DBUS="${XDG_DATA_HOME:-$HOME/.local/share}/dbus-1/services"
+mkdir -p "$SERVIZI_DBUS"
+cat > "$SERVIZI_DBUS/org.freedesktop.FileManager1.service" <<FINE_DBUS
+[D-BUS Service]
+Name=org.freedesktop.FileManager1
+Exec=$CARTELLA_RADICE/scripts/minerva-filemanager1
+FINE_DBUS
+c_ok "«Mostra nella cartella» apre il gestore file di Minerva"
+
 gtk-update-icon-cache -f -t "$PREFISSO/share/icons/hicolor" >/dev/null 2>&1 || true
 
 # ── Chi apre le immagini ──────────────────────────────────────────────────

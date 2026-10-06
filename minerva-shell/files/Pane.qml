@@ -491,6 +491,8 @@ Item {
             if (listing.pane !== pane.paneId)
                 return;
             pane.entries = listing.entries || [];
+            if (pane.daSelezionare !== "")
+                Qt.callLater(pane._selezionaArrivato);
             // Com'è già ordinato quello che è arrivato. Se combacia con
             // l'ordine chiesto, non c'è niente da riordinare: vedi `_ordinate`.
             pane.ordineDalDemone = listing.ordinatoPer || "";
@@ -577,6 +579,39 @@ Item {
 
     function selectOnly(p) {
         pane.selection = [p];
+    }
+
+    // ── «Mostra nella cartella» ──────────────────────────────────────────
+    //
+    // Un altro programma (Chrome, dopo uno scaricamento) chiede di vedere UN
+    // file: si apre la sua cartella e lo si trova già scelto. La scelta si
+    // può fare solo quando l'elenco è arrivato, quindi il file si ricorda qui.
+    property string daSelezionare: ""
+
+    function mostraFile(file) {
+        var f = String(file || "");
+        if (f === "")
+            return;
+        var i = f.lastIndexOf("/");
+        pane.navigate(i > 0 ? f.substring(0, i) : "/");
+        pane.daSelezionare = f;
+    }
+
+    function _selezionaArrivato() {
+        var f = pane.daSelezionare;
+        if (f === "")
+            return;
+        pane.daSelezionare = "";
+        for (var i = 0; i < pane.shown.length; i++) {
+            if (pane.shown[i].path !== f)
+                continue;
+            pane.selectOnly(f);
+            pane.cursor = i;
+            pane.anchorIndex = i;
+            pane.cursoreMostrato = true;
+            view.positionViewAtIndex(i, GridView.Contain);
+            return;
+        }
     }
 
     function toggleSelection(p) {

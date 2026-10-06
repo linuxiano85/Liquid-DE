@@ -35,9 +35,14 @@ if [ "${MINERVA_PROVA:-}" != "1" ]; then
     dbus-update-activation-environment --systemd \
         WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE PATH \
         MINERVA_CANALE MINERVA_COMPOSITORE MINERVA_IPC_SOCKET \
+        MINERVA_SESSIONE XDG_SESSION_ID \
         XDG_DATA_DIRS XDG_DATA_HOME XDG_CONFIG_HOME \
         >/dev/null 2>&1
 fi
+# `MINERVA_SESSIONE` e `XDG_SESSION_ID` dicono a chi parte da D-Bus a quale
+# demone parlare: senza, il gestore file avviato da «Mostra nella cartella» di
+# Chrome cercava il canale della sessione «unica», non trovava nessuno e
+# restava con le cartelle vuote (6 ottobre 2026).
 # Anche l'ambiente di questo processo deve averli: i figli (demone, shell)
 # li ereditano da qui, non solo da D-Bus.
 export MINERVA_CANALE MINERVA_COMPOSITORE 2>/dev/null || true

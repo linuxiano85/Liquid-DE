@@ -38,8 +38,15 @@ fi
 # nuova finestra» della dock. Senza, un gestore file già aperto apre una
 # scheda; con, una finestra in più.
 NUOVA=""
+MOSTRA=""
 if [ "${1:-}" = "--nuova-finestra" ]; then
     NUOVA=si
+    shift
+fi
+# `--mostra FILE`: la cartella di FILE, con FILE già scelto. È «Mostra nella
+# cartella» dei browser, che arriva da `minerva-filemanager1`.
+if [ "${1:-}" = "--mostra" ]; then
+    MOSTRA=si
     shift
 fi
 TARGET=${1:-}
@@ -50,6 +57,11 @@ case "$TARGET" in
         TARGET=$(printf '%b' "$(printf '%s' "$TARGET" | sed 's/%\(..\)/\\x\1/g')")
         ;;
 esac
+SELEZIONA=""
+if [ -n "$MOSTRA" ] && [ -n "$TARGET" ]; then
+    SELEZIONA=$TARGET
+    TARGET=$(dirname -- "$TARGET")
+fi
 
 # Serialize cold starts and preload requests. The lock must not be inherited
 # by the detached Quickshell process, or subsequent clicks would block forever.
@@ -68,12 +80,20 @@ ipc_files() {
     # Some Quickshell versions return success even for "Target not found".
     # Require an acknowledgement from our handler, not just an exit status.
     case "$1:$RISPOSTA" in
-        ping:ok|open:ok|avvia:ok|finestra:"finestre in più: "*) return 0 ;;
+        ping:ok|open:ok|avvia:ok|mostra:ok|finestra:"finestre in più: "*) return 0 ;;
         *) return 1 ;;
     esac
 }
 apri_files() {
     [ "$SOLO_PREPARA" = si ] && return 0
+    # Con un file da scegliere: appena avviati lo sceglie già la prima scheda
+    # (`MINERVA_FILES_SELEZIONA`, qui sotto), e `avvia` riaprendo la cartella
+    # lo perderebbe; con la finestra già accesa lo si chiede a lei.
+    if [ -n "$SELEZIONA" ]; then
+        [ "${1:-}" = avviato ] && return 0
+        ipc_files mostra "$SELEZIONA" >/dev/null
+        return $?
+    fi
     if [ "${1:-}" = avviato ]; then ipc_files avvia "$TARGET" >/dev/null; return $?; fi
     if [ -n "$NUOVA" ]; then ipc_files finestra "$TARGET" >/dev/null
     else ipc_files open "$TARGET" >/dev/null; fi
@@ -83,7 +103,8 @@ if ipc_files ping >/dev/null 2>&1; then
 fi
 
 MINERVA_FILES_PATH="$TARGET"
-export MINERVA_FILES_PATH
+MINERVA_FILES_SELEZIONA="$SELEZIONA"
+export MINERVA_FILES_PATH MINERVA_FILES_SELEZIONA
 . "$ROOT/scripts/minerva-ambiente-app"
 # A stale user systemd connection must not make the app impossible to launch.
 if ! timeout -k 1 10 sh -c ' . "$1"; shift; minerva_avvia_app "$@" ' sh \

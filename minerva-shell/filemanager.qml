@@ -140,6 +140,13 @@ ShellRoot {
             }
             return start;
         }
+        initialSeleziona: {
+            try {
+                return Quickshell.env("MINERVA_FILES_SELEZIONA") || "";
+            } catch (e) {
+                return "";
+            }
+        }
 
         dormiente: pronta.dormiente
 
@@ -227,6 +234,15 @@ ShellRoot {
             return "ok";
         }
 
+        /// «Mostra nella cartella»: apre la cartella di `file` e lo sceglie.
+        /// Lo usano `minerva-files --mostra` e il servizio
+        /// `org.freedesktop.FileManager1` (`scripts/minerva-filemanager1`).
+        function mostra(file: string): string {
+            manager.mostraFile(file);
+            pronta.risveglia();
+            return "ok";
+        }
+
         /// Una finestra in più (non una scheda): «Apri una nuova finestra».
         function finestra(path: string): string {
             app.nuovaFinestra(path);
@@ -237,6 +253,13 @@ ShellRoot {
         /// niente: se questa risponde, il processo c'è.
         function ping(): string {
             return "ok";
+        }
+
+        /// Per le prove: la cartella della scheda attiva e cosa c'è scelto.
+        function scelta(): string {
+            var c = manager.current;
+            return c ? manager.tabs.count + " schede | " + c.path + " | "
+                       + c.selection.join(", ") : "nessuna scheda";
         }
 
         /// Per le prove: dove sta l'icona di un file nella finestra («x y»).
