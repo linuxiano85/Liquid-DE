@@ -545,7 +545,14 @@ Page {
                 { "key": "suspendAfter",
                   "it": "Sospendi il computer dopo",  "en": "Suspend the computer after",
                   "value": page.suspendAfter, "max": 120 }
-            ]
+            ].filter(function (r) {
+                // Senza una retroilluminazione (un fisso col monitor esterno)
+                // «abbassa la luminosità» non ha niente da abbassare: una
+                // levetta che non fa niente è peggio di nessuna levetta. La
+                // stessa regola che nasconde il cursore della luminosità in
+                // Schermo.
+                return r.key !== "dimAfter" || Core.SystemState.hasBrightness;
+            })
 
             delegate: Item {
                 id: idle

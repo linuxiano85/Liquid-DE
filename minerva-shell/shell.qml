@@ -2452,7 +2452,10 @@ ShellRoot {
     // pannello; il compositore ragiona in secondi. Zero vuol dire «mai», e
     // «mai» si dice non mandando quel numero — non mandandone uno enorme, che
     // prima o poi scatta.
-    readonly property int sogliaDim: Core.Ipc.get("power.dimAfter", 5) * 60
+    // Senza retroilluminazione non si abbassa niente: la soglia non si manda
+    // e `brightnessctl` non parte a vuoto (vedi la pagina Energia).
+    readonly property int sogliaDim: Core.SystemState.hasBrightness
+        ? Core.Ipc.get("power.dimAfter", 5) * 60 : 0
     readonly property int sogliaBlocco: Core.Ipc.get("power.lockAfter", 10) * 60
     /// Lo schermo a riposo: il compositore lo spegne e lo riaccende da sé al
     /// primo tocco. Era il mestiere di `hypridle`, perso quando il conto è
