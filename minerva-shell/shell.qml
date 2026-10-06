@@ -1275,6 +1275,24 @@ ShellRoot {
     readonly property bool _tieniVivoGioco: Core.Gioco.attiva
     readonly property bool _tieniVivaLaLuce: Core.LuceNotturna.daApplicare
 
+    // ── Chiaro o scuro, anche per i programmi degli altri ────────────────
+    //
+    // Chrome, Firefox, le app Electron e quelle GTK4 chiedono al portale
+    // `org.freedesktop.appearance color-scheme`, che il portale legge da
+    // `org.gnome.desktop.interface color-scheme`. Lì non scriveva nessuno:
+    // restava il `prefer-dark` messo da KDE, e scegliendo il tema Giorno la
+    // scrivania diventava chiara e i programmi restavano scuri (trovato il 6
+    // ottobre 2026). Si scrive solo a impostazioni arrivate, altrimenti
+    // all'avvio passerebbe un istante il tema di fabbrica.
+    readonly property string _versoAltrui: !Core.Ipc.impostazioniArrivate ? ""
+        : (Theme.Colors.scura ? "prefer-dark" : "prefer-light")
+    on_VersoAltruiChanged: {
+        if (root._versoAltrui !== "")
+            versoAltrui.start(["gsettings", "set", "org.gnome.desktop.interface",
+                               "color-scheme", root._versoAltrui]);
+    }
+    Core.Exec { id: versoAltrui }
+
     // ── Modalità gioco ───────────────────────────────────────────────────
     //
     // Si accende da sola quando qualcosa va a schermo intero. Vedi
