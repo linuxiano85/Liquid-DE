@@ -35,6 +35,8 @@ import "../ui" as Ui
 Item {
     id: ordine
 
+    readonly property bool it: Core.Strings.lang === "it"
+
     property var gruppi: []
 
     /// Le cartelle che si possono prendere come riferimento, col peso di
@@ -121,7 +123,7 @@ Item {
     function cerca() {
         if (ordine.cercando) return;
         ordine.cercando = true;
-        ordine.scrivi("Cerco i file che ci sono due volte.");
+        ordine.scrivi(ordine.it ? "Cerco i file che ci sono due volte." : "Looking for files you have twice.");
         Core.Ipc.manutenzioneCercaDoppioni();
     }
 
@@ -245,14 +247,14 @@ Item {
         function onManutenzioneDoppioniTolti(esito) {
             if (!esito) return;
             if (esito.ok !== true) {
-                ordine.scrivi(esito.errore || "Non ce l'ho fatta.");
+                ordine.scrivi(esito.errore || (ordine.it ? "Non ce l'ho fatta." : "I couldn't do it."));
                 return;
             }
             var rif = esito.rifiutati || [];
             for (var i = 0; i < rif.length; i++)
                 ordine.scrivi(rif[i].percorso + ": " + rif[i].perche);
-            ordine.scrivi("Nel cestino " + (esito.cestinati || 0)
-                          + " copie. Ricontrollo.");
+            ordine.scrivi(ordine.it ? "Nel cestino " + (esito.cestinati || 0) + " copie. Ricontrollo."
+                                    : (esito.cestinati || 0) + " copies in the trash. Checking again.");
             ordine.cerca();
         }
     }
@@ -289,8 +291,8 @@ Item {
                     Text {
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
-                        text: ordine.cercando ? "Sto guardando…"
-                                              : "I file che hai due volte"
+                        text: ordine.cercando ? (ordine.it ? "Sto guardando…" : "Looking…")
+                                              : (ordine.it ? "I file che hai due volte" : "Files you have twice")
                         color: Theme.Colors.text
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeXL
@@ -304,11 +306,15 @@ Item {
                         text: ordine.cercando
                               ? (ordine.ultimoPasso !== ""
                                  ? ordine.ultimoPasso
-                                 : "Confronto per dimensione, poi le due estremità, "
-                                   + "poi il file intero.")
-                              : "Guarda la tua cartella di casa e trova i file "
-                                + "identici byte per byte. Il codice non si "
-                                + "tocca: dentro un progetto i doppioni sono normali."
+                                 : (ordine.it ? "Confronto per dimensione, poi le due estremità, "
+                                                + "poi il file intero."
+                                              : "Comparing by size, then both ends, then the whole file."))
+                              : (ordine.it ? "Guarda la tua cartella di casa e trova i file "
+                                             + "identici byte per byte. Il codice non si "
+                                             + "tocca: dentro un progetto i doppioni sono normali."
+                                           : "Looks through your home folder for files identical "
+                                             + "byte by byte. Code is left alone: inside a project "
+                                             + "duplicates are normal.")
                         color: Theme.Colors.textFaint
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeSM
@@ -331,7 +337,7 @@ Item {
                     Text {
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
-                        text: "Nessun doppione"
+                        text: ordine.it ? "Nessun doppione" : "No duplicates"
                         color: Theme.Colors.text
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeXL
@@ -341,8 +347,10 @@ Item {
                     Text {
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
-                        text: "Ho confrontato " + ordine.guardati
-                              + " file: è tutta roba diversa."
+                        text: ordine.it ? "Ho confrontato " + ordine.guardati
+                                          + " file: è tutta roba diversa."
+                                        : "I compared " + ordine.guardati
+                                          + " files: they are all different."
                         color: Theme.Colors.textFaint
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeSM
@@ -378,8 +386,8 @@ Item {
                     height: 26
                     verticalAlignment: Text.AlignVCenter
                     text: ordine.escluse.length === 0
-                          ? "Non guardo dentro:"
-                          : "Non guardo dentro (" + ordine.escluse.length + "):"
+                          ? (ordine.it ? "Non guardo dentro:" : "Skipping:")
+                          : (ordine.it ? "Non guardo dentro (" : "Skipping (") + ordine.escluse.length + "):"
                     color: Theme.Colors.textFaint
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeXS
@@ -484,7 +492,7 @@ Item {
                     Text {
                         id: piuTesto
                         anchors.centerIn: parent
-                        text: "+ escludi una cartella"
+                        text: ordine.it ? "+ escludi una cartella" : "+ skip a folder"
                         color: Theme.Colors.textMuted
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeXS
@@ -508,7 +516,7 @@ Item {
                 visible: ordine.cartelle.length > 0
 
                 Text {
-                    text: "Qual è la cartella buona?"
+                    text: ordine.it ? "Qual è la cartella buona?" : "Which folder is the good one?"
                     color: Theme.Colors.text
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeLG
@@ -518,10 +526,14 @@ Item {
                 Text {
                     width: parent.width
                     wrapMode: Text.WordWrap
-                    text: "Prendine una come riferimento — per esempio un "
-                          + "backup appena arrivato — e tutte le copie che "
-                          + "stanno fuori vengono spuntate. Quello che c'è "
-                          + "dentro non si tocca."
+                    text: ordine.it
+                          ? "Prendine una come riferimento — per esempio un "
+                            + "backup appena arrivato — e tutte le copie che "
+                            + "stanno fuori vengono spuntate. Quello che c'è "
+                            + "dentro non si tocca."
+                          : "Pick one as the reference — a backup that just arrived, "
+                            + "for example — and every copy outside it gets ticked. "
+                            + "What is inside is left alone."
                     color: Theme.Colors.textFaint
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeXS
@@ -576,7 +588,7 @@ Item {
                                 }
 
                                 Text {
-                                    text: "libera "
+                                    text: (ordine.it ? "libera " : "frees ")
                                           + Misure.peso(pastiglia.modelData.liberabili)
                                     color: Theme.Colors.textFaint
                                     font.family: Theme.Typography.fontDisplay
@@ -604,7 +616,7 @@ Item {
                 Text {
                     width: parent.width
                     visible: ordine.riferimento !== ""
-                    text: "Riferimento: " + ordine.riferimento
+                    text: (ordine.it ? "Riferimento: " : "Reference: ") + ordine.riferimento
                     color: Theme.Colors.accent
                     elide: Text.ElideMiddle
                     font.family: Theme.Typography.fontMono
@@ -634,8 +646,8 @@ Item {
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
                             text: Misure.peso(gruppo.modelData.byteInPiu)
-                                  + " in più · " + gruppo.modelData.percorsi.length
-                                  + " copie"
+                                  + (ordine.it ? " in più · " : " extra · ") + gruppo.modelData.percorsi.length
+                                  + (ordine.it ? " copie" : " copies")
                             color: Theme.Colors.text
                             font.family: Theme.Typography.fontDisplay
                             font.pixelSize: Theme.Typography.sizeMD
@@ -677,11 +689,12 @@ Item {
         sourceComponent: Component {
             Ui.Scegli {
                 soloCartelle: true
-                titolo: "Quale cartella non devo guardare?"
+                titolo: ordine.it ? "Quale cartella non devo guardare?" : "Which folder should I skip?"
                 onScelto: (percorso) => {
                     Core.Ipc.manutenzioneEscludi(percorso);
                     ordine.scegliCartella = false;
-                    ordine.scrivi("Non guarderò più dentro " + percorso + ".");
+                    ordine.scrivi(ordine.it ? "Non guarderò più dentro " + percorso + "."
+                                      : "I will no longer look inside " + percorso + ".");
                 }
                 onAnnullato: ordine.scegliCartella = false
             }
@@ -729,7 +742,8 @@ Item {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: "sprecati in " + ordine.gruppi.length + " gruppi"
+                text: (ordine.it ? "sprecati in " : "wasted in ") + ordine.gruppi.length
+                      + (ordine.it ? " gruppi" : " groups")
                 color: Theme.Colors.textFaint
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeSM
@@ -745,7 +759,7 @@ Item {
             Pulsante {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: ordine.gruppi.length > 0
-                testo: "Togli le spunte"
+                testo: ordine.it ? "Togli le spunte" : "Untick all"
                 attivo: ordine.sceltiQuanti > 0
                 onScelto: ordine.nessuna()
             }
@@ -753,7 +767,7 @@ Item {
             Pulsante {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: ordine.gruppi.length > 0
-                testo: "Tutte tranne una"
+                testo: ordine.it ? "Tutte tranne una" : "All but one"
                 onScelto: ordine.scegliTutteMenoUna()
             }
 
@@ -763,12 +777,13 @@ Item {
                 attivo: !ordine.cercando
                         && (ordine.gruppi.length === 0 || ordine.sceltiQuanti > 0)
                 testo: {
-                    if (ordine.cercando) return "Sto guardando…";
-                    if (ordine.gruppi.length === 0) return "Cerca i doppioni";
-                    if (ordine.sceltiQuanti === 0) return "Scegli cosa togliere";
+                    if (ordine.cercando) return ordine.it ? "Sto guardando…" : "Looking…";
+                    if (ordine.gruppi.length === 0) return ordine.it ? "Cerca i doppioni" : "Find duplicates";
+                    if (ordine.sceltiQuanti === 0) return ordine.it ? "Scegli cosa togliere" : "Choose what to remove";
                     // Quanto si libera, accanto a quante: è il numero che fa
                     // decidere, e `sceltiByte` lo contava già senza mostrarlo.
-                    return "Nel cestino " + ordine.sceltiQuanti + " copie · "
+                    return (ordine.it ? "Nel cestino " + ordine.sceltiQuanti + " copie · "
+                                      : ordine.sceltiQuanti + " copies to the trash · ")
                            + Misure.peso(ordine.sceltiByte);
                 }
                 onScelto: {
@@ -776,7 +791,8 @@ Item {
                     var via = [];
                     for (var k in ordine.scelti)
                         if (ordine.scelti[k] === true) via.push(k);
-                    ordine.scrivi("Metto nel cestino " + via.length + " copie.");
+                    ordine.scrivi(ordine.it ? "Metto nel cestino " + via.length + " copie."
+                                         : "Moving " + via.length + " copies to the trash.");
                     Core.Ipc.manutenzioneDoppioniCestina(via);
                 }
             }
