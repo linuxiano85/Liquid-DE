@@ -478,6 +478,30 @@ Item {
         navigate(pane.history[pane.historyIndex], false);
     }
 
+    // ── Lo spazio libero ─────────────────────────────────────────────────
+    //
+    // Prima non lo diceva da nessuna parte: per sapere se una copia da venti
+    // gigabyte ci stava bisognava aprire un terminale. Si legge con `df` sul
+    // disco della cartella, quando si cambia cartella e dopo ogni operazione
+    // — non a ogni rilettura: durante uno scaricamento sarebbe un processo
+    // al secondo per un numero che cambia di poco.
+    property real spazioLibero: -1
+
+    property var _df: Core.Exec {
+        onDone: function (uscita) {
+            var v = parseFloat(String(uscita).trim().split(/\s+/).pop());
+            pane.spazioLibero = isFinite(v) && v >= 0 ? v : -1;
+        }
+    }
+
+    property var _dfPresto: Timer {
+        interval: 400
+        onTriggered: {
+            if (pane.path !== "" && pane.path.charAt(0) === "/")
+                pane._df.shArgs('df --output=avail -B1 -- "$1" 2>/dev/null | tail -1', [pane.path]);
+        }
+    }
+
     /// Mostra o nasconde i file nascosti, e lo ricorda. Il pulsante e Ctrl+H.
     function commutaNascosti() {
         Core.Ipc.setSetting("files.showHidden", !pane.showHidden);
@@ -510,6 +534,7 @@ Item {
     }
 
     onPathChanged: {
+        pane._dfPresto.restart();
         pane.scrivendoPercorso = false;
         // Cambiando cartella la ricerca non ha più senso: cercava DENTRO
         // quella di prima, e lasciarla accesa mostrerebbe risultati di un
@@ -603,7 +628,7 @@ Item {
         // Dopo una copia, una rinomina o un cestinamento il contenuto è
         // cambiato: l'elenco si riaggiorna da solo invece di aspettare che
         // qualcuno prema un tasto e si chieda perché non vede il file nuovo.
-        function onFileResultReceived() { pane.reload(); }
+        function onFileResultReceived() { pane.reload(); pane._dfPresto.restart(); }
 
         // Il gestore file adesso è un processo suo, e un processo nasce PRIMA
         // di essersi collegato al demone: la prima richiesta dell'elenco parte
@@ -1265,10 +1290,13 @@ Item {
                 if (pane.filter !== "")
                     return it ? n + " di " + pane.entries.length
                               : n + " of " + pane.entries.length;
-                if (n === 0)
-                    return "";
-                return it ? (n === 1 ? "1 elemento" : n + " elementi")
-                          : (n === 1 ? "1 item" : n + " items");
+                var quanti = n === 0 ? ""
+                    : it ? (n === 1 ? "1 elemento" : n + " elementi")
+                         : (n === 1 ? "1 item" : n + " items");
+                if (pane.spazioLibero < 0)
+                    return quanti;
+                var libero = Core.Formato.peso(pane.spazioLibero) + (it ? " liberi" : " free");
+                return quanti === "" ? libero : quanti + "  ·  " + libero;
             }
             color: Theme.Colors.textFaint
             font.family: Theme.Typography.fontDisplay
