@@ -2214,10 +2214,21 @@ Item {
                     // Sotto i 24 pixel una miniatura è un francobollo
                     // illeggibile pagato con un decodificatore per riga: a
                     // quella misura l'icona dice di più e costa niente.
-                    source: (thumb.height >= 24
-                             && Core.Ipc.get("files.anteprime", true)
-                             && Files.isImage(cell.modelData.name))
-                            ? Files.fileUrl(cell.modelData.path) : ""
+                    source: {
+                        if (thumb.height < 24 || !Core.Ipc.get("files.anteprime", true))
+                            return "";
+                        if (Files.isImage(cell.modelData.name))
+                            return Files.fileUrl(cell.modelData.path);
+                        // Video e PDF: la miniatura la fa il demone, e arriva
+                        // dopo. Si legge `miniatureVersione` perché il legame
+                        // si rifaccia quando arriva.
+                        if (Files.conMiniatura(cell.modelData.name) && !cell.modelData.isDir) {
+                            var v = Files.miniatureVersione;
+                            var f = Files.miniaturaDi(cell.modelData.path);
+                            return f !== "" ? Files.fileUrl(f) : "";
+                        }
+                        return "";
+                    }
                     // Si decodifica alla misura in cui si vede, non a quella
                     // vera del file: senza, ogni miniatura tiene in memoria
                     // l'immagine intera.
@@ -2249,6 +2260,18 @@ Item {
                     thickness: cell.gridMode ? 1.4 : 1.7
                     color: cell.modelData.isDir ? Theme.Colors.accent
                                                 : Theme.Colors.textFaint
+                }
+
+                // Un video si distingue da una foto: il triangolo del «play».
+                Ui.Icon {
+                    anchors.centerIn: preview
+                    width: Math.max(14, Math.min(34, parent.width * 0.26))
+                    height: width
+                    visible: preview.visible && Files.eVideo(cell.modelData.name)
+                    name: "play"
+                    thickness: 2
+                    color: "white"
+                    opacity: 0.9
                 }
 
                 // Il collegamento si vede: una freccina in basso a sinistra,

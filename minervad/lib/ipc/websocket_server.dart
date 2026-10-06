@@ -23,6 +23,7 @@ import '../services/keybind_service.dart';
 import '../services/file_service.dart';
 import '../services/osservatore_cartelle.dart';
 import '../services/recenti_service.dart';
+import '../services/miniature_service.dart';
 import '../services/system_state_service.dart';
 import '../services/mime_service.dart';
 import '../services/finestre_service.dart';
@@ -168,6 +169,7 @@ class WebSocketServer {
       (client, messaggio) => (client as WebSocketClientConnection).send(messaggio));
   final RicercaService _ricerca = RicercaService();
   final RecentiService _recenti = RecentiService();
+  final MiniatureService _miniature = MiniatureService();
 
   /// La galleria. Non tiene stato fra una richiesta e l'altra tranne il
   /// catalogo, che è esattamente il punto: caricarlo una volta e riusarlo.
@@ -2177,6 +2179,21 @@ class WebSocketServer {
             final r = await _fileService.collega(paths, prefisso);
             client.send({'event': 'fs_result', 'payload': r});
           }
+        }
+        break;
+
+      // La miniatura di un video o di un PDF. Si risponde quando è pronta,
+      // senza tenere fermo il canale: farla può volere qualche secondo.
+      case 'fs_miniatura':
+        {
+          final path = '${msg['path'] ?? ''}';
+          unawaited(() async {
+            final file = await _miniature.miniatura(path);
+            client.send({
+              'event': 'fs_miniatura',
+              'payload': {'path': path, 'file': file},
+            });
+          }());
         }
         break;
 

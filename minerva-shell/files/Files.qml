@@ -278,6 +278,52 @@ QtObject {
         return name.substring(cut + 1).toLowerCase();
     }
 
+    // ── Le miniature che Qt non sa fare da sé ────────────────────────────
+    //
+    // Video e PDF: le fa il demone (`MiniatureService`), riusando quelle che
+    // Dolphin e Nautilus hanno già fatto. Qui si chiede una volta per file e
+    // si tiene la risposta; `miniatureVersione` cambia a ogni risposta, e chi
+    // la legge nel suo legame si ridisegna quando arriva la sua.
+    readonly property var _estConMiniatura: ({
+        "mp4": 1, "mkv": 1, "webm": 1, "avi": 1, "mov": 1, "m4v": 1, "wmv": 1,
+        "flv": 1, "mpg": 1, "mpeg": 1, "ts": 1, "ogv": 1, "3gp": 1, "pdf": 1
+    })
+    property var _miniature: ({})
+    property var _chieste: ({})
+    property int miniatureVersione: 0
+
+    function conMiniatura(name) {
+        return files._estConMiniatura[files.extension(name)] === 1;
+    }
+
+    function eVideo(name) {
+        var e = files.extension(name);
+        return files._estConMiniatura[e] === 1 && e !== "pdf";
+    }
+
+    /// Il file della miniatura, o «» se non c'è (ancora).
+    function miniaturaDi(path) {
+        var m = files._miniature[path];
+        if (m !== undefined)
+            return m;
+        if (!files._chieste[path]) {
+            files._chieste[path] = true;
+            Core.Ipc.send({ "action": "fs_miniatura", "path": path });
+        }
+        return "";
+    }
+
+    property var _ascoltaMiniature: Connections {
+        target: Core.Ipc
+        function onMiniaturaPronta(info) {
+            if (!info || !info.path)
+                return;
+            files._miniature[info.path] = String(info.file || "");
+            delete files._chieste[info.path];
+            files.miniatureVersione++;
+        }
+    }
+
     /// Vero se il file si può disegnare in miniatura. Il formato lo carica Qt
     /// da solo: si elencano quelli che sa leggere, non quelli che esistono.
     function isImage(name) {

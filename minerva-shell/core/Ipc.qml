@@ -731,6 +731,8 @@ QtObject {
     /// Una cartella aperta in un riquadro è cambiata da fuori: `{path, pane}`.
     /// Vedi `OsservatoreCartelle` nel demone.
     signal cartellaCambiata(var info)
+    /// La miniatura di un video o di un PDF: `{path, file}` («» = nessuna).
+    signal miniaturaPronta(var info)
     signal fileJobChanged(var job)
     signal fileJobsReceived(var jobs)
     signal fileResultReceived(var result)
@@ -2351,6 +2353,9 @@ QtObject {
                 break;
             case "fs_changed":
                 ipc.cartellaCambiata(msg.payload || {});
+                break;
+            case "fs_miniatura":
+                ipc.miniaturaPronta(msg.payload || {});
                 break;
             case "fs_search":
                 ipc.ricercaAvanza(msg.payload);
