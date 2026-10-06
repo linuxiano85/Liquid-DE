@@ -1076,6 +1076,11 @@ QtObject {
         return send({ "action": "locale_set", "value": value });
     }
 
+    /// Un collegamento simbolico a ciascun percorso, nella sua cartella.
+    function fsCollega(paths, prefisso) {
+        return send({ "action": "fs_symlink", "paths": paths, "prefisso": prefisso });
+    }
+
     /// «Annulla» di uno spostamento: ogni `{da, a}` torna da `a` a `da`.
     function fsRimetti(coppie) {
         return send({ "action": "fs_rimetti", "coppie": coppie });

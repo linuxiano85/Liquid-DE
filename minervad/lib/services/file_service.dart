@@ -304,6 +304,48 @@ class FileService {
     }
   }
 
+  /// Crea un collegamento simbolico a ciascun percorso, nella stessa
+  /// cartella: «Collegamento a foto.jpg». Mancava (6 ottobre 2026): per
+  /// avere in Scrivania la cartella di un progetto serviva il terminale.
+  ///
+  /// Il nome libero si cerca PROVANDO a creare, non guardando prima: fra il
+  /// controllo e la creazione un altro programma può prendersi lo stesso
+  /// nome, e `symlink` — a differenza di una scrittura — non sovrascrive mai.
+  /// Il collegamento punta al percorso assoluto, così regge anche spostato.
+  Future<Map<String, dynamic>> collega(List<String> paths, String prefisso) async {
+    final creati = <String>[];
+    final falliti = <String>[];
+    for (final p in paths) {
+      final nome = p.split('/').last;
+      if (!p.startsWith('/') || nome.isEmpty || nome == '.' || nome == '..') continue;
+      final cartella = _genitoreDi(p);
+      final voluto = '$cartella/$prefisso$nome';
+      String? fatto;
+      Object? ultimo;
+      for (var n = 0; n < 100 && fatto == null; n++) {
+        final prova = n == 0 ? voluto : '$voluto ($n)';
+        try {
+          Link(prova).createSync(p);
+          fatto = prova;
+        } on FileSystemException catch (e) {
+          ultimo = e;
+          if (e.osError?.errorCode != 17) break; // non «esiste già»: inutile riprovare
+        }
+      }
+      if (fatto != null) {
+        creati.add(fatto);
+      } else {
+        falliti.add(motivo(nome, ultimo ?? 'nessun nome libero'));
+      }
+    }
+    return {
+      'ok': falliti.isEmpty,
+      'error': falliti.join('\n'),
+      'operazione': 'creati',
+      'creati': creati,
+    };
+  }
+
   /// Rimette al loro posto dei file spostati: «Annulla» di uno spostamento.
   /// Ogni coppia è `{da, a}` come la scrive `TransferJob.fatti`: il file sta
   /// in `a` e torna in `da`, senza mai scrivere sopra qualcosa che nel

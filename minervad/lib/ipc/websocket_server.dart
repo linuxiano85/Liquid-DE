@@ -1853,6 +1853,11 @@ class WebSocketServer {
           final path = msg['path'];
           if (path is String && path.isNotEmpty) {
             final r = await _fileService.makeDirectory(path);
+            // Annullabile: vedi «Annulla» in `files/Files.qml`.
+            if (r['ok'] == true) {
+              r['operazione'] = 'creati';
+              r['creati'] = [path];
+            }
             client.send({'event': 'fs_result', 'payload': r});
           }
         }
@@ -1875,6 +1880,10 @@ class WebSocketServer {
           final path = msg['path'];
           if (path is String && path.isNotEmpty) {
             final r = await _fileService.creaFile(path);
+            if (r['ok'] == true) {
+              r['operazione'] = 'creati';
+              r['creati'] = [path];
+            }
             client.send({'event': 'fs_result', 'payload': r});
           }
         }
@@ -2136,6 +2145,17 @@ class WebSocketServer {
         break;
 
       // ── Cestino ───────────────────────────────────────────────────────
+      case 'fs_symlink':
+        {
+          final paths = (msg['paths'] as List?)?.whereType<String>().toList() ?? [];
+          final prefisso = '${msg['prefisso'] ?? ''}'.replaceAll('/', '');
+          if (paths.isNotEmpty) {
+            final r = await _fileService.collega(paths, prefisso);
+            client.send({'event': 'fs_result', 'payload': r});
+          }
+        }
+        break;
+
       // «Annulla» di uno spostamento: i file tornano da dove venivano.
       case 'fs_rimetti':
         {

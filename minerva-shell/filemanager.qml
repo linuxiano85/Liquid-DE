@@ -284,6 +284,14 @@ ShellRoot {
             return String(ops.length);
         }
 
+        /// Per le prove: «Crea collegamento» sulla selezione.
+        function collega(): string {
+            var ops = manager.operands();
+            if (ops.length > 0)
+                Core.Ipc.fsCollega(ops, "Collegamento a ");
+            return String(ops.length);
+        }
+
         /// Per le prove: Ctrl+Z. Risponde con cosa ha annullato.
         function annulla(): string {
             var cosa = Files.cosaAnnullare;

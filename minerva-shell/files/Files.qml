@@ -640,6 +640,8 @@ QtObject {
         case "rinomina": return (it ? "rinomina di " : "rename of ") + u.a.split("/").pop();
         case "sposta":   return (it ? "sposta " : "move ") + cosa;
         case "copia":    return (it ? "copia di " : "copy of ") + cosa;
+        case "creati":   return (it ? "crea " : "create ") + u.percorsi[0].split("/").pop()
+                                + (n > 1 ? (it ? " e altri " : " and ") + (n - 1) : "");
         }
         return "";
     }
@@ -669,6 +671,8 @@ QtObject {
                 }
                 files._ricorda({ "tipo": "cestino", "percorsi": r.nelCestino,
                                  "quanti": r.nelCestino.length });
+            } else if (r.operazione === "creati" && r.creati && r.creati.length > 0) {
+                files._ricorda({ "tipo": "creati", "percorsi": r.creati, "quanti": r.creati.length });
             } else if (r.operazione === "rinomina") {
                 if (files._rinominaDaSaltare === r.da + "\n" + r.a) {
                     files._rinominaDaSaltare = "";
@@ -710,6 +714,12 @@ QtObject {
         case "copia":
             files._cestiniDaSaltare++;
             Core.Ipc.fsTrash(u.fatti.map(function (f) { return f.a; }));
+            break;
+        case "creati":
+            // Nel cestino e non cancellati: una cartella nuova può essersi
+            // già riempita, e annullare non deve perdere niente.
+            files._cestiniDaSaltare++;
+            Core.Ipc.fsTrash(u.percorsi);
             break;
         }
     }

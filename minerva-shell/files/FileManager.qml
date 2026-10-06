@@ -2715,6 +2715,12 @@ FloatingWindow {
                          "icon": "clipboard", "action": "copyPath",
                          "shortcut": "Ctrl+Maiusc+C" });
         }
+        // Un collegamento nella stessa cartella, che poi si sposta dove
+        // serve (sulla Scrivania, in un progetto). Dove non si può scrivere
+        // non compare, come gli altri comandi che creano qualcosa.
+        if (n > 0 && puoi && !Files.inTrash(manager.current ? manager.current.path : ""))
+            items.push({ "label": it ? "Crea collegamento" : "Create link",
+                         "icon": "link", "action": "collega" });
 
         // «Proprietà» in fondo, come su qualunque altro sistema: è il posto
         // dove la mano va da sola, e cambiarlo non farebbe guadagnare niente
@@ -3016,6 +3022,10 @@ FloatingWindow {
             case "sfondoDaFile": manager.sfondoDaFile(); break;
             case "sfondoScrivania": manager.sfondoScrivania(); break;
             case "copyPath":  manager.doCopyPath(); break;
+            case "collega":
+                Core.Ipc.fsCollega(manager.operands(),
+                                   Core.Strings.lang === "it" ? "Collegamento a " : "Link to ");
+                break;
             case "deleteForever": manager.doDeleteForever(); break;
             case "terminal":  manager.openTerminalHere(); break;
             case "anteprima": manager.browseWithViewer(); break;
