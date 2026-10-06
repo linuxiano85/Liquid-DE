@@ -2921,9 +2921,30 @@ ShellRoot {
         id: scriviCursore
         onDone: function(tema) {
             var t = String(tema).trim();
-            if (t !== "")
-                Core.Compositore.cursore(t, Core.Ipc.get("accessibility.cursorSize", 24));
+            if (t === "")
+                return;
+            var d = Core.Ipc.get("accessibility.cursorSize", 24);
+            Core.Compositore.cursore(t, d);
+            // Lo stesso tema e la stessa misura anche ai programmi che il
+            // puntatore se lo disegnano da soli (GTK4, Chrome, Firefox):
+            // leggono `org.gnome.desktop.interface`, non il compositore, e
+            // senza questo sopra le loro finestre il puntatore cambiava
+            // forma e misura (6 ottobre 2026: 24 sopra Minerva, 30 sopra
+            // Chrome).
+            cursoreAltrui.start(["gsettings", "set", "org.gnome.desktop.interface",
+                                 "cursor-theme", t]);
+            cursoreAltrui.start(["gsettings", "set", "org.gnome.desktop.interface",
+                                 "cursor-size", String(d)]);
         }
+    }
+    Core.Exec { id: cursoreAltrui }
+
+    // La misura cambiata dalle Impostazioni: il compositore la riceve da là,
+    // i programmi degli altri solo da qui (vedi `cursoreAltrui`).
+    readonly property int _misuraCursore: Core.Ipc.get("accessibility.cursorSize", 24)
+    on_MisuraCursoreChanged: {
+        if (Core.Ipc.impostazioniArrivate)
+            root.applicaCursore();
     }
 
     function applicaCursore() {
@@ -2942,7 +2963,8 @@ ShellRoot {
             "\"$HOME/.config/gtk-3.0/settings.ini\" 2>/dev/null " +
             "| tr -d '\"' | head -1); " +
             "[ -d \"/usr/share/icons/$t/cursors\" ] || " +
-            "[ -d \"$HOME/.icons/$t/cursors\" ] || t=Adwaita; " +
+            "[ -d \"$HOME/.icons/$t/cursors\" ] || " +
+            "[ -d \"$HOME/.local/share/icons/$t/cursors\" ] || t=Adwaita; " +
             "printf '%s' \"$t\"");
     }
 

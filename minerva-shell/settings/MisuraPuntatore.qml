@@ -89,7 +89,8 @@ Item {
                 "\"$HOME/.config/gtk-3.0/settings.ini\" 2>/dev/null " +
                 "| tr -d '\"' | head -1); " +
                 "[ -d \"/usr/share/icons/$t/cursors\" ] || " +
-                "[ -d \"$HOME/.icons/$t/cursors\" ] || t=Adwaita; " +
+                "[ -d \"$HOME/.icons/$t/cursors\" ] || " +
+                "[ -d \"$HOME/.local/share/icons/$t/cursors\" ] || t=Adwaita; " +
                 "printf '%s' \"$t\"");
         }
     }
