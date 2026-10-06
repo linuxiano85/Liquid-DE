@@ -52,10 +52,19 @@ fi
 [ -d "$IMMAGINI" ] || IMMAGINI="$HOME/Pictures"
 [ -d "$IMMAGINI" ] || IMMAGINI="$HOME"
 
-CARTELLA="$IMMAGINI/Schermate"
+# Cartella e nome nella lingua della sessione: «Pictures/Schermate» per chi
+# parla inglese era una cartella che non si capiva. Il catalogo delle foto
+# riconosce tutti e due i nomi (`Datatore.eSchermata`, e la data con «alle» o
+# «at»), quindi cambiarli non toglie niente alla Galleria.
+case "${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}" in
+    it*) CARTELLA="$IMMAGINI/Schermate"; PREFISSO="Schermata"; ORA_DI="alle"
+         NON_RIUSCITA="Schermata non riuscita"; SALVATA="Schermata salvata" ;;
+    *)   CARTELLA="$IMMAGINI/Screenshots"; PREFISSO="Screenshot"; ORA_DI="at"
+         NON_RIUSCITA="Screenshot failed"; SALVATA="Screenshot saved" ;;
+esac
 mkdir -p "$CARTELLA" || exit 1
 
-NOME="$CARTELLA/Schermata $(date '+%Y-%m-%d alle %H.%M.%S').png"
+NOME="$CARTELLA/$PREFISSO $(date "+%Y-%m-%d $ORA_DI %H.%M.%S").png"
 
 # ── L'avviso, e il file di cui parla ──────────────────────────────────────
 #
@@ -101,7 +110,7 @@ case "$MODO" in
         REGIONE=$(slurp 2>/dev/null) || exit 0
         [ -n "$REGIONE" ] || exit 0
         aspetta
-        grim -g "$REGIONE" "$NOME" || { avvisa "Schermata non riuscita" "grim ha fallito"; exit 1; }
+        grim -g "$REGIONE" "$NOME" || { avvisa "$NON_RIUSCITA" "grim ha fallito"; exit 1; }
         ;;
     finestra)
         aspetta
@@ -128,14 +137,14 @@ except Exception:
     pass
 ') || REGIONE=""
         if [ -n "$REGIONE" ]; then
-            grim -g "$REGIONE" "$NOME" || { avvisa "Schermata non riuscita" "grim ha fallito"; exit 1; }
+            grim -g "$REGIONE" "$NOME" || { avvisa "$NON_RIUSCITA" "grim ha fallito"; exit 1; }
         else
-            grim "$NOME" || { avvisa "Schermata non riuscita" "grim ha fallito"; exit 1; }
+            grim "$NOME" || { avvisa "$NON_RIUSCITA" "grim ha fallito"; exit 1; }
         fi
         ;;
     *)
         aspetta
-        grim "$NOME" || { avvisa "Schermata non riuscita" "grim ha fallito"; exit 1; }
+        grim "$NOME" || { avvisa "$NON_RIUSCITA" "grim ha fallito"; exit 1; }
         ;;
 esac
 
@@ -146,5 +155,5 @@ if command -v wl-copy >/dev/null 2>&1; then
     wl-copy --type image/png < "$NOME" 2>/dev/null
 fi
 
-avvisa "Schermata salvata" "$NOME" "$NOME"
+avvisa "$SALVATA" "$NOME" "$NOME"
 printf '%s\n' "$NOME"

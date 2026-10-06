@@ -124,6 +124,7 @@ PanelWindow {
 
     property date oggi: new Date()
     readonly property var _locale: Core.Strings.lang === "it" ? Qt.locale("it_IT") : Qt.locale("en_GB")
+    readonly property bool it: Core.Strings.lang === "it"
 
     visible: isola.mostrato
     anchors { top: true; bottom: true; left: true; right: true }
@@ -243,9 +244,9 @@ PanelWindow {
                     anchors.verticalCenter: parent.verticalCenter
                     text: {
                         if (isola.faccia === "notifiche")
-                            return "Notifiche";
+                            return isola.it ? "Notifiche" : "Notifications";
                         if (isola.faccia === "schermata")
-                            return "Schermata";
+                            return isola.it ? "Schermata" : "Screenshot";
                         var s = isola.oggi.toLocaleDateString(isola._locale, "dddd d MMMM");
                         return s.charAt(0).toUpperCase() + s.slice(1);
                     }
@@ -257,7 +258,8 @@ PanelWindow {
                 Capsula {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    testo: isola.faccia === "giorno" ? "Calendario" : "Giornata"
+                    testo: isola.faccia === "giorno" ? (isola.it ? "Calendario" : "Calendar")
+                                                     : (isola.it ? "Giornata" : "Today")
                     onScelta: isola.giraSu(isola.faccia === "giorno" ? "mese" : "giorno")
                 }
                 Capsula {
@@ -266,7 +268,7 @@ PanelWindow {
                     anchors.right: parent.right
                     anchors.rightMargin: 96
                     anchors.verticalCenter: parent.verticalCenter
-                    testo: "Svuota"
+                    testo: isola.it ? "Svuota" : "Clear"
                     onScelta: Core.Notifications.clear()
                 }
             }
@@ -279,19 +281,20 @@ PanelWindow {
                 Text {
                     width: parent.width
                     wrapMode: Text.WordWrap
-                    text: "Il meteo non parte finché non scegli un posto: senza, non si chiede niente a nessuno."
+                    text: isola.it ? "Il meteo non parte finché non scegli un posto: senza, non si chiede niente a nessuno."
+                                   : "The weather starts once you pick a place: until then, nobody is asked anything."
                     color: Theme.Colors.textMuted
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeSM
                 }
                 Capsula {
-                    testo: "Scegli la località"
+                    testo: isola.it ? "Scegli la località" : "Choose the place"
                     onScelta: { isola.chiudi(); isola.impostazioniChieste(); }
                 }
             }
             Text {
                 visible: Core.Meteo.attivo && !Core.Meteo.pronto && isola.faccia === "giorno"
-                text: "Il tempo sta arrivando…"
+                text: isola.it ? "Il tempo sta arrivando…" : "The weather is on its way…"
                 color: Theme.Colors.textMuted
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeSM
@@ -335,7 +338,7 @@ PanelWindow {
                         width: parent.width
                         elide: Text.ElideRight
                         text: Core.Meteo.descrizione(adesso.a.codice)
-                              + (Core.Meteo.vecchio ? " · non aggiornato" : "")
+                              + (Core.Meteo.vecchio ? (isola.it ? " · non aggiornato" : " · not updated") : "")
                         color: Theme.Colors.text
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeMD
@@ -344,8 +347,9 @@ PanelWindow {
                     Text {
                         width: parent.width
                         elide: Text.ElideRight
-                        text: Core.Meteo.luogo + " · massima " + Core.Meteo.gradi(adesso.g.max)
-                              + ", minima " + Core.Meteo.gradi(adesso.g.min)
+                        text: Core.Meteo.luogo + (isola.it ? " · massima " : " · high ")
+                              + Core.Meteo.gradi(adesso.g.max)
+                              + (isola.it ? ", minima " : ", low ") + Core.Meteo.gradi(adesso.g.min)
                         color: Theme.Colors.textMuted
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeSM
@@ -353,9 +357,9 @@ PanelWindow {
                     Text {
                         width: parent.width
                         elide: Text.ElideRight
-                        text: "Percepita " + Core.Meteo.gradi(adesso.a.percepita)
-                              + " · umidità " + Math.round(adesso.a.umidita || 0) + "%"
-                              + " · vento " + Math.round(adesso.a.vento || 0) + " km/h"
+                        text: (isola.it ? "Percepita " : "Feels like ") + Core.Meteo.gradi(adesso.a.percepita)
+                              + (isola.it ? " · umidità " : " · humidity ") + Math.round(adesso.a.umidita || 0) + "%"
+                              + (isola.it ? " · vento " : " · wind ") + Math.round(adesso.a.vento || 0) + " km/h"
                         color: Theme.Colors.textFaint
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeXS
@@ -430,7 +434,7 @@ PanelWindow {
                     spacing: Theme.Effects.space2
                     Ui.Icon { width: 16; height: 16; name: "sun"; color: Theme.Colors.textMuted; anchors.verticalCenter: parent.verticalCenter }
                     Text {
-                        text: "Alba " + (adesso.g.alba || "")
+                        text: (isola.it ? "Alba " : "Sunrise ") + (adesso.g.alba || "")
                         color: Theme.Colors.textMuted
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeSM
@@ -440,7 +444,7 @@ PanelWindow {
                     spacing: Theme.Effects.space2
                     Ui.Icon { width: 16; height: 16; name: "moon"; color: Theme.Colors.textMuted; anchors.verticalCenter: parent.verticalCenter }
                     Text {
-                        text: "Tramonto " + (adesso.g.tramonto || "")
+                        text: (isola.it ? "Tramonto " : "Sunset ") + (adesso.g.tramonto || "")
                         color: Theme.Colors.textMuted
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeSM
@@ -507,9 +511,12 @@ PanelWindow {
 
                 Repeater {
                     model: [
-                        { "id": "schermo",  "icona": "screen", "it": "Tutto lo schermo",  "nota": "Così com'è adesso" },
-                        { "id": "area",     "icona": "crop",   "it": "Una porzione",      "nota": "La scegli trascinando col mouse" },
-                        { "id": "finestra", "icona": "window", "it": "Solo una finestra", "nota": "Quella attiva, senza il resto della scrivania" }
+                        { "id": "schermo",  "icona": "screen", "it": "Tutto lo schermo",  "nota": "Così com'è adesso",
+                          "en": "The whole screen", "notaEn": "Just as it is now" },
+                        { "id": "area",     "icona": "crop",   "it": "Una porzione",      "nota": "La scegli trascinando col mouse",
+                          "en": "A portion", "notaEn": "You pick it by dragging the mouse" },
+                        { "id": "finestra", "icona": "window", "it": "Solo una finestra", "nota": "Quella attiva, senza il resto della scrivania",
+                          "en": "Just one window", "notaEn": "The active one, without the rest of the desktop" }
                     ]
                     delegate: Rectangle {
                         id: scelta
@@ -532,14 +539,14 @@ PanelWindow {
                             anchors.leftMargin: Theme.Effects.space3
                             anchors.verticalCenter: parent.verticalCenter
                             Text {
-                                text: scelta.modelData.it
+                                text: isola.it ? scelta.modelData.it : scelta.modelData.en
                                 color: Theme.Colors.text
                                 font.family: Theme.Typography.fontDisplay
                                 font.pixelSize: Theme.Typography.sizeSM
                                 font.weight: Theme.Typography.weightMedium
                             }
                             Text {
-                                text: scelta.modelData.nota
+                                text: isola.it ? scelta.modelData.nota : scelta.modelData.notaEn
                                 color: Theme.Colors.textMuted
                                 font.family: Theme.Typography.fontDisplay
                                 font.pixelSize: Theme.Typography.sizeXS
@@ -565,17 +572,18 @@ PanelWindow {
                     topPadding: Theme.Effects.space1
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "Fra quanto"
+                        text: isola.it ? "Fra quanto" : "Delay"
                         color: Theme.Colors.textMuted
                         font.family: Theme.Typography.fontDisplay
                         font.pixelSize: Theme.Typography.sizeSM
                         rightPadding: Theme.Effects.space2
                     }
                     Repeater {
-                        model: [ { "v": 0, "it": "Subito" }, { "v": 3, "it": "3 s" }, { "v": 10, "it": "10 s" } ]
+                        model: [ { "v": 0, "it": "Subito", "en": "Now" }, { "v": 3, "it": "3 s", "en": "3 s" },
+                                 { "v": 10, "it": "10 s", "en": "10 s" } ]
                         delegate: Capsula {
                             required property var modelData
-                            testo: modelData.it
+                            testo: isola.it ? modelData.it : modelData.en
                             color: isola.ritardoSchermata === modelData.v ? Qt.alpha(Theme.Colors.accent, 0.28)
                                                                           : Theme.Colors.raised
                             onScelta: isola.ritardoSchermata = modelData.v
@@ -585,7 +593,8 @@ PanelWindow {
                 Text {
                     width: parent.width
                     wrapMode: Text.WordWrap
-                    text: "Si salva in Immagini › Schermate, e una copia va anche negli appunti."
+                    text: isola.it ? "Si salva in Immagini › Schermate, e una copia va anche negli appunti."
+                                   : "It is saved in Pictures › Screenshots, and a copy goes to the clipboard too."
                     color: Theme.Colors.textFaint
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeXS
@@ -610,8 +619,9 @@ PanelWindow {
                     bottomPadding: Theme.Effects.space3
                     horizontalAlignment: Text.AlignHCenter
                     text: Core.Notifications.doNotDisturb
-                          ? "Niente notifiche. «Non disturbare» è acceso: arrivano senza farsi vedere."
-                          : "Niente notifiche."
+                          ? (isola.it ? "Niente notifiche. «Non disturbare» è acceso: arrivano senza farsi vedere."
+                                      : "No notifications. “Do not disturb” is on: they arrive without showing up.")
+                          : (isola.it ? "Niente notifiche." : "No notifications.")
                     wrapMode: Text.WordWrap
                     color: Theme.Colors.textFaint
                     font.family: Theme.Typography.fontDisplay
@@ -720,7 +730,8 @@ PanelWindow {
                     visible: Core.Notifications.items.length > notifiche.elenco.length
                     width: parent.width
                     horizontalAlignment: Text.AlignHCenter
-                    text: "e altre " + (Core.Notifications.items.length - notifiche.elenco.length)
+                    text: (isola.it ? "e altre " : "and ") + (Core.Notifications.items.length - notifiche.elenco.length)
+                          + (isola.it ? "" : " more")
                     color: Theme.Colors.textFaint
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeXS
@@ -796,7 +807,7 @@ PanelWindow {
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         visible: !calendario.questo
-                        testo: "Torna a oggi"
+                        testo: isola.it ? "Torna a oggi" : "Back to today"
                         onScelta: isola.giraSu("mese")
                     }
                 }
