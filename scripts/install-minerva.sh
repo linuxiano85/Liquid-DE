@@ -536,10 +536,16 @@ gtk-update-icon-cache -f -t "$PREFISSO/share/icons/hicolor" >/dev/null 2>&1 || t
 #
 # Si toccano solo i formati che sappiamo davvero disegnare, e nessun formato
 # vettoriale o di macchina fotografica: quelli restano a chi li faceva.
-for tipo in image/png image/jpeg image/gif image/bmp image/webp image/tiff; do
+# Anche i video: dal 6 ottobre 2026 si guardano in Anteprima, scorrendo
+# insieme alle fotografie della stessa cartella (deciso con Giacomo: «ognuno
+# il suo mestiere»). Media resta il lettore della musica; per un video lo si
+# sceglie con «Apri con» quando servono playlist, taglio o sottotitoli.
+for tipo in image/png image/jpeg image/gif image/bmp image/webp image/tiff \
+            video/mp4 video/webm video/x-matroska video/quicktime \
+            video/x-msvideo video/mpeg video/ogg video/3gpp; do
     xdg-mime default minerva-viewer.desktop "$tipo" 2>/dev/null || true
 done
-c_ok "Anteprima è il visualizzatore predefinito delle immagini"
+c_ok "Anteprima è il visualizzatore predefinito di immagini e video"
 c_info "per tornare indietro: xdg-mime default <programma>.desktop image/jpeg"
 
 # ── Chi apre audio e video ────────────────────────────────────────────────
@@ -557,10 +563,10 @@ c_info "per tornare indietro: xdg-mime default <programma>.desktop image/jpeg"
 # Un tipo dichiarato da due nostri programmi è un difetto, non una comodità:
 # quando succede se ne toglie uno.
 for tipo in audio/mpeg audio/x-wav audio/wav audio/mp4 audio/aac audio/flac \
-            audio/ogg video/mp4 video/webm video/x-matroska video/quicktime; do
+            audio/ogg; do
     xdg-mime default minerva-media.desktop "$tipo" 2>/dev/null || true
 done
-c_ok "Media è il lettore predefinito di audio e video"
+c_ok "Media è il lettore predefinito della musica"
 c_info "per tornare indietro: xdg-mime default <programma>.desktop audio/mpeg"
 
 # Il PATH qui non conta: è la sessione di Liquid DE a mettere il prefisso in

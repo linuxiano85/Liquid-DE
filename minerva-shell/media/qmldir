@@ -3,3 +3,4 @@ MediaBackend 1.0 MediaBackend.qml
 VisualizerWidgetQML 1.0 VisualizerWidgetQML.qml
 PiPWindow 1.0 PiPWindow.qml
 MediaWindow 1.0 MediaWindow.qml
+Lettore 1.0 Lettore.qml

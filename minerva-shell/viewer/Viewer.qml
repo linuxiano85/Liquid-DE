@@ -5,6 +5,8 @@ import "../theme" as Theme
 import "../core" as Core
 import "../ui" as Ui
 import "../menu"
+import "../media" as Media
+import Quickshell.Wayland
 
 // Viewer — Minerva Anteprima.
 //
@@ -724,62 +726,27 @@ FloatingWindow {
         }
     }
 
-    // ── La scheda di un video ────────────────────────────────────────────
+    // ── Il video, qui dentro ─────────────────────────────────────────────
     //
-    // Un video sta nell'album — è nella cartella, è stato girato lo stesso
-    // pomeriggio delle fotografie — ma qui non si riproduce. Invece di un
-    // rettangolo nero che sembra un errore, si dice che cos'è e si offre di
-    // aprirlo con chi lo sa suonare.
-
-    Column {
-        anchors.centerIn: tavolo
-        spacing: Theme.Effects.space3
-        visible: viewer.video(viewer.percorso) && !viewer.mostraGriglia
+    // Prima qui c'era una scheda col nome e un pulsante che passava il video
+    // a Minerva Media, in un'altra finestra: dalla galleria, un filmato del
+    // telefono portava in un programma fatto per playlist e scaricamenti
+    // (Giacomo, 6 ottobre 2026: «è disorganizzato»). Adesso si guarda qui,
+    // come le fotografie, e le frecce passano al file dopo. Per playlist,
+    // taglio e sottotitoli resta «Apri con… → Media».
+    Media.Lettore {
+        id: lettoreVideo
+        anchors.fill: tavolo
         z: 3
+        visible: viewer.video(viewer.percorso) && !viewer.mostraGriglia && !viewer.inGalleria
+        sorgente: visible ? viewer.percorso : ""
+        onSchermoInteroChiesto: viewer.schermoIntero()
+    }
 
-        Rectangle {
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: 88
-            height: 88
-            radius: width / 2
-            color: Theme.Colors.raised
-            border.width: Theme.Effects.hairline
-            border.color: Theme.Colors.edgeAccent
-
-            Ui.Icon {
-                anchors.centerIn: parent
-                width: 34
-                height: 34
-                name: "video"
-                alwaysDrawn: true
-                color: Theme.Colors.accent
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: Core.Ipc.openDefault([viewer.percorso])
-            }
-        }
-
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: viewer.nome
-            color: Theme.Colors.text
-            font.family: Theme.Typography.fontDisplay
-            font.weight: Theme.Typography.weightRegular
-            font.pixelSize: Theme.Typography.sizeLG
-        }
-
-        Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: viewer.it ? "Premi per riprodurlo"
-                            : "Click to play it"
-            color: Theme.Colors.textFaint
-            font.family: Theme.Typography.fontDisplay
-            font.weight: Theme.Typography.weightRegular
-            font.pixelSize: Theme.Typography.sizeSM
-        }
+    // Mentre un video va, lo schermo non si spegne e non si blocca.
+    IdleInhibitor {
+        window: viewer
+        enabled: lettoreVideo.suona
     }
 
     // ── Il provino a contatto ────────────────────────────────────────────
@@ -1471,7 +1438,16 @@ FloatingWindow {
     // dipendono da chi ha il fuoco dentro. È la stessa ragione per cui li usa
     // il gestore file.
 
-    Shortcut { sequences: ["Right", "Space"]; onActivated: viewer.vai(1) }
+    // Spazio sulle foto va avanti; su un video lo fa partire e lo ferma,
+    // come in ogni lettore. K è la stessa cosa, e J/L saltano di dieci secondi.
+    Shortcut { sequence: "Right"; onActivated: viewer.vai(1) }
+    Shortcut {
+        sequence: "Space"
+        onActivated: lettoreVideo.visible ? lettoreVideo.commuta() : viewer.vai(1)
+    }
+    Shortcut { sequence: "K"; enabled: lettoreVideo.visible; onActivated: lettoreVideo.commuta() }
+    Shortcut { sequence: "J"; enabled: lettoreVideo.visible; onActivated: lettoreVideo.salta(-10000) }
+    Shortcut { sequence: "L"; enabled: lettoreVideo.visible; onActivated: lettoreVideo.salta(10000) }
     Shortcut { sequences: ["Left", "Backspace"]; onActivated: viewer.vai(-1) }
     Shortcut { sequence: "Home"; onActivated: viewer.vaiA(0) }
     Shortcut { sequence: "End";  onActivated: viewer.vaiA(viewer.album.length - 1) }

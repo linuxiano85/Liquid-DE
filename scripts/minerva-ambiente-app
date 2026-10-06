@@ -96,6 +96,20 @@ export QT_WAYLAND_DISABLE_WINDOWDECORATION
 
 if [ "${MINERVA_APP_GPU:-0}" = "1" ]; then
     unset QT_QUICK_BACKEND
+    # ── E la decodifica dei video sul processore ─────────────────────────
+    #
+    # 6 ottobre 2026: i video di Giacomo sono AV1, e la sua RX 580 l'AV1 in
+    # hardware non lo sa decodificare. FFmpeg ci prova lo stesso (VAAPI),
+    # fallisce — «hwaccel initialisation returned error» — e Qt invece di
+    # ripiegare sul processore non produce nessun fotogramma: l'audio va,
+    # l'immagine resta nera. Succedeva in Media come in Anteprima.
+    # Provato con una finestra sola: con la decodifica hardware spenta il
+    # video si vede. Chi ha una scheda che regge i suoi video in hardware
+    # la riaccende con MINERVA_VIDEO_HW=1.
+    if [ "${MINERVA_VIDEO_HW:-0}" != "1" ]; then
+        QT_FFMPEG_DECODING_HW_DEVICE_TYPES=,
+        export QT_FFMPEG_DECODING_HW_DEVICE_TYPES
+    fi
 else
     QT_QUICK_BACKEND=software
     export QT_QUICK_BACKEND

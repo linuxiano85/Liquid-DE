@@ -80,9 +80,13 @@ fi
 MINERVA_VIEWER_PATHS="$PATHS"
 MINERVA_VIEWER_DIR="$CARTELLA"
 export MINERVA_VIEWER_PATHS MINERVA_VIEWER_DIR
-# L'ambiente comune delle nostre app: disegnano col processore invece che
-# con la scheda video. Il perché, i numeri e cosa si perde stanno tutti
-# in `scripts/minerva-ambiente-app`.
+# L'ambiente comune delle nostre app. Anteprima chiede la scheda video: dal
+# 6 ottobre 2026 i video della galleria si guardano qui dentro, e col disegno
+# sul processore `VideoOutput` non mostra niente (l'audio sì). Costa una
+# cinquantina di MB su questa finestra; i numeri e il perché stanno in
+# `scripts/minerva-ambiente-app`.
+MINERVA_APP_GPU=1
+export MINERVA_APP_GPU
 . "$ROOT/scripts/minerva-ambiente-app"
 
 minerva_avvia_app anteprima qs -d -n -p "$CONFIG"

@@ -20,5 +20,5 @@ Categories=Graphics;Viewer;2DGraphics;RasterGraphics;
 # aprire una fotografia, e in una sessione Minerva quel mestiere resta a
 # Gwenview. Sono i formati che Qt sa leggere da sé: si dichiara quello che si
 # sa fare, non quello che esiste.
-MimeType=image/png;image/jpeg;image/gif;image/bmp;image/webp;image/tiff;image/x-icon;image/svg+xml;image/x-portable-pixmap;image/x-xbitmap;
+MimeType=image/png;image/jpeg;image/gif;image/bmp;image/webp;image/tiff;image/x-icon;image/svg+xml;image/x-portable-pixmap;image/x-xbitmap;video/mp4;video/webm;video/x-matroska;video/quicktime;video/x-msvideo;video/mpeg;video/ogg;video/3gpp;
 Keywords=immagini;foto;fotografie;visualizzatore;anteprima;images;photos;viewer;preview;picture;

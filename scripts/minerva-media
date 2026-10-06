@@ -37,7 +37,7 @@ fi
 MINERVA_MEDIA_APRI="$TARGET"
 export MINERVA_MEDIA_APRI
 
-# ── L'unica nostra app che chiede la scheda video ───────────────────────────
+# ── Chiede la scheda video (come Anteprima) ─────────────────────────────────
 #
 # `VideoOutput` di Qt Multimedia col renderer software non disegna niente:
 # l'audio parte, il tempo scorre, e l'immagine non c'è. Nessun errore. È il
