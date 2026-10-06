@@ -1,0 +1,77 @@
+#!/bin/sh
+# minerva-store — Apre lo store dei programmi, se si può già sulla ricerca.
+#
+#     minerva-store --chi        → «Shelly|0»  (nome, 1 se sa cercare da solo)
+#     minerva-store xyzq         → apre lo store cercando «xyzq»
+#
+# ── Perché esiste ─────────────────────────────────────────────────────────
+#
+# Giacomo, 6 ottobre 2026: in «Apri con» un collegamento che cerchi nel
+# gestore pacchetti un programma adatto — «nel mio caso apre Shelly». La
+# finestra di GTK lo faceva solo con GNOME Software, scritto fisso.
+#
+# Lo store è chi gestisce `x-scheme-handler/appstream`: è la voce che ogni
+# store dichiara nel suo `.desktop`, ed è quella che il sistema usa per
+# «mostra questo programma nello store». Gli store che accettano una ricerca
+# sulla riga di comando la ricevono; gli altri — Shelly fra questi, che non
+# ha un'opzione per aprirsi su una ricerca — si aprono e la ricerca va negli
+# appunti, così basta incollarla. `--chi` dice quale dei due casi è, per
+# scriverlo nella riga PRIMA che la si prema.
+
+ID=$(xdg-mime query default x-scheme-handler/appstream 2>/dev/null)
+
+# Il nome che si legge nel menu, dal `.desktop`. Prima la traduzione nella
+# lingua della sessione, poi quello di base.
+nome_di() {
+    lingua=${LANG%%_*}
+    for d in "${XDG_DATA_HOME:-$HOME/.local/share}" $(printf '%s' "${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" | tr ':' ' '); do
+        f="$d/applications/$1"
+        [ -f "$f" ] || continue
+        n=$(sed -n "/^\[Desktop Entry\]/,/^\[/{s/^Name\[$lingua\]=//p}" "$f" | head -1)
+        [ -n "$n" ] || n=$(sed -n '/^\[Desktop Entry\]/,/^\[/{s/^Name=//p}' "$f" | head -1)
+        printf '%s' "$n"
+        return 0
+    done
+    return 1
+}
+
+# Quelli che sanno aprirsi su una ricerca, e come. Lo stesso programma ha a
+# volte due nomi di `.desktop` (pacchetto della distribuzione o Flatpak).
+cerca_con() {
+    case "$1" in
+        org.gnome.Software.desktop)        echo "gnome-software --search=" ;;
+        org.kde.discover.desktop)          echo "plasma-discover --search " ;;
+        org.manjaro.pamac.manager.desktop) echo "pamac-manager --search=" ;;
+        *) return 1 ;;
+    esac
+}
+
+if [ -z "$ID" ]; then
+    [ "${1:-}" = "--chi" ] && exit 1
+    echo "minerva-store: nessuno store installato (nessuno gestisce appstream://)" >&2
+    exit 1
+fi
+
+if [ "${1:-}" = "--chi" ]; then
+    n=$(nome_di "$ID") || n=${ID%.desktop}
+    if cerca_con "$ID" >/dev/null; then
+        printf '%s|1\n' "$n"
+    else
+        printf '%s|0\n' "$n"
+    fi
+    exit 0
+fi
+
+RICERCA=${1:-}
+if [ -n "$RICERCA" ] && comando=$(cerca_con "$ID"); then
+    programma=${comando%% *}
+    opzione=${comando#* }
+    case "$opzione" in
+        *=) exec "$programma" "$opzione$RICERCA" ;;
+        *)  exec "$programma" ${opzione% } "$RICERCA" ;;
+    esac
+fi
+
+# Senza ricerca sulla riga di comando: negli appunti, e lo store si apre.
+[ -n "$RICERCA" ] && printf '%s' "$RICERCA" | wl-copy 2>/dev/null
+exec gtk-launch "${ID%.desktop}"

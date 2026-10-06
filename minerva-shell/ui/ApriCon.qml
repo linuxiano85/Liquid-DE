@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import "../theme" as Theme
 import "../core" as Core
 import "." as Ui
@@ -100,6 +101,52 @@ Rectangle {
         chiedi.visible = true;
         chiedi.forceActiveFocus();
         Core.Ipc.mimeDescribe(percorso);
+        if (chiedi.store === "" && !chiStore.busy)
+            chiStore.start([chiedi._scriptStore, "--chi"]);
+    }
+
+    // ── Cercare un programma nello store ─────────────────────────────────
+    //
+    // Giacomo, 6 ottobre 2026: un collegamento che cerchi nel gestore
+    // pacchetti un programma adatto. Quale store e come gli si passa la
+    // ricerca lo sa `scripts/minerva-store`; qui si chiede una volta sola
+    // come si chiama e se sa cercare da solo, per scriverlo sulla riga.
+    property string store: ""
+    property bool storeCerca: false
+    // `Quickshell.shellDir` e non `Qt.resolvedUrl("../../scripts/…")`:
+    // Quickshell non risolve i percorsi fuori dalla cartella della shell e
+    // li manda a `qrc:/qs-blackhole`, cioè a un comando che non parte. Tutti
+    // i punti d'ingresso stanno in `minerva-shell/`, quindi la cartella
+    // sopra è la radice per ognuno.
+    readonly property string _scriptStore: {
+        var dir = String(Quickshell.shellDir).replace(/^file:\/\//, "")
+                                             .replace(/\/+$/, "");
+        return dir.substring(0, dir.lastIndexOf("/")) + "/scripts/minerva-store";
+    }
+
+    property var chiStore: Core.Exec {
+        onDone: function (out) {
+            var r = String(out).trim().split("|");
+            if (r.length === 2 && r[0] !== "") {
+                chiedi.store = r[0];
+                chiedi.storeCerca = r[1] === "1";
+            }
+        }
+    }
+
+    /// Che cosa cercare: l'estensione, che è quello che si scriverebbe a
+    /// mano; il tipo solo per un file che un'estensione non ce l'ha.
+    readonly property string ricercaStore: {
+        var n = chiedi.nome;
+        var punto = n.lastIndexOf(".");
+        if (punto > 0 && punto < n.length - 1)
+            return n.substring(punto + 1).toLowerCase();
+        return chiedi.tipo !== "application/octet-stream" ? chiedi.tipo : "";
+    }
+
+    function cercaNelloStore() {
+        Quickshell.execDetached([chiedi._scriptStore, chiedi.ricercaStore]);
+        chiedi.chiudi();
     }
 
     /// La stessa domanda, fatta da un altro programma. Col file in mano i
@@ -347,6 +394,20 @@ Rectangle {
                         }
                     }
                 }
+            }
+
+            Ui.RigaScelta {
+                width: parent.width
+                visible: chiedi.store !== "" && !chiedi.aspetto
+                icona: "search"
+                testo: (chiedi.it ? "Cerca un programma in " : "Find a program in ")
+                       + chiedi.store
+                nota: chiedi.storeCerca || chiedi.ricercaStore === "" ? ""
+                      : (chiedi.it ? "«" + chiedi.ricercaStore
+                                     + "» va negli appunti: incollalo nella ricerca"
+                                   : "“" + chiedi.ricercaStore
+                                     + "” goes to the clipboard: paste it in the search")
+                onScelto: chiedi.cercaNelloStore()
             }
 
             // ── La spunta ────────────────────────────────────────────────
