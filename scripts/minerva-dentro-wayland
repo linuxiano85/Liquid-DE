@@ -36,6 +36,9 @@ if [ "${MINERVA_PROVA:-}" != "1" ]; then
         WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE PATH \
         MINERVA_CANALE MINERVA_COMPOSITORE MINERVA_IPC_SOCKET \
         MINERVA_SESSIONE XDG_SESSION_ID \
+        MINERVA_ROOT XDG_SESSION_DESKTOP QS_NO_RELOAD_POPUP \
+        QT_QPA_PLATFORM QT_WAYLAND_DISABLE_WINDOWDECORATION \
+        QT_AUTO_SCREEN_SCALE_FACTOR GDK_BACKEND XCURSOR_THEME XCURSOR_SIZE \
         XDG_DATA_DIRS XDG_DATA_HOME XDG_CONFIG_HOME \
         >/dev/null 2>&1
 fi
@@ -43,6 +46,10 @@ fi
 # demone parlare: senza, il gestore file avviato da «Mostra nella cartella» di
 # Chrome cercava il canale della sessione «unica», non trovava nessuno e
 # restava con le cartelle vuote (6 ottobre 2026).
+# Le variabili di Qt e del cursore per la stessa ragione: lo stesso gestore
+# file, partito senza `QT_WAYLAND_DISABLE_WINDOWDECORATION`, si prendeva la
+# barra del titolo chiara di Qt sopra la sua (Giacomo, lo stesso giorno: «due
+# barre del titolo sovrapposte»), e il cursore di serie al posto del tema.
 # Anche l'ambiente di questo processo deve averli: i figli (demone, shell)
 # li ereditano da qui, non solo da D-Bus.
 export MINERVA_CANALE MINERVA_COMPOSITORE 2>/dev/null || true

@@ -86,6 +86,14 @@
 #
 # Si toglie la riga `.` che include questo file da quello script, e quella app
 # torna sulla GPU da sola, senza toccare le altre.
+# Le nostre app si disegnano la barra del titolo da sole. Senza questa riga,
+# un'app partita da D-Bus (il gestore file aperto da «Mostra nella cartella»
+# di Chrome) non la ereditava dalla sessione e Qt ci metteva sopra la sua:
+# due barre una sull'altra (6 ottobre 2026). Detta qui, non dipende più da
+# chi ci lancia.
+QT_WAYLAND_DISABLE_WINDOWDECORATION=1
+export QT_WAYLAND_DISABLE_WINDOWDECORATION
+
 if [ "${MINERVA_APP_GPU:-0}" = "1" ]; then
     unset QT_QUICK_BACKEND
 else
