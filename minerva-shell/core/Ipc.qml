@@ -1653,6 +1653,21 @@ QtObject {
         return send({ "action": "open_default", "paths": paths });
     }
 
+    /// Il file per cui la shell deve chiedere «con che cosa?» se il demone
+    /// risponde `needsChoice`. Vedi `apriOChiedi`.
+    property string chiediPer: ""
+
+    /// «Apri questo», e se non c'è un programma per il suo tipo si chiede.
+    ///
+    /// `openDefault` da solo lascia la risposta `needsChoice` a chi la vuole
+    /// ascoltare, e per una notifica o per `xdg-open` non ascoltava nessuno:
+    /// clic su un file di tipo sconosciuto, e niente (6 ottobre 2026). La
+    /// finestrella la apre `shell.qml`, che guarda `chiediPer`.
+    function apriOChiedi(path) {
+        ipc.chiediPer = path;
+        return ipc.openDefault([path]);
+    }
+
     /// Le icone arrivano da due strade — dentro `init_state` alla connessione,
     /// e da sole quando il tema cambia — e in tutti e due i casi vanno prese
     /// allo stesso modo.

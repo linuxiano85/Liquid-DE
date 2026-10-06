@@ -231,6 +231,17 @@ ShellRoot {
             return "ok";
         }
 
+        /// Apre un file col suo programma, e se non ce n'è uno chiede con
+        /// che cosa. Lo usa `scripts/xdg-open`: è la strada del doppio clic
+        /// nel gestore file, non quella generica di xdg-utils che per un tipo
+        /// sconosciuto apriva il file nel browser.
+        function apri(percorso: string): string {
+            if (percorso === "" || percorso.charAt(0) !== "/")
+                return "no percorso assoluto";
+            Core.Ipc.apriOChiedi(percorso);
+            return "ok";
+        }
+
         /// «Con che cosa lo apro?» per conto del portale: la chiama
         /// `scripts/minerva-portale`, che aspetta la risposta su D-Bus.
         /// `scelte` è `{"scelte": [{id, name, iconPath}…]}` in JSON, usato solo
@@ -1834,7 +1845,7 @@ ShellRoot {
         }
 
         function chiudiPerConto(handle) {
-            if (handle !== sovrapposizioneScrivania.portale)
+            if (handle === "" || handle !== sovrapposizioneScrivania.portale)
                 return;
             sovrapposizioneScrivania.portale = "";
             apriConScrivania.chiudi();
@@ -1871,6 +1882,7 @@ ShellRoot {
 
         Ui.ApriCon {
             id: apriConScrivania
+            offriCartella: true
             onChiuso: sovrapposizioneScrivania._forseSpegni()
             onEseguiRichiesto: function (percorso) {
                 if (root.icone)
@@ -1887,6 +1899,23 @@ ShellRoot {
                 root.run([root.minervaRoot + "/scripts/minerva-files",
                           "--mostra", percorso]);
             }
+        }
+    }
+
+    // «Con che cosa lo apro?» per chi ha chiesto `Core.Ipc.apriOChiedi`: le
+    // notifiche e `xdg-open` (`scripts/xdg-open`). La scrivania e il gestore
+    // file ascoltano la stessa risposta per conto loro, ciascuno per i SUOI
+    // file; qui si risponde solo per quello che la shell ha chiesto.
+    Connections {
+        target: Core.Ipc
+        function onFileResultReceived(result) {
+            var paths = result.paths || [];
+            if (Core.Ipc.chiediPer === "" || paths.length === 0
+                    || paths[0] !== Core.Ipc.chiediPer)
+                return;
+            Core.Ipc.chiediPer = "";
+            if (result.needsChoice === true)
+                sovrapposizioneScrivania.apriCon(paths[0], false);
         }
     }
 

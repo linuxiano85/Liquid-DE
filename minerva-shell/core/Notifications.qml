@@ -128,7 +128,7 @@ QtObject {
             // c'è, la risposta lo DICE (`needsChoice`) invece di lasciare il
             // clic senza effetto — ed è la stessa strada del doppio clic nel
             // gestore file, quindi una sola regola per «apri questo».
-            Core.Ipc.openDefault([f]);
+            Core.Ipc.apriOChiedi(f);
             return true;
         }
 

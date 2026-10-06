@@ -66,6 +66,11 @@ Rectangle {
     /// eseguibile»: chi chiede ha chiesto un programma, non un terminale.
     property bool perConto: false
 
+    /// Offrire «Mostra nella cartella» quando nessuno sa aprire il file. Sì
+    /// nella shell (notifiche, `xdg-open`, portale), no nel gestore file,
+    /// dove nella cartella ci si è già.
+    property bool offriCartella: false
+
     readonly property string nome: {
         var p = String(chiedi.percorso || "");
         var taglio = p.lastIndexOf("/");
@@ -286,7 +291,8 @@ Rectangle {
             // almeno si vede dov'è, e da lì si rinomina, si sposta, si butta.
             Ui.RigaScelta {
                 width: parent.width
-                visible: chiedi.perConto && chiedi.percorso !== ""
+                visible: (chiedi.perConto || chiedi.offriCartella)
+                         && chiedi.percorso !== ""
                          && !chiedi.aspetto && chiedi.candidati.length === 0
                 icona: "folder"
                 testo: chiedi.it ? "Mostra nella cartella" : "Show in folder"

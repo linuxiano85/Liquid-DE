@@ -1,0 +1,80 @@
+#!/bin/sh
+# xdg-open — Lo stesso comando di sempre, che dentro Liquid DE apre i file
+# come li apre il gestore file.
+#
+# ── Perché esiste ─────────────────────────────────────────────────────────
+#
+# `xdg-open` (xdg-utils) sceglie la strada da `XDG_CURRENT_DESKTOP`; il nostro
+# (`LiquidDE:Minerva`) non lo conosce, quindi finisce nel ramo generico. Lì,
+# per un file di un tipo che nessuno ha come predefinito, l'ultimo tentativo è
+# il BROWSER: Chrome che apre «Mostra» su un file appena scaricato se lo
+# vedeva tornare in Chrome (trovato il 6 ottobre 2026, con `BROWSER=echo`).
+# E dove un predefinito c'è, `xdg-mime` in modo generico può prendere il primo
+# programma che dichiara il tipo — il difetto per cui le foto si aprivano nel
+# browser, già raccontato in `files/FileManager.qml`.
+#
+# Qui un file o una cartella locali vanno alla shell (`minerva apri`), che fa
+# quello che fa il doppio clic: il predefinito deciso dal demone, e se non
+# c'è la finestrella «Con che cosa lo apro?». Tutto il resto — indirizzi web,
+# `mailto:`, le opzioni — passa all'`xdg-open` di sistema senza toccarlo.
+#
+# Sta in `scripts/`, che nella sessione di Liquid DE viene PRIMA di /usr/bin
+# nel PATH (`start-minerva-wayland.sh`): fuori da Liquid DE non lo vede
+# nessuno.
+
+QUI="$(cd "$(dirname "$0")" && pwd)"
+
+# Il vero xdg-open: il primo nel PATH che non sia questo file. Cercarlo per
+# nome e non scriverlo fisso (`/usr/bin/xdg-open`) perché sulle distribuzioni
+# che lo mettono altrove resti giusto.
+sistema() {
+    vecchio_ifs=$IFS
+    IFS=:
+    for d in $PATH; do
+        IFS=$vecchio_ifs
+        [ -n "$d" ] || continue
+        [ "$(cd "$d" 2>/dev/null && pwd)" = "$QUI" ] && continue
+        if [ -x "$d/xdg-open" ]; then
+            exec "$d/xdg-open" "$@"
+        fi
+    done
+    IFS=$vecchio_ifs
+    echo "xdg-open: nessun xdg-open di sistema nel PATH" >&2
+    exit 3
+}
+
+[ $# -eq 1 ] || sistema "$@"
+
+case "$1" in
+    -*) sistema "$@" ;;
+    file://*)
+        # Solo `file:///percorso` (host vuoto) o `file://localhost/…`: un
+        # host diverso è un file di un'altra macchina.
+        resto=${1#file://}
+        case "$resto" in
+            localhost/*) resto=${resto#localhost} ;;
+            /*) ;;
+            *) sistema "$@" ;;
+        esac
+        # `%20` e compagni: Python c'è sempre dove c'è Liquid DE.
+        percorso=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.unquote(sys.argv[1]))' "$resto") \
+            || sistema "$@"
+        ;;
+    /*) percorso=$1 ;;
+    *://*|*:*) sistema "$@" ;;
+    *) percorso="$(pwd)/$1" ;;
+esac
+
+[ -e "$percorso" ] || sistema "$@"
+
+case "${XDG_CURRENT_DESKTOP:-}" in
+    *LiquidDE*|*Minerva*) ;;
+    *) sistema "$@" ;;
+esac
+
+SHELL_QML="$(dirname "$QUI")/minerva-shell/shell.qml"
+RISPOSTA=$(timeout 3 qs ipc -p "$SHELL_QML" call minerva apri "$percorso" 2>/dev/null)
+[ "$RISPOSTA" = "ok" ] && exit 0
+# Senza shell che risponda si fa come prima: meglio la strada generica che
+# niente.
+sistema "$@"
