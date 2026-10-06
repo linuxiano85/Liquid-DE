@@ -69,23 +69,38 @@ PanelWindow {
     // Due generi: le LEVETTE accendono e spengono qualcosa e dicono com'è;
     // le SCORCIATOIE aprono un posto, e il Centro si chiude.
     readonly property var catalogo: [
-        { "id": "wifi",          "nome": "Wi-Fi",          "levetta": true },
-        { "id": "bluetooth",     "nome": "Bluetooth",      "levetta": true },
-        { "id": "notte",         "nome": "Luce notturna",  "levetta": true },
-        { "id": "nondisturbare", "nome": "Non disturbare", "levetta": true },
-        { "id": "risparmio",     "nome": "Risparmio",      "levetta": true },
-        { "id": "gioco",         "nome": "Modo gioco",     "levetta": true },
-        { "id": "trasmetti",     "nome": "Trasmetti",      "levetta": true },
-        { "id": "impostazioni",  "nome": "Impostazioni",   "detto": "tutte le scelte" },
-        { "id": "schermata",     "nome": "Schermata",      "detto": "cattura lo schermo" },
-        { "id": "appunti",       "nome": "Appunti",        "detto": "quello che hai copiato" },
-        { "id": "file",          "nome": "File",           "detto": "la cartella personale" },
-        { "id": "terminale",     "nome": "Terminale",      "detto": "una riga di comando" },
-        { "id": "attivita",      "nome": "Attività",       "detto": "programmi e risorse" },
-        { "id": "scorciatoie",   "nome": "Scorciatoie",    "detto": "i tasti di Minerva" }
+        { "id": "wifi",          "nome": "Wi-Fi",          "name": "Wi-Fi",          "levetta": true },
+        { "id": "bluetooth",     "nome": "Bluetooth",      "name": "Bluetooth",      "levetta": true },
+        { "id": "notte",         "nome": "Luce notturna",  "name": "Night light",    "levetta": true },
+        { "id": "nondisturbare", "nome": "Non disturbare", "name": "Do not disturb", "levetta": true },
+        { "id": "risparmio",     "nome": "Risparmio",      "name": "Power saver",    "levetta": true },
+        { "id": "gioco",         "nome": "Modo gioco",     "name": "Game mode",      "levetta": true },
+        { "id": "trasmetti",     "nome": "Trasmetti",      "name": "Cast",           "levetta": true },
+        { "id": "impostazioni",  "nome": "Impostazioni",   "name": "Settings",
+          "detto": "tutte le scelte",        "said": "every choice" },
+        { "id": "schermata",     "nome": "Schermata",      "name": "Screenshot",
+          "detto": "cattura lo schermo",     "said": "capture the screen" },
+        { "id": "appunti",       "nome": "Appunti",        "name": "Clipboard",
+          "detto": "quello che hai copiato", "said": "what you copied" },
+        { "id": "file",          "nome": "File",           "name": "Files",
+          "detto": "la cartella personale",  "said": "your home folder" },
+        { "id": "terminale",     "nome": "Terminale",      "name": "Terminal",
+          "detto": "una riga di comando",    "said": "a command line" },
+        { "id": "attivita",      "nome": "Attività",       "name": "Activity",
+          "detto": "programmi e risorse",    "said": "programs and resources" },
+        { "id": "scorciatoie",   "nome": "Scorciatoie",    "name": "Shortcuts",
+          "detto": "i tasti di Minerva",     "said": "Minerva's keys" }
     ]
     readonly property var vociDiSerie: ["wifi", "bluetooth", "notte", "nondisturbare",
                                         "risparmio", "gioco", "trasmetti", "impostazioni"]
+
+    readonly property bool it: Core.Strings.lang === "it"
+
+    /// Il nome di un riquadro nella lingua di chi guarda.
+    function nomeDi(id) {
+        var v = centro._voceDi(id);
+        return v ? (centro.it ? v.nome : v.name) : String(id);
+    }
 
     function _voceDi(id) {
         for (var i = 0; i < centro.catalogo.length; i++)
@@ -147,24 +162,26 @@ PanelWindow {
         switch (id) {
         // Radio accesa non vuol dire connessi (J2, PC di prova): diceva
         // «connesso» anche senza nessuna rete.
-        case "wifi":          return Core.SystemState.networkWired ? "in rete col cavo"
+        case "wifi":          return Core.SystemState.networkWired
+                                       ? (centro.it ? "in rete col cavo" : "wired")
                                    : Core.SystemState.networkName !== "" ? Core.SystemState.networkName
-                                   : "non connesso";
-        case "bluetooth":     return "acceso";
-        case "notte":         return "schermo caldo";
-        case "nondisturbare": return "notifiche in silenzio";
-        case "risparmio":     return "effetti ridotti";
-        case "gioco":         return "notifiche zitte";
+                                   : (centro.it ? "non connesso" : "not connected");
+        case "bluetooth":     return centro.it ? "acceso" : "on";
+        case "notte":         return centro.it ? "schermo caldo" : "warm screen";
+        case "nondisturbare": return centro.it ? "notifiche in silenzio" : "notifications muted";
+        case "risparmio":     return centro.it ? "effetti ridotti" : "fewer effects";
+        case "gioco":         return centro.it ? "notifiche zitte" : "notifications quiet";
         case "trasmetti":
             if (centro.trasmissioneVerso !== "")
-                return (centro.trasmissioneSpecchio ? "schermo su " : "sto mandando a ")
+                return (centro.trasmissioneSpecchio ? (centro.it ? "schermo su " : "screen on ")
+                                                    : (centro.it ? "sto mandando a " : "sending to "))
                        + centro.trasmissioneVerso;
             if (centro.schermiTrovati.length === 0)
-                return "nessuno schermo in rete";
+                return centro.it ? "nessuno schermo in rete" : "no screen on the network";
             return centro.schermiTrovati.map(function (s) { return String(s.nome); }).join(", ");
         }
         var v = centro._voceDi(id);
-        return v && v.detto ? v.detto : "";
+        return v && v.detto ? (centro.it ? v.detto : v.said) : "";
     }
 
     function scegli(id) {
@@ -209,7 +226,9 @@ PanelWindow {
                 return;
             }
             if (centro.schermiTrovati.length === 0) {
-                centro.motivoFallito = "Nessun televisore trovato in rete: deve essere acceso e sulla stessa rete.";
+                centro.motivoFallito = centro.it
+                    ? "Nessun televisore trovato in rete: deve essere acceso e sulla stessa rete."
+                    : "No TV found on the network: it must be on and on the same network.";
                 return;
             }
             centro.scegliDove = true;
@@ -343,7 +362,8 @@ PanelWindow {
                 Text {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    text: centro.modifica ? "Fatto" : "Personalizza"
+                    text: centro.modifica ? (centro.it ? "Fatto" : "Done")
+                                          : (centro.it ? "Personalizza" : "Customise")
                     color: personalizzaMouse.containsMouse || centro.modifica
                            ? Theme.Colors.accent : Theme.Colors.textFaint
                     font.family: Theme.Typography.fontDisplay
@@ -372,7 +392,7 @@ PanelWindow {
                         required property var modelData
                         required property int index
                         readonly property var voce: centro._voceDi(modelData)
-                        nome: voce ? voce.nome : modelData
+                        nome: voce ? centro.nomeDi(modelData) : modelData
                         scorciatoia: !(voce && voce.levetta)
                         acceso: centro.accesoDi(modelData)
                         detto: centro.dettoDi(modelData)
@@ -392,7 +412,7 @@ PanelWindow {
                 spacing: Theme.Effects.space1
                 visible: !centro.modifica && centro.scegliDove && centro.trasmissioneVerso === ""
                 Text {
-                    text: "Manda lo schermo a:"
+                    text: centro.it ? "Manda lo schermo a:" : "Send the screen to:"
                     color: Theme.Colors.textFaint
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeXS
@@ -431,8 +451,11 @@ PanelWindow {
                 Text {
                     width: parent.width
                     wrapMode: Text.WordWrap
-                    text: "Circa tre secondi di ritardo: per guardare va bene, per lavorare "
-                          + "sullo schermo grande no. Un file si manda dal tasto destro, «Trasmetti a…»."
+                    text: centro.it
+                          ? "Circa tre secondi di ritardo: per guardare va bene, per lavorare "
+                            + "sullo schermo grande no. Un file si manda dal tasto destro, «Trasmetti a…»."
+                          : "About three seconds of delay: fine for watching, not for working "
+                            + "on the big screen. A file is sent from the right click, “Cast to…”."
                     color: Theme.Colors.textFaint
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeXS
@@ -459,8 +482,10 @@ PanelWindow {
                     width: parent.width
                     wrapMode: Text.WordWrap
                     text: centro.mancanti.length > 0
-                          ? "Tocca per aggiungere. Le frecce spostano, la croce toglie."
-                          : "Ci sono già tutti. Le frecce spostano, la croce toglie."
+                          ? (centro.it ? "Tocca per aggiungere. Le frecce spostano, la croce toglie."
+                                       : "Tap to add. The arrows move, the cross removes.")
+                          : (centro.it ? "Ci sono già tutti. Le frecce spostano, la croce toglie."
+                                       : "They are all here. The arrows move, the cross removes.")
                     color: Theme.Colors.textFaint
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeXS
@@ -481,7 +506,7 @@ PanelWindow {
                             Text {
                                 id: aggiungiTesto
                                 anchors.centerIn: parent
-                                text: "+ " + (centro._voceDi(daAggiungere.modelData) || { "nome": "" }).nome
+                                text: "+ " + centro.nomeDi(daAggiungere.modelData)
                                 color: Theme.Colors.text
                                 font.family: Theme.Typography.fontDisplay
                                 font.pixelSize: Theme.Typography.sizeXS
@@ -497,7 +522,7 @@ PanelWindow {
                     }
                 }
                 Text {
-                    text: "↺ Come di serie"
+                    text: centro.it ? "↺ Come di serie" : "↺ Defaults"
                     color: serieMouse.containsMouse ? Theme.Colors.accent : Theme.Colors.textMuted
                     font.family: Theme.Typography.fontDisplay
                     font.pixelSize: Theme.Typography.sizeXS
@@ -520,7 +545,7 @@ PanelWindow {
                 onCambiato: function(v) { Core.SystemState.setVolume(v); }
             }
             Liquido {
-                nome: "Luminosità"
+                nome: centro.it ? "Luminosità" : "Brightness"
                 valore: Core.SystemState.brightness
                 visible: valore >= 0
                 onCambiato: function(v) { Core.SystemState.setBrightness(Math.max(5, v)); }
@@ -622,11 +647,11 @@ PanelWindow {
                 spacing: Theme.Effects.space1
                 Repeater {
                     model: [
-                        { "id": "blocca",   "it": "Blocca",   "tieni": false },
-                        { "id": "sospendi", "it": "Sospendi", "tieni": false },
-                        { "id": "esci",     "it": "Esci",     "tieni": true },
-                        { "id": "riavvia",  "it": "Riavvia",  "tieni": true },
-                        { "id": "spegni",   "it": "Spegni",   "tieni": true }
+                        { "id": "blocca",   "it": "Blocca",   "en": "Lock",     "tieni": false },
+                        { "id": "sospendi", "it": "Sospendi", "en": "Sleep",    "tieni": false },
+                        { "id": "esci",     "it": "Esci",     "en": "Log out",  "tieni": true },
+                        { "id": "riavvia",  "it": "Riavvia",  "en": "Restart",  "tieni": true },
+                        { "id": "spegni",   "it": "Spegni",   "en": "Shut down", "tieni": true }
                     ]
                     delegate: Energia {
                         width: (colonna.width - 4 * Theme.Effects.space1) / 5
@@ -639,7 +664,9 @@ PanelWindow {
             Text {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
-                text: "Esci, Riavvia e Spegni: tieni premuto finché non si riempie, o tocca due volte."
+                text: centro.it
+                      ? "Esci, Riavvia e Spegni: tieni premuto finché non si riempie, o tocca due volte."
+                      : "Log out, Restart and Shut down: hold until it fills, or tap twice."
                 color: Theme.Colors.textFaint
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeXS
@@ -868,7 +895,8 @@ PanelWindow {
         }
         Text {
             anchors.centerIn: parent
-            text: en.armato ? "Ancora" : en.modelData.it
+            text: en.armato ? (centro.it ? "Ancora" : "Again")
+                            : (centro.it ? en.modelData.it : en.modelData.en)
             color: Theme.Colors.text
             font.family: Theme.Typography.fontDisplay
             font.pixelSize: Theme.Typography.sizeXS
