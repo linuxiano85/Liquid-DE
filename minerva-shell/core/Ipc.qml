@@ -1076,6 +1076,11 @@ QtObject {
         return send({ "action": "locale_set", "value": value });
     }
 
+    /// «Annulla» di uno spostamento: ogni `{da, a}` torna da `a` a `da`.
+    function fsRimetti(coppie) {
+        return send({ "action": "fs_rimetti", "coppie": coppie });
+    }
+
     function fsTrashRestore(paths) {
         return send({ "action": "fs_trash_restore", "paths": paths });
     }

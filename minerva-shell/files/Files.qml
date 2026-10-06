@@ -608,6 +608,112 @@ QtObject {
         }
     }
 
+    // ── Annulla ──────────────────────────────────────────────────────────
+    //
+    // Ctrl+Z. Mancava del tutto (6 ottobre 2026): un file buttato per sbaglio
+    // si recuperava aprendo il cestino, uno spostato nella cartella sbagliata
+    // andava cercato. Si annulla quello che il demone dice di aver FATTO —
+    // il nome finale, la posizione nel cestino — e non quello che si era
+    // chiesto, che con un conflitto o un cestino pieno di omonimi è un'altra
+    // cosa.
+    //
+    //     cestino  → si rimette dov'era (`fs_trash_restore`)
+    //     rinomina → si rinomina all'indietro
+    //     sposta   → si riporta da dove veniva (`fs_rimetti`)
+    //     copia    → le copie vanno nel cestino, non cancellate
+    //
+    // Le ultime venti, nell'ordine in cui sono successe.
+
+    property var annullabili: []
+    readonly property bool puoiAnnullare: files.annullabili.length > 0
+
+    /// Come si chiama l'ultima, per il menu: «Annulla: sposta 3 file».
+    readonly property string cosaAnnullare: {
+        if (files.annullabili.length === 0)
+            return "";
+        var u = files.annullabili[files.annullabili.length - 1];
+        var it = Core.Strings.lang === "it";
+        var n = u.quanti || 1;
+        var cosa = n === 1 ? (it ? "1 file" : "1 file") : n + " file" + (it ? "" : "s");
+        switch (u.tipo) {
+        case "cestino":  return (it ? "rimetti " : "restore ") + cosa;
+        case "rinomina": return (it ? "rinomina di " : "rename of ") + u.a.split("/").pop();
+        case "sposta":   return (it ? "sposta " : "move ") + cosa;
+        case "copia":    return (it ? "copia di " : "copy of ") + cosa;
+        }
+        return "";
+    }
+
+    property var _jobVisti: ({})
+    /// Le risposte che arrivano da un annullamento non si annullano a loro
+    /// volta: si saltano.
+    property int _cestiniDaSaltare: 0
+    property string _rinominaDaSaltare: ""
+
+    function _ricorda(voce) {
+        var a = files.annullabili.concat([voce]);
+        if (a.length > 20)
+            a = a.slice(a.length - 20);
+        files.annullabili = a;
+    }
+
+    property var _ascoltaOperazioni: Connections {
+        target: Core.Ipc
+        function onFileResultReceived(r) {
+            if (!r || r.ok !== true && !(r.nelCestino && r.nelCestino.length > 0))
+                return;
+            if (r.operazione === "cestino" && r.nelCestino && r.nelCestino.length > 0) {
+                if (files._cestiniDaSaltare > 0) {
+                    files._cestiniDaSaltare--;
+                    return;
+                }
+                files._ricorda({ "tipo": "cestino", "percorsi": r.nelCestino,
+                                 "quanti": r.nelCestino.length });
+            } else if (r.operazione === "rinomina") {
+                if (files._rinominaDaSaltare === r.da + "\n" + r.a) {
+                    files._rinominaDaSaltare = "";
+                    return;
+                }
+                files._ricorda({ "tipo": "rinomina", "da": r.da, "a": r.a, "quanti": 1 });
+            }
+        }
+        function onFileJobChanged(job) {
+            if (!job || !job.fatti || job.fatti.length === 0 || files._jobVisti[job.id])
+                return;
+            var v = files._jobVisti;
+            v[job.id] = true;
+            files._jobVisti = v;
+            var fatti = job.fatti.filter(function (f) { return f.sostituito !== true; });
+            if (fatti.length > 0)
+                files._ricorda({ "tipo": job.move ? "sposta" : "copia", "fatti": fatti,
+                                 "quanti": fatti.length });
+        }
+    }
+
+    function annulla() {
+        if (files.annullabili.length === 0)
+            return;
+        var a = files.annullabili.slice();
+        var u = a.pop();
+        files.annullabili = a;
+        switch (u.tipo) {
+        case "cestino":
+            Core.Ipc.fsTrashRestore(u.percorsi);
+            break;
+        case "rinomina":
+            files._rinominaDaSaltare = u.a + "\n" + u.da;
+            Core.Ipc.fsRename(u.a, u.da);
+            break;
+        case "sposta":
+            Core.Ipc.fsRimetti(u.fatti.map(function (f) { return { "da": f.da, "a": f.a }; }));
+            break;
+        case "copia":
+            files._cestiniDaSaltare++;
+            Core.Ipc.fsTrash(u.fatti.map(function (f) { return f.a; }));
+            break;
+        }
+    }
+
     /// Cosa incollare adesso: `{percorsi, tagliati}`. Se negli appunti di
     /// sistema c'è ancora la nostra copia vale il nostro «tagliato», che lì
     /// non si può scrivere; se c'è quella di un altro programma, vale la sua.

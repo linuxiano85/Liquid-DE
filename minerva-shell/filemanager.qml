@@ -269,6 +269,33 @@ ShellRoot {
             return String(Files.clipboard.length);
         }
 
+        /// Per le prove: «Taglia» sulla selezione, come Ctrl+X.
+        function taglia(): string {
+            manager.doCut();
+            return String(Files.clipboard.length);
+        }
+
+        /// Per le prove: la selezione nel cestino, senza la domanda (come
+        /// con `files.confermaCestino` spento).
+        function cestina(): string {
+            var ops = manager.operands();
+            if (ops.length > 0)
+                Core.Ipc.fsTrash(ops);
+            return String(ops.length);
+        }
+
+        /// Per le prove: Ctrl+Z. Risponde con cosa ha annullato.
+        function annulla(): string {
+            var cosa = Files.cosaAnnullare;
+            Files.annulla();
+            return cosa === "" ? "niente" : cosa;
+        }
+
+        /// Per le prove: cosa annullerebbe Ctrl+Z adesso.
+        function annullabile(): string {
+            return Files.cosaAnnullare === "" ? "niente" : Files.cosaAnnullare;
+        }
+
         /// Per le prove: «Incolla» nella scheda attiva, come Ctrl+V.
         function incolla(): string {
             manager.doPaste();

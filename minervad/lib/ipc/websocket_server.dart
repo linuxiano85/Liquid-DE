@@ -1896,6 +1896,11 @@ class WebSocketServer {
           final to = msg['to'];
           if (from is String && to is String) {
             final r = await _fileService.rename(from, to);
+            if (r['ok'] == true) {
+              r['operazione'] = 'rinomina';
+              r['da'] = from;
+              r['a'] = to;
+            }
             client.send({'event': 'fs_result', 'payload': r});
           }
         }
@@ -2131,6 +2136,17 @@ class WebSocketServer {
         break;
 
       // ── Cestino ───────────────────────────────────────────────────────
+      // «Annulla» di uno spostamento: i file tornano da dove venivano.
+      case 'fs_rimetti':
+        {
+          final coppie = (msg['coppie'] as List?)?.whereType<Map>().toList() ?? [];
+          if (coppie.isNotEmpty) {
+            final r = await _fileService.rimetti(coppie);
+            client.send({'event': 'fs_result', 'payload': r});
+          }
+        }
+        break;
+
       case 'fs_trash_restore':
         {
           final paths = (msg['paths'] as List?)?.cast<String>() ?? [];

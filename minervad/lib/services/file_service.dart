@@ -304,6 +304,31 @@ class FileService {
     }
   }
 
+  /// Rimette al loro posto dei file spostati: «Annulla» di uno spostamento.
+  /// Ogni coppia è `{da, a}` come la scrive `TransferJob.fatti`: il file sta
+  /// in `a` e torna in `da`, senza mai scrivere sopra qualcosa che nel
+  /// frattempo è comparso lì.
+  Future<Map<String, dynamic>> rimetti(List<Map> coppie) async {
+    final falliti = <String>[];
+    var rimessi = 0;
+    for (final c in coppie) {
+      final da = '${c['da'] ?? ''}';
+      final a = '${c['a'] ?? ''}';
+      if (!da.startsWith('/') || !a.startsWith('/')) continue;
+      try {
+        LinuxFiles.renameNoReplace(a, da);
+        rimessi++;
+      } catch (e) {
+        falliti.add(motivo(a.split('/').last, e));
+      }
+    }
+    return {
+      'ok': falliti.isEmpty,
+      'error': falliti.join('\n'),
+      'rimessi': rimessi,
+    };
+  }
+
   Future<Map<String, dynamic>> rename(String from, String to) async {
     try {
       if (await _sameEntry(from, to)) return {'ok': true, 'error': ''};
@@ -333,6 +358,9 @@ class FileService {
 
     final rifiutati = <String>[];
     var cestinati = 0;
+    // Dove è finito ciascuno: è quello che serve a rimetterlo a posto
+    // («Annulla»), dato che nel cestino il nome può essere «foto.png.2».
+    final nelCestino = <String>[];
 
     for (final p in paths) {
       final name = p.split(Platform.pathSeparator).last;
@@ -358,6 +386,7 @@ class FileService {
         pubblicata = true;
         await _sposta(p, target);
         cestinati++;
+        nelCestino.add(target);
       } catch (e) {
         rifiutati.add(motivo(name, e));
         // Se una copia cross-device è stata pubblicata prima di un errore
@@ -374,6 +403,8 @@ class FileService {
       'ok': rifiutati.isEmpty,
       'error': rifiutati.join('\n'),
       'cestinati': cestinati,
+      'operazione': 'cestino',
+      'nelCestino': nelCestino,
     };
   }
 
@@ -1482,6 +1513,7 @@ class FileService {
           try {
             target = _rinominaSenzaSovrascrivere(
                 s, target, voluto, job.conflitto == 'entrambi');
+            job.fatti.add({'da': s, 'a': target});
             job.bytesDone += await _measureQuiet(target);
             job.currentFile = name;
             _emit(job);
@@ -1527,6 +1559,12 @@ class FileService {
         await _metadatiDellaCima(s, target);
         await _togliPreparazione(staging.path);
         staging = null;
+        // Uno sostituito non si annulla: il vecchio contenuto non c'è più.
+        job.fatti.add({
+          'da': s,
+          'a': target,
+          if (occupato && job.conflitto == 'sostituisci') 'sostituito': true,
+        });
         if (job.move) {
           try {
             await _deletePath(s);
@@ -1975,6 +2013,11 @@ class TransferJob {
   String error = '';
   DateTime? finishedAt;
 
+  /// Quello che è stato fatto davvero, voce per voce: da dove a dove, col
+  /// nome FINALE (che con «entrambi» può essere «foto (2).png»). Serve ad
+  /// annullare: senza, si saprebbe solo cosa si era chiesto.
+  final List<Map<String, dynamic>> fatti = [];
+
   /// Completato quando arriva «riprendi». Esiste solo mentre è in pausa.
   Completer<void>? resumeSignal;
 
@@ -2006,5 +2049,6 @@ class TransferJob {
         'bytesDone': bytesDone,
         'currentFile': currentFile,
         'error': error,
+        if (isFinished) 'fatti': fatti,
       };
 }

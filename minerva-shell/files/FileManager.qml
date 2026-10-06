@@ -1843,6 +1843,7 @@ FloatingWindow {
     Shortcut { sequence: "Alt+Left";  enabled: !manager.typing; onActivated: if (manager.current) manager.current.goBack() }
     Shortcut { sequence: "Alt+Right"; enabled: !manager.typing; onActivated: if (manager.current) manager.current.goForward() }
     Shortcut { sequence: "Alt+Up";    enabled: !manager.typing; onActivated: if (manager.current) manager.current.goUp() }
+    Shortcut { sequence: "Ctrl+Z";    enabled: !manager.typing && !manager.busy; onActivated: Files.annulla() }
     Shortcut { sequence: "Ctrl+H";    enabled: !manager.typing; onActivated: if (manager.current) manager.current.commutaNascosti() }
     Shortcut {
         sequence: "Tab"
@@ -2513,6 +2514,12 @@ FloatingWindow {
         if (puoi && Files.puoiIncollare)
             items.push({ "label": it ? "Incolla" : "Paste", "icon": "check",
                          "action": "paste", "shortcut": "Ctrl+V" });
+        // «Annulla» col nome di quello che annulla: un «Annulla» generico
+        // non dice se riporta indietro la rinomina di un minuto fa o la
+        // copia di stamattina.
+        if (Files.puoiAnnullare)
+            items.push({ "label": (it ? "Annulla: " : "Undo: ") + Files.cosaAnnullare,
+                         "icon": "back", "action": "undo", "shortcut": "Ctrl+Z" });
 
         // Le voci che mandano roba in un'altra scheda compaiono solo se
         // un'altra scheda c'è — e se c'è qualcosa da mandarci.
@@ -2996,6 +3003,7 @@ FloatingWindow {
             case "copy":      manager.doCopy(); break;
             case "cut":       manager.doCut(); break;
             case "paste":     manager.doPaste(); break;
+            case "undo":      Files.annulla(); break;
             case "copyOther": manager.sendToOther(false); break;
             case "moveOther": manager.sendToOther(true); break;
             case "rename":    manager.doRename(); break;
