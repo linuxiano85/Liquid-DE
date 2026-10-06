@@ -29,6 +29,10 @@ class SystemAudioService {
   final changes = StreamController<Map<String, dynamic>>.broadcast();
   Process? _watch;
   Timer? _debounce, _retry;
+
+  /// Fermato da `ferma()`: niente riconnessioni finché qualcuno non richiama
+  /// `start()`. Diverso da `_closed`, che è per sempre.
+  bool _fermo = false;
   bool _closed = false, _starting = false, _reading = false, _again = false;
   bool _selecting = false;
 
@@ -191,6 +195,7 @@ class SystemAudioService {
 
   Future<void> start() async {
     if (_closed || _watch != null || _starting) return;
+    _fermo = false;
     _starting = true;
     try {
       final p = await Process.start(
@@ -198,7 +203,7 @@ class SystemAudioService {
         ['subscribe'],
         environment: {'LC_ALL': 'C.UTF-8'},
       );
-      if (_closed) {
+      if (_closed || _fermo) {
         p.kill();
         return;
       }
@@ -226,8 +231,21 @@ class SystemAudioService {
     }
   }
 
+  /// Smette di ascoltare PipeWire, senza chiudere il servizio: lo chiama chi
+  /// vede andar via l'ultimo iscritto. `pactl subscribe` restava acceso per
+  /// tutta la sessione dopo la prima apertura della pagina Audio, e a ogni
+  /// tasto del volume rileggeva lo stato per nessuno (5 ottobre 2026).
+  void ferma() {
+    _fermo = true;
+    _retry?.cancel();
+    _debounce?.cancel();
+    final w = _watch;
+    _watch = null;
+    w?.kill();
+  }
+
   void _reconnect() {
-    if (_closed) return;
+    if (_closed || _fermo) return;
     _retry?.cancel();
     _retry = Timer(const Duration(seconds: 2), start);
   }

@@ -1045,6 +1045,13 @@ class WebSocketServer {
     _finestre.spingiTutto();
   }
 
+  /// Spegne l'ascolto di PipeWire se non è rimasto nessuno iscritto.
+  void _audioSeNonServe() {
+    if (!_clients.any((c) => c.isSubscribed('system_audio_state'))) {
+      _systemAudio.ferma();
+    }
+  }
+
   void _removeClient(WebSocketClientConnection client) {
     _desktopLauncher.forget(client);
     _clients.remove(client);
@@ -1059,6 +1066,9 @@ class WebSocketServer {
     // leggere `/proc` ogni due secondi per il resto della sessione.
     if (_iscrittiProcessi.remove(client)) _processi.disiscrivi();
     if (_iscrittiMacchina.remove(client)) _processi.disiscriviMacchina();
+    // Lo stesso per l'audio: le Impostazioni chiuse non mandano
+    // `unsubscribe_audio`.
+    _audioSeNonServe();
     // La Fucina racconta la compilazione a chi ascolta: chi se ne va smette
     // di essere nell'elenco, o ogni riga di `make` proverebbe a raggiungerlo.
     _fucina.officina.smetti(client);
@@ -2257,13 +2267,13 @@ class WebSocketServer {
       // parte alla prima iscrizione, e chi non guarda la pagina non riceve
       // niente. I due nomi degli eventi sono scritti per esteso, non
       // calcolati: `bus_coerenza_test` deve poterli leggere.
+      // Le richieste singole leggono lo stato adesso: l'ascolto continuo
+      // serve solo a chi si è iscritto.
       case 'system_audio_state':
-        await _systemAudio.start();
         client.send({'event': 'system_audio_state',
             'payload': await _systemAudio.status()});
         break;
       case 'system_audio_select':
-        await _systemAudio.start();
         client.send({'event': 'system_audio_select',
             'payload': await _systemAudio.select(msg)});
         break;
@@ -2301,6 +2311,7 @@ class WebSocketServer {
         client.subscribedEvents = client.subscribedEvents
             .where((e) => e != 'system_audio_state')
             .toList();
+        _audioSeNonServe();
         break;
       // ── Leggere e scrivere un documento ───────────────────────────────
       //
