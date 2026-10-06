@@ -6,7 +6,7 @@
 # mano la generazione dei protocolli, che è la parte più noiosa e più facile
 # da sbagliare in silenzio.
 project('minerva-wayland', 'c',
-  version: '0.1.0',
+  version: run_command('cat', meson.current_source_dir() + '/../minerva-shell/VERSION', check: true).stdout().strip(),
   license: 'GPL-3.0-or-later',
   default_options: [
     'c_std=c11',

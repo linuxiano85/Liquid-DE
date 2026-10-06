@@ -302,7 +302,7 @@ FloatingWindow {
         { "id": "accesso",    "icon": "lock",      "it": "Accesso",       "en": "Login",
           "cerca": "accesso login greeter sfondo aurora automatico" },
         { "id": "shell",      "icon": "settings",  "it": "Minerva",       "en": "Minerva",
-          "cerca": "aiuto scorciatoie promemoria ripristino valori di fabbrica" }
+          "cerca": "aiuto scorciatoie promemoria ripristino valori di fabbrica informazioni about versione sistema" }
     ]
 
     // ── Come si presentano ───────────────────────────────────────────────

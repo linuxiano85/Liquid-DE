@@ -146,6 +146,7 @@ Page {
             required property var modelData
             readonly property string chiave: modelData.chiave
             readonly property var mappa: modelData.mappa || {}
+            enabled: modelData.gestito === true
 
             width: parent ? parent.width : 0
             heading: modelData.nome
@@ -158,7 +159,9 @@ Page {
                              : "Compatibility is off: presets and buttons only apply when it is on.")
                   : modelData.gestito
                     ? (page.it ? "Pronto per tutti i giochi." : "Ready for every game.")
-                    : (page.it ? "Non ancora gestito: un momento." : "Not managed yet: one moment.")
+                  : (page.it
+                     ? "InputPlumber non ha preso in carico questo pad: i controlli sono disattivati. Verifica che il servizio sia attivo e che il dispositivo sia supportato; scollega e ricollega il pad dopo aver avviato InputPlumber."
+                     : "InputPlumber has not claimed this gamepad, so its controls are disabled. Check that the service is running and the device is supported; reconnect the gamepad after starting InputPlumber.")
 
             S.SettingRow {
                 width: parent.width
