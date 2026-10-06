@@ -1838,6 +1838,12 @@ FloatingWindow {
     Shortcut { sequence: "Ctrl+N"; enabled: !manager.busy; onActivated: manager.apriNuovaFinestra() }
     Shortcut { sequence: "Ctrl+W"; enabled: !manager.busy; onActivated: manager.closeCurrentTab() }
     Shortcut { sequence: "Alt+Return"; enabled: !manager.busy; onActivated: manager.doProperties() }
+    // Avanti, indietro e su come in ogni gestore file e nel browser. Mancavano:
+    // la cronologia c'era, ma solo coi pulsanti (6 ottobre 2026).
+    Shortcut { sequence: "Alt+Left";  enabled: !manager.typing; onActivated: if (manager.current) manager.current.goBack() }
+    Shortcut { sequence: "Alt+Right"; enabled: !manager.typing; onActivated: if (manager.current) manager.current.goForward() }
+    Shortcut { sequence: "Alt+Up";    enabled: !manager.typing; onActivated: if (manager.current) manager.current.goUp() }
+    Shortcut { sequence: "Ctrl+H";    enabled: !manager.typing; onActivated: if (manager.current) manager.current.commutaNascosti() }
     Shortcut {
         sequence: "Tab"
         enabled: !manager.busy && manager.panes.length > 1

@@ -22,6 +22,24 @@ Item {
     /// rilettura della stessa cartella (vedi `onFileListingReceived`).
     property string _elencoDi: ""
 
+    // ── I tasti avanti e indietro del mouse ──────────────────────────────
+    //
+    // Ce li ha quasi ogni mouse, e in ogni gestore file fanno quello che
+    // fanno nel browser. Accetta SOLO quei due tasti: sinistro e destro
+    // passano sotto come se non ci fosse, e agisce sul riquadro sotto il
+    // puntatore, che con due riquadri affiancati è quello che si indica.
+    MouseArea {
+        anchors.fill: parent
+        z: 1000
+        acceptedButtons: Qt.BackButton | Qt.ForwardButton
+        onClicked: function (e) {
+            if (e.button === Qt.BackButton)
+                pane.goBack();
+            else
+                pane.goForward();
+        }
+    }
+
     // Chiusa la scheda, il demone smette di guardare la sua cartella.
     Component.onDestruction: Core.Ipc.fsSmettiDiGuardare(pane.paneId)
 
@@ -458,6 +476,13 @@ Item {
             return;
         pane.historyIndex++;
         navigate(pane.history[pane.historyIndex], false);
+    }
+
+    /// Mostra o nasconde i file nascosti, e lo ricorda. Il pulsante e Ctrl+H.
+    function commutaNascosti() {
+        Core.Ipc.setSetting("files.showHidden", !pane.showHidden);
+        pane.showHidden = !pane.showHidden;
+        pane.reload();
     }
 
     function goUp() {
@@ -2500,11 +2525,7 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        Core.Ipc.setSetting("files.showHidden", !pane.showHidden);
-                        pane.showHidden = !pane.showHidden;
-                        pane.reload();
-                    }
+                    onClicked: pane.commutaNascosti()
                 }
             }
 
