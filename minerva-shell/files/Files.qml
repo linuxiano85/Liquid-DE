@@ -545,9 +545,46 @@ QtObject {
     property var appuntiDiSistema: []
     property bool appuntiDiSistemaTagliati: false
 
+    /// Il tipo dell'immagine negli appunti di sistema («image/png»), o «».
+    property string appuntiImmagine: ""
+
     /// C'è qualcosa da incollare: nostro o di un altro programma.
     readonly property bool puoiIncollare: files.clipboard.length > 0
                                           || files.appuntiDiSistema.length > 0
+                                          || files.appuntiImmagine !== ""
+
+    // ── Un'immagine incollata diventa un file ────────────────────────────
+    //
+    // Ctrl+V con una schermata negli appunti non faceva niente (6 ottobre
+    // 2026); Dolphin e Nautilus ne fanno un file. Il nome dice cosa e
+    // quando, e `set -C` fa fallire la scrittura invece di coprire un file
+    // che si chiama già così. Si annulla come una cartella nuova.
+    property string _immagineScritta: ""
+    property var _scriviImmagine: Core.Exec {
+        onCompleted: function (codice) {
+            if (codice === 0 && files._immagineScritta !== "")
+                files._ricorda({ "tipo": "creati", "percorsi": [files._immagineScritta],
+                                 "quanti": 1 });
+            files._immagineScritta = "";
+        }
+    }
+
+    function incollaImmagine(cartella) {
+        var tipo = files.appuntiImmagine;
+        if (tipo === "" || cartella === "")
+            return;
+        var est = { "image/png": "png", "image/jpeg": "jpg",
+                    "image/webp": "webp", "image/gif": "gif" }[tipo] || "png";
+        var d = new Date();
+        function due(n) { return (n < 10 ? "0" : "") + n; }
+        var quando = d.getFullYear() + "-" + due(d.getMonth() + 1) + "-" + due(d.getDate())
+                   + " " + due(d.getHours()) + "." + due(d.getMinutes()) + "." + due(d.getSeconds());
+        var nome = (Core.Strings.lang === "it" ? "Immagine incollata " : "Pasted image ")
+                   + quando + "." + est;
+        files._immagineScritta = cartella + "/" + nome;
+        _scriviImmagine.shArgs('set -C; wl-paste -n -t "$1" > "$2"',
+                               [tipo, files._immagineScritta]);
+    }
 
     /// Il testo che abbiamo messo noi negli appunti di sistema: se ci si
     /// ritrova lo stesso, la copia è ancora la nostra.
@@ -629,7 +666,11 @@ QtObject {
             + "  if printf '%s\\n' \"$t\" | grep -qx 'application/x-kde-cutselection' "
             + "     && [ \"$(wl-paste -n -t application/x-kde-cutselection)\" = 1 ]; then echo cut; else echo copy; fi; "
             + "  wl-paste -n -t text/uri-list; "
-            + "fi");
+            // Un'immagine (una schermata, una copiata dal browser): si dice
+            // il tipo, e incollare la salva come file.
+            + "else for i in image/png image/jpeg image/webp image/gif; do "
+            + "  if printf '%s\\n' \"$t\" | grep -qx \"$i\"; then echo immagine; echo \"$i\"; break; fi; "
+            + "done; fi");
     }
 
     property var leggi: Core.Exec {
@@ -637,6 +678,8 @@ QtObject {
             var righe = String(uscita).split(/\r?\n/);
             var percorsi = [];
             var tagliati = false;
+            files.appuntiImmagine = righe[0] === "immagine" && righe.length >= 2
+                ? righe[1].trim() : "";
             if (righe.length >= 2 && (righe[0] === "gnome" || righe[0] === "uri")) {
                 tagliati = righe[1].trim() === "cut";
                 for (var i = 2; i < righe.length; i++) {
@@ -783,6 +826,10 @@ QtObject {
     /// non si può scrivere; se c'è quella di un altro programma, vale la sua.
     function daIncollare() {
         var sistema = files.appuntiDiSistema;
+        // Un'immagine negli appunti di sistema vuol dire che dopo la nostra
+        // copia qualcuno ne ha messo un'altra: i nostri file sono vecchi.
+        if (sistema.length === 0 && files.appuntiImmagine !== "")
+            return { "percorsi": [], "tagliati": false, "nostra": false };
         if (sistema.length === 0)
             return { "percorsi": files.clipboard.slice(), "tagliati": files.clipboardIsCut,
                      "nostra": true };

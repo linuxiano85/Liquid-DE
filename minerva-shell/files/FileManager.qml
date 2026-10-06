@@ -790,8 +790,10 @@ FloatingWindow {
         var dove = manager.current.path;
         Files.leggiAppunti(function () {
             var d = Files.daIncollare();
-            if (d.percorsi.length === 0)
+            if (d.percorsi.length === 0) {
+                Files.incollaImmagine(dove);
                 return;
+            }
             manager.trasferisci(d.percorsi, dove, d.tagliati);
             // Dopo un taglio gli appunti si svuotano, anche quelli di
             // sistema: i file non sono più dove dicono, e incollarli una
