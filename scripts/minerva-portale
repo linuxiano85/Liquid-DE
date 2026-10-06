@@ -1,0 +1,265 @@
+#!/usr/bin/env python3
+"""minerva-portale — il «Con che cosa lo apro?» del portale, fatto da Minerva.
+
+── Perché esiste ──────────────────────────────────────────────────────────────
+
+Giacomo, 6 ottobre 2026: «quando ho qualche file sconosciuto e provo ad aprirlo
+si apre una schermata, penso di GNOME, che dice di cercare in GNOME Software».
+
+Chrome e quasi tutti gli altri, per aprire un file, non lanciano `xdg-open`:
+chiedono a `xdg-desktop-portal` (`OpenURI.OpenFile`). Se per quel tipo non c'è
+un programma predefinito, il portale chiede a un backend di far scegliere — e
+il nostro `liquidde-portals.conf` lasciava quella domanda a GTK, che risponde
+con la sua finestra e col pulsante per GNOME Software. Che qui non c'è.
+
+Qui la domanda va alla shell, che mostra la stessa finestrella `ui/ApriCon.qml`
+del gestore file e della scrivania: stessi candidati, stessa spunta «Ricorda»,
+più «Mostra nella cartella» per il file che nessuno sa aprire.
+
+── Come gira la risposta ──────────────────────────────────────────────────────
+
+Il portale chiama `ChooseApplication` e aspetta. Noi chiediamo alla shell di
+mostrare la finestrella (`qs ipc … call minerva apriConPerConto`) e teniamo la
+chiamata in sospeso; quando si sceglie, la shell ci chiama `Risposta` su
+D-Bus e solo allora il portale ha la sua risposta.
+
+Senza shell (una sessione rotta, un'altra scrivania) la domanda passa a GTK
+com'era prima: una finestra che non ci piace è meglio di nessuna finestra.
+Lo stesso fuori da Liquid DE.
+"""
+
+import json
+import os
+import subprocess
+import sys
+from urllib.parse import unquote, urlparse
+
+import gi
+
+gi.require_version("Gio", "2.0")
+from gi.repository import Gio, GLib  # noqa: E402
+
+NOME = "org.freedesktop.impl.portal.desktop.liquidde"
+PERCORSO = "/org/freedesktop/portal/desktop"
+GTK = "org.freedesktop.impl.portal.desktop.gtk"
+INTERFACCIA = """
+<node>
+  <interface name="org.freedesktop.impl.portal.AppChooser">
+    <method name="ChooseApplication">
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="s" name="app_id" direction="in"/>
+      <arg type="s" name="parent_window" direction="in"/>
+      <arg type="as" name="choices" direction="in"/>
+      <arg type="a{sv}" name="options" direction="in"/>
+      <arg type="u" name="response" direction="out"/>
+      <arg type="a{sv}" name="results" direction="out"/>
+    </method>
+    <method name="UpdateChoices">
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="as" name="choices" direction="in"/>
+    </method>
+    <property name="version" type="u" access="read"/>
+  </interface>
+  <interface name="org.liquidde.Portale">
+    <method name="Risposta">
+      <arg type="o" name="handle" direction="in"/>
+      <arg type="s" name="scelta" direction="in"/>
+    </method>
+  </interface>
+</node>
+"""
+RICHIESTA = """
+<node>
+  <interface name="org.freedesktop.impl.portal.Request">
+    <method name="Close"/>
+  </interface>
+</node>
+"""
+
+# Dopo quanto senza domande in sospeso si esce: il portale ci riavvia da sé
+# alla prossima, e restare accesi per un file sconosciuto al giorno non vale
+# la memoria.
+RIPOSO_SECONDI = 120
+
+# Risposte del portale: 0 scelto, 1 annullato, 2 altro.
+SCELTO, ANNULLATO, ALTRO = 0, 1, 2
+
+QUI = os.path.dirname(os.path.realpath(__file__))
+SHELL_QML = os.path.join(os.path.dirname(QUI), "minerva-shell", "shell.qml")
+
+
+def in_liquid() -> bool:
+    nomi = os.environ.get("XDG_CURRENT_DESKTOP", "").lower().split(":")
+    return "liquidde" in nomi or "minerva" in nomi
+
+
+def percorso_da(uri: str) -> str:
+    if not uri:
+        return ""
+    u = urlparse(uri)
+    if u.scheme != "file":
+        return ""
+    p = unquote(u.path)
+    return p if os.path.isabs(p) else ""
+
+
+# I temi in cui cercare un'icona quando non c'è un file da far descrivere al
+# demone (un indirizzo `mailto:`, per dire). Non è la ricerca completa della
+# specifica: è abbastanza per non mostrare righe senza icona.
+_CARTELLE_ICONE = [
+    "/usr/share/icons/hicolor/scalable/apps",
+    "/usr/share/icons/hicolor/256x256/apps",
+    "/usr/share/icons/hicolor/128x128/apps",
+    "/usr/share/icons/hicolor/64x64/apps",
+    "/usr/share/icons/hicolor/48x48/apps",
+    "/usr/share/pixmaps",
+]
+
+
+def icona(info) -> str:
+    ic = info.get_icon()
+    if ic is None:
+        return ""
+    if isinstance(ic, Gio.FileIcon):
+        return ic.get_file().get_path() or ""
+    if isinstance(ic, Gio.ThemedIcon):
+        for nome in ic.get_names():
+            if os.path.isabs(nome):
+                return nome if os.path.exists(nome) else ""
+            for cartella in _CARTELLE_ICONE:
+                for est in (".svg", ".png"):
+                    f = os.path.join(cartella, nome + est)
+                    if os.path.exists(f):
+                        return f
+    return ""
+
+
+def candidati(scelte):
+    """Dagli id del portale (`org.kde.kate`) alle righe di `ApriCon`."""
+    fuori = []
+    for s in scelte:
+        try:
+            info = Gio.DesktopAppInfo.new(s + ".desktop")
+        except TypeError:
+            info = None
+        if info is None:
+            continue
+        fuori.append({"id": s + ".desktop", "name": info.get_name() or s,
+                      "iconPath": icona(info)})
+    return fuori
+
+
+def chiedi_alla_shell(*argomenti) -> bool:
+    try:
+        r = subprocess.run(["qs", "ipc", "-p", SHELL_QML, "call", "minerva", *argomenti],
+                           stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=4)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return r.returncode == 0 and r.stdout.strip() == "ok"
+
+
+def main() -> int:
+    ciclo = GLib.MainLoop()
+    nodo = Gio.DBusNodeInfo.new_for_xml(INTERFACCIA)
+    nodo_richiesta = Gio.DBusNodeInfo.new_for_xml(RICHIESTA)
+    # handle → (invocazione, id dell'oggetto Request registrato)
+    in_sospeso = {}
+    scadenza = [0]
+    bus = [None]
+
+    def riarma():
+        if scadenza[0]:
+            GLib.source_remove(scadenza[0])
+            scadenza[0] = 0
+        if not in_sospeso:
+            scadenza[0] = GLib.timeout_add_seconds(RIPOSO_SECONDI, lambda: (ciclo.quit(), False)[1])
+
+    def rispondi(handle, risposta, risultati):
+        voce = in_sospeso.pop(handle, None)
+        if voce is None:
+            return
+        invocazione, reg = voce
+        if reg:
+            bus[0].unregister_object(reg)
+        invocazione.return_value(GLib.Variant("(ua{sv})", (risposta, risultati)))
+        riarma()
+
+    def a_gtk(handle, parametri, invocazione):
+        """La stessa domanda girata al backend di GTK, risposta compresa."""
+        def finito(con, esito):
+            try:
+                invocazione.return_value(con.call_finish(esito))
+            except GLib.Error as e:
+                invocazione.return_dbus_error("org.freedesktop.DBus.Error.Failed", e.message)
+        bus[0].call(GTK, PERCORSO, "org.freedesktop.impl.portal.AppChooser",
+                    "ChooseApplication", parametri, GLib.VariantType("(ua{sv})"),
+                    Gio.DBusCallFlags.NONE, -1, None, finito)
+
+    def scegli(handle, parametri, invocazione):
+        _handle, _app, _genitore, scelte, opzioni = parametri.unpack()
+        file = percorso_da(opzioni.get("uri", ""))
+        tipo = opzioni.get("content_type", "")
+        if not in_liquid():
+            a_gtk(handle, parametri, invocazione)
+            return
+
+        def chiudi_richiesta(_c, _m, _p, _i, _metodo, _par, inv):
+            inv.return_value(None)
+            chiedi_alla_shell("apriConChiudi", handle)
+            rispondi(handle, ANNULLATO, {})
+
+        reg = bus[0].register_object(handle, nodo_richiesta.interfaces[0],
+                                     chiudi_richiesta, None, None)
+        in_sospeso[handle] = (invocazione, reg)
+        riarma()
+        # Col file in mano la finestrella chiede i candidati al demone, come
+        # dappertutto; quelli del portale servono quando un file non c'è.
+        # Dentro un oggetto e mai una lista nuda: `qs ipc` legge «[]» come
+        # «nessun argomento» e la chiamata fallisce per un argomento mancante.
+        scelte_json = json.dumps({"scelte": [] if file else candidati(scelte)})
+        if not chiedi_alla_shell("apriConPerConto", handle, file, tipo, scelte_json):
+            in_sospeso.pop(handle, None)
+            if reg:
+                bus[0].unregister_object(reg)
+            a_gtk(handle, parametri, invocazione)
+            riarma()
+
+    def chiamata(_con, _mittente, _percorso, interfaccia, metodo, parametri, invocazione):
+        if metodo == "ChooseApplication":
+            scegli(parametri[0], parametri, invocazione)
+        elif metodo == "UpdateChoices":
+            # Le scelte nuove arrivano quando si installa un programma a
+            # finestra aperta; la finestrella i candidati li ha già dal demone.
+            invocazione.return_value(None)
+        elif metodo == "Risposta":
+            handle, scelta = parametri.unpack()
+            invocazione.return_value(None)
+            if scelta.endswith(".desktop"):
+                scelta = scelta[:-len(".desktop")]
+            if scelta:
+                rispondi(handle, SCELTO, {"choice": GLib.Variant("s", scelta)})
+            else:
+                rispondi(handle, ANNULLATO, {})
+        else:
+            invocazione.return_dbus_error("org.freedesktop.DBus.Error.UnknownMethod", metodo)
+
+    def proprieta(_con, _mittente, _percorso, _interfaccia, nome):
+        return GLib.Variant("u", 2) if nome == "version" else None
+
+    def bus_pronto(con, _nome):
+        bus[0] = con
+        con.register_object(PERCORSO, nodo.interfaces[0], chiamata, proprieta, None)
+        con.register_object(PERCORSO, nodo.interfaces[1], chiamata, None, None)
+
+    def perso(_con, _nome):
+        ciclo.quit()
+
+    Gio.bus_own_name(Gio.BusType.SESSION, NOME, Gio.BusNameOwnerFlags.NONE,
+                     bus_pronto, None, perso)
+    riarma()
+    ciclo.run()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

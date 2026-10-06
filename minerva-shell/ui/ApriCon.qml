@@ -39,6 +39,11 @@ Rectangle {
     signal eseguiRichiesto(string percorso)
     /// Il file va reso eseguibile (`chmod +x`).
     signal eseguibileRichiesto(string percorso)
+    /// Per conto di un altro programma (`perConto`): la scelta, o «» se si
+    /// è lasciato perdere. Aprire tocca a chi ha chiesto, non a noi.
+    signal sceltoPerConto(string appId)
+    /// Il file va mostrato nella sua cartella, scelto.
+    signal mostraRichiesto(string percorso)
 
     anchors.fill: parent
     color: Theme.Colors.scrim
@@ -54,6 +59,12 @@ Rectangle {
     property var candidati: []
     property bool ricorda: false
     property bool aspetto: false
+
+    /// La domanda viene dal portale (`scripts/minerva-portale`): un altro
+    /// programma — Chrome che apre uno scaricato — vuole sapere con che cosa
+    /// aprire il file, e lo aprirà lui. Niente «esegui» né «rendi
+    /// eseguibile»: chi chiede ha chiesto un programma, non un terminale.
+    property bool perConto: false
 
     readonly property string nome: {
         var p = String(chiedi.percorso || "");
@@ -79,10 +90,24 @@ Rectangle {
         // mettere». Cambiare un'impostazione di sistema è una cosa che si fa
         // apposta, non una cosa che capita mentre si apre un file.
         chiedi.ricorda = false;
+        chiedi.perConto = false;
         chiedi.aspetto = true;
         chiedi.visible = true;
         chiedi.forceActiveFocus();
         Core.Ipc.mimeDescribe(percorso);
+    }
+
+    /// La stessa domanda, fatta da un altro programma. Col file in mano i
+    /// candidati li dice il demone come dappertutto; senza (un indirizzo
+    /// `mailto:`) valgono quelli che ha mandato il portale.
+    function apriPerConto(percorso, tipo, scelte) {
+        chiedi.apri(percorso, false);
+        chiedi.perConto = true;
+        if (percorso === "") {
+            chiedi.tipo = tipo;
+            chiedi.candidati = scelte;
+            chiedi.aspetto = false;
+        }
     }
 
     // Esc chiude, come in ogni altra finestrella di Minerva. `focus` si prende
@@ -96,6 +121,10 @@ Rectangle {
     signal chiuso()
 
     function chiudi() {
+        if (chiedi.perConto && chiedi.visible) {
+            chiedi.perConto = false;
+            chiedi.sceltoPerConto("");
+        }
         chiedi.visible = false;
         chiedi.percorso = "";
         chiedi.candidati = [];
@@ -108,14 +137,19 @@ Rectangle {
     function conQuesto(appId) {
         if (chiedi.ricorda && chiedi.tipo !== "")
             Core.Ipc.mimeSetDefault(chiedi.tipo, appId);
-        Core.Ipc.openWith(appId, [chiedi.percorso]);
+        if (chiedi.perConto) {
+            chiedi.perConto = false;
+            chiedi.sceltoPerConto(appId);
+        } else {
+            Core.Ipc.openWith(appId, [chiedi.percorso]);
+        }
         chiedi.chiudi();
     }
 
     Connections {
         target: Core.Ipc
         function onMimeDescribed(d) {
-            if (!d || d.path !== chiedi.percorso)
+            if (!d || d.path === "" || d.path !== chiedi.percorso)
                 return;
             chiedi.tipo = d.mime || "";
             chiedi.predefinito = d.defaultApp || "";
@@ -198,6 +232,7 @@ Rectangle {
             Ui.RigaScelta {
                 width: parent.width
                 visible: !chiedi.eseguibile && chiedi.tipoEseguibile
+                         && !chiedi.perConto
                 icona: "check"
                 testo: chiedi.it ? "Rendi eseguibile" : "Make it runnable"
                 nota: chiedi.it ? "Poi si potrà avviare col doppio clic"
@@ -245,6 +280,21 @@ Rectangle {
                 color: Theme.Colors.textFaint
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeSM
+            }
+
+            // Il file che nessuno sa aprire non deve finire in un vicolo cieco:
+            // almeno si vede dov'è, e da lì si rinomina, si sposta, si butta.
+            Ui.RigaScelta {
+                width: parent.width
+                visible: chiedi.perConto && chiedi.percorso !== ""
+                         && !chiedi.aspetto && chiedi.candidati.length === 0
+                icona: "folder"
+                testo: chiedi.it ? "Mostra nella cartella" : "Show in folder"
+                onScelto: {
+                    var p = chiedi.percorso;
+                    chiedi.chiudi();
+                    chiedi.mostraRichiesto(p);
+                }
             }
 
             // Avvolto in un Item perché la barra dev'essere FRATELLA del

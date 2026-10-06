@@ -487,6 +487,23 @@ Exec=$CARTELLA_RADICE/scripts/minerva-filemanager1
 FINE_DBUS
 c_ok "«Mostra nella cartella» apre il gestore file di Minerva"
 
+# ── «Con che cosa lo apro?» quando lo chiede un altro programma ──────────
+#
+# Chrome apre gli scaricati passando dal portale; per un tipo senza programma
+# predefinito il portale fa scegliere, e rispondeva GTK col pulsante per GNOME
+# Software. Il portale legge i suoi backend SOLO da /usr/share (non guarda
+# nella cartella dell'utente), quindi questo file va lì; il servizio D-Bus
+# invece sta con quello di sopra. La scelta fra `liquidde` e `gtk` la fa
+# `liquidde-portals.conf`, e vale solo dentro Liquid DE.
+sudo install -Dm644 "$MINERVA_DIR/config/xdg-desktop-portal/liquidde.portal" \
+    /usr/share/xdg-desktop-portal/portals/liquidde.portal
+cat > "$SERVIZI_DBUS/org.freedesktop.impl.portal.desktop.liquidde.service" <<FINE_DBUS
+[D-BUS Service]
+Name=org.freedesktop.impl.portal.desktop.liquidde
+Exec=$CARTELLA_RADICE/scripts/minerva-portale
+FINE_DBUS
+c_ok "«Con che cosa lo apro?» dei programmi passa da Minerva"
+
 gtk-update-icon-cache -f -t "$PREFISSO/share/icons/hicolor" >/dev/null 2>&1 || true
 
 # ── Chi apre le immagini ──────────────────────────────────────────────────

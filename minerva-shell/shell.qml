@@ -231,6 +231,30 @@ ShellRoot {
             return "ok";
         }
 
+        /// «Con che cosa lo apro?» per conto del portale: la chiama
+        /// `scripts/minerva-portale`, che aspetta la risposta su D-Bus.
+        /// `scelte` è `{"scelte": [{id, name, iconPath}…]}` in JSON, usato solo
+        /// quando non c'è un file da far descrivere al demone.
+        function apriConPerConto(handle: string, percorso: string,
+                                 tipo: string, scelte: string): string {
+            var elenco = [];
+            try {
+                elenco = JSON.parse(scelte).scelte;
+            } catch (e) {
+                elenco = [];
+            }
+            if (!Array.isArray(elenco))
+                elenco = [];
+            sovrapposizioneScrivania.apriConPerConto(handle, percorso, tipo, elenco);
+            return "ok";
+        }
+
+        /// Il programma che aveva chiesto ha rinunciato: si chiude.
+        function apriConChiudi(handle: string): string {
+            sovrapposizioneScrivania.chiudiPerConto(handle);
+            return "ok";
+        }
+
         /// Com'è messa la dock adesso: il modo e se si vede.
         ///
         ///     qs ipc --pid <pid> call minerva dock
@@ -1785,8 +1809,52 @@ ShellRoot {
         }
 
         function apriCon(percorso, eseguibile) {
+            sovrapposizioneScrivania._lasciaPortale();
             sovrapposizioneScrivania.visible = true;
             apriConScrivania.apri(percorso, eseguibile);
+        }
+
+        // ── «Con che cosa lo apro?» per conto di un altro programma ──────
+        //
+        // Lo chiede `scripts/minerva-portale` quando Chrome (o chiunque passi
+        // dal portale) apre un file di un tipo senza programma predefinito.
+        // Prima rispondeva la finestra di GTK, col pulsante per GNOME
+        // Software (Giacomo, 6 ottobre 2026).
+        //
+        // `portale` è la domanda in sospeso: la risposta torna con lo stesso
+        // nome, e una domanda nuova chiude quella vecchia senza scelta —
+        // altrimenti il programma di prima resterebbe ad aspettare.
+        property string portale: ""
+
+        function apriConPerConto(handle, percorso, tipo, scelte) {
+            sovrapposizioneScrivania._lasciaPortale();
+            sovrapposizioneScrivania.portale = handle;
+            sovrapposizioneScrivania.visible = true;
+            apriConScrivania.apriPerConto(percorso, tipo, scelte);
+        }
+
+        function chiudiPerConto(handle) {
+            if (handle !== sovrapposizioneScrivania.portale)
+                return;
+            sovrapposizioneScrivania.portale = "";
+            apriConScrivania.chiudi();
+        }
+
+        function _rispondiPortale(scelta) {
+            var h = sovrapposizioneScrivania.portale;
+            if (h === "")
+                return;
+            sovrapposizioneScrivania.portale = "";
+            Quickshell.execDetached(["gdbus", "call", "--session",
+                "--dest", "org.freedesktop.impl.portal.desktop.liquidde",
+                "--object-path", "/org/freedesktop/portal/desktop",
+                "--method", "org.liquidde.Portale.Risposta", h, scelta]);
+        }
+
+        function _lasciaPortale() {
+            if (apriConScrivania.visible && apriConScrivania.perConto)
+                apriConScrivania.chiudi();
+            sovrapposizioneScrivania._rispondiPortale("");
         }
 
         /// Si spegne solo quando NESSUNO dei due è più acceso: spegnerla al
@@ -1811,6 +1879,13 @@ ShellRoot {
             onEseguibileRichiesto: function (percorso) {
                 if (root.icone)
                     root.icone.rendiEseguibileOra(percorso);
+            }
+            onSceltoPerConto: function (appId) {
+                sovrapposizioneScrivania._rispondiPortale(appId);
+            }
+            onMostraRichiesto: function (percorso) {
+                root.run([root.minervaRoot + "/scripts/minerva-files",
+                          "--mostra", percorso]);
             }
         }
     }
