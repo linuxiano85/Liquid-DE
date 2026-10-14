@@ -32,8 +32,8 @@ class LiquidUpdateChanges {
     if (path.startsWith('compositore/')) return 'compositor';
     if (path.startsWith('minervad/')) return 'daemon';
     if (path.startsWith('minerva-shell/native/')) return 'native';
+    if (path.startsWith('minerva-shell/fucina/')) return 'fucina';
     if (path.startsWith('minerva-shell/')) return 'shell';
-    if (path.startsWith('fucina2/')) return 'fucina';
     if (['assets/', 'config/', 'scripts/', 'desktop/'].any(path.startsWith)) {
       return 'integration';
     }

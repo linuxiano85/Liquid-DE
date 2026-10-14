@@ -47,10 +47,10 @@ def component(path):
         return 'daemon'
     if path.startswith(('minerva-shell/native/', 'lib/minerva/', 'libexec/tiling/')):
         return 'native'
+    if path.startswith('minerva-shell/fucina/'):
+        return 'fucina'
     if path.startswith('minerva-shell/'):
         return 'shell'
-    if path.startswith('fucina2/'):
-        return 'fucina'
     if path.startswith(('scripts/', 'assets/', 'config/', 'desktop/')) or path == 'LICENSE':
         return 'integration'
     raise ValueError(f'File non appartenente alla distribuzione: {path}')

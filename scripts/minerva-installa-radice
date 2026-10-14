@@ -75,7 +75,6 @@ mkdir -p "$RADICE"
 rsync -a --delete --delete-excluded --delay-updates \
     --include='/scripts/***' \
     --include='/minerva-shell/***' \
-    --include='/fucina2/***' \
     --include='/assets/***' \
     --include='/config/***' \
     --include='/desktop/***' \

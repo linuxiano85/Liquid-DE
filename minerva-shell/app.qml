@@ -253,7 +253,7 @@ ShellRoot {
         sourceComponent: Component {
             Fucina {
                 dormiente: prontaFucina.dormiente
-                onRequestClose: prontaFucina.chiudi()
+                onChiusa: prontaFucina.chiudi()
             }
         }
     }
@@ -571,6 +571,36 @@ ShellRoot {
             if (c.length === 0) return "nessuna";
             f.scegliCartella(c[0].id);
             return "ok";
+        }
+    }
+
+    // Per le prove della Fucina: aprire una pagina e leggere lo stato. Erano
+    // nel processo a parte della nuova Fucina finché si chiamava «Fucina 2»;
+    // ora che ha preso il posto della vecchia sta nell'ospite come le altre.
+    IpcHandler {
+        target: "fucina"
+        function mostra(sezione: string): string {
+            if (["panoramica", "configura", "compila", "kernel"].indexOf(sezione) < 0)
+                return "sezione non valida";
+            app.apri("fucina", "");
+            var f = fucinaL.item;
+            if (!f) return "chiusa";
+            f.pagina = sezione;
+            if (sezione === "kernel") f.verificaKernelInUso();
+            return "ok";
+        }
+        function stato(): string {
+            var f = fucinaL.item;
+            if (!f) return JSON.stringify({ "aperta": false });
+            return JSON.stringify({ "aperta": true, pagina: f.pagina, kernelInUso: f.kernelInUso,
+                connesso: Core.Ipc.connected, revisioniStato: f.revisioniStato,
+                amministrazione: f.amministrazioneKernel,
+                targetCompilatori: f.targetCompilatori,
+                supportoNativo: f.supportoNativo,
+                compilando: f.compilando, secondi: f.secondiCompilazione,
+                log: f.logCompilazione, esito: f.esitoCompilazione,
+                ricetta: f.pianoCompilazione, riepilogo: f.riepilogoEsecuzione,
+                verifica: f.verificaKernel });
         }
     }
 

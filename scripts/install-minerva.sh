@@ -494,7 +494,7 @@ mkdir -p "$ICONE"
 # menu non esiste, e infatti l'MP3 continuava ad aprirlo un'altra cosa.
 for app in minerva-files minerva-settings minerva-monitor minerva-viewer \
            minerva-editor minerva-calcolatrice minerva-media minerva-custodia \
-           minerva-manutenzione minerva-terminale minerva-fucina minerva-fucina2 \
+           minerva-manutenzione minerva-terminale minerva-fucina \
            minerva-posta; do
     # Un collegamento alla RADICE INSTALLATA, non ai sorgenti: fino al 4
     # ottobre 2026 puntava al progetto, e spostando il progetto tutti questi
@@ -503,6 +503,16 @@ for app in minerva-files minerva-settings minerva-monitor minerva-viewer \
     install -Dm644 "$MINERVA_DIR/desktop/$app.desktop" "$APPLICAZIONI/$app.desktop"
     install -Dm644 "$MINERVA_DIR/assets/icons/$app.svg" "$ICONE/$app.svg"
     c_ok "$app installato"
+done
+# ── Le app ritirate ──────────────────────────────────────────────────────
+#
+# `minerva-fucina2` era la Fucina nuova finché conviveva con la vecchia: dal
+# 14 ottobre 2026 è LA Fucina, e si apre con `minerva-fucina`. Il suo
+# collegamento, la voce di menu e l'icona restavano installati da prima, e
+# una voce di menu che punta a un comando che non c'è più è un clic che non
+# fa niente.
+for app in minerva-fucina2; do
+    rm -f "$CARTELLA_BIN/$app" "$APPLICAZIONI/$app.desktop" "$ICONE/$app.svg"
 done
 # ── E le due che nel menu NON devono comparire ───────────────────────────
 #

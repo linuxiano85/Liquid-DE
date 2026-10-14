@@ -1,4 +1,4 @@
-# Fucina 2: recuperare la cache dopo un'interruzione
+# Fucina: recuperare la cache dopo un'interruzione
 
 Aggiornamento dell'8 ottobre 2026. Il recupero riapre l'accesso alla cache: non riprende né considera riuscita una compilazione interrotta e non ripara un'installazione amministrativa.
 
