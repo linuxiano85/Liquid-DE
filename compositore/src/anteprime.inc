@@ -97,8 +97,7 @@ static void anteprima_payload(int slot,char *reply,size_t len) {
 // Prima si andava a rotazione (`anteprime_slot++ % ANTEPRIME_MAX`) anche con
 // posti liberi: chiusa una finestra, il suo posto restava vuoto e la
 // miniatura nuova andava a coprire quella di una finestra ancora aperta,
-// che spariva dalle Stanze finché non veniva rifotografata (revisione di
-// Claude, 11 ottobre 2026).
+// che spariva dalle Stanze finché non veniva rifotografata (11 ottobre 2026).
 static int anteprima_posto(uintptr_t window) {
     int vuoto = -1;
     int vecchio = 0;

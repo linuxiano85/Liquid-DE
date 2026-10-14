@@ -66,9 +66,21 @@ PanelWindow {
     /// Voci del menu
     property var items: []
     property int selectedIndex: -1
-    property var subitems: []
-    property int subSelectedIndex: -1
-    property bool subFocus: false
+    property var rootSelection: null
+    onSelectedIndexChanged: {
+        var item = items[selectedIndex];
+        rootSelection = item ? { action: item.action || "", label: item.label || "" } : null;
+    }
+    onItemsChanged: if (visible) refreshBranches()
+    // Ogni colonna conserva selezione e voce del padre: tornare indietro non
+    // deve ricostruire un sottomenu diverso o saltare direttamente alla radice.
+    property var branches: []
+    property int focusedLevel: 0
+    property int layoutRevision: 0
+    property int branchRevision: 0
+    readonly property bool subFocus: focusedLevel > 0
+    readonly property var subitems: entriesAt(focusedLevel > 0 ? focusedLevel : 1)
+    readonly property int subSelectedIndex: selectedAt(focusedLevel > 0 ? focusedLevel : 1)
     /// Punto a cui il menu si aggancia, in coordinate dello schermo.
     property int menuX: 0
     property int menuY: 0
@@ -124,30 +136,38 @@ PanelWindow {
         quick.sort(function(a, b) {
             return primary.indexOf(a.action) - primary.indexOf(b.action);
         });
-        var result = quick.concat(main);
-        if (extra.length && extensionsVisible)
-            result.push({
-            "label": Windows11.Style.label("Altre azioni", "More actions"),
-            "children": extra
-        });
-
-        result = result.concat(properties);
-        result.push({
-            "separator": true
-        });
-        result.push({
-            "label": Windows11.Style.label("Personalizza menu", "Customize menu"),
+        // Le estensioni e la personalizzazione non devono interrompere le
+        // operazioni sui file. Manteniamo anche un confine visivo dopo le icone.
+        var result = quick.slice();
+        if (quick.length && main.length)
+            result.push({ "separator": true });
+        result = result.concat(main);
+        if (properties.length) {
+            result.push({ "separator": true });
+            result = result.concat(properties);
+        }
+        var additional = extensionsVisible ? extra.slice() : [];
+        if (additional.length)
+            additional.push({ "separator": true });
+        additional.push({
+            "label": Windows11.Style.label("Opzioni del menu…", "Menu options…"),
             "icon": "settings",
             "action": "__customize"
+        });
+        result.push({ "separator": true });
+        result.push({
+            "label": Windows11.Style.label("Mostra altre opzioni", "Show more options"),
+            "action": "__more",
+            "children": additional
         });
         return result;
     }
 
     function rebuild() {
         menu.items = arrange(originalItems);
-        menu.subitems = [];
+        menu.branches = [];
         menu.selectedIndex = -1;
-        menu.subFocus = false;
+        menu.focusedLevel = 0;
     }
 
     function toggleAction(action, show) {
@@ -161,52 +181,187 @@ PanelWindow {
         rebuild();
     }
 
-    function moveSelection(delta) {
-        var list = subFocus ? subitems : items, count = list.length;
-        if (!count)
-            return ;
-
-        var index = subFocus ? subSelectedIndex : selectedIndex;
-        for (var n = 0; n < count; n++) {
-            index = (index + delta + count) % count;
-            var item = list[index];
-            if (!item.separator && item.enabled !== false)
-                break;
-
-        }
-        if (subFocus) {
-            subSelectedIndex = index;
-        } else {
-            selectedIndex = index;
-            subitems = [];
-        }
-        Qt.callLater(function() {
-            var column = menu.subFocus ? submenuColumn : itemsColumn;
-            var scroll = menu.subFocus ? subScroll : menuScroll;
-            for (var child of column.children) {
-                if (child.index === index) {
-                    scroll.contentY = Math.max(0, Math.min(scroll.contentHeight - scroll.height, child.y - 8));
-                    break;
-                }
-            }
-        });
+    function entriesAt(level) {
+        return level === 0 ? items : branches[level - 1] ? branches[level - 1].items : [];
     }
 
+    function selectedAt(level) {
+        return level === 0 ? selectedIndex : branches[level - 1] ? branches[level - 1].selectedIndex : -1;
+    }
+
+    function setSelection(level, index) {
+        if (level === 0) {
+            selectedIndex = index;
+        } else if (branches[level - 1]) {
+            var path = branches.slice();
+            var item = entriesAt(level)[index];
+            path[level - 1] = Object.assign({}, path[level - 1], { selectedIndex: index,
+                selectedAction: item ? item.action || "" : "", selectedLabel: item ? item.label || "" : "" });
+            branches = path;
+        }
+    }
+
+    function columnAt(level) {
+        var view = level > 0 ? submenuViews.itemAt(level - 1) : null;
+        return level === 0 ? itemsColumn : view ? view.column : null;
+    }
+
+    function scrollAt(level) {
+        var view = level > 0 ? submenuViews.itemAt(level - 1) : null;
+        return level === 0 ? menuScroll : view ? view.scroller : null;
+    }
+
+    function entryAt(level, index) {
+        var view = level > 0 ? submenuViews.itemAt(level - 1) : null;
+        var rows = level === 0 ? rootEntries : view ? view.rows : null;
+        return rows ? rows.itemAt(index) : null;
+    }
+
+    function rowOffset(level, index) {
+        var revision = layoutRevision;
+        var row = entryAt(level, index);
+        var column = columnAt(level);
+        var scroll = scrollAt(level);
+        return column && scroll ? column.y + (row ? row.y : 0) - scroll.contentY : 8;
+    }
+
+    function selectEntry(level, index) {
+        var previous = selectedAt(level);
+        setSelection(level, index);
+        focusedLevel = level;
+        if (previous !== index)
+            branches = branches.slice(0, level);
+    }
+
+    function previewEntry(level, index) {
+        selectEntry(level, index);
+        var item = entriesAt(level)[index];
+        if (item && item.children && item.enabled !== false)
+            openBranch(level, index, false);
+        else
+            branches = branches.slice(0, level);
+    }
+
+    function openBranch(level, index, keyboard) {
+        var item = entriesAt(level)[index];
+        if (!item || !item.children || !item.children.length || item.enabled === false)
+            return;
+        var previous = branches[level];
+        selectEntry(level, index);
+        var branch = { items: item.children,
+                       revision: previous && previous.parentIndex === index && previous.parentLabel === (item.label || "") ? previous.revision : ++branchRevision,
+                       selectedIndex: previous && previous.parentIndex === index ? previous.selectedIndex : -1,
+                       selectedAction: previous ? previous.selectedAction : "", selectedLabel: previous ? previous.selectedLabel : "",
+                       parentIndex: index, parentAction: item.action || "", parentLabel: item.label || "" };
+        branches = branches.slice(0, level).concat([branch]);
+        if (keyboard) {
+            focusedLevel = level + 1;
+            setSelection(focusedLevel, -1);
+            moveSelection(1);
+        }
+    }
+
+    function leaveBranch() {
+        if (focusedLevel > 0) {
+            branches = branches.slice(0, focusedLevel - 1);
+            focusedLevel--;
+        } else {
+            branches = [];
+        }
+    }
+
+    function findSameEntry(list, action, label) {
+        var exact = list.findIndex(function(item) {
+            return (item.action || "") === action && (item.label || "") === label && !item.separator;
+        });
+        if (exact >= 0)
+            return exact;
+        // Il percorso dell'azione D-Bus cambia quando il servizio riordina
+        // le voci. Una sola etichetta uguale è riconoscibile; più di una no.
+        var candidates = [];
+        list.forEach(function(item, index) {
+            if (label && item.label === label && !item.separator)
+                candidates.push(index);
+        });
+        return candidates.length === 1 ? candidates[0] : -1;
+    }
+
+    function refreshBranches() {
+        var path = [];
+        var list = items;
+        if (rootSelection)
+            selectedIndex = findSameEntry(items, rootSelection.action, rootSelection.label);
+        for (var i = 0; i < branches.length; i++) {
+            var old = branches[i];
+            var index = findSameEntry(list, old.parentAction, old.parentLabel);
+            var parent = list[index];
+            if (!parent || parent.enabled === false || !parent.children || !parent.children.length)
+                break;
+            var selection = old.selectedIndex < 0 ? -1 : findSameEntry(parent.children, old.selectedAction, old.selectedLabel);
+            if (selection >= 0 && parent.children[selection].enabled === false)
+                selection = -1;
+            var item = parent.children[selection];
+            path.push(Object.assign({}, old, { items: parent.children, revision: ++branchRevision, parentIndex: index,
+                parentAction: parent.action || "", parentLabel: parent.label || "", selectedIndex: selection,
+                selectedAction: item ? item.action || "" : "", selectedLabel: item ? item.label || "" : "" }));
+            if (i === 0)
+                selectedIndex = index;
+            else {
+                path[i - 1].selectedIndex = index;
+                path[i - 1].selectedAction = parent.action || "";
+                path[i - 1].selectedLabel = parent.label || "";
+            }
+            list = parent.children;
+        }
+        branches = path;
+        focusedLevel = Math.min(focusedLevel, branches.length);
+    }
+
+    function moveSelection(delta) {
+        var level = focusedLevel;
+        var list = entriesAt(level);
+        var count = list.length;
+        if (!count)
+            return;
+        var index = selectedAt(level);
+        var found = -1;
+        for (var n = 0; n < count; n++) {
+            index = (index + delta + count) % count;
+            if (!list[index].separator && list[index].enabled !== false) {
+                found = index;
+                break;
+            }
+        }
+        selectEntry(level, found);
+        Qt.callLater(menu.revealSelection, level);
+    }
+
+    function revealSelection(level) {
+        var row = entryAt(level, selectedAt(level));
+        var scroll = scrollAt(level);
+        if (!row || !scroll)
+            return;
+        var column = columnAt(level);
+        var top = column.y + row.y;
+        if (top < scroll.contentY)
+            scroll.contentY = top;
+        else if (top + row.height > scroll.contentY + scroll.height)
+            scroll.contentY = Math.max(0, Math.min(scroll.contentHeight - scroll.height, top + row.height - scroll.height));
+    }
+
+
     function activateSelection() {
-        var item = (subFocus ? subitems : items)[subFocus ? subSelectedIndex : selectedIndex];
+        var item = entriesAt(focusedLevel)[selectedAt(focusedLevel)];
         if (!item || item.separator || item.enabled === false)
             return ;
 
         if (item.children) {
-            subitems = item.children;
-            subFocus = true;
-            subSelectedIndex = -1;
-            moveSelection(1);
+            openBranch(focusedLevel, selectedAt(focusedLevel), true);
             return ;
         }
         var action = item.action || "";
         if (action === "__customize") {
-            subitems = [];
+            branches = [];
             customizing = true;
             customInline.forceActiveFocus();
             return ;
@@ -263,9 +418,9 @@ PanelWindow {
         menu.customizing = false;
         menu.rebuild();
         menu.selectedIndex = -1;
-        menu.subitems = [];
-        menu.subFocus = false;
-        menu.subSelectedIndex = -1;
+        menu.branches = [];
+        menu.focusedLevel = 0;
+
         menu.menuX = x;
         menu.menuY = y;
         menu._apertoAlle = Date.now();
@@ -284,6 +439,8 @@ PanelWindow {
             return ;
 
         menu.visible = false;
+        menu.branches = [];
+        menu.focusedLevel = 0;
         menu.dismissed();
     }
 
@@ -397,22 +554,19 @@ PanelWindow {
         anchors.fill: parent
         focus: true
         Keys.onEscapePressed: {
-            if (menu.subFocus) {
-                menu.subitems = [];
-                menu.subFocus = false;
+            if (menu.branches.length) {
+                menu.leaveBranch();
             } else {
                 menu.close();
             }
         }
         Keys.onRightPressed: {
-            if (!menu.subFocus && menu.items[menu.selectedIndex] && menu.items[menu.selectedIndex].children)
+            var item = menu.entriesAt(menu.focusedLevel)[menu.selectedAt(menu.focusedLevel)];
+            if (item && item.children)
                 menu.activateSelection();
 
         }
-        Keys.onLeftPressed: {
-            menu.subitems = [];
-            menu.subFocus = false;
-        }
+        Keys.onLeftPressed: menu.leaveBranch()
         Keys.onDownPressed: menu.moveSelection(1)
         Keys.onUpPressed: menu.moveSelection(-1)
         Keys.onReturnPressed: menu.activateSelection()
@@ -420,10 +574,7 @@ PanelWindow {
         Keys.onSpacePressed: menu.activateSelection()
         Keys.onPressed: function(event) {
             if (event.key === Qt.Key_Home || event.key === Qt.Key_End) {
-                if (menu.subFocus)
-                    menu.subSelectedIndex = event.key === Qt.Key_Home ? -1 : 0;
-                else
-                    menu.selectedIndex = event.key === Qt.Key_Home ? -1 : 0;
+                menu.setSelection(menu.focusedLevel, event.key === Qt.Key_Home ? -1 : 0);
                 menu.moveSelection(event.key === Qt.Key_Home ? 1 : -1);
                 event.accepted = true;
             }
@@ -462,7 +613,7 @@ PanelWindow {
         // Il minimo resta 252, perché un menu di tre voci corte non deve
         // diventare un francobollo; il massimo è 420, perché oltre non è più
         // un menu ed è meglio un nome accorciato di una lenzuola.
-        width: Math.max(252, Math.min(420, Math.ceil(righello.piuLarga) + card.contorno + 2))
+        width: Math.max(0, Math.min(menu.width - 16, Math.max(252, Math.min(420, Math.ceil(righello.piuLarga) + card.contorno + 10))))
         implicitHeight: itemsColumn.implicitHeight + Theme.Effects.space2 * 2
         height: Math.min(implicitHeight, menu.availableHeight - 16)
         radius: menu.windowsAppearance ? 8 : Theme.Effects.radiusMD
@@ -480,55 +631,10 @@ PanelWindow {
         // trucco: è l'unico modo di non avere due idee diverse della stessa
         // larghezza. Non c'è anello, perché questi non hanno una `width`
         // legata alla scheda — solo la loro `implicitWidth`.
-        Item {
+        MenuMeasure {
             id: righello
-
-            readonly property real piuLarga: {
-                var w = 0;
-                for (var i = 0; i < misure.count; i++) {
-                    var t = misure.itemAt(i);
-                    if (t)
-                        w = Math.max(w, t.quanto);
-
-                }
-                return w;
-            }
-
-            visible: false
-            width: 0
-            height: 0
-
-            Repeater {
-                id: misure
-
-                model: menu.items
-
-                Item {
-                    required property var modelData
-                    readonly property real quanto: modelData && modelData.separator !== true ? etichetta.implicitWidth + tasti.implicitWidth + (tasti.text !== "" ? Theme.Effects.space4 : 0) : 0
-
-                    Text {
-                        id: etichetta
-
-                        textFormat: Text.PlainText
-                        text: (modelData && modelData.label) || ""
-                        font.family: (menu.windowsAppearance ? Windows11.Style.font : Theme.Typography.fontDisplay)
-                        font.weight: Theme.Typography.weightRegular
-                        font.pixelSize: (menu.windowsAppearance ? 14 * Windows11.Style.textScale : Theme.Typography.sizeMD)
-                    }
-
-                    Text {
-                        id: tasti
-
-                        text: (modelData && modelData.shortcut) || ""
-                        font.family: Theme.Typography.fontMono
-                        font.pixelSize: Theme.Typography.sizeXS
-                    }
-
-                }
-
-            }
-
+            items: menu.items
+            windowsAppearance: menu.windowsAppearance
         }
 
         Loader {
@@ -566,6 +672,7 @@ PanelWindow {
         }
 
         // I clic dentro al menu non devono chiuderlo prima di attivare la voce
+
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
@@ -582,6 +689,7 @@ PanelWindow {
 
             Column {
                 id: itemsColumn
+                property int menuLevel: 0
 
                 x: 4
                 y: 8
@@ -611,7 +719,7 @@ PanelWindow {
                                 menu.selectedIndex = menu.items.findIndex(function(item) {
                                     return item.action === modelData.action;
                                 });
-                                menu.subFocus = false;
+                                menu.focusedLevel = 0;
                                 menu.activateSelection();
                             }
 
@@ -631,6 +739,9 @@ PanelWindow {
                 }
 
                 Repeater {
+                    id: rootEntries
+                    onItemAdded: menu.layoutRevision++
+                    onItemRemoved: menu.layoutRevision++
                     model: menu.items
                     delegate: entryTemplate
                 }
@@ -649,69 +760,105 @@ PanelWindow {
 
     }
 
-    Rectangle {
-        id: subcard
-
-        visible: menu.subitems.length > 0 && !menu.customizing
-        x: card.x + card.width + 4 + width <= menu.width - 8 ? card.x + card.width + 4 : card.x - width - 4
-        y: Math.max(8, Math.min(card.y + 8 + menu.selectedIndex * 35, menu.availableHeight - height - 8))
-        width: card.width
-        height: Math.min(submenuColumn.implicitHeight + 16, menu.availableHeight - 16)
-        radius: menu.windowsAppearance ? 8 : Theme.Effects.radiusMD
-        color: menu.windowsAppearance ? Windows11.Style.surface : Theme.Colors.membrane
-        border.color: menu.windowsAppearance ? Windows11.Style.edge : Theme.Colors.edge
-
-        Loader {
-            active: menu.windowsAppearance && subcard.visible
-            z: -1
-
-            sourceComponent: Component {
-                Windows11.Shadow {
-                    surface: subcard
-                }
-
+    Repeater {
+        id: submenuViews
+        // Un modello numerico mantiene vive le colonne quando cambia solo
+        // la selezione. Un array qui le ricreerebbe sotto il puntatore.
+        model: menu.branches.length
+        delegate: Rectangle {
+            id: subcard
+            required property int index
+            readonly property var branch: menu.branches[index] || ({ items: [], parentIndex: -1 })
+            readonly property int contentRevision: branch.revision || 0
+            property var dataItems: []
+            property bool componentReady: false
+            onContentRevisionChanged: if (componentReady) syncItems()
+            Component.onCompleted: {
+                componentReady = true;
+                syncItems();
             }
-
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.AllButtons
-        }
-
-        Flickable {
-            id: subScroll
-
-            anchors.fill: parent
-            contentWidth: width
-            contentHeight: submenuColumn.implicitHeight + 16
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-
-            Column {
-                id: submenuColumn
-
-                x: 4
-                y: 8
-                width: subScroll.width - 8 - (subScroll.contentHeight > subScroll.height ? 18 : 0)
-                spacing: 1
-
-                Repeater {
-                    model: menu.subitems
-                    delegate: entryTemplate
-                }
-
+            function syncItems() {
+                var previousScroll = subScroll.contentY;
+                dataItems = branch.items;
+                var level = index + 1;
+                var revision = contentRevision;
+                var views = submenuViews;
+                var owner = menu;
+                Qt.callLater(function() {
+                    var view = views ? views.itemAt(level - 1) : null;
+                    if (!view || view.contentRevision !== revision)
+                        return;
+                    view.scroller.contentY = Math.max(0, Math.min(previousScroll, view.scroller.contentHeight - view.scroller.height));
+                    if (owner)
+                        owner.revealSelection(level);
+                });
             }
+            readonly property var ownerCard: index === 0 ? card : submenuViews.itemAt(index - 1)
+            readonly property bool preferLeft: index === 0 ? false : ownerCard ? ownerCard.openedLeft : false
+            readonly property real rightX: ownerCard ? ownerCard.x + ownerCard.width + 4 : 8
+            readonly property real leftX: ownerCard ? ownerCard.x - width - 4 : 8
+            readonly property bool openedLeft: preferLeft ? leftX >= 8 || rightX + width > menu.width - 8 : rightX + width > menu.width - 8 && leftX >= 8
+            property alias column: submenuColumn
+            property alias scroller: subScroll
+            property alias rows: branchRows
+            objectName: "contextMenuBranch-" + (index + 1)
+            visible: !menu.customizing
+            z: index + 1
+            x: Math.max(8, Math.min(openedLeft ? leftX : rightX, menu.width - width - 8))
+            y: Math.max(8, Math.min((ownerCard ? ownerCard.y : 0) + menu.rowOffset(index, branch.parentIndex) - 8,
+                                   menu.availableHeight - height - 8))
+            width: Math.max(0, Math.min(menu.width - 16, Math.max(252, Math.min(420, Math.ceil(branchMeasure.piuLarga) + card.contorno + 10))))
+            height: Math.min(submenuColumn.implicitHeight + 16, menu.availableHeight - 16)
+            radius: menu.windowsAppearance ? 8 : Theme.Effects.radiusMD
+            color: menu.windowsAppearance ? Windows11.Style.surface : Theme.Colors.membrane
+            border.color: menu.windowsAppearance ? Windows11.Style.edge : Theme.Colors.edge
 
+            MenuMeasure {
+                id: branchMeasure
+                items: subcard.dataItems
+                windowsAppearance: menu.windowsAppearance
+            }
+            Loader {
+                active: menu.windowsAppearance && subcard.visible
+                z: -1
+                sourceComponent: Component {
+                    Windows11.Shadow { surface: subcard }
+                }
+            }
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.AllButtons
+            }
+            Flickable {
+                id: subScroll
+                anchors.fill: parent
+                contentWidth: width
+                contentHeight: submenuColumn.implicitHeight + 16
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                Column {
+                    id: submenuColumn
+                    property int menuLevel: subcard.index + 1
+                    x: 4
+                    y: 8
+                    width: subScroll.width - 8 - (subScroll.contentHeight > subScroll.height ? 18 : 0)
+                    spacing: 1
+                    Repeater {
+                        id: branchRows
+                        onItemAdded: menu.layoutRevision++
+                        onItemRemoved: menu.layoutRevision++
+                        model: subcard.dataItems
+                        delegate: entryTemplate
+                    }
+                }
+            }
+            Ui.Scorrimento {
+                bersaglio: subScroll
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+            }
         }
-
-        Ui.Scorrimento {
-            bersaglio: subScroll
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-        }
-
     }
 
     Component {
@@ -722,16 +869,17 @@ PanelWindow {
 
             required property var modelData
             required property int index
-            readonly property bool secondary: parent === submenuColumn
+            readonly property int level: parent ? parent.menuLevel : 0
+            readonly property bool secondary: level > 0
             readonly property bool isSeparator: modelData.separator === true
             readonly property bool danger: modelData.danger === true
             readonly property color tone: danger ? Theme.Colors.danger : hover.containsMouse ? (menu.windowsAppearance ? Windows11.Style.text : Theme.Colors.accent) : (menu.windowsAppearance ? Windows11.Style.muted : Theme.Colors.textMuted)
 
             objectName: "contextMenu-" + (modelData.action || "submenu")
-            width: secondary ? submenuColumn.width : itemsColumn.width
+            width: parent ? parent.width : 0
             visible: modelData.quick !== true
             height: !visible ? 0 : isSeparator ? 9 : 34
-            radius: Theme.Effects.radiusSM
+            radius: menu.windowsAppearance ? 4 : Theme.Effects.radiusSM
             opacity: modelData.enabled === false ? 0.45 : 1
             enabled: !isSeparator && modelData.enabled !== false
             Accessible.role: modelData.checkable ? (modelData.radio ? Accessible.RadioButton : Accessible.CheckBox) : Accessible.MenuItem
@@ -743,14 +891,10 @@ PanelWindow {
             Accessible.onToggleAction: activateEntry()
 
             function activateEntry() {
-                menu.subFocus = entry.secondary;
-                if (entry.secondary)
-                    menu.subSelectedIndex = entry.index;
-                else
-                    menu.selectedIndex = entry.index;
+                menu.selectEntry(entry.level, entry.index);
                 menu.activateSelection();
             }
-            color: (!isSeparator && (hover.containsMouse || (secondary ? menu.subSelectedIndex : menu.selectedIndex) === index)) ? (danger ? Qt.alpha(Theme.Colors.danger, 0.16) : (menu.windowsAppearance ? Windows11.Style.hover : Theme.Colors.hover)) : "transparent"
+            color: (!isSeparator && (hover.containsMouse || menu.selectedAt(entry.level) === index)) ? (danger ? Qt.alpha(Theme.Colors.danger, 0.16) : (menu.windowsAppearance ? Windows11.Style.hover : Theme.Colors.hover)) : "transparent"
 
             // Separatore
             Rectangle {
@@ -856,8 +1000,8 @@ PanelWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 text: entry.modelData.shortcut || ""
                 color: (menu.windowsAppearance ? Windows11.Style.muted : Theme.Colors.textFaint)
-                font.family: Theme.Typography.fontMono
-                font.pixelSize: Theme.Typography.sizeXS
+                font.family: menu.windowsAppearance ? Windows11.Style.font : Theme.Typography.fontMono
+                font.pixelSize: menu.windowsAppearance ? 12 * Windows11.Style.textScale : Theme.Typography.sizeXS
                 visible: !entry.isSeparator
             }
 
@@ -878,16 +1022,7 @@ PanelWindow {
                 anchors.fill: parent
                 hoverEnabled: true
                 enabled: !entry.isSeparator && entry.modelData.enabled !== false
-                onEntered: {
-                    if (entry.secondary) {
-                        menu.subSelectedIndex = entry.index;
-                        menu.subFocus = true;
-                    } else {
-                        menu.selectedIndex = entry.index;
-                        menu.subFocus = false;
-                        menu.subitems = entry.modelData.children || [];
-                    }
-                }
+                onEntered: menu.previewEntry(entry.level, entry.index)
                 cursorShape: Qt.PointingHandCursor
                 onClicked: entry.activateEntry()
             }

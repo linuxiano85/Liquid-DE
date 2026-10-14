@@ -72,7 +72,7 @@ class FinestreService {
   //
   // VELOCE (60 ms): un fotogramma e mezzo a sessanta hertz. È il passo mentre
   // qualcosa si muove. Più lento si vede la barra inseguire la finestra a
-  // scatti — parole di il manutentore: «le barre del titolo non seguono bene la
+  // scatti — parole del manutentore: «le barre del titolo non seguono bene la
   // finestra se le sposti velocemente».
   //
   // RIPOSO (150 ms): la rete di sicurezza, ed è la sola cosa qui dentro che si

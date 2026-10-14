@@ -9,7 +9,7 @@ import "../ui" as Ui
 //
 // ── Da dove nasce ──────────────────────────────────────────────────────────
 //
-// Da una cartella di il manutentore che si chiama `Documenti/Progetti/Minerva-Copie` e
+// Da una cartella del manutentore che si chiama `Documenti/Progetti/Minerva-Copie` e
 // che contiene questo:
 //
 //     minerva-2026-08-04_2014-utente-e-accesso.tar.zst   18 MB

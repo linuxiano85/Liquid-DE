@@ -4,9 +4,7 @@ import "../theme" as Theme
 
 // WobblyControls — Le finestre tremolanti: acceso o spento, e quanto.
 //
-// il manutentore, 10 settembre 2026: «voglio le finestre tremolanti». E il 12, a
-// Codex: «vorrei avere l'effetto e l'impostazione della sua elasticità nelle
-// impostazioni».
+// Il comando conserva separatamente abilitazione e forza dell’effetto.
 //
 // Un pezzo a sé e non due righe dentro Animazioni, perché sono DUE manopole
 // legate: l'interruttore ricorda l'ultima forza scelta (`elasticoUltimo`), e

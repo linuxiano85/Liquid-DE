@@ -31,3 +31,4 @@ AudioMixer 1.0 AudioMixer.qml
 VolumeSlider 1.0 VolumeSlider.qml
 BluetoothDevices 1.0 BluetoothDevices.qml
 WifiNetworks 1.0 WifiNetworks.qml
+ModernStart 1.0 ModernStart.qml

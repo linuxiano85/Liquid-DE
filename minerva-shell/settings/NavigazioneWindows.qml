@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import "../core" as Core
 import "../ui" as Ui
 import "../windows11" as W
@@ -30,6 +31,12 @@ Item {
         color: presaUtente.containsMouse ? W.Style.hover : "transparent"
         Accessible.role: Accessible.Button
         Accessible.name: Core.Utente.nome
+        activeFocusOnTab: true
+        border.width: activeFocus ? 2 : 0
+        border.color: W.Style.text
+        Keys.onReturnPressed: if (nav.finestra) nav.finestra.apriSezione("utente")
+        Keys.onSpacePressed: if (nav.finestra) nav.finestra.apriSezione("utente")
+        Accessible.onPressAction: if (nav.finestra) nav.finestra.apriSezione("utente")
 
         Rectangle {
             id: iniziale
@@ -125,6 +132,34 @@ Item {
         }
     }
 
+    Ui.Scorrimento {
+        bersaglio: elenco
+        anchors.right: elenco.right
+        anchors.top: elenco.top
+        anchors.bottom: elenco.bottom
+    }
+
+    // Tab deve accompagnare il focus anche quando una finestra bassa
+    // nasconde le ultime categorie o i risultati della ricerca.
+    Connections {
+        target: nav.Window.window
+        function onActiveFocusItemChanged() {
+            var item = nav.Window.window.activeFocusItem;
+            var ancestor = item;
+            while (ancestor && ancestor !== voci)
+                ancestor = ancestor.parent;
+            if (!item || ancestor !== voci)
+                return;
+            var point = item.mapToItem(voci, 0, 0);
+            var next = elenco.contentY;
+            if (point.y < next)
+                next = point.y;
+            else if (point.y + item.height > next + elenco.height)
+                next = point.y + item.height - elenco.height;
+            elenco.contentY = Math.max(0, Math.min(next, Math.max(0, elenco.contentHeight - elenco.height)));
+        }
+    }
+
     component Voce: Rectangle {
         id: voce
         property url immagine: ""
@@ -142,6 +177,7 @@ Item {
         Accessible.role: Accessible.PageTab
         Accessible.name: voce.testo
         Accessible.selected: voce.scelta
+        Accessible.onPressAction: voce.attivata()
         Keys.onReturnPressed: voce.attivata()
         Keys.onSpacePressed: voce.attivata()
 

@@ -123,11 +123,11 @@ static void cliente_chiudi(struct cliente *cl) {
 //    bloccava il mouse e lo schermo di tutti. Uscito il 24 agosto 2026.
 //
 // 2. Poi un `poll` con una pazienza di 200 ms: un ciclo con una fine, ma
-//    sempre un'attesa dentro il compositore. L'audit di Codex del 12
+//    sempre un'attesa dentro il compositore. La verifica del 12
 //    settembre 2026 l'ha misurata (C02): un cliente fermo costava a tutti
 //    gli altri **203 ms**, mouse e schermo compresi.
 //
-// 3. Adesso (Codex, 13 settembre) nessuno aspetta nessuno. Quello che non
+// 3. Dal 13 settembre 2026 nessuno aspetta nessuno. Quello che non
 //    entra nel socket resta in `uscita`, una coda per cliente, e si riprova
 //    quando il ciclo di eventi dice che il socket è tornato scrivibile
 //    (`WL_EVENT_WRITABLE`). Chi non legge riempie la propria coda e viene

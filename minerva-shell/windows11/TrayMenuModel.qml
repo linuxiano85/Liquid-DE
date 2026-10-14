@@ -48,7 +48,9 @@ Item {
         id: rows
         onItemAdded: tree.revision++
         onItemRemoved: tree.revision++
-        model: tree.entries
+        // Il modello Qt mantiene i delegate delle voci non rimosse durante
+        // il riordino. L'array values li ricreava, perdendo gli opener figli.
+        model: opener.children
         delegate: Item {
             id: row
             required property var modelData
@@ -87,7 +89,7 @@ Item {
                 source: active ? Qt.resolvedUrl("TrayMenuModel.qml") : ""
                 onLoaded: {
                     item.depth = tree.depth + 1;
-                    item.prefix = row.action;
+                    item.prefix = Qt.binding(function() { return row.action; });
                     item.source = row.modelData;
                 }
             }

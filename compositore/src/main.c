@@ -1122,7 +1122,7 @@ struct finestra {
 	/// 1. Fino al 7 settembre 2026 il colore lo portava la `maniglia`, che è
 	///    un rettangolo PIENO grande quanto la finestra. Sotto una finestra
 	///    opaca se ne vedono solo i bordi, ed era l'effetto voluto; sotto una
-	///    TRASLUCIDA traspare da tutta la superficie. L'Alacritty di il manutentore
+	///    TRASLUCIDA traspare da tutta la superficie. L'Alacritty del manutentore
 	///    sta a `opacity = 0.85`, e a ogni cambio di fuoco la finestra si
 	///    tingeva per intero — misurato: da (54, 84, 98) a (50, 114, 131).
 	/// 2. Allora quattro strisce sottili, una per lato. Ha retto finché gli
@@ -6682,7 +6682,7 @@ static void puntatore_applica(struct minerva *m, struct wlr_input_device *dev) {
 	// Lo scorrimento naturale è nelle Impostazioni sotto **Touchpad**, e
 	// deve valere solo lì. `libinput_device_config_scroll_has_natural_scroll`
 	// dice sì anche per un mouse: con la levetta accesa — che è come sta
-	// sul portatile di il manutentore — attaccando un mouse la rotellina andava al
+	// sul portatile del manutentore — attaccando un mouse la rotellina andava al
 	// contrario, per colpa di un interruttore che dice «touchpad».
 	//
 	// Un touchpad si riconosce dal fatto che sa scorrere con DUE DITA: è
@@ -6730,7 +6730,7 @@ static void puntatore_distrutto(struct wl_listener *l, void *dati) {
 	// lista e si lasciava attaccato a quello di wlroots, che continuava a
 	// tenersene il conto.
 	//
-	// Il sintomo, visto il 4 settembre 2026 da il manutentore — «cosa sono tutti
+	// Il sintomo, visto il 4 settembre 2026 dal manutentore — «cosa sono tutti
 	// quei segni + in impostazioni?» — è una **fila di cursori rimasti
 	// impressi sullo schermo**, uno per ogni posto in cui il puntatore si
 	// era fermato, disegnati sopra le finestre e immuni a qualunque
@@ -9777,7 +9777,7 @@ static void monitor_transaction_removed(struct minerva *m, struct wlr_output *ou
 //                 grande mostra un bordo vuoto a destra e in basso.
 //
 // il manutentore, 22 settembre 2026: «sotto i monitor le opzioni duplica, solo
-// monitor 1 o 2 o solo pc e estendi». Codex aveva lasciato fuori la
+// monitor 1 o 2 o solo pc e estendi». La versione precedente aveva lasciato fuori la
 // duplicazione apposta; entra qui con la stessa transazione degli altri due.
 
 /// Il modo di `o` con esattamente `w`×`h`, alla frequenza più alta, o NULL.
@@ -13487,7 +13487,7 @@ int main(int argc, char *argv[]) {
 	// ── Il blocco prima del sonno ───────────────────────────────────────
 	//
 	// Solo su una sessione vera: le prove annidate non parlano con logind, e
-	// non devono — una prova che prende un inibitore sul portatile di il manutentore
+	// non devono — una prova che prende un inibitore sul portatile del manutentore
 	// è una prova che gli impedisce di chiudere il coperchio.
 	//
 	// Se logind non c'è si avvisa e basta. La prima versione qui bloccava lo

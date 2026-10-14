@@ -33,25 +33,4 @@ Il kernel in uso non può essere reinstallato o rimosso. Durante un lavoro, con 
 
 Al termine della compilazione il riepilogo distingue la build completata dall'installazione. Se mancano i controlli, propone **Vedi controlli** e apre la pagina Kernel installati. Il kernel della distribuzione resta escluso dalle rimozioni gestibili da Fucina.
 
-## Evidenze
-
-- **304 test Dart passati**, inclusi manifest corrotto, rilascio diverso, file vuoti/mancanti, symlink, helper assente/non eseguibile, ABI vecchia/futura, programmi mancanti, diagnosi in errore e rifiuti senza chiamate root.
-- **16 prove grafiche passate**: azioni disabilitate con helper obsoleto, prerequisiti cambiati durante la conferma, materiali incompleti e QEMU fallito.
-- **9 prove mirate passate dopo l'ultima revisione ABI**: un aiutante con marcatori di versione duplicati viene rifiutato come ambiguo.
-- **Daemon AOT e finestra realmente installati**: l'aiutante vecchio è riconosciuto prima dell'installazione; gli strumenti presenti sono indicati separatamente. Nessuna azione kernel amministrativa inviata dalla sonda reale.
-- Immagine del candidato `7.2.9-fucina-opt-clang` invariata: SHA256 `12f65192e69504d9cb0900bd620189f5fa8c970c089d0cda9b378cca0e98e711`.
-
-Artefatti: `Liquid_test-principale/rapporti/artefatti-2026-10/fucina2/test-dart-304.log`, `test-prerequisiti-abi-9.log`, `test-gui-16.log`, `gui-prerequisiti/`, `prova-prerequisiti-reale-finale.json`, `prova-prerequisiti-abi-univoca.json` e `runtime-prerequisiti.json`. I conteggi precedenti restano nei rapporti storici.
-
-Per ripetere la sonda in sola lettura, usando il file canale della propria sessione:
-
-```sh
-python tests/prova_fucina_prerequisiti.py \
-  --canale /percorso/della/sessione/canale \
-  --rilascio 7.2.9-fucina-opt-clang \
-  --output /tmp/prova-prerequisiti-nuova.json
-```
-
-`--rilascio` è facoltativo. Se presente, la sonda confronta l'immagine nella cache dichiarata dal daemon prima e dopo la lettura. Il file di output deve essere nuovo. La sonda invia soltanto richieste di stato ed elenco; non compila, installa, rimuove o recupera lavori.
-
-Per la cache interrotta, vedere la [guida al recupero](fucina-recupero-cache.md). Per compilazione, KVM, test del kernel e limiti del confronto prestazionale, vedere il [rapporto di ottimizzazione](../audit/chatgpt/FUCINA2-AUDIT-OTTIMIZZAZIONE.md).
+Per la cache interrotta, vedere la [guida al recupero](fucina-recupero-cache.md).

@@ -10,13 +10,60 @@ PaginaWindows {
     id: pagina
     readonly property string lingua: Core.Strings.lang
     readonly property string layout: Core.Ipc.get("windows11.startLayout", "default")
+    readonly property bool moderno: Core.Ipc.get("windows11.startExperience", "modern") === "modern"
     briciole: [
         { "testo": Dati.t(lingua, "personalizzazione"), "pagina": "w-personalizzazione" },
         { "testo": "Start" }
     ]
 
-    GruppoImpostazioni { testo: "Layout" }
+    SchedaImpostazione {
+        titolo: W.Style.label("Design del menu Start", "Start menu design")
+        icona: "grid"
+        TendinaWindows {
+            objectName: "startDesign"
+            valore: Core.Ipc.get("windows11.startExperience", "modern")
+            voci: [
+                { valore: "modern", testo: W.Style.label("Pannello unico", "Unified panel") },
+                { valore: "classic", testo: W.Style.label("Design precedente", "Previous design") }
+            ]
+            onScelto: function(v) { Core.Ipc.setSetting("windows11.startExperience", v); }
+        }
+    }
+    SchedaImpostazione {
+        visible: pagina.moderno
+        titolo: W.Style.label("Visualizzazione delle app", "App view")
+        icona: "apps"
+        TendinaWindows {
+            objectName: "startVistaApp"
+            valore: Core.Ipc.get("windows11.startAppsView", "category")
+            voci: [
+                { valore: "category", testo: W.Style.label("Categorie", "Category") },
+                { valore: "grid", testo: W.Style.label("Griglia", "Grid") },
+                { valore: "list", testo: W.Style.label("Elenco", "List") }
+            ]
+            onScelto: function(v) { Core.Ipc.setSetting("windows11.startAppsView", v); }
+        }
+    }
+    Repeater {
+        model: [
+            { key: "startPinnedExpanded", it: "Espandi i preferiti", en: "Expand pinned apps" },
+            { key: "startRecommendedExpanded", it: "Espandi gli elementi consigliati", en: "Expand recommendations" }
+        ]
+        delegate: SchedaImpostazione {
+            required property var modelData
+            visible: pagina.moderno
+            titolo: W.Style.label(modelData.it, modelData.en)
+            S.ToggleSwitch {
+                objectName: "start-" + modelData.key
+                Accessible.name: W.Style.label(modelData.it, modelData.en)
+                checked: Core.Ipc.get("windows11." + modelData.key, false)
+                onToggled: function(v) { Core.Ipc.setSetting("windows11." + modelData.key, v); }
+            }
+        }
+    }
+    GruppoImpostazioni { testo: "Layout"; visible: !pagina.moderno }
     Row {
+        visible: !pagina.moderno
         width: parent.width
         spacing: 24
         Repeater {

@@ -36,20 +36,6 @@ L'installazione prepara moduli e initramfs prima della pubblicazione; sui guasti
 
 In **Kernel installati → Sorgenti e archivi conservati**, **Verifica di nuovo** controlla il lavoro interrotto. **Riapri cache** si abilita soltanto quando il daemon può verificare che i processi registrati sono terminati. Il recupero conserva sorgenti, kernel e log, archivia il segnale come ricevuta e non considera riuscito il lavoro precedente. Registri legacy, processi incerti e installazioni amministrative richiedono controlli ulteriori; non cancellare il segnale manualmente. Dettagli, prove reali e limiti nella [guida al recupero della cache](../docs/fucina-recupero-cache.md).
 
-Per ripetere le verifiche:
-
-```sh
-(cd tests/fucina_suite && dart test)
-python tests/test_fucina_transactions.py
-python tests/test_fucina_kernel_safety.py
-FUCINA_GUI_ARTIFACT_DIR=/tmp/fucina2-gui python tests/test_fucina2_gui.py
-python tests/prova_fucina_reale.py --canale /run/user/1000/liquid-de/sessioni/2/canale
-```
-
-L'ultima istruzione legge soltanto lo stato del daemon. Per una prova di compilazione reale, usare il file canale della propria sessione e aggiungere `--compila --versione VERSIONE --nome prova-log --limite 180`. La prova ferma soltanto la build che ha avviato, non installa kernel e distingue esplicitamente una build completata da un arresto intenzionale. Le prove grafiche usano la finestra Quickshell reale con eventi IPC isolati e producono screenshot; non sostituiscono una compilazione e una prova di avvio reali.
-
-Le sonde `tests/fucina_kernel_probe.py` e `tests/fucina_kselftests.py` verificano il kernel effettivamente avviato, con file temporanei, limiti e casi espliciti. Risultati, esclusioni e problemi di permessi sono riportati separatamente. Il rapporto della sessione di ottimizzazione è in [FUCINA2-AUDIT-OTTIMIZZAZIONE.md](../audit/chatgpt/FUCINA2-AUDIT-OTTIMIZZAZIONE.md).
-
 Il tema, il client IPC e i componenti dell'officina sono riusati dai rispettivi percorsi in `minerva-shell` tramite collegamenti simbolici: così la nuova app non mantiene copie divergenti di codice privilegiato o di protocollo. Le operazioni continuano a essere convalidate dal daemon e dall'helper root esistente.
 
 Per provarla senza installarla: `./scripts/minerva-fucina2`.

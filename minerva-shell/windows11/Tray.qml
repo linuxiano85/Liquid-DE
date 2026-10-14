@@ -13,6 +13,7 @@ Item {
     property QtObject menuOwner: null
     property var menuRoot: null
     property bool menuPending: false
+    property bool menuUpdateScheduled: false
     property int menuGeneration: 0
     property var menuAnchor: null
     readonly property var menuEntries: tree.entries
@@ -49,8 +50,25 @@ Item {
     }
 
     function presentMenu() {
-        if (!tree.items.length)
+        // Un riordino del modello rimuove e ricrea più delegate nello stesso
+        // giro: mostriamo il risultato intero, non gli stati intermedi vuoti.
+        if (menuUpdateScheduled)
             return;
+        menuUpdateScheduled = true;
+        Qt.callLater(function() {
+            tray.menuUpdateScheduled = false;
+            tray.presentMenuNow();
+        });
+    }
+
+    function presentMenuNow() {
+        if (!tree.items.length) {
+            // Durante il primo caricamento aspettiamo D-Bus. Se invece il
+            // servizio svuota un menu già aperto, le vecchie azioni decadono.
+            if (actions.visible)
+                actions.close();
+            return;
+        }
         if (menuPending) {
             menuPending = false;
             if (menuAnchor)
@@ -62,10 +80,6 @@ Item {
         } else if (actions.visible) {
             // Icone, spunte e disponibilità possono cambiare a menu aperto.
             actions.items = tree.items;
-            if (actions.subitems.length) {
-                var parentItem = tree.items[actions.selectedIndex];
-                actions.subitems = parentItem ? parentItem.children || [] : [];
-            }
         }
     }
 

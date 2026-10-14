@@ -13,7 +13,7 @@
 // rettangolo sorgente e uno destinazione. Deformare non si può chiedere: si
 // fa da soli.
 //
-// La strada scelta — di Codex, 12 settembre 2026 — non tocca il passaggio di
+// La strada scelta — del 12 settembre 2026 — non tocca il passaggio di
 // disegno dello schermo. Durante il gesto:
 //
 //  1. i nodi della finestra (barra, contenuto, anello, maniglia) vengono

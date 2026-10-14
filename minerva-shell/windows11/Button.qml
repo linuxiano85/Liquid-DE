@@ -5,6 +5,8 @@ FocusScope {
     id: root
     property string text: ""
     property string icon: ""
+    property string trailingIcon: ""
+    property real trailingRotation: 0
     property bool selected: false
     property bool filled: false
     /// Quanto è grande il simbolo. 18 nei pannelli; 24 sulla barra, dove in
@@ -22,10 +24,13 @@ FocusScope {
     property string tooltip: text
     // I collegamenti dello Start devono lasciare spazio anche a nomi lunghi.
     property real maximumTextWidth: -1
+    property real fontPixelSize: 12 * Style.textScale
     /// Icona e testo a sinistra invece che al centro: gli elenchi di azioni
     /// (l'anteprima di Cerca) in Windows sono allineati a sinistra.
     property bool aSinistra: false
     property alias hovered: mouse.containsMouse
+    property alias pointerArea: mouse
+    property bool suppressClick: false
     property color foreground: filled ? Style.accentForeground : Style.text
     /// Al posto del simbolo, il ritratto tondo di chi usa il computer (il
     /// piede dello Start, come in Windows 11): la foto se c'è, altrimenti
@@ -35,7 +40,8 @@ FocusScope {
     signal clicked()
     signal rightClicked()
     signal middleClicked()
-    implicitWidth: text === "" ? 40 : Math.max(40, caption.width + (icon === "" && !avatar ? 24 : (avatar ? 62 : 54)))
+    implicitWidth: (text === "" ? 40 : Math.max(40, caption.width + (icon === "" && !avatar ? 24 : (avatar ? 62 : 54))))
+        + (trailingIcon === "" ? 0 : 24)
     implicitHeight: 34
     Accessible.role: Accessible.Button; Accessible.name: tooltip
     Accessible.onPressAction: clicked()
@@ -84,14 +90,27 @@ FocusScope {
             text: root.text
             color: root.foreground
             font.family: Style.font
-            font.pixelSize: 12 * Style.textScale
+            font.pixelSize: root.fontPixelSize
             anchors.verticalCenter: parent.verticalCenter
+        }
+        Glyph {
+            visible: root.trailingIcon !== ""
+            name: root.trailingIcon
+            color: root.foreground
+            width: 14
+            height: 14
+            anchors.verticalCenter: parent.verticalCenter
+            rotation: root.trailingRotation
+            rasterized: true
         }
     }
     MouseArea {
         id: mouse; anchors.fill: parent; hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+        onPressed: root.suppressClick = false
         onClicked: function(event) {
+            if (root.suppressClick)
+                return;
             root._focoDalMouse = true;
             root.forceActiveFocus(Qt.MouseFocusReason);
             if (event.button === Qt.RightButton) root.rightClicked();

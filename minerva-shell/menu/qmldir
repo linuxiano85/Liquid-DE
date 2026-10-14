@@ -1,5 +1,6 @@
 module menu
 ContextMenu  1.0 ContextMenu.qml
+MenuMeasure  1.0 MenuMeasure.qml
 WallpaperLayer 1.0 WallpaperLayer.qml
 DesktopLayer 1.0 DesktopLayer.qml
 DesktopIcons 1.0 DesktopIcons.qml

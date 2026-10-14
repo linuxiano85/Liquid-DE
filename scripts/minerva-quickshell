@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""Avvia il runtime locale compatibile con Qt, oppure quello di sistema."""
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+
+def runtime():
+    root = Path(__file__).resolve().parents[1]
+    folder = root / 'libexec/quickshell'
+    executable = folder / 'qs'
+    if os.environ.get('MINERVA_QUICKSHELL_SYSTEM') != '1' and executable.is_file():
+        try:
+            metadata = json.loads((folder / 'runtime.json').read_text())
+            if not isinstance(metadata, dict):
+                raise ValueError('Manifesto non valido')
+            qt = subprocess.check_output(['pkg-config', '--modversion', 'Qt6Core'],
+                                         text=True, timeout=5).strip()
+            # Le API Qt private richiedono la stessa versione della build.
+            if (metadata.get('schema') == 1 and metadata.get('qtVersion') == qt
+                    and os.access(executable, os.X_OK)
+                    and metadata.get('sha256') == hashlib.sha256(executable.read_bytes()).hexdigest()):
+                return str(executable)
+            print('[MINERVA][SHELL] Runtime locale non compatibile: uso Quickshell di sistema.', file=sys.stderr)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            print('[MINERVA][SHELL] Runtime locale non verificabile: uso Quickshell di sistema.', file=sys.stderr)
+    system = shutil.which('qs')
+    if not system:
+        raise RuntimeError('Quickshell non disponibile')
+    return system
+
+
+def main():
+    executable = runtime()
+    if sys.argv[1:] == ['--runtime']:
+        print(executable)
+        return
+    # Gli argomenti rimangono separati: percorsi e opzioni non passano da sh.
+    os.execv(executable, [executable, *sys.argv[1:]])
+
+
+if __name__ == '__main__':
+    main()

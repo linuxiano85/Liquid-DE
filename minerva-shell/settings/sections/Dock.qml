@@ -337,7 +337,7 @@ Page {
         // Senza blur dietro c'è una fotografia nitida e sotto 0,75 il testo si
         // perde (il conto sta in `theme/Colors.qml`). Col blur dietro c'è una
         // macchia morbida e scurita, e si può scendere molto di più: misurato
-        // il 9 settembre 2026 sulla scrivania di il manutentore, a 0,50 il testo
+        // il 9 settembre 2026 sulla scrivania del manutentore, a 0,50 il testo
         // della barra sta a **10,2:1**, cioè più del doppio della soglia di
         // 4,5:1. Sotto quel valore non si scende, ed è prudenza dichiarata:
         // il contrasto dipende dalla FOTOGRAFIA, e la sfocatura appiattisce i

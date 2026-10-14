@@ -103,7 +103,7 @@ if [ "${MINERVA_APP_GPU:-0}" = "1" ]; then
     unset QT_QUICK_BACKEND
     # ── E la decodifica dei video sul processore ─────────────────────────
     #
-    # 6 ottobre 2026: i video di il manutentore sono AV1, e la sua RX 580 l'AV1 in
+    # 6 ottobre 2026: i video del manutentore sono AV1, e la sua RX 580 l'AV1 in
     # hardware non lo sa decodificare. FFmpeg ci prova lo stesso (VAAPI),
     # fallisce — «hwaccel initialisation returned error» — e Qt invece di
     # ripiegare sul processore non produce nessun fotogramma: l'audio va,

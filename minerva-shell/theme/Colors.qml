@@ -373,7 +373,7 @@ QtObject {
     /// numeri del tema scuro, sul tema chiaro le icone della barra degli
     /// strumenti sbiadivano fino a sembrare tutte disattivate.
     //
-    // Alzate il 2 agosto 2026 su segnalazione di il manutentore («colori più visibili
+    // Alzate il 2 agosto 2026 su segnalazione del manutentore («colori più visibili
     // nella modalità chiara o scura, sono poco leggibili»). La più colpevole
     // era `textFaint` al 34%: le descrizioni sotto ogni impostazione, le unità
     // di misura e le etichette delle icone finivano sotto la soglia in cui si

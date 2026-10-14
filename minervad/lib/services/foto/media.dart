@@ -3,7 +3,7 @@
 /// ── Perché le esclusioni stanno qui e non in un'opzione ────────────────────
 ///
 /// Perché senza, la richiesta «cerca le foto nella cartella personale» dà una
-/// risposta assurda. Misurato il 26 agosto 2026 sulla casa di il manutentore:
+/// risposta assurda. Misurato il 26 agosto 2026 sulla casa del manutentore:
 ///
 /// ```
 ///   88.982  file immagine o video in tutta la home

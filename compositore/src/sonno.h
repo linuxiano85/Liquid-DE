@@ -2,7 +2,7 @@
 //
 // ── Il difetto che chiude ──────────────────────────────────────────────────
 //
-// Audit del 12 settembre 2026 (Codex, S01): la shell lanciava `systemctl
+// Audit del 12 settembre 2026 (S01): la shell lanciava `systemctl
 // suspend` e basta. Al risveglio la scrivania era lì, sbloccata, con dentro
 // tutto — a meno che l'inattività non avesse già fatto scattare il blocco,
 // cosa che con una sospensione immediata da sessione viva non succede mai.

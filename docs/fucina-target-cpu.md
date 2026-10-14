@@ -47,23 +47,3 @@ Il payload contiene solo compilatore, target, tuning, esito e messaggio. Non pub
 Questa è una verifica del driver del compilatore sul sistema corrente, non del comando effettivo di ogni oggetto del kernel. Kbuild imposta opzioni proprie e limita l'uso di alcune istruzioni. La ricetta continua a verificare `CONFIG_X86_NATIVE_CPU` dopo Kconfig e a fermarsi se il requisito esplicito non è attivo. Per Clang e gli altri strumenti LLVM vedere [Kbuild LLVM](https://docs.kernel.org/kbuild/llvm.html).
 
 Le sonde non cambiano governor, SMT, mitigazioni, frequenze o sysctl. Non confrontano le prestazioni di GCC e Clang e non certificano stabilità del kernel futuro.
-
-## Prove e ripetizione
-
-- **315 test Dart passati**: parser GCC/Clang, token non valido, compilatore assente, codice di uscita negativo, output eccessivo, timeout con processo terminato, richieste concorrenti, flag CPU discordanti o mancanti e rifiuto backend senza chiamate root.
-- **18 prove grafiche passate**, incluse le nuove schede CPU, target generico con flag non uniformi e compilatore non disponibile.
-- Durante la prima prova grafica la fixture ometteva il rilascio e faceva correttamente perdere il supporto `native`. Aggiunto il rilascio di fixture, il percorso completo passa. Non è stato aggirato il controllo della versione nell'app.
-- Daemon reale: **12 CPU con flag completi e uniformi**, livello **v3**, target **haswell** sia con GCC sia con Clang. Immagine candidata invariata durante il rilievo.
-
-Artefatti in `Liquid_test-principale/rapporti/artefatti-2026-10/fucina2/`: `test-dart-315.log`, `test-gui-18.log`, `gui-target/`, `prova-target-cpu-finale.json` e `runtime-target-cpu.json`.
-
-```sh
-(cd tests/fucina_suite && dart test --reporter expanded)
-FUCINA_GUI_ARTIFACT_DIR=/tmp/fucina2-gui python tests/test_fucina2_gui.py
-python tests/prova_fucina_target.py \
-  --canale /percorso/della/sessione/canale \
-  --rilascio 7.2.9-fucina-opt-clang \
-  --output /tmp/prova-target-nuova.json
-```
-
-`--rilascio` è facoltativo; se presente confronta l'immagine nella cache prima/dopo il rilievo. Il file di output deve essere nuovo. Il rilievo può aggiornare lo storico locale delle periferiche come nell'app; non compila, installa o rimuove kernel e non invia azioni amministrative.

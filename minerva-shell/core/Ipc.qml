@@ -93,7 +93,7 @@ QtObject {
     /// `height 34` (il ripiego) mentre l'altezza vera era 38. Hyprland
     /// riservava 38, la barra ne disegnava 34, e restavano quattro pixel di
     /// scarto — «la barra è staccata dalla finestra e la linea rosa è un
-    /// pochino storta», parole di il manutentore mentre guardava.
+    /// pochino storta», parole del manutentore mentre guardava.
     readonly property bool impostazioniArrivate: ipc._settingsNote
 
     property bool _settingsNote: false
@@ -569,7 +569,7 @@ QtObject {
     // Stesso patto: `pactl subscribe` gira nel demone dalla prima iscrizione,
     // e i cambiamenti (cuffie, HDMI, profili) arrivano come `system_audio_state`
     // solo a chi si è iscritto. Prima la pagina chiedeva lo stato ogni 4 s con
-    // un timer; Codex ha tolto il timer ma non ha messo l'iscrizione, e da
+    // un timer; la revisione precedente ha tolto il timer ma non ha messo l'iscrizione, e da
     // quel giorno inserire le cuffie non aggiornava più la pagina finché non
     // la si riapriva (22 settembre 2026).
     function iscriviAudio() {
@@ -2827,7 +2827,7 @@ QtObject {
     /// prossima volta che ci prova è a cinque e sette. Misurato sul registro
     /// della sessione del 31 agosto 2026: la dock compariva a **4,666
     /// secondi**, e quasi due erano soltanto attesa fra un tentativo e
-    /// l'altro. È la metà buona dei «dieci secondi per avviarsi» di il manutentore;
+    /// l'altro. È la metà buona dei «dieci secondi per avviarsi» del manutentore;
     /// l'altra metà era `dart run` (1965 ms contro 162, misurati).
     ///
     /// Quindi: finché non ci si è **mai** agganciati, e solo per i primi
@@ -2880,7 +2880,7 @@ QtObject {
             // ── CI SI FERMA QUANDO IL DEMONE HA RISPOSTO ─────────────────
             //
             // Qui c'era `if (!socket.connected) … else stop()`, e quel `stop()`
-            // è costato a il manutentore una scrivania senza dock e senza menù per
+            // è costato al manutentore una scrivania senza dock e senza menù per
             // tutta la mattina del 31 agosto 2026.
             //
             // `socket.connected` dice che una connessione è stata CHIESTA, non

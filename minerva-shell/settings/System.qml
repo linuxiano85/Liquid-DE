@@ -303,9 +303,9 @@ FloatingWindow {
         { "id": "app", "voci": ["defaults", "avvio"] },
         { "id": "account", "voci": ["utente", "account", "accesso"] },
         { "id": "ora", "voci": ["dataora"] },
-        { "id": "giochi", "voci": [] },
+        { "id": "giochi", "pagina": "w-giochi", "voci": [] },
         { "id": "accessibilita", "voci": ["accesso-facile"] },
-        { "id": "privacy", "voci": [] },
+        { "id": "privacy", "pagina": "w-privacy", "voci": [] },
         { "id": "update", "pagina": "w-update", "voci": [] }
     ].map(function (c) {
         c.it = Dati.t("it", c.id);
@@ -317,6 +317,8 @@ FloatingWindow {
     /// Le pagine Windows costruite (`windows/`), con la categoria a cui
     /// appartengono.
     readonly property var pagineWindows: ({
+        "w-giochi": { "file": "windows/Giochi.qml", "categoria": "giochi" },
+        "w-privacy": { "file": "windows/Privacy.qml", "categoria": "privacy" },
         "w-sistema": { "file": "windows/Sistema.qml", "categoria": "sistema" },
         "w-home": { "file": "windows/Home.qml", "categoria": "home" },
         "w-update": { "file": "windows/LiquidUpdate.qml", "categoria": "update" },
@@ -454,7 +456,8 @@ FloatingWindow {
         if (!settings.stileWindows || settings.paginaCategoria !== "" || settings.paginaWindows !== "")
             return "";
         var c = settings.categoriaPer(settings.categoriaOrigine) || settings.categoriaDi(settings.section);
-        return c && c.voci.length > 1 ? (settings.it ? c.it : c.en) : "";
+        return c && (c.voci.length > 1 || settings.categoriaOrigine !== "")
+            ? (settings.it ? c.it : c.en) : "";
     }
 
     function apriCategoria(id) {

@@ -12,7 +12,7 @@ import Minerva.WindowIdentity 1.0 as Native
 // finestra chiedendo al compositore dove si trovasse. Costava tutto questo:
 //
 //  · la barra arrivava in ritardo. Spostando la finestra in fretta restava
-//    indietro e poi la raggiungeva a scatti; in una schermata di il manutentore si
+//    indietro e poi la raggiungeva a scatti; in una schermata del manutentore si
 //    vede staccata di cento pixel dalla finestra a cui appartiene. Nessun
 //    inseguimento può essere perfetto: fra il momento in cui la finestra si
 //    muove e quello in cui lo veniamo a sapere passa del tempo, e quel tempo

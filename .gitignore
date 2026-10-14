@@ -93,7 +93,32 @@ minerva-shell/windows11/wallpapers/*.jpg
 # Gli artefatti delle prove vanno in Liquid_test (vedi sopra).
 artifacts/
 
-# Binari del compositore e cache delle prove non sono sorgenti.
-compositore/build-native/
-compositore/build/
-**/__pycache__/
+# Materiale locale conservato in Liquid_test; escluso dalla pubblicazione.
+/audit
+/tests
+/docs/NATIVE-GRAPHICS-PAM.md
+/docs/SHELL-FILE-REVIEW.md
+/docs/SHELL-STABILIZATION.md
+/docs/fucina-recovery-20261003.md
+/docs/tiling-selezione-rotazione.md
+/docs/tiling-app-esterne.md
+/docs/preset-isolati.md
+/docs/orchestrazione-ia.md
+/docs/officina-ia-specifica.md
+/docs/file-manager-evoluzione.md
+/docs/dispositivi-telefoni-usb.md
+/docs/windows11.md
+/docs/liquid-update-pacchetti.md
+/minervad/test/windows11_fixture.dart
+/minervad/test/files_fixture.dart
+/posta/
+
+# I collegamenti di sviluppo non entrano nei pacchetti pubblici.
+/audit/
+/tests/
+/minervad/test/
+/assets/marchio/liquid/proposte.png
+/assets/marchio/liquid/proposte.svg
+
+# Runtime ricompilato per Qt locale; non si pubblicano i binari.
+/libexec/quickshell/

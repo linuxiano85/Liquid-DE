@@ -319,7 +319,7 @@ FloatingWindow {
 
     // ── Aprire una cartella intera ───────────────────────────────────────
     //
-    // Chiesto da il manutentore: «mettergli sulla finestra una freccetta per aprire
+    // Chiesto dal manutentore: «mettergli sulla finestra una freccetta per aprire
     // una lista per aprire ad esempio una cartella di immagini». Senza, si può
     // arrivare qui solo da fuori — dal gestore file o da un doppio clic — e un
     // programma che non si sa aprire da solo è un programma a metà.

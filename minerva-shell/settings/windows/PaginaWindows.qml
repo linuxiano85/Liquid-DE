@@ -57,12 +57,12 @@ Item {
     }
 
     // ── Le briciole ──────────────────────────────────────────────────────
-    Row {
+    Flow {
         id: briciole
         objectName: "bricioleWindows"
         x: colonna.x + rotolo.x
         y: 19
-        height: 44
+        width: colonna.width
         spacing: 0
 
         Repeater {
@@ -79,6 +79,8 @@ Item {
                     objectName: ultima ? "paginaTitolo" : "briciolaCategoria"
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.testo
+                    width: Math.min(implicitWidth, Math.max(0, briciole.width - (ultima ? 0 : 42)))
+                    elide: Text.ElideRight
                     textFormat: Text.PlainText
                     color: ultima ? W.Style.text : (presa.containsMouse ? W.Style.text : W.Style.muted)
                     font.family: W.Style.font
@@ -86,6 +88,30 @@ Item {
                     font.weight: Font.DemiBold
                     Accessible.role: ultima ? Accessible.Heading : Accessible.Link
                     Accessible.name: modelData.testo
+                    activeFocusOnTab: !ultima && modelData.pagina !== undefined
+                    Accessible.onPressAction: attiva()
+                    Keys.onReturnPressed: attiva()
+                    Keys.onSpacePressed: attiva()
+                    function attiva() {
+                        if (ultima || modelData.pagina === undefined)
+                            return;
+                        var destinazione = modelData.pagina;
+                        var finestra = pagina.finestra;
+                        if (finestra)
+                            finestra.apriWindows(destinazione);
+                        else
+                            pagina.briciolaChiesta(destinazione);
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: -2
+                        color: "transparent"
+                        radius: 4
+                        border.width: 2
+                        border.color: W.Style.text
+                        visible: voce.activeFocus
+                    }
 
                     MouseArea {
                         id: presa
@@ -93,16 +119,7 @@ Item {
                         enabled: !ultima && modelData.pagina !== undefined
                         hoverEnabled: true
                         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                        onClicked: {
-                            var destinazione = modelData.pagina;
-                            var finestra = pagina.finestra;
-                            // La risposta può distruggere questo delegate:
-                            // conservare il destinatario prima di emettere.
-                            if (finestra)
-                                finestra.apriWindows(destinazione);
-                            else
-                                pagina.briciolaChiesta(destinazione);
-                        }
+                        onClicked: voce.attiva()
                     }
                 }
                 Item {
@@ -125,7 +142,7 @@ Item {
     Flickable {
         id: rotolo
         anchors.top: parent.top
-        anchors.topMargin: 74
+        anchors.topMargin: Math.max(74, briciole.y + briciole.height + 11)
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom

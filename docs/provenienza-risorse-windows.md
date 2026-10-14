@@ -20,7 +20,7 @@ nel checkout locale, questi percorsi possono copiarli nell'installazione.
 Non usare tale albero locale per produrre un archivio pubblico senza verificare
 ed escludere le risorse prive di autorizzazione.
 
-Controllato da Claude il 12 ottobre: nessuno script del progetto produce un
+Controllato il 12 ottobre: nessuno script del progetto produce un
 pacchetto o un archivio; le due copie installano solo sul computer di chi ha
 il checkout, e il progetto si distribuisce con Git, che i JPG li ignora.
 Per questo gli script non li escludono: toglierli lì cancellerebbe lo sfondo

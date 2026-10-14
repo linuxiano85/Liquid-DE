@@ -41,8 +41,8 @@ PKGS=(
     base-devel meson ninja cmake pkgconf
     wayland wayland-protocols libdrm libinput libxkbcommon pixman
     mesa libglvnd seatd libdisplay-info libliftoff hwdata
-    # vulkan-headers e glslang servivano solo al renderer Vulkan, che non si
-    # compila più di serie (vedi compositore/costruisci.sh).
+    # glslang serviva al renderer Vulkan del compositore, non più di serie.
+    # Gli header Vulkan rimangono necessari per il runtime locale Quickshell.
     vulkan-icd-loader
     libxcb xcb-util-wm xcb-util-errors xcb-util-renderutil xorg-xwayland
     cairo pango systemd glib2 gtk4 pam
@@ -67,6 +67,11 @@ PKGS=(
     xdg-desktop-portal xdg-desktop-portal-wlr
     # Shell QML
     quickshell qt6-wayland qt6-declarative qt6-base qt6-svg
+    # Il runtime locale corregge DBusMenu senza alterare il pacchetto di sistema.
+    qt6-shadertools cpptrace jemalloc vulkan-headers
+    # Posta: la finestra parla con il suo servizio (liquid-maild) via
+    # WebSocket su 127.0.0.1. Senza questo modulo la finestra non si apre.
+    qt6-websockets
     # ── E il multimediale, che era stato tolto per metà buona ragione ──
     #
     # Il 27 agosto 2026 `qt6-multimedia` è uscito dall'elenco di ciò che
@@ -186,6 +191,11 @@ bash "$MINERVA_DIR/scripts/costruisci-window-identity.sh" || {
 }
 bash "$MINERVA_DIR/scripts/costruisci-tiled-headers.sh" || {
     c_err "Build delle intestazioni adattive GTK fallita."
+    exit 1
+}
+c_head "Runtime della shell e menu D-Bus"
+python3 "$MINERVA_DIR/scripts/costruisci-quickshell.py" || {
+    c_err "Build del runtime locale della shell fallita."
     exit 1
 }
 c_head "Dipendenze del backend"
@@ -484,7 +494,8 @@ mkdir -p "$ICONE"
 # menu non esiste, e infatti l'MP3 continuava ad aprirlo un'altra cosa.
 for app in minerva-files minerva-settings minerva-monitor minerva-viewer \
            minerva-editor minerva-calcolatrice minerva-media minerva-custodia \
-           minerva-manutenzione minerva-terminale minerva-fucina minerva-fucina2; do
+           minerva-manutenzione minerva-terminale minerva-fucina minerva-fucina2 \
+           minerva-posta; do
     # Un collegamento alla RADICE INSTALLATA, non ai sorgenti: fino al 4
     # ottobre 2026 puntava al progetto, e spostando il progetto tutti questi
     # comandi sono diventati collegamenti rotti in un colpo solo.

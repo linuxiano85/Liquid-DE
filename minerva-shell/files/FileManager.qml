@@ -91,7 +91,7 @@ FloatingWindow {
     // a mostrarlo: un programma acceso che non si vede da nessuna parte è il
     // difetto, non la soluzione.
     //
-    // Scelta di il manutentore il 16 agosto 2026, davanti ai due conti. Dal 18 agosto
+    // Scelta del manutentore il 16 agosto 2026, davanti ai due conti. Dal 18 agosto
     // il meccanismo è di tutte le app e vive in `core/TenutaPronta.qml`: qui
     // resta solo l'interruttore della luce.
     property bool dormiente: false
@@ -2816,7 +2816,7 @@ FloatingWindow {
 
             // ── Eseguire ─────────────────────────────────────────────────
             //
-            // Richiesta di il manutentore il 17 agosto 2026: «essendo un file .sh
+            // Richiesta del manutentore il 17 agosto 2026: «essendo un file .sh
             // vorrei poter avere la voce esegui nel terminale».
             if (uno !== "" && manager.eseguibileDi(uno)) {
                 items.push({ "label": it ? "Esegui nel terminale"

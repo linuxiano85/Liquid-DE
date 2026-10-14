@@ -39,7 +39,6 @@ PaginaWindows {
         {id:"remoto", icon:"network", it:"Desktop remoto", en:"Remote Desktop", descIt:"Utenti desktop remoto, autorizzazioni di connessione", descEn:"Remote desktop users, connection permissions"},
         {id:"appunti", icon:"document", it:"Appunti", en:"Clipboard", descIt:"Cronologia delle operazioni di taglia e copia, sincronizzazione, cancellazione", descEn:"Cut and copy history, synchronization, clearing"},
         {id:"componenti", icon:"window", it:"Componenti di sistema", en:"System components", descIt:"Versione e componenti di Liquid DE", descEn:"Liquid DE version and components", pagina:"shell"},
-        {id:"ia", icon:"star", it:"Componenti IA", en:"AI components", descIt:"Componenti di intelligenza artificiale installati nel PC", descEn:"AI components installed on this PC"},
         {id:"facoltative", icon:"apps", it:"Funzionalità facoltative", en:"Optional features", descIt:"Funzionalità aggiuntive per il dispositivo", descEn:"Additional device features"},
         {id:"shell", icon:"informazioni", it:"Informazioni sul sistema", en:"About", descIt:"Specifiche dei dispositivi e di Linux, versione di Liquid", descEn:"Device and Linux specifications, Liquid version", pagina:"shell"}
     ]

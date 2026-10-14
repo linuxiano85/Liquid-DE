@@ -1,6 +1,33 @@
 /// Git confronta le revisioni; le categorie distinguono i sorgenti del desktop
 /// dai cambiamenti che non richiedono alcun aggiornamento della sessione.
 class LiquidUpdateChanges {
+  static Map<String, dynamic> cacheResponse(Map<String, dynamic> comparison) {
+    // Si conservano solo i campi già convalidati e il diff entro il budget;
+    // al riavvio passano nuovamente per lo stesso parser della risposta HTTP.
+    return {
+      'status': comparison['status'],
+      'total_commits': comparison['totalCommits'],
+      'commits': [
+        for (final commit in comparison['commits'] ?? [])
+          {
+            'sha': commit['revision'],
+            'commit': {'message': commit['message']},
+          },
+      ],
+      'files': [
+        for (final file in comparison['files'] ?? [])
+          {
+            'filename': file['path'],
+            'status': file['status'],
+            'additions': file['additions'],
+            'deletions': file['deletions'],
+            if (file['previous'] != '') 'previous_filename': file['previous'],
+            if (file['patchAvailable'] == true) 'patch': file['patch'],
+          },
+      ],
+    };
+  }
+
   static String component(String path) {
     if (path.startsWith('compositore/')) return 'compositor';
     if (path.startsWith('minervad/')) return 'daemon';

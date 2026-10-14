@@ -6,7 +6,7 @@ import 'account/webdav.dart';
 
 /// AccountService — gli account online di Minerva.
 ///
-/// Richiesta di il manutentore, 24 agosto 2026: «perché in impostazioni non inseriamo
+/// Richiesta del manutentore, 24 agosto 2026: «perché in impostazioni non inseriamo
 /// una sezione account online come fa gnome e altri desktop dove poter accedere
 /// a vari servizi e vedere ad esempio spazio usato e rimanente, se il servizio
 /// di sincronizzazione per quel servizio è attivo e altre informazioni?»
@@ -63,7 +63,7 @@ class AccountService {
   /// Sta qui, e non dentro `_mettiViaPassword`, per una ragione che è saltata
   /// fuori scrivendo le prove: finché la scrittura nel portachiavi era una
   /// `Process.start` piantata dentro il metodo, ogni prova che collegava un
-  /// account **scriveva davvero nel portachiavi di il manutentore** — e la riga che
+  /// account **scriveva davvero nel portachiavi del manutentore** — e la riga che
   /// controllava che una password sbagliata non ci finisse non guardava
   /// niente, perché quel comando non passava dalla lista che la prova
   /// osservava. Una prova che non può fallire non è una prova.

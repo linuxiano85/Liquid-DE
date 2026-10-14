@@ -1246,7 +1246,7 @@ class Officina {
   // ── La prova d'avvio ─────────────────────────────────────────────────
 
   /// Se c'è KVM per chi compila. Si sostituisce nelle prove (vedi il
-  /// costruttore): la macchina di chi le lancia non è quella di il manutentore.
+  /// costruttore): la macchina di chi le lancia non è quella del manutentore.
   Future<bool> _conKvm() async {
     try {
       final r = await Process.run('test', [

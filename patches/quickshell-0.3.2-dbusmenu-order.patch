@@ -1,0 +1,19 @@
+--- a/src/dbus/dbusmenu/dbusmenu.cpp
++++ b/src/dbus/dbusmenu/dbusmenu.cpp
+@@ -374,6 +374,16 @@
+ 
+ 	if (depth != 0) {
+ 		auto childrenChanged = false;
++		// Gli stessi ID possono arrivare in un ordine nuovo. Senza questo
++		// confronto il menu conserva l'ordine vecchio fino a una riapertura.
++		if (item->mShowChildren && item->mChildren.size() == layout.children.size()) {
++			for (qsizetype index = 0; index < item->mChildren.size(); index++) {
++				if (item->mChildren[index] != layout.children[index].id) {
++					childrenChanged = true;
++					break;
++				}
++			}
++		}
+ 		auto iter = item->mChildren.begin();
+ 		while (iter != item->mChildren.end()) {
+ 			auto existing = std::ranges::find_if(layout.children, [&](const DBusMenuLayout& layout) {

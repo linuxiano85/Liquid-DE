@@ -15,7 +15,7 @@ import 'custodia/registro.dart';
 /// punto di ritorno. Se il punto non riesce, l'operazione non parte.**
 ///
 /// Non è una cortesia e non è un consiglio nel manuale: è la condizione che
-/// rende offribile a il manutentore un pulsante «torna a ieri». Chi sa git sa che
+/// rende offribile al manutentore un pulsante «torna a ieri». Chi sa git sa che
 /// `reset --hard` butta via tutto quello che non è salvato, e sceglie
 /// consapevolmente; chi non sa git preme un pulsante che dice «torna a ieri» e
 /// si aspetta di poter tornare avanti. Ha ragione lui, e il codice deve
@@ -88,7 +88,7 @@ class CustodiaService {
   // progetto si fanno UNA per volta, in fila. Senza questa fila, un «Manda
   // adesso» premuto mentre il salvataggio è ancora in corso (un `git add -A`
   // su una cartella grossa ci mette dei secondi) spingeva fuori la storia di
-  // PRIMA e diceva «Mandato». Visto sul progetto di il manutentore il 18 settembre
+  // PRIMA e diceva «Mandato». Visto sul progetto del manutentore il 18 settembre
   // 2026: invio alle 21:28:49, salvataggio finito alle 21:29:12, e GitHub
   // fermo a tre giorni prima con la finestra che diceva di aver fatto.
   final Map<String, Future<void>> _inFila = {};
@@ -352,7 +352,7 @@ class CustodiaService {
   // ── Le destinazioni ────────────────────────────────────────────────────
   //
   // «Vorrei poter scegliere in fase di caricamento quale opzione voglio» —
-  // parole di il manutentore. Quindi ogni progetto ha un ELENCO di posti dove andare,
+  // parole del manutentore. Quindi ogni progetto ha un ELENCO di posti dove andare,
   // e mandare fuori chiede quale.
 
   Future<Map<String, dynamic>> aggiungiDestinazione(

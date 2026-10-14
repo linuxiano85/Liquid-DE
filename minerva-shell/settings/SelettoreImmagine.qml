@@ -27,7 +27,7 @@ import "../ui" as Ui
 //
 // `visible: false` NASCONDE, NON SOSPENDE. Un `Repeater` di anteprime dentro
 // un riquadro invisibile costruisce le sue celle e DECODIFICA le sue immagini
-// come se fosse in primo piano: nella cartella di il manutentore erano trecentoundici
+// come se fosse in primo piano: nella cartella del manutentore erano trecentoundici
 // fotografie. Per questo il modello è vuoto finché non si apre, e non basta
 // nascondere la griglia.
 Rectangle {

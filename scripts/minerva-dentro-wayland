@@ -244,6 +244,10 @@ fi
 # finestre che spuntano sulla scrivania di chi sta lavorando.
 if [ "$DI_PROVA" != "1" ]; then
     "$MINERVA_DIR/scripts/minerva-autostart" >/dev/null 2>&1 &
+    # Il servizio della Posta: la posta arriva (e il filtro lavora) anche a
+    # finestra chiusa. A riposo pesa circa 8 MB; senza account non si collega
+    # a niente. Se non è stato compilato, lo script esce senza fare danni.
+    "$MINERVA_DIR/scripts/minerva-posta-demone" >/dev/null 2>&1 &
 fi
 
 # Il gestore file tenuto pronto: 70 ms invece di 674 alla prima apertura.

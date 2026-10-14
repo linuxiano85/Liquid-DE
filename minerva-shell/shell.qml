@@ -1242,7 +1242,7 @@ ShellRoot {
 
             // ── Attività: i processi, dentro la shell ────────────────────
             //
-            // Ctrl+Maiusc+Esc. Pannello e non finestra: scelta di il manutentore
+            // Ctrl+Maiusc+Esc. Pannello e non finestra: scelta del manutentore
             // del 28 settembre 2026 — il perché sta in `menu/Attivita.qml`.
             Attivita {
                 id: attivitaPannello
@@ -1471,7 +1471,7 @@ ShellRoot {
     // e così NESSUNO in tutta la sessione toccava la luce notturna: la levetta
     // scattava, l'impostazione si salvava, e non succedeva niente.
     //
-    // Segnalato da il manutentore il 17 agosto 2026 — «se clicco su luce notturna non
+    // Segnalato dal manutentore il 17 agosto 2026 — «se clicco su luce notturna non
     // succede» — e trovato solo perché `prove-luce.qml` faceva la stessa cosa
     // e falliva allo stesso modo.
     //
@@ -2260,9 +2260,21 @@ ShellRoot {
                 ] },
                 { "separator": true },
                 action(it ? "Impostazioni schermo" : "Display settings", "win:display", "screen"),
-                action(it ? "Personalizza" : "Personalise", "wallpaper", "image"),
+                action(it ? "Personalizza" : "Personalise", "win:personalize", "image"),
+                action(it ? "Cambia sfondo…" : "Change background…", "win:background", "image"),
                 { "separator": true },
-                action(it ? "Mostra altre opzioni" : "Show more options", "win:more")
+                // Le funzioni specifiche di Liquid restano raggiungibili senza
+                // sostituire il menu del desktop con quello della barra.
+                { "label": it ? "Mostra altre opzioni" : "Show more options", "children": [
+                    { "label": S.t("newTerminal"), "icon": "terminal", "action": "terminal", "shortcut": "Super+↵" },
+                    { "label": S.t("openFiles"), "icon": "folder", "action": "files", "shortcut": "Super+E" },
+                    { "separator": true },
+                    { "label": it ? "Strumenti Liquid" : "Liquid tools", "children": [
+                        root.vocePersonalizza(),
+                        { "label": it ? "Scrivania pulita" : "Clean desktop", "icon": "image", "action": "pulita" },
+                        { "label": S.t("shortcuts"), "icon": "keyboard", "action": "cheatsheet", "shortcut": "Super+K" }
+                    ] }
+                ] }
             ];
         }
         var items = [
@@ -2314,6 +2326,7 @@ ShellRoot {
     ContextMenu {
         screen: root.schermoAttivo
         id: desktopMenu
+        objectName: "desktopContextMenu"
         windowsAppearance: root.barraWindows
 
         onTriggered: function(action) {
@@ -2322,6 +2335,10 @@ ShellRoot {
                 var id = action.substring(4);
                 if (id === "display") {
                     root.openSettings("display");
+                } else if (id === "personalize") {
+                    root.openSettings("w-personalizzazione");
+                } else if (id === "background") {
+                    root.openSettings("w-sfondo");
                 } else if (id === "icons") {
                     Core.Ipc.setSetting("desktop.icons", !Core.Ipc.get("desktop.icons", true));
                 } else if (id === "refresh" && root.icone) {
@@ -2338,8 +2355,6 @@ ShellRoot {
                     while (names.indexOf(name) >= 0)
                         name = base + " (" + (n++) + ")";
                     Core.Ipc.fsMakeDirectory(root.icone.cartella + "/" + name);
-                } else if (id === "more") {
-                    desktopMenu.openAt(root.puntoMenu.x, root.puntoMenu.y, root.barraMenuItems());
                 } else if (root.icone) {
                     root.icone.eseguiDisposizione(id);
                 }
@@ -2368,7 +2383,9 @@ ShellRoot {
                 break;
             // Lo sfondo sta nella pagina Scrivania dal 28 settembre 2026:
             // aprire Aspetto mandava nel posto sbagliato.
-            case "wallpaper":     root.openSettings("scrivania"); break;
+            case "wallpaper":
+                root.openSettings(Core.DesktopStyle.attuale === "windows" ? "w-sfondo" : "scrivania");
+                break;
             case "wallpaperNext": Core.Wallpaper.next(1); break;
             case "lock":       root.run([root.minervaRoot + "/scripts/minerva-blocca"]); break;
             case "power":      root.pannello("power"); break;
@@ -2559,7 +2576,9 @@ ShellRoot {
     function runCommand(id) {
         switch (id) {
         case "settings":   root.openSettings(); break;
-        case "wallpaper":  root.openSettings("scrivania"); break;
+        case "wallpaper":
+            root.openSettings(Core.DesktopStyle.attuale === "windows" ? "w-sfondo" : "scrivania");
+            break;
         case "display":    root.openSettings("display"); break;
         case "power":      root.openSettings("power"); break;
         case "audio":      root.openSettings("audio"); break;

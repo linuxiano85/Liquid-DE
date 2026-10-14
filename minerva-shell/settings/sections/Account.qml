@@ -16,7 +16,7 @@ import "../../ui" as Ui
 //
 // ── Da dove nasce ──────────────────────────────────────────────────────────
 //
-// Parole di il manutentore, 24 agosto 2026: «perché in impostazioni non inseriamo una
+// Parole del manutentore, 24 agosto 2026: «perché in impostazioni non inseriamo una
 // sezione account online come fa gnome e altri desktop dove poter accedere a
 // vari servizi e vedere ad esempio spazio usato e rimanente, se il servizio di
 // sincronizzazione per quel servizio è attivo e altre informazioni?»

@@ -254,7 +254,7 @@ class GitMotore {
 
   // ── Raggruppare per significato ────────────────────────────────────────
   //
-  // «14 file nella scrivania, 3 nel demone, 2 nei documenti» dice a il manutentore
+  // «14 file nella scrivania, 3 nel demone, 2 nei documenti» dice al manutentore
   // cosa ha fatto stamattina. Un elenco di 110 percorsi non gli dice niente:
   // è il motivo per cui non guarda mai `git status`.
   //

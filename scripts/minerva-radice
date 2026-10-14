@@ -682,7 +682,7 @@ case "$AZIONE" in
     # quel servizio è irraggiungibile. Il sintomo è cattivo: il televisore
     # accetta il comando (`MEDIA_STATUS`), la schermata di Chromecast sparisce,
     # e resta **schermo nero**. Il sì arriva subito, il no arriva dopo e in
-    # silenzio. Visto sulla TV di il manutentore il 30 agosto 2026.
+    # silenzio. Visto sulla TV del manutentore il 30 agosto 2026.
     #
     # ── Perché questo verbo NON prende argomenti ──────────────────────────
     #
@@ -879,7 +879,7 @@ case "$AZIONE" in
         # lingue sarebbero tornate tutte al primo aggiornamento. Cioè l'esatto
         # difetto che questo verbo esiste per non commettere.
         #
-        # Visto sulla macchina di il manutentore il 9 settembre 2026, dopo la prima
+        # Visto sulla macchina del manutentore il 9 settembre 2026, dopo la prima
         # pulizia vera: «attenzione: /etc/pacman.conf, riga 145: la direttiva
         # NoExtract presente nella sezione multilib non è stata riconosciuta».
         #

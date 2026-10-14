@@ -10,7 +10,7 @@ import 'processo_limitato.dart';
 ///
 /// ── IL PROBLEMA (4 ottobre 2026) ────────────────────────────────────────────
 ///
-/// Il DualShock 4 di il manutentore, collegato in Bluetooth, funzionava sulla
+/// Il DualShock 4 del manutentore, collegato in Bluetooth, funzionava sulla
 /// scrivania e non dentro GTA V avviato da Faugus. Il kernel lo vedeva
 /// (`hid_playstation`), i permessi c'erano: il guaio stava sopra. Ogni gioco
 /// sceglie da sé come leggere un pad — XInput, hidraw, SDL — e un DS4 grezzo

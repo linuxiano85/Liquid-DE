@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import Quickshell
 import "../core" as Core
 import "../ui" as Ui
@@ -7,6 +8,7 @@ FocusScope {
     id: menu
 
     property bool searchOnly: false
+    readonly property bool modern: !searchOnly && Core.Ipc.get("windows11.startExperience", "modern") === "modern"
     readonly property color mutedInk: searchOnly ? Style.muted : Style.startMuted
     property bool allApps: false
     property string searchCategory: "all"
@@ -24,10 +26,27 @@ FocusScope {
     property int page: 0
     property int selectedIndex: 0
     property var recent: []
+    property bool initialized: false
+    readonly property bool recommendations: Core.Ipc.get("windows11.recommendations", true)
+    onRecommendationsChanged: {
+        if (initialized && recommendations)
+            Core.Ipc.send({action: "fs_recenti", id: recentId});
+        if (!recommendations)
+            recent = [];
+    }
     property var files: []
     property string recentId: "windows-recent-" + Date.now() + "-" + Math.random()
     property string searchId: ""
     property var contextApp: null
+    property var contextReturnFocus: null
+    onContextAppChanged: {
+        if (contextApp) {
+            contextReturnFocus = menu.Window.window ? menu.Window.window.activeFocusItem : null;
+            contextMenu.forceActiveFocus(Qt.PopupFocusReason);
+        } else if (contextReturnFocus && menu.visible) {
+            contextReturnFocus.forceActiveFocus(Qt.PopupFocusReason);
+        }
+    }
 
     /// Il menu piccolo aperto sopra un pulsante del piede: "power" sopra
     /// l'alimentazione, "account" sopra il nome. Vuoto: nessuno.
@@ -133,6 +152,10 @@ FocusScope {
     // cambiare un indice senza un riquadro visibile. Il campo resta pronto
     // quando si comincia a scrivere, anche dopo aver navigato con le frecce.
     function enterPinned() {
+        if (modern && modernContent.item) {
+            modernContent.item.enter();
+            return;
+        }
         if (pinnedApps.length === 0)
             return;
         pinnedGrid.forceActiveFocus(Qt.TabFocusReason);
@@ -196,6 +219,28 @@ FocusScope {
         contextApp = null;
     }
 
+    function movePinToFront() {
+        if (!contextApp)
+            return;
+        var id = contextApp.appId;
+        var ordered = pinned.slice();
+        var index = ordered.indexOf(id);
+        if (index < 0)
+            return;
+        ordered.splice(index, 1);
+        ordered.unshift(id);
+        Core.Ipc.setSetting("launcher.fixedApps", ordered);
+        contextApp = null;
+        selectedIndex = 0;
+        page = 0;
+        Qt.callLater(function() {
+            if (menu.modern && modernContent.item)
+                modernContent.item.focusPin(id);
+            else
+                menu.enterPinned();
+        });
+    }
+
     objectName: "windowsStart"
     onAppsChanged: {
         selectedIndex = Math.max(0, Math.min(selectedIndex, apps.length - 1));
@@ -203,6 +248,7 @@ FocusScope {
     }
     onListModeChanged: contextApp = null
     Component.onCompleted: {
+        initialized = true;
         Core.Apps.aggiorna();
         field.forceActiveFocus();
         if (searchOnly || Core.Ipc.get("windows11.recommendations", true))
@@ -442,7 +488,7 @@ FocusScope {
                 return ;
 
             if (data.id === menu.recentId)
-                menu.recent = (data.voci || []).slice(0, 6);
+                menu.recent = (data.voci || []).slice(0, 20);
 
             if (menu.searchId !== "" && data.id === menu.searchId)
                 menu.files = menu.files.concat(data.voci || []).slice(0, 20);
@@ -457,7 +503,7 @@ FocusScope {
         z: -1
         anchors.fill: parent
         radius: 8
-        color: menu.searchOnly ? Style.surface : Style.startSurface
+        color: menu.searchOnly ? Style.surface : menu.modern ? Style.pannello : Style.startSurface
         border.color: Style.edge
     }
 
@@ -468,25 +514,16 @@ FocusScope {
         x: 32
         y: 32
         width: parent.width - 64
-        height: 34
-        radius: 4
-        color: Style.field
-        border.color: Style.edge
-
-        Rectangle {
-            anchors.bottom: parent.bottom
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: 2
-            color: Style.accentInk
-            radius: 1
-        }
+        height: Math.max(32, Math.ceil(field.implicitHeight) + 12)
+        radius: height / 2
+        color: Style.startSearchFill
+        border.color: Style.startSearchStroke
 
         Glyph {
-            x: 12
+            x: 16
             anchors.verticalCenter: parent.verticalCenter
-            width: 18
-            height: 18
+            width: 16
+            height: 16
             name: "search"
             color: menu.mutedInk
             alwaysDrawn: true
@@ -496,16 +533,16 @@ FocusScope {
             id: field
 
             objectName: "windowsSearchInput"
-            x: 40
-            y: 7
-            width: parent.width - 52
-            height: 24
+            x: 44
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.width - 60
+            height: Math.ceil(implicitHeight)
             font.family: Style.font
             font.pixelSize: 14 * Style.textScale
             color: Style.text
             selectByMouse: true
             clip: true
-            Accessible.name: Style.label("Cerca applicazioni e file", "Search apps and files")
+            Accessible.name: Style.label("Cerca app, impostazioni e documenti", "Search for apps, settings, and documents")
             Keys.onDownPressed: {
                 if (menu.listMode)
                     menu.move(1);
@@ -528,13 +565,14 @@ FocusScope {
                 else if (menu.listMode)
                     appList.forceActiveFocus();
                 else
-                    pinnedGrid.forceActiveFocus();
+                    menu.enterPinned();
             }
 
             Text {
                 anchors.fill: parent
                 visible: field.text === ""
-                text: Style.label("Cerca applicazioni e file", "Search apps and files")
+                objectName: "windowsStartSearchPlaceholder"
+                text: field.Accessible.name
                 font: field.font
                 color: menu.mutedInk
             }
@@ -543,24 +581,56 @@ FocusScope {
 
     }
 
+    Loader {
+        id: modernContent
+        objectName: "windowsModernStart"
+        x: 32
+        y: Math.max(96, searchBox.y + searchBox.height + 24)
+        width: parent.width - 64
+        height: Math.max(0, piede.y - y - 16)
+        active: menu.modern
+        visible: active && !menu.listMode
+        sourceComponent: ModernStart {
+            pinnedApps: menu.pinnedApps
+            catalog: menu.catalog
+            recent: menu.recent
+            onLaunchRequested: function(app) { menu.launch(app); }
+            onContextRequested: function(app) { menu.contextApp = app; }
+            onFileRequested: function(path) {
+                Core.Ipc.apriOChiedi(path);
+                menu.closeRequested();
+            }
+            onSearchRequested: function(text) { menu.begin(text); }
+            onSearchFocusRequested: field.forceActiveFocus(Qt.TabFocusReason)
+        }
+    }
+
     Flickable {
         id: pinnedArea
 
         objectName: "windowsPinnedArea"
         contentWidth: width
-        contentHeight: 546
+        // Un'altezza fissa lasciava una scrollbar anche con contenuto vuoto.
+        // Si conserva lo spazio del layout scelto e si scorre solo ciò che c'è.
+        contentHeight: Math.max(pinnedGrid.y + pinnedGrid.height,
+                               emptyPinned.visible ? emptyPinned.y + emptyPinned.height : 0,
+                               pinnedPages.visible ? pinnedPages.y + pinnedPages.height : 0,
+                               recommendedHeading.visible ? recommendedHeading.y + recommendedHeading.height : 0,
+                               recentGrid.visible ? recentGrid.y + recentGrid.height : 0,
+                               emptyRecent.visible ? emptyRecent.y + emptyRecent.height : 0) + 16
         clip: true
         x: 32
         y: 110
         width: parent.width - 64
         height: parent.height - 184
-        visible: !menu.searchOnly && (!menu.listMode || navigation.progress < 1)
+        visible: !menu.modern && !menu.searchOnly && (!menu.listMode || navigation.progress < 1)
         enabled: !menu.listMode
         opacity: 1 - navigation.progress
 
         Text {
+            objectName: "windowsPinnedHeading"
             x: 32
-            text: Style.label("Aggiunte", "Pinned")
+            text: Style.label("Preferiti", "Pinned")
             color: Style.text
             font.family: Style.font
             font.pixelSize: 14 * Style.textScale
@@ -572,7 +642,7 @@ FocusScope {
             anchors.right: parent.right
             anchors.rightMargin: 32
             height: 26
-            text: Style.label("Tutte le app  ›", "All apps  ›")
+            text: Style.label("Tutto  ›", "All  ›")
             selected: true
             onClicked: menu.showApps(true)
         }
@@ -668,6 +738,7 @@ FocusScope {
         }
 
         Text {
+            id: emptyPinned
             y: 70
             width: parent.width
             visible: menu.pinnedApps.length === 0
@@ -679,6 +750,7 @@ FocusScope {
         }
 
         Row {
+            id: pinnedPages
             anchors.right: parent.right
             y: 42 + menu.pinnedRows * 80
             visible: menu.pinnedApps.length > menu.pageSize
@@ -708,10 +780,12 @@ FocusScope {
         }
 
         Text {
+            id: recommendedHeading
+            objectName: "windowsRecommendedHeading"
             x: 32
             y: menu.recommendedY
             visible: Core.Ipc.get("windows11.recommendations", true)
-            text: Style.label("Consigliati", "Recommended")
+            text: Style.label("Elementi consigliati", "Recommended")
             color: Style.text
             font.family: Style.font
             font.pixelSize: 14 * Style.textScale
@@ -719,6 +793,7 @@ FocusScope {
         }
 
         Grid {
+            id: recentGrid
             x: 32
             y: menu.recommendedY + 38
             width: parent.width - 64
@@ -779,6 +854,7 @@ FocusScope {
         }
 
         Text {
+            id: emptyRecent
             x: 32
             y: menu.recommendedY + 42
             visible: Core.Ipc.get("windows11.recommendations", true) && menu.recent.length === 0
@@ -953,13 +1029,13 @@ FocusScope {
         anchors.bottom: parent.bottom
         width: parent.width
         height: 64
-        color: Style.startFooter
+        color: menu.modern ? Style.pannelloPiede : Style.startFooter
         radius: 8
 
         Rectangle {
             width: parent.width
             height: 8
-            color: Style.startFooter
+            color: menu.modern ? Style.pannelloPiede : Style.startFooter
         }
 
         Button {
@@ -984,7 +1060,8 @@ FocusScope {
             id: pulsanteAlimentazione
             objectName: "windowsStartPower"
             anchors.right: parent.right
-            anchors.rightMargin: 40
+            anchors.rightMargin: 52
+            height: 40
             anchors.verticalCenter: parent.verticalCenter
             icon: "power"
             tooltip: Style.label("Alimentazione", "Power")
@@ -1017,6 +1094,7 @@ FocusScope {
     MouseArea {
         anchors.fill: parent
         visible: menu.contextApp !== null || menu.piccolo !== ""
+        z: 19
         onClicked: {
             menu.contextApp = null;
             menu.piccolo = "";
@@ -1031,7 +1109,54 @@ FocusScope {
     Rectangle {
         id: menuPiccolo
         objectName: "windowsStartPowerMenu"
+        z: 20
         visible: menu.piccolo !== ""
+        readonly property bool alimentazione: menu.piccolo === "power"
+        property int scelta: -1
+        property var ritornoFocus: null
+        function seleziona(index) {
+            if (!vociPiccole.count)
+                return;
+            scelta = (index + vociPiccole.count) % vociPiccole.count;
+            var button = vociPiccole.itemAt(scelta);
+            if (button)
+                button.forceActiveFocus(Qt.TabFocusReason);
+        }
+        onVisibleChanged: {
+            if (visible) {
+                ritornoFocus = menu.piccolo === "power" ? pulsanteAlimentazione : pulsanteAccount;
+                scelta = -1;
+                forceActiveFocus(Qt.PopupFocusReason);
+            } else if (menu.visible && ritornoFocus) {
+                ritornoFocus.forceActiveFocus(Qt.PopupFocusReason);
+            }
+        }
+        Accessible.role: Accessible.PopupMenu
+        Accessible.name: alimentazione ? Style.label("Alimentazione", "Power") : Style.label("Account", "Account")
+        Keys.onPressed: function(event) {
+            if (event.key === Qt.Key_Down || event.key === Qt.Key_Tab && !(event.modifiers & Qt.ShiftModifier))
+                seleziona(scelta + 1);
+            else if (event.key === Qt.Key_Up || event.key === Qt.Key_Tab && event.modifiers & Qt.ShiftModifier)
+                seleziona(scelta < 0 ? vociPiccole.count - 1 : scelta - 1);
+            else if (event.key === Qt.Key_Home)
+                seleziona(0);
+            else if (event.key === Qt.Key_End)
+                seleziona(vociPiccole.count - 1);
+            else
+                return;
+            event.accepted = true;
+        }
+        property int misuraRevision: 0
+        readonly property real larghezzaVoci: {
+            var revision = misuraRevision;
+            var widest = 0;
+            for (var i = 0; i < vociPiccole.count; i++) {
+                var row = vociPiccole.itemAt(i);
+                if (row)
+                    widest = Math.max(widest, row.implicitWidth);
+            }
+            return widest;
+        }
         readonly property var voci: menu.piccolo === "power" ? [
             { "id": "accesso", "icon": "settings", "label": Style.label("Opzioni di accesso", "Sign-in options") },
             { "id": "sospendi", "icon": "moon", "label": Style.label("Sospendi", "Sleep") },
@@ -1042,34 +1167,40 @@ FocusScope {
             { "id": "blocca", "icon": "lock", "label": Style.label("Blocca", "Lock") },
             { "id": "esci", "icon": "logout", "label": Style.label("Disconnetti", "Sign out") }
         ]
-        width: 240
-        height: voci.length * 40 + 8
-        // Sopra il piede, allineato al suo pulsante: a destra quello
-        // dell'alimentazione, a sinistra quello dell'account. Ancorato e non
-        // calcolato con `mapToItem`, che non si ricalcola quando le cose si
-        // spostano: il clic su «Blocca» arrivava a «Disconnetti».
-        anchors.bottom: piede.top
-        anchors.bottomMargin: 6
-        anchors.right: menu.piccolo === "power" ? piede.right : undefined
-        anchors.rightMargin: 24
-        anchors.left: menu.piccolo === "power" ? undefined : piede.left
-        anchors.leftMargin: 56
+        // VM Windows 11, 100%: minimo 164, righe 32, bordo/padding 3.
+        // Le etichette e la dimensione del testo possono richiedere più spazio.
+        width: alimentazione ? Math.min(menu.width - 16, Math.max(164, Math.ceil(larghezzaVoci) + 4)) : 240
+        height: voci.length * (alimentazione ? 32 : 40) + (alimentazione ? 6 : 8)
+        // Le coordinate dipendono dalla geometria del pulsante: mapToItem
+        // da solo non si aggiornava quando il piede cambiava posizione.
+        y: piede.y + (alimentazione ? pulsanteAlimentazione.y : 0) - height - 6
+        x: piede.x + (alimentazione ? pulsanteAlimentazione.x + pulsanteAlimentazione.width / 2 - width / 2 : 56)
         radius: 8
         color: Style.field
         border.color: Style.edge
 
+        Shadow { surface: menuPiccolo }
+
         Column {
             anchors.fill: parent
-            anchors.margins: 4
+            anchors.margins: menuPiccolo.alimentazione ? 3 : 4
 
             Repeater {
+                id: vociPiccole
+                onItemAdded: menuPiccolo.misuraRevision++
+                onItemRemoved: menuPiccolo.misuraRevision++
                 model: menuPiccolo.voci
 
                 delegate: Button {
                     required property var modelData
+                    required property int index
                     objectName: "windowsStartPower-" + modelData.id
                     width: parent.width
-                    height: 40
+                    height: menuPiccolo.alimentazione ? 32 : 40
+                    aSinistra: menuPiccolo.alimentazione
+                    fontPixelSize: (menuPiccolo.alimentazione ? 14 : 12) * Style.textScale
+                    Accessible.role: Accessible.MenuItem
+                    onActiveFocusChanged: if (activeFocus) menuPiccolo.scelta = index
                     icon: modelData.icon
                     text: modelData.label
                     // Passa dallo Start e non fa niente qui dopo: chiudere il
@@ -1084,32 +1215,65 @@ FocusScope {
     }
 
     Rectangle {
+        id: contextMenu
+        objectName: "windowsStartAppContext"
         visible: menu.contextApp !== null
+        z: 20
         x: Math.max(16, menu.width - 280)
         y: 100
         width: 256
-        height: 144
+        readonly property bool pinnedApp: menu.contextApp !== null && menu.pinned.indexOf(menu.contextApp.appId) >= 0
+        height: pinnedApp ? 188 : 144
         radius: 8
         color: Style.field
         border.color: Style.edge
+        Accessible.role: Accessible.PopupMenu
+        Accessible.name: menu.contextApp ? menu.contextApp.name : ""
+        property int current: -1
+        onVisibleChanged: current = -1
+        function select(delta) {
+            var choices = contextButtons.children.filter(function(button) { return button.visible; });
+            if (!choices.length)
+                return;
+            current = (current + delta + choices.length) % choices.length;
+            choices[current].forceActiveFocus(Qt.TabFocusReason);
+        }
+        Keys.onDownPressed: select(1)
+        Keys.onUpPressed: select(current < 0 ? 0 : -1)
+        Keys.onPressed: function(event) {
+            if (event.key === Qt.Key_Home) {
+                current = -1;
+                select(1);
+            } else if (event.key === Qt.Key_End) {
+                current = -1;
+                select(0);
+            } else {
+                return;
+            }
+            event.accepted = true;
+        }
+
+        Shadow { surface: contextMenu }
 
         Column {
+            id: contextButtons
             anchors.fill: parent
             anchors.margins: 8
             spacing: 4
 
             Button {
+                objectName: "windowsStartAppNewWindow"
+                Accessible.role: Accessible.MenuItem
                 width: parent.width
                 height: 40
                 text: Style.label("Apri nuova finestra", "Open new window")
                 icon: "plus"
-                onClicked: {
-                    menu.launch(menu.contextApp);
-                    menu.contextApp = null;
-                }
+                onClicked: menu.launch(menu.contextApp)
             }
 
             Button {
+                objectName: "windowsStartAppPin"
+                Accessible.role: Accessible.MenuItem
                 width: parent.width
                 height: 40
                 text: menu.contextApp && menu.pinned.indexOf(menu.contextApp.appId) >= 0 ? Style.label("Rimuovi da Start", "Unpin from Start") : Style.label("Aggiungi a Start", "Pin to Start")
@@ -1117,10 +1281,22 @@ FocusScope {
             }
 
             Button {
+                objectName: "windowsStartAppTaskbarPin"
+                Accessible.role: Accessible.MenuItem
                 width: parent.width
                 height: 40
                 text: menu.contextApp && Core.Ipc.get("dock.pinned", []).indexOf(menu.contextApp.appId) >= 0 ? Style.label("Rimuovi dalla barra", "Unpin from taskbar") : Style.label("Aggiungi alla barra", "Pin to taskbar")
                 onClicked: menu.pin(false)
+            }
+
+            Button {
+                objectName: "windowsStartAppMoveFirst"
+                Accessible.role: Accessible.MenuItem
+                width: parent.width
+                height: 40
+                visible: contextMenu.pinnedApp
+                text: Style.label("Sposta all'inizio", "Move to front")
+                onClicked: menu.movePinToFront()
             }
 
         }

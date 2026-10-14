@@ -18,11 +18,21 @@ PaginaWindows {
     CatalogoTemi { id: temi }
 
     Item {
+        id: anteprimaTemi
+        readonly property bool affiancati: width >= 740
         width: parent.width
-        height: 212
-        AnteprimaDesktop { y: 24; width: 336; height: 188 }
+        height: Math.max(212, temiRapidi.y + temiRapidi.height)
+        AnteprimaDesktop {
+            id: anteprima
+            y: 24
+            width: Math.min(336, parent.width)
+            height: width * 188 / 336
+        }
         Text {
-            x: 382; y: 0
+            x: anteprimaTemi.affiancati ? 382 : 0
+            y: anteprimaTemi.affiancati ? 0 : anteprima.y + anteprima.height + 16
+            width: parent.width - x
+            wrapMode: Text.WordWrap
             text: pagina.tt("selezionaTema")
             color: W.Style.text
             font.family: W.Style.font
@@ -30,7 +40,9 @@ PaginaWindows {
             font.weight: Font.DemiBold
         }
         Grid {
-            x: 382; y: 31
+            id: temiRapidi
+            x: anteprimaTemi.affiancati ? 382 : 0
+            y: anteprimaTemi.affiancati ? 31 : anteprima.y + anteprima.height + 64
             columns: 3
             spacing: 4
             Repeater {
@@ -43,7 +55,9 @@ PaginaWindows {
                     Keys.onReturnPressed: if (usabile) temi.applica(modelData)
                     Keys.onSpacePressed: if (usabile) temi.applica(modelData)
                     objectName: "temaRapido-" + modelData.id
-                    width: 116; height: 94; radius: 6
+                    width: Math.min(116, (anteprimaTemi.width - temiRapidi.x - 8) / 3)
+                    height: width * 94 / 116
+                    radius: 6
                     color: "transparent"
                     border.width: modelData.id === temi.corrente ? 2 : (presa.containsMouse && usabile ? 1 : 0)
                     border.color: modelData.id === temi.corrente ? W.Style.accent : W.Style.text
@@ -92,6 +106,22 @@ PaginaWindows {
             porta: true
             disponibile: modelData.pagina !== undefined || modelData.liquid !== undefined
             onAttivata: if (pagina.finestra) pagina.finestra.apriWindows(modelData.pagina || modelData.liquid)
+        }
+    }
+
+    GruppoImpostazioni { testo: pagina.tt("opzioniLiquid") }
+    Repeater {
+        // Le pagine esistenti devono restare raggiungibili anche senza
+        // indovinare una parola nella ricerca della barra laterale.
+        model: pagina.finestra ? pagina.finestra.categoriaPer("personalizzazione").voci : []
+        delegate: SchedaImpostazione {
+            required property string modelData
+            readonly property var destinazione: pagina.finestra.paginaPer(modelData)
+            objectName: "categoriaVoce-liquid-" + modelData
+            icona: destinazione ? destinazione.icon : "settings"
+            titolo: destinazione ? (W.Style.it ? destinazione.it : destinazione.en) : ""
+            porta: true
+            onAttivata: pagina.finestra.apriSezione(modelData)
         }
     }
 }

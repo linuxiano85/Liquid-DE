@@ -38,7 +38,7 @@
 // Impostazioni, che sono quelle che si toccano di più, e che spesso stanno
 // aperte mentre si fa altro.
 //
-// Scelta di il manutentore il 18 agosto 2026: «sì, ma per gradi e con una rete».
+// Scelta del manutentore il 18 agosto 2026: «sì, ma per gradi e con una rete».
 //
 // ── Come si usa ─────────────────────────────────────────────────────────────
 //
@@ -62,6 +62,7 @@ import "custodia"
 import "manutenzione"
 import "fucina"
 import "terminale"
+import "posta"
 
 ShellRoot {
     id: app
@@ -346,6 +347,27 @@ ShellRoot {
         onSpenta: terminaleL.active = false
     }
 
+    // Posta: la finestra parla con il demone liquid-maild, che resta acceso
+    // anche quando questa è chiusa (la posta arriva comunque).
+    Loader {
+        id: postaL
+        active: false
+        sourceComponent: Component {
+            Posta {
+                dormiente: prontaPosta.dormiente
+                onRequestClose: prontaPosta.chiudi()
+            }
+        }
+    }
+
+    Core.TenutaPronta {
+        id: prontaPosta
+        nome: "posta"
+        esceDaSola: false
+        laFinestra: postaL.item
+        onSpenta: postaL.active = false
+    }
+
     // ── Aprire ───────────────────────────────────────────────────────────
 
     /// Accende una delle quattro e la porta davanti.
@@ -402,6 +424,13 @@ ShellRoot {
             fucinaL.active = true;
             prontaFucina.risveglia();
             break;
+        case "posta":
+            postaL.active = true;
+            // Un `mailto:` dal browser o da un'altra app: si apre "Scrivi".
+            if (argomento && String(argomento).toLowerCase().indexOf("mailto:") === 0)
+                postaL.item.apriMailto(argomento);
+            prontaPosta.risveglia();
+            break;
         default:
             return false;
         }
@@ -434,6 +463,7 @@ ShellRoot {
         case "anteprima":    caricatore = anteprima;    pronta = prontaAnteprima;    break;
         case "attivita":     caricatore = attivita;     pronta = prontaAttivita;     break;
         case "terminale":    caricatore = terminaleL;   pronta = prontaTerminale;    break;
+        case "posta":        caricatore = postaL;       pronta = prontaPosta;        break;
         default: return false;
         }
         // Già costruita: che sia sveglia o dormiente, è pronta. Si lascia stare.
@@ -481,7 +511,7 @@ ShellRoot {
         // si dimentica, quindi c'è una guardia in `scripts/prove.sh` che
         // conta i `Loader` e verifica che siano tutti nominati.
         var caricatori = [calcolatrice, editor, anteprima, attivita, custodiaL,
-                          manutenzioneL, terminaleL, fucinaL];
+                          manutenzioneL, terminaleL, fucinaL, postaL];
         for (var i = 0; i < caricatori.length; i++) {
             if (caricatori[i].active)
                 return;
@@ -505,8 +535,44 @@ ShellRoot {
     // lasciava l'ospite acceso senza finestre. Trovato il 30 settembre 2026
     // aggiungendo la Fucina, contando le righe accanto.
     Connections { target: prontaTerminale;    function onSpenta() { app._valutaSeRestare(); } }
+    // Posta: aggiunta il 13 ottobre 2026. Senza questa riga e senza `postaL`
+    // nell'elenco qui sopra, aprire Posta a freddo spegneva l'ospite appena
+    // arrivavano le impostazioni: la finestra non compariva mai.
+    Connections { target: prontaPosta;        function onSpenta() { app._valutaSeRestare(); } }
 
     // ── Comandi dall'esterno ─────────────────────────────────────────────
+
+    // Per le prove della Posta: stato e poche azioni, come fanno le altre
+    // app. Non apre niente che l'utente non potrebbe aprire con un clic.
+    IpcHandler {
+        target: "posta"
+        function stato(): string {
+            var f = postaL.item;
+            if (!f) return JSON.stringify({ "aperta": false });
+            return JSON.stringify({
+                "aperta": true, "account": f.accounts.length, "cartelle": f.cartelle.length,
+                "messaggi": f.messaggi.length, "aperto": f.aperto,
+                "oggetto": f.dettaglio ? f.dettaglio.subject : null,
+                "nuovoAccount": f.nuovoAccount,
+                "bozza": f.bozza ? { "to": f.bozza.to, "subject": f.bozza.subject, "text": f.bozza.text } : null,
+                "avviso": f.avviso
+            });
+        }
+        function apriIndice(i: string): string {
+            var f = postaL.item;
+            if (!f || !f.messaggi[Number(i)]) return "nessuno";
+            f.apri(f.messaggi[Number(i)].id);
+            return "ok";
+        }
+        function cartella(ruolo: string): string {
+            var f = postaL.item;
+            if (!f) return "chiusa";
+            var c = f.cartelle.filter(function (x) { return x.role === ruolo; });
+            if (c.length === 0) return "nessuna";
+            f.scegliCartella(c[0].id);
+            return "ok";
+        }
+    }
 
     IpcHandler {
         target: "app"

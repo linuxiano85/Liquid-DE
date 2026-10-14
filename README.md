@@ -27,7 +27,6 @@ progetto.
 - **Il preset Windows 11** offre barra centrata, Start classico, anteprime,
   tray, impostazioni rapide, calendario e meteo. Gli sfondi Bloom di Microsoft
   non sono nel repository: si usano se li hai già sul disco.
-  [Scelte e guida](docs/windows11.md).
 - **L'installer grafico** controlla le dipendenze, mostra l'avanzamento e alla
   fine permette di scegliere il gestore di accesso. Include Minerva Login
   basato su `greetd`.
@@ -101,8 +100,7 @@ SDR coerente. HDR e il renderer Vulkan con tutti gli effetti richiedono ancora
 validazione.
 
 Le prove del compositore e parte delle suite della shell e del demone vivono
-nel repository separato `Liquid_test`. Questo repository contiene anche prove
-e controlli CI per componenti dell'ambiente.
+nel repository separato `Liquid_test`. Questo repository contiene i sorgenti del desktop.
 
 ## Licenza
 

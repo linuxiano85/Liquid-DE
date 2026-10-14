@@ -11,7 +11,7 @@ import "../ui" as Ui
 //
 // ── Che cosa NON fa, e perché ────────────────────────────────────────────
 //
-// Non guarda tutta la cartella personale. Misurato sulla macchina di il manutentore
+// Non guarda tutta la cartella personale. Misurato sulla macchina del manutentore
 // il 26 agosto 2026: **88.982 file** fra immagini e video, di cui 64.115 in
 // `Documenti/Progetti` e 17.303 in `.local/share` — icone e risorse, non
 // ricordi. Le fotografie vere, fuori dai progetti, sono **826**.

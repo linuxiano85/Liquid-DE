@@ -328,7 +328,7 @@ class Progetto {
   String motore;
 
   /// Dove va al sicuro. Plurale, e scelto al momento dell'invio: sono parole
-  /// di il manutentore — «vorrei poter scegliere in fase di caricamento quale opzione
+  /// del manutentore — «vorrei poter scegliere in fase di caricamento quale opzione
   /// voglio».
   final List<Destinazione> destinazioni;
 

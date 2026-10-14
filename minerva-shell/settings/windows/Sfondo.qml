@@ -281,7 +281,7 @@ PaginaWindows {
         disponibile: false
     }
 
-    // Le opzioni che Windows non ha (decisione di il manutentore: in coda, in una
+    // Le opzioni che Windows non ha (decisione del manutentore: in coda, in una
     // scheda sola che si apre).
     GruppoImpostazioni { testo: "Liquid" }
     EspansoreImpostazione {

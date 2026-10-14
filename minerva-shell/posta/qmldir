@@ -1,0 +1,9 @@
+module posta
+Posta        1.0 Posta.qml
+Canale       1.0 Canale.qml
+Colonna      1.0 Colonna.qml
+Lista        1.0 Lista.qml
+Lettore      1.0 Lettore.qml
+Componi      1.0 Componi.qml
+NuovoAccount 1.0 NuovoAccount.qml
+Pulsante     1.0 Pulsante.qml

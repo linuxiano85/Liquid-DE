@@ -26,7 +26,7 @@ export MINERVA_ROOT="$MINERVA_DIR"
 # scarno di systemd — `/usr/local/bin:/usr/bin` e poco altro. `~/.local/bin`,
 # dove i programmi si installano quando non si è root, **non c'è**.
 #
-# Il costo, trovato il 3 settembre 2026 guardando la sessione vera di il manutentore:
+# Il costo, trovato il 3 settembre 2026 guardando la sessione vera del manutentore:
 # `minerva-polkit` era compilato e installato (`permessi/costruisci.sh` lo mette
 # proprio lì), l'installatore diceva verde, e il compositore non lo trovava.
 # Risultato: nessun agente dei permessi per due giorni, cioè **nessuna finestra

@@ -39,7 +39,7 @@ Page {
     // di anteprime. Serve alla sola modalità «immagine»: con gli sfondi di
     // Minerva o con la cartella che gira da sé quella griglia è invisibile,
     // e fino all'11 agosto 2026 veniva costruita e DECODIFICATA lo stesso.
-    // Nella cartella di il manutentore (311 fotografie di telefono) erano
+    // Nella cartella del manutentore (311 fotografie di telefono) erano
     // ventiquattro immagini decodificate a 420×260 che nessuno vedeva.
     //
     // La regola, che vale per tutto Qt: `visible: false` NASCONDE, NON

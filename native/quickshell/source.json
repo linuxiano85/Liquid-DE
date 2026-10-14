@@ -1,0 +1,11 @@
+{
+  "version": "0.3.2",
+  "commit": "4f508be500dea6e5732cc3d50382a0048b17e7b1",
+  "sourceUrl": "https://codeload.github.com/quickshell-mirror/quickshell/tar.gz/4f508be500dea6e5732cc3d50382a0048b17e7b1",
+  "sourceSha256": "6806c64680b8058918f3c79d9af0603e99004601bc49bd1828029335673774c6",
+  "cli11Url": "https://codeload.github.com/CLIUtils/CLI11/tar.gz/refs/tags/v2.5.0",
+  "cli11Sha256": "17e02b4cddc2fa348e5dbdbb582c59a3486fa2b2433e70a0c3bacb871334fd55",
+  "patchedFile": "src/dbus/dbusmenu/dbusmenu.cpp",
+  "patchedFileSha256": "98f5a054791772fdf76373669d6d362150d1f2b99507d502bdc2bdcf44cc7b30",
+  "patchSha256": "0802ce7010b4be4f5ee29658c56596779c48db72739aa6db79cd038c4d1c43c6"
+}

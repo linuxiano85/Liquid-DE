@@ -84,10 +84,15 @@ rsync -a --delete --delete-excluded --delay-updates \
     --include='/lib/minerva/libminervatiledheaders.so' \
     --include='/libexec/' \
     --include='/libexec/tiling/***' \
+    --include='/libexec/quickshell/***' \
     --include='/minervad/' \
     --include='/minervad/build/' \
     --include='/minervad/build/minervad' \
     --include='/minervad/build/minerva-terminale-motore' \
+    --include='/posta/' \
+    --include='/posta/daemon/' \
+    --include='/posta/daemon/build/' \
+    --include='/posta/daemon/build/cli/***' \
     --include='/compositore/' \
     --include='/compositore/build-native/' \
     --include='/compositore/build-native/minerva-wayland' \

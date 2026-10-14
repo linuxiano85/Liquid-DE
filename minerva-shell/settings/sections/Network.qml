@@ -105,7 +105,7 @@ Page {
                       ? (page.it ? "Cerco le reti…" : "Scanning…")
                       // «1 reti trovate» era la scritta che c'era: il plurale
                       // scritto a mano attaccato a un numero. Con una rete
-                      // sola — cioè in casa di il manutentore — si legge sempre.
+                      // sola — cioè in casa del manutentore — si legge sempre.
                       : (page.networks.length + (page.it
                             ? (page.networks.length === 1 ? " rete trovata"
                                                           : " reti trovate")

@@ -66,7 +66,7 @@ class Setaccio {
   ///
   /// `Progetti` è il caso di questa macchina e sta scritto qui, ma la regola
   /// che vale è quella sotto: si salta ciò che è **generato**, non ciò che è
-  /// di il manutentore.
+  /// del manutentore.
   static const Set<String> _daNonGuardare = {
     'Progetti',
     'node_modules',
@@ -83,7 +83,7 @@ class Setaccio {
     // `~/Android` sono 3,1 GB e 45.403 file, `~/flutter` 1,6 GB e 17.427:
     // dentro una SDK i doppioni sono normali quanto dentro `node_modules` —
     // le stesse librerie in più versioni della piattaforma — e non si toccano
-    // mai. Misurate sulla macchina di il manutentore il 9 settembre 2026, mentre il
+    // mai. Misurate sulla macchina del manutentore il 9 settembre 2026, mentre il
     // setaccio ci passava dentro.
     'Android',
     'flutter',

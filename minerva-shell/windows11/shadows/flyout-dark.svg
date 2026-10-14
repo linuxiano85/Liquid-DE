@@ -11,7 +11,7 @@
       <!-- L'ombra solo FUORI dalla forma: sotto il pannello non c'è niente.
            Col vetro vero di Windows (Acrylic nel compositore) il pannello
            non si dipinge pieno, e un'ombra anche dentro lo scuriva tutto
-           (Claude, 11 ottobre 2026). -->
+           (11 ottobre 2026). -->
       <feComposite in="ombra" in2="SourceAlpha" operator="out"/>
     </filter>
   </defs>

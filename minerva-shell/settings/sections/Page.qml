@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import "../../theme" as Theme
 import "../../ui" as Ui
 import "../../core" as Core
@@ -37,6 +38,32 @@ Item {
     /// la posizione, fa la chiave con cui ogni scheda ricorda se è aperta.
     property string sezione: ""
     property alias posizioneScorrimento: rotolo.contentY
+
+    // Le pagine ereditate devono accompagnare Tab come quelle dedicate:
+    // un controllo focalizzato fuori dal ritaglio non è utilizzabile.
+    function revealItem(item) {
+        if (!item)
+            return;
+        var ancestor = item;
+        while (ancestor && ancestor !== stack)
+            ancestor = ancestor.parent;
+        if (ancestor !== stack)
+            return;
+        var point = item.mapToItem(rotolo, 0, 0);
+        var next = rotolo.contentY;
+        if (point.y < 8)
+            next += point.y - 8;
+        else if (point.y + item.height > rotolo.height - 8)
+            next += point.y + item.height - rotolo.height + 8;
+        rotolo.contentY = Math.max(0, Math.min(next, Math.max(0, rotolo.contentHeight - rotolo.height)));
+    }
+    Connections {
+        target: page.Window.window
+        function onActiveFocusItemChanged() {
+            if (page.Window.window)
+                page.revealItem(page.Window.window.activeFocusItem);
+        }
+    }
 
     // Ogni scheda sa in che pagina sta e in che posizione: la prima di serie
     // è aperta, le altre chiuse. Si contano solo i figli diretti della

@@ -103,7 +103,7 @@ Item {
     // messa prima resta attaccata. Passando «a sinistra» e poi di nuovo «a
     // destra», i pulsanti restavano incollati a sinistra per sempre.
     //
-    // Segnalato da il manutentore il 18 agosto 2026: «se imposti i pulsanti a
+    // Segnalato dal manutentore il 18 agosto 2026: «se imposti i pulsanti a
     // sinistra compaiono parecchi bug e anche se li rimetti a posto non si
     // tolgono, devi riavviare la sessione». Riprodotto in tre clic e
     // fotografato: i pulsanti tornavano nell'ordine di destra ma restavano

@@ -33,32 +33,6 @@ Diagnosi e recupero prendono lo stesso lock POSIX delle compilazioni. Il comando
 
 L'IPC autenticato espone `fucina_cache_recupera` e risponde con `fucina_cache_recuperata`. Accetta soltanto il token: percorso della cache e controlli restano nel daemon. Non espone opzioni di forzatura o terminazione dei processi.
 
-## Prove eseguite
-
-| Prova | Risultato |
-| --- | --- |
-| Suite Dart completa | 296 test passati |
-| Finestra Quickshell reale con IPC isolato | 13 test passati |
-| Processo principale terminato, figlio ancora vivo | Recupero rifiutato |
-| Figlio terminato, gruppi assenti | Recupero consentito |
-| PID riutilizzato, namespace diverso, registro legacy, symlink, JSON corrotto, fase di spawn incerta | Casi verificati dalla suite |
-| IPC del daemon AOT reale, cache reale e figlio `sleep` controllato | Rifiuto prima dell'uscita, recupero dopo; sei file sentinella invariati |
-| Compilazione incrementale reale con il registro nuovo | Completata in 101 secondi; segnale rimosso regolarmente |
-
-L'immagine `7.2.9-fucina-opt-clang` dopo la build conserva lo SHA256 `12f65192e69504d9cb0900bd620189f5fa8c970c089d0cda9b378cca0e98e711`, identico al candidato verificato in KVM. Questo dimostra ripetibilità dell'artefatto, non un miglioramento delle prestazioni sull'hardware.
-
-Comandi dalla radice del repository:
-
-```sh
-(cd tests/fucina_suite && dart test --reporter expanded)
-FUCINA_GUI_ARTIFACT_DIR=/tmp/fucina2-gui python tests/test_fucina2_gui.py
-python tests/prova_fucina_recupero.py --canale /percorso/della/sessione/canale
-```
-
-L'ultimo comando legge soltanto lo stato. Per la prova controllata del recupero aggiungere `--esegui --output /tmp/prova-recupero-nuova.json`: il file di output deve essere nuovo e la cache libera. La prova crea un proprio processo `sleep` e un registro, verifica il rifiuto mentre il figlio è vivo, termina solo il proprio gruppo dopo averne controllato l'identità, recupera via IPC e confronta le sentinelle. Non invia azioni di installazione/rimozione. Se fallisce, conserva il segnale invece di cancellarlo alla cieca.
-
-Log ed evidenze sono in `Liquid_test-principale/rapporti/artefatti-2026-10/fucina2/`: `test-dart-296.log`, `test-gui-13.log`, `prova-recupero-reale-finale.json`, `runtime-recupero-guidato.json`, `verifica-recupero-guidato.json` e `gui-recupero/`.
-
 ## Limiti
 
 Il controllo copre i gruppi registrati dei comandi dell'officina. Non termina automaticamente processi e non può certificare comandi estranei che si siano deliberatamente staccati dal gruppo. Casi incerti restano bloccati. Il registro non rende le installazioni resistenti a perdita di alimentazione, SIGKILL o guasti del filesystem.

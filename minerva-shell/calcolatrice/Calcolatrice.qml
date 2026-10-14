@@ -364,7 +364,7 @@ FloatingWindow {
         // Qui c'era `calco.onClosed`, cioè LEGGERE il gestore invece di
         // chiudere: un'espressione che vale il gestore stesso, e la si butta
         // via. Non chiudeva niente, e non si vedeva perché le barre del
-        // titolo di il manutentore le disegna il compositore — questa barra qui
+        // titolo del manutentore le disegna il compositore — questa barra qui
         // dentro non compare mai.
         onCloseRequested: calco.requestClose()
     }

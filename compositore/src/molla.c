@@ -64,8 +64,7 @@ bool molla_passo_regolato(struct molla *s, double bersaglio_x, double bersaglio_
 	//
 	// È esatta per qualunque `dt`: un fotogramma perso non fa guadagnare
 	// energia alla molla, e una forza di 0,01 non la manda all'infinito. Era
-	// il difetto C01 dell'audit del 12 settembre 2026, e la correzione è di
-	// Codex — la versione con Eulero a passi spezzati lo prendeva solo fino
+	// il difetto C01 dell'audit del 12 settembre 2026, mentre la versione con Eulero a passi spezzati lo prendeva solo fino
 	// a un certo punto.
 	const double omega = MOLLA_OMEGA * rigidita / fmax(forza, 0.001);
 	const double a = smorzamento * omega;

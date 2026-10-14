@@ -191,7 +191,7 @@ fi
 echo "[MINERVA][SHELL] Guardiano avviato (pid $$)." >> "$REGISTRO"
 
 while :; do
-    qs -p "$ROOT/minerva-shell/shell.qml" >> "$REGISTRO" 2>&1 &
+    "$ROOT/scripts/minerva-quickshell" -p "$ROOT/minerva-shell/shell.qml" >> "$REGISTRO" 2>&1 &
     figlio=$!
     wait "$figlio"
     esito=$?

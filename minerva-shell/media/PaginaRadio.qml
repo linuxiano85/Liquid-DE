@@ -17,7 +17,7 @@ import "../ui" as Ui
 // loro posto l'iniziale, su un colore che viene dal nome (sempre lo stesso
 // per la stessa radio, così la si riconosce).
 //
-// Richiesta di il manutentore, 6 ottobre 2026: «Media lo userei per ascoltare
+// Richiesta del manutentore, 6 ottobre 2026: «Media lo userei per ascoltare
 // musica, scaricare video e modificare audio e video. Una radio online.»
 Item {
     id: pagina

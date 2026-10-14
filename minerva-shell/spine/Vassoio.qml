@@ -26,7 +26,7 @@ import "../menu" as Menu
 // consegna `SystemTray.items`; qui c'è solo il disegno e i tre gesti.
 //
 //   clic          `activate()` — per quasi tutti vuol dire «rimettimi la
-//                 finestra davanti», che è il gesto che serviva a il manutentore.
+//                 finestra davanti», che è il gesto che serviva al manutentore.
 //                 Quelli che dichiarano `onlyMenu` non hanno un'azione: per
 //                 loro il clic apre il menù, altrimenti non farebbe niente e
 //                 sembrerebbe rotto.

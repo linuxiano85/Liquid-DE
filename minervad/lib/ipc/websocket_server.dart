@@ -442,7 +442,7 @@ class WebSocketServer {
   ///
   /// ── Perché serve, e perché non lo può fare la shell ────────────────────
   ///
-  /// Sulla scrivania di il manutentore c'erano cinque quadrati azzurri identici
+  /// Sulla scrivania del manutentore c'erano cinque quadrati azzurri identici
   /// chiamati `steam.desktop`, `Tomba! Special Edition.desktop`, `Tomb Raider
   /// I-III Remastered Starring Lara Croft.desktop`. Un file `.desktop` non È
   /// un file: è il biglietto da visita di un programma, e mostrarne il nome
@@ -3263,7 +3263,7 @@ class WebSocketServer {
 
       // ── E come si tolgono ──────────────────────────────────────────────
       //
-      // **Nel cestino, mai cancellati.** Sono file di il manutentore, non cache: la
+      // **Nel cestino, mai cancellati.** Sono file del manutentore, non cache: la
       // differenza fra «hai liberato sette giga» e «hai perso i video di tuo
       // figlio» è una rete sotto, e il cestino di sistema è già quella rete
       // (`FileService.trash`, che scrive anche il `.trashinfo` per il

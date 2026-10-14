@@ -51,7 +51,7 @@ Singleton {
     // `set_minimized`, `set_maximized` e `set_fullscreen`, come il
     // trascinamento della barra usa `startSystemMove()`. Si perde solo ciò
     // che è nostro: «riduci» nel pannello delle ridotte, «ingrandisci» che si
-    // ferma allo spazio utile. Richiesta di il manutentore del 30 agosto 2026: «le
+    // ferma allo spazio utile. Richiesta del manutentore del 30 agosto 2026: «le
     // nostre app funzionanti su altri desktop environment di qualsiasi tipo».
     /// Vero quando c'è un compositore che ascolta i comandi di Minerva.
     ///
@@ -761,7 +761,7 @@ Singleton {
     // Chiedere soltanto l'elenco non basta: il 25 agosto 2026, fotografando
     // lo schermo subito dopo il cambio di scrivania, le barre del titolo della
     // scrivania di prima restavano disegnate fra i 150 e i 550 millisecondi,
-    // il tempo della risposta. Le parole di il manutentore: «rimangono dei residui».
+    // il tempo della risposta. Le parole del manutentore: «rimangono dei residui».
 
     /// La scrivania detta dall'ultimo evento del compositore, o 0.
     property int _scrivaniaDaEvento: 0
@@ -938,7 +938,7 @@ Singleton {
     /// Col vetro il compositore mette la STESSA trasparenza su tutto l'albero
     /// della finestra — la barra che disegna lui e il contenuto del programma
     /// — così che siano un corpo solo invece di due trasparenze attaccate con
-    /// una linea in mezzo. È la richiesta di il manutentore del 2 settembre 2026.
+    /// una linea in mezzo. È la richiesta del manutentore del 2 settembre 2026.
     ///
     /// Col blur, in più, quello che sta DIETRO la finestra è sfocato: è un
     /// nodo che il compositore mette sotto di lei, non un ritocco alla

@@ -1565,7 +1565,7 @@ PanelWindow {
     /// icone in basso, che si ingrandiscono al passaggio. Chi la guarda legge
     /// «dock», e in una dock il clic PORTA DAVANTI — sempre. Il risultato era
     /// che tornando dalla finestra alla sua icona per riprenderla in mano, la
-    /// finestra spariva. Parole di il manutentore: «se clicco sulla dock Chrome si
+    /// finestra spariva. Parole del manutentore: «se clicco sulla dock Chrome si
     /// minimizza».
     ///
     /// Ridurre resta a portata di mano in due posti dove è quello che si sta

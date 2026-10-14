@@ -12,6 +12,7 @@ PaginaWindows {
     readonly property bool occupato: stato.phase === "checking" || stato.phase === "downloading"
     property string vista: ""
     readonly property var confronto: stato.comparison || ({})
+    readonly property var fileConfronto: confronto.files || []
     function componente(nome) {
         var nomi = {compositor: tr("Compositore", "Compositor"), daemon: tr("Demone", "Daemon"), shell: "Shell", native: tr("Modulo nativo", "Native module"), fucina: "Fucina", integration: tr("Risorse e integrazione", "Resources and integration"), repository: tr("Documentazione e sviluppo", "Documentation and development"), unclassified: tr("Da classificare", "Needs classification")};
         return nomi[nome] || nome;
@@ -194,9 +195,11 @@ PaginaWindows {
         }
     }
     Text {
+        objectName: "liquidUpdateDownloadNotice"
         visible: pagina.vista === "" && !!pagina.ultimo.revision
         width: parent.width
         text: pagina.tr("Canale principale: ", "Main channel: ") + pagina.ultimo.branch + " · " + pagina.tr("Archivio sorgenti del progetto", "Project source archive")
+            + "\n" + pagina.tr("Scarica salva i sorgenti: non installa né sostituisce il desktop.", "Download saves the source code: it does not install or replace the desktop.")
             + (pagina.installato.dirty ? "\n" + pagina.tr("Questa installazione contiene modifiche locali.", "This installation contains local changes.") : "")
         textFormat: Text.PlainText
         wrapMode: Text.WordWrap
@@ -204,6 +207,58 @@ PaginaWindows {
         font.family: W.Style.font
         font.pixelSize: 12
         bottomPadding: 16
+    }
+    // Il riepilogo deve essere leggibile prima di scaricare, senza aprire
+    // una sottopagina. Un confronto parziale non diventa un elenco completo.
+    Column {
+        visible: pagina.vista === "" && !!pagina.ultimo.revision
+        width: parent.width
+        spacing: 8
+        Text {
+            objectName: "liquidUpdateChangesSummary"
+            width: parent.width
+            text: pagina.stato.comparisonError ? pagina.tr("Dettaglio delle modifiche non disponibile. Ripeti la verifica.", "Change details unavailable. Check again.")
+                : !pagina.confronto.base ? pagina.tr("Esegui una verifica per caricare i file cambiati.", "Check for updates to load changed files.")
+                : pagina.quantiFile(pagina.fileConfronto.length)
+                    + (pagina.confronto.complete ? "" : pagina.tr(" · elenco parziale restituito da GitHub", " · partial list returned by GitHub"))
+            textFormat: Text.PlainText
+            wrapMode: Text.WordWrap
+            color: W.Style.text
+            font.family: W.Style.font
+            font.pixelSize: 14
+            font.weight: Font.DemiBold
+        }
+        Text {
+            objectName: "liquidUpdateComponentsSummary"
+            visible: !!pagina.confronto.base
+            width: parent.width
+            text: Object.keys(pagina.confronto.components || {}).map(function(nome) {
+                return pagina.componente(nome) + ": " + pagina.confronto.components[nome];
+            }).join(" · ")
+            textFormat: Text.PlainText
+            wrapMode: Text.WordWrap
+            color: W.Style.muted
+            font.family: W.Style.font
+            font.pixelSize: 12
+        }
+        Repeater {
+            model: pagina.fileConfronto.slice(0, 5)
+            delegate: SchedaImpostazione {
+                required property var modelData
+                objectName: "liquidUpdateFilePreview-" + modelData.path
+                titolo: modelData.path
+                descrizione: pagina.tipoModifica(modelData.status) + " · +" + modelData.additions + " / −" + modelData.deletions
+                porta: true
+                onAttivata: pagina.apriVista("changes")
+            }
+        }
+        PulsanteWindows {
+            objectName: "liquidUpdateAllChanges"
+            visible: !!pagina.confronto.base
+            testo: pagina.tr("Vedi tutte le modifiche", "View all changes")
+            onPremuto: pagina.apriVista("changes")
+        }
+        Item { width: 1; height: 8 }
     }
     Text {
         visible: pagina.vista === ""

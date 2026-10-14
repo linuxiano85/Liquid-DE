@@ -10,7 +10,7 @@ import "../ui" as Ui
 //
 // ── Perché un elenco e non un posto solo ───────────────────────────────────
 //
-// Parole di il manutentore: «vorrei poter scegliere in fase di caricamento quale
+// Parole del manutentore: «vorrei poter scegliere in fase di caricamento quale
 // opzione voglio». Ha ragione, e non è una preferenza: un progetto di codice
 // vuole GitHub, 286 GB di immagini ROM vogliono un disco in un cassetto, e chi
 // ha entrambe le cose vuole tutte e due.

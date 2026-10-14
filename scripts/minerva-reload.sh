@@ -162,7 +162,7 @@ if [ -n "$LIVE_PID" ] && kill -0 "$LIVE_PID" 2>/dev/null; then
     # Si guardavano le ultime 40 righe del registro, che comprendono quelle
     # della ricarica precedente: dopo un `tutto`, il riavvio del demone lascia
     # «Socket error … ServerNotFoundError», e la ricarica successiva le
-    # segnalava come errori suoi (notato da Claude e da ChatGPT l'11 ottobre
+    # segnalava come errori suoi (verificato l'11 ottobre
     # 2026). Ora si parte dall'ultimo «Reloading configuration» di quickshell.
     SHELL_LOG="$STATO/shell.log"
     if [ -f "$SHELL_LOG" ]; then
@@ -254,4 +254,24 @@ s.close()' "$1" 2>/dev/null
     [ -n "$SOCKET" ] && [ -S "$SOCKET" ] \
         && demone_risponde "$SOCKET" \
         || bad "il demone non ha aperto nessun socket (cercato in $CANALE)"
+
+    # ── Il servizio della Posta ──────────────────────────────────────────
+    # Si cerca per PERCORSO e non per nome: Dart chiama il processo
+    # `dart:liquid_mai…`, e un `pkill -x liquid_maild` non lo trova mai
+    # (successo il 13 ottobre: restava acceso il binario vecchio).
+    POSTA="$MINERVA_DIR/posta/daemon/build/cli/bundle/bin/liquid_maild"
+    if [ -x "$POSTA" ]; then
+        say "Riavvio il servizio della Posta"
+        for p in $(pgrep -f "/posta/daemon/build/cli/bundle/bin/liquid_maild\$"); do
+            di_prova "$p" || kill "$p" 2>/dev/null
+        done
+        # Chiude le connessioni con i server con calma (LOGOUT): si aspetta
+        # che il lock si liberi, altrimenti il nuovo uscirebbe subito.
+        for _ in $(seq 20); do
+            pgrep -f "/posta/daemon/build/cli/bundle/bin/liquid_maild\$" >/dev/null || break
+            sleep 0.5
+        done
+        come_la_sessione "$MINERVA_DIR/scripts/minerva-posta-demone" >/dev/null 2>&1 \
+            && ok "servizio della Posta riavviato" || bad "servizio della Posta non avviato"
+    fi
 fi

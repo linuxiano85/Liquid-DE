@@ -3,6 +3,7 @@ import Quickshell
 import "../ui" as Ui
 Item {
     property string path: ""
+    property bool clipSafe: false
     implicitWidth: 32; implicitHeight: 32
     Image {
         id: image; anchors.fill: parent
@@ -10,5 +11,5 @@ Item {
         fillMode: Image.PreserveAspectFit; asynchronous: true; mipmap: true
         sourceSize.width: Math.ceil(width * 2); sourceSize.height: Math.ceil(height * 2)
     }
-    Glyph { anchors.fill: parent; visible: image.status !== Image.Ready; name: "apps"; color: Style.accentInk; alwaysDrawn: true }
+    Glyph { anchors.fill: parent; visible: image.status !== Image.Ready; name: "apps"; color: Style.accentInk; alwaysDrawn: true; rasterized: parent.clipSafe }
 }

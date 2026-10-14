@@ -463,6 +463,10 @@ class SettingsApi {
           valore.toSet().length == valore.length;
     if (percorso == 'windows11.startLayout')
       return ['pinned', 'default', 'recommended'].contains(valore);
+    if (percorso == 'windows11.startExperience')
+      return ['modern', 'classic'].contains(valore);
+    if (percorso == 'windows11.startAppsView')
+      return ['category', 'grid', 'list'].contains(valore);
     if (percorso == 'windows11.startFolders') {
       // Solo destinazioni note: nessun comando o percorso eseguibile nelle preferenze.
       const cartelle = ['settings', 'files', 'documents', 'downloads',
@@ -723,7 +727,7 @@ class SettingsApi {
   /// una versione precedente, da uno script di prova, da me durante una prova —
   /// restano lì per sempre: `_fillMissingDefaults` sa solo aggiungere.
   ///
-  /// Nel `settings.json` di il manutentore, l'8 settembre 2026, ce n'erano sette:
+  /// Nel `settings.json` del manutentore, l'8 settembre 2026, ce n'erano sette:
   /// `animations.enabled`, `bar.opacity`, `launcher.defaultView`,
   /// `launcher.maxShown`, `plugins.enabled`, `windows.blur`,
   /// `windows.compositorBars` — resti dell'era di Hyprland e degli
@@ -1616,6 +1620,10 @@ class SettingsApi {
       'recommendations': true,
       // Scelte della barra e dello Start separate dagli altri preset.
       'startLayout': 'default',
+      'startExperience': 'modern',
+      'startAppsView': 'category',
+      'startPinnedExpanded': false,
+      'startRecommendedExpanded': false,
       'startFolders': <String>[],
       'taskbarSearch': 'icon',
       'taskbarAlignment': 'center',
@@ -1791,7 +1799,7 @@ class SettingsApi {
     // esattamente l'albero che non va ricostruito.
     //
     // Per questo sono tutte spente di fabbrica tranne il gestore file,
-    // che era già acceso per scelta di il manutentore il 16 agosto e ha la sua
+    // che era già acceso per scelta del manutentore il 16 agosto e ha la sua
     // chiave storica in `files.tieniAcceso`. Si accendono una alla
     // volta, guardando il prezzo scritto accanto.
     'preload': {

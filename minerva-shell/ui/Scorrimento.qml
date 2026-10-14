@@ -106,7 +106,7 @@ Item {
         // cambiando set di icone, per esempio — e quello che si vede è una
         // scaletta di trattini a mezz'aria.
         //
-        // Segnalata da il manutentore il 4 e il 5 settembre 2026 come «tutti quei
+        // Segnalata dal manutentore il 4 e il 5 settembre 2026 come «tutti quei
         // segni + sovrapposti». Non erano segni: erano i resti del pollice.
         return Math.round(
             Math.min(dentro, Math.max(32, dentro * (finestra / tutto))));

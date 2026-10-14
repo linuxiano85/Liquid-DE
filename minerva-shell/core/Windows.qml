@@ -186,7 +186,7 @@ QtObject {
     ///
     /// Il 10 agosto 2026, appena attaccato il secondo schermo, la garanzia che
     /// tiene le finestre dentro lo spazio utile si è messa a trascinare sul
-    /// monitor attivo anche le finestre dell'altro: il terminale di il manutentore,
+    /// monitor attivo anche le finestre dell'altro: il terminale del manutentore,
     /// che stava sul portatile, si è ritrovato a x=1536 — cioè appena fuori
     /// dal suo schermo. Una garanzia che sposta le finestre dove non erano è
     /// peggio del difetto che doveva impedire.
@@ -287,7 +287,7 @@ QtObject {
     // Una finestra portata troppo in alto ci finisce sotto insieme alla propria
     // barra del titolo — e la barra del titolo è la maniglia: sparita quella,
     // la finestra non si può più né spostare, né ingrandire, né chiudere col
-    // mouse. Parole di il manutentore: «le finestre sono incollate alla barra e non
+    // mouse. Parole del manutentore: «le finestre sono incollate alla barra e non
     // hanno la barra del titolo, devo chiuderle con super+C».
     //
     // ── Per TUTTE le finestre ────────────────────────────────────────────
@@ -344,7 +344,7 @@ QtObject {
             // Questa garanzia manda «sposta». Il trascinamento col mouse lo
             // fa il compositore, con la sua strada. Se i due agiscono
             // insieme, la finestra viene tirata da due parti: segue la mano a
-            // scatti, si ferma, torna indietro. Parole di il manutentore l'11 agosto:
+            // scatti, si ferma, torna indietro. Parole del manutentore l'11 agosto:
             // «non c'è più un trascinamento libero, vuole per forza stare
             // nelle posizioni degli angoli o tutto lo schermo».
             //
@@ -402,7 +402,7 @@ QtObject {
     // cima.
     //
     // Misurato il 10 agosto 2026 sul gestore file: posizione -2,44, misura
-    // 1536x864. Le parole di il manutentore erano «le
+    // 1536x864. Le parole del manutentore erano «le
     // finestre escono fuori dallo schermo e devo passarle a schermo intero»:
     // il rimedio che aveva trovato è giusto, perché «schermo intero» è
     // l'unico comando che rifà i conti da capo.

@@ -105,7 +105,7 @@ ShellRoot {
     // Il gestore file è arrivato per primo, il 16 agosto, con questo
     // meccanismo scritto a mano qui dentro. Adesso è un componente che usano
     // tutte e sei le app — ma le sue due chiavi restano quelle di allora:
-    // `files.tieniAcceso` è già nelle Impostazioni di il manutentore e
+    // `files.tieniAcceso` è già nelle Impostazioni del manutentore e
     // `MINERVA_FILES_DORMIENTE` è già nell'avvio automatico. Rinominarle per
     // simmetria avrebbe spento in silenzio una scelta già fatta.
     //

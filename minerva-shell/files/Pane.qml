@@ -328,7 +328,7 @@ Item {
     ///
     /// Il cursore esiste sempre — la tastiera ha bisogno di un punto da cui
     /// partire — ma disegnarlo appena si apre una cartella faceva sembrare
-    /// selezionato il primo file di ogni scheda. Segnalato da il manutentore il
+    /// selezionato il primo file di ogni scheda. Segnalato dal manutentore il
     /// 12 agosto 2026: «quando apro il gestore file c'è sempre qualcosa di
     /// selezionato, e se apro un'altra scheda ogni scheda ha qualcosa di
     /// selezionato, ed è fastidioso».

@@ -145,7 +145,7 @@ installa_file() {
     # Qui c'era solo `chmod -R a+rX`, e il commento sopra diceva già la cosa
     # giusta: «scrivibile da nessuno che non sia amministratore». Il comando
     # però non la faceva. `rsync -a` e `cp -a` CONSERVANO il proprietario:
-    # copiando da una cartella di il manutentore, l'installazione restava
+    # copiando da una cartella del manutentore, l'installazione restava
     # `utente:utente` — e `a+rX` aggiunge permessi, non ne toglie.
     #
     # Il conto di quanto costava, e non è teorico: qui dentro c'è
@@ -220,7 +220,7 @@ installa_file() {
     #
     # Perché il pannello Accesso lo lancia con `pkexec`, cioè come root. Fino
     # al 23 agosto 2026 lo lanciava **dalla cartella del progetto**: root
-    # eseguiva uno script che sta in casa di il manutentore ed è scrivibile da
+    # eseguiva uno script che sta in casa del manutentore ed è scrivibile da
     # il manutentore. Non è di per sé una scalata di privilegi — la password di
     # amministratore la chiede lo stesso — ma è la forma classica del guaio:
     # qualunque processo che gira come lui (un pacchetto npm, un'estensione

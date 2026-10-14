@@ -604,7 +604,7 @@ Item {
     // file a qualcun altro: è muovere una cosa dentro la finestra in cui sta
     // già. Il trascinamento di sistema (`Drag.Automatic`) invece è una
     // TRATTATIVA fra due programmi, e fatta per questo dava tre difetti
-    // insieme — tutti e tre segnalati da il manutentore il 16 agosto 2026:
+    // insieme — tutti e tre segnalati dal manutentore il 16 agosto 2026:
     //
     //  1. **l'icona non seguiva la mano.** `startDrag()` di Qt entra in un
     //     ciclo di eventi suo e non torna finché non si lascia: fra la presa e

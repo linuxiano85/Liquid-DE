@@ -1205,7 +1205,7 @@ FloatingWindow {
         // altri». Stava dopo la colonna dei numeri, cioè sopra: i numeri
         // c'erano, erano giusti, e nessuno li ha mai visti — un rettangolo
         // opaco grande quanto tutto il foglio ci stava davanti. È il quarto
-        // difetto di questa colonna, e l'unico che spiega perché a il manutentore
+        // difetto di questa colonna, e l'unico che spiega perché al manutentore
         // sembrasse che i numeri di riga non ci fossero proprio.
         Rectangle {
             x: 0

@@ -108,7 +108,7 @@ Rectangle {
         chiedi.tipo = "";
         chiedi.predefinito = "";
         chiedi.candidati = [];
-        // La spunta nasce VUOTA a ogni apertura. Scelta di il manutentore: «da
+        // La spunta nasce VUOTA a ogni apertura. Scelta del manutentore: «da
         // mettere». Cambiare un'impostazione di sistema è una cosa che si fa
         // apposta, non una cosa che capita mentre si apre un file.
         chiedi.ricorda = false;

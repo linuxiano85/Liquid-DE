@@ -146,6 +146,9 @@ class LiquidUpdateService {
     await _readInstalled();
     try {
       if (await stateFile.exists()) {
+        if (await stateFile.length() > 4 * 1024 * 1024) {
+          throw const FormatException('state_size');
+        }
         final data = jsonDecode(await stateFile.readAsString());
         if (data is! Map || data['repository'] != repository) {
           throw const FormatException();
@@ -165,6 +168,21 @@ class LiquidUpdateService {
         }
         _checkedAt = data['checkedAt'] is String ? data['checkedAt'] : '';
         _pauseUntil = data['pauseUntil'] is String ? data['pauseUntil'] : '';
+        final cached = data['comparison'];
+        if (cached is Map &&
+            validRevision(cached['base']) &&
+            cached['base'] == _installed['revision'] &&
+            cached['revision'] == _latest['revision']) {
+          try {
+            _comparison = LiquidUpdateChanges.parse(
+              Map<String, dynamic>.from(cached['response'] as Map),
+            );
+            _comparison['base'] = cached['base'];
+            _comparison['revision'] = cached['revision'];
+          } catch (_) {
+            _comparisonError = 'state_invalid';
+          }
+        }
         if (data['history'] is List) {
           _history = (data['history'] as List)
               .whereType<Map>()
@@ -202,6 +220,12 @@ class LiquidUpdateService {
           'checkedAt': _checkedAt,
           'pauseUntil': _pauseUntil,
           'history': _history,
+          if (_comparison.isNotEmpty)
+            'comparison': {
+              'base': _comparison['base'],
+              'revision': _comparison['revision'],
+              'response': LiquidUpdateChanges.cacheResponse(_comparison),
+            },
         }),
         flush: true,
       );
@@ -216,7 +240,10 @@ class LiquidUpdateService {
       final previous = DateTime.tryParse(_checkedAt);
       final due =
           previous == null ||
-          DateTime.now().difference(previous) >= automaticInterval;
+          DateTime.now().difference(previous) >= automaticInterval ||
+          (validRevision(_installed['revision']) &&
+              validRevision(_latest['revision']) &&
+              _comparison.isEmpty);
       if (!_closed && !busy && !paused && (scheduled || due)) {
         unawaited(check());
       }

@@ -123,7 +123,7 @@ Item {
     /// Che cosa vale se dell'impostazione non si sa ancora niente.
     ///
     /// Falso per tutte tranne il gestore file, che era già acceso per scelta
-    /// di il manutentore. Sei app tenute pronte sono circa 700 MB: è una cosa che si
+    /// del manutentore. Sei app tenute pronte sono circa 700 MB: è una cosa che si
     /// sceglie una alla volta guardando il prezzo, non un valore di fabbrica.
     property bool ripiego: false
 

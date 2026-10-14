@@ -99,7 +99,7 @@ PanelWindow {
     //
     // Era un legame diretto su Core.Windows.all: un array NUOVO a ogni
     // aggiornamento delle finestre, compreso un TITOLO che cambia — e c'è
-    // chi lo cambia di continuo (Claude fa girare ◐◑ nel titolo del
+    // chi lo cambia di continuo (un processo fa girare ◐◑ nel titolo del
     // terminale, un browser il contatore dei messaggi). Il Repeater, con un
     // array nuovo, rifà da capo tutte le stanze e le loro icone: una volta al
     // secondo, su ogni schermo, anche a Stanze chiuse. Misurato il 29

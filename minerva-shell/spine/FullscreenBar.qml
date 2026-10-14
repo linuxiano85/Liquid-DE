@@ -183,7 +183,7 @@ PanelWindow {
     // che copre è il bordo alto, che in un filmato è nero e in un gioco è
     // l'ultima cosa che si guarda.
     //
-    // Chiesta da il manutentore l'11 agosto: «quella piccola barra del titolo che
+    // Chiesta dal manutentore l'11 agosto: «quella piccola barra del titolo che
     // compare la vorrei per tutta la larghezza, non per un pezzettino».
     Rectangle {
         id: pill

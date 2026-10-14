@@ -60,6 +60,10 @@ QtObject {
 
     // ── Controlli, schede, bordi ─────────────────────────────────────────
     readonly property color field: ColorMath.over(style.gettoni.controlFill, style.surface)
+    // Campo Start misurato nella VM a 100%: riempimento bianco e bordo E4.
+    // In scuro si mantiene il gettone di controllo del tema.
+    readonly property color startSearchFill: style.dark ? style.field : "#FFFFFF"
+    readonly property color startSearchStroke: style.dark ? style.edge : "#E4E4E4"
     readonly property color edge: ColorMath.over(style.gettoni.surfaceStroke, style.surface)
     readonly property color divider: style.gettoni.dividerStroke
     readonly property color card: style.gettoni.cardBackground
