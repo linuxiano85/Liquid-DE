@@ -81,6 +81,9 @@ PanelWindow {
     /// Centrato orizzontalmente sul punto invece che allineato a sinistra.
     /// Serve alle icone: il menu di una icona esce dal suo centro.
     property bool centred: false
+    // I menu della tray rispettano la barra inferiore anche quando sono lunghi.
+    property real bottomInset: 0
+    readonly property real availableHeight: Math.max(16, height - bottomInset)
     property var _inArrivo: null
     property bool _versoAlto: false
     property bool _centrato: false
@@ -274,6 +277,9 @@ PanelWindow {
     }
 
     function close() {
+        // Una risposta tardiva del puntatore non deve riaprire un menu chiuso.
+        menu._inArrivo = null;
+        senzaRisposta.stop();
         if (!menu.visible)
             return ;
 
@@ -411,6 +417,17 @@ PanelWindow {
         Keys.onUpPressed: menu.moveSelection(-1)
         Keys.onReturnPressed: menu.activateSelection()
         Keys.onEnterPressed: menu.activateSelection()
+        Keys.onSpacePressed: menu.activateSelection()
+        Keys.onPressed: function(event) {
+            if (event.key === Qt.Key_Home || event.key === Qt.Key_End) {
+                if (menu.subFocus)
+                    menu.subSelectedIndex = event.key === Qt.Key_Home ? -1 : 0;
+                else
+                    menu.selectedIndex = event.key === Qt.Key_Home ? -1 : 0;
+                menu.moveSelection(event.key === Qt.Key_Home ? 1 : -1);
+                event.accepted = true;
+            }
+        }
     }
 
     Rectangle {
@@ -441,13 +458,13 @@ PanelWindow {
 
         visible: !menu.customizing
         x: Math.max(8, Math.min(card.wantX, menu.width - width - 8))
-        y: Math.max(8, Math.min(card.wantY, menu.height - height - 8))
+        y: Math.max(8, Math.min(card.wantY, menu.availableHeight - height - 8))
         // Il minimo resta 252, perché un menu di tre voci corte non deve
         // diventare un francobollo; il massimo è 420, perché oltre non è più
         // un menu ed è meglio un nome accorciato di una lenzuola.
         width: Math.max(252, Math.min(420, Math.ceil(righello.piuLarga) + card.contorno + 2))
         implicitHeight: itemsColumn.implicitHeight + Theme.Effects.space2 * 2
-        height: Math.min(implicitHeight, menu.height - 16)
+        height: Math.min(implicitHeight, menu.availableHeight - 16)
         radius: menu.windowsAppearance ? 8 : Theme.Effects.radiusMD
         color: (menu.windowsAppearance ? Windows11.Style.surface : Theme.Colors.membrane)
         border.width: 1
@@ -637,9 +654,9 @@ PanelWindow {
 
         visible: menu.subitems.length > 0 && !menu.customizing
         x: card.x + card.width + 4 + width <= menu.width - 8 ? card.x + card.width + 4 : card.x - width - 4
-        y: Math.max(8, Math.min(card.y + 8 + menu.selectedIndex * 35, menu.height - height - 8))
+        y: Math.max(8, Math.min(card.y + 8 + menu.selectedIndex * 35, menu.availableHeight - height - 8))
         width: card.width
-        height: Math.min(submenuColumn.implicitHeight + 16, menu.height - 16)
+        height: Math.min(submenuColumn.implicitHeight + 16, menu.availableHeight - 16)
         radius: menu.windowsAppearance ? 8 : Theme.Effects.radiusMD
         color: menu.windowsAppearance ? Windows11.Style.surface : Theme.Colors.membrane
         border.color: menu.windowsAppearance ? Windows11.Style.edge : Theme.Colors.edge
@@ -716,6 +733,23 @@ PanelWindow {
             height: !visible ? 0 : isSeparator ? 9 : 34
             radius: Theme.Effects.radiusSM
             opacity: modelData.enabled === false ? 0.45 : 1
+            enabled: !isSeparator && modelData.enabled !== false
+            Accessible.role: modelData.checkable ? (modelData.radio ? Accessible.RadioButton : Accessible.CheckBox) : Accessible.MenuItem
+            Accessible.name: modelData.label || ""
+            Accessible.checkable: modelData.checkable === true
+            Accessible.checked: modelData.checked === true
+            Accessible.ignored: isSeparator
+            Accessible.onPressAction: activateEntry()
+            Accessible.onToggleAction: activateEntry()
+
+            function activateEntry() {
+                menu.subFocus = entry.secondary;
+                if (entry.secondary)
+                    menu.subSelectedIndex = entry.index;
+                else
+                    menu.selectedIndex = entry.index;
+                menu.activateSelection();
+            }
             color: (!isSeparator && (hover.containsMouse || (secondary ? menu.subSelectedIndex : menu.selectedIndex) === index)) ? (danger ? Qt.alpha(Theme.Colors.danger, 0.16) : (menu.windowsAppearance ? Windows11.Style.hover : Theme.Colors.hover)) : "transparent"
 
             // Separatore
@@ -737,8 +771,39 @@ PanelWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 17
                 height: 17
-                visible: !entry.isSeparator && iconName !== ""
-                sourceComponent: menu.windowsAppearance ? fluentMenuIcon : liquidMenuIcon
+                visible: !entry.isSeparator && (iconName !== "" || !!entry.modelData.iconUrl || entry.modelData.checkable === true)
+                sourceComponent: entry.modelData.checkable ? checkIndicator
+                                 : entry.modelData.iconUrl ? suppliedIcon
+                                 : menu.windowsAppearance ? fluentMenuIcon : liquidMenuIcon
+
+                Component {
+                    id: suppliedIcon
+                    Image {
+                        source: entry.modelData.iconUrl || ""
+                        sourceSize: Qt.size(34, 34)
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: true
+                    }
+                }
+                Component {
+                    id: checkIndicator
+                    Item {
+                        Windows11.Glyph {
+                            anchors.fill: parent
+                            name: "check"
+                            color: entry.tone
+                            visible: entry.modelData.checked === true && !entry.modelData.radio
+                        }
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: entry.modelData.radio ? 7 : 10
+                            height: entry.modelData.radio ? 7 : 2
+                            radius: entry.modelData.radio ? width / 2 : 0
+                            color: entry.tone
+                            visible: entry.modelData.radio ? entry.modelData.checked === true : entry.modelData.mixed === true
+                        }
+                    }
+                }
 
                 Component {
                     id: fluentMenuIcon
@@ -787,13 +852,24 @@ PanelWindow {
                 id: shortcutText
 
                 anchors.right: parent.right
-                anchors.rightMargin: Theme.Effects.space3
+                anchors.rightMargin: entry.modelData.children ? 32 : Theme.Effects.space3
                 anchors.verticalCenter: parent.verticalCenter
                 text: entry.modelData.shortcut || ""
                 color: (menu.windowsAppearance ? Windows11.Style.muted : Theme.Colors.textFaint)
                 font.family: Theme.Typography.fontMono
                 font.pixelSize: Theme.Typography.sizeXS
                 visible: !entry.isSeparator
+            }
+
+            Windows11.Glyph {
+                anchors.right: parent.right
+                anchors.rightMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
+                width: 14
+                height: 14
+                name: "chevronRight"
+                color: entry.tone
+                visible: !entry.isSeparator && !!entry.modelData.children
             }
 
             MouseArea {
@@ -813,14 +889,7 @@ PanelWindow {
                     }
                 }
                 cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    menu.subFocus = entry.secondary;
-                    if (entry.secondary)
-                        menu.subSelectedIndex = entry.index;
-                    else
-                        menu.selectedIndex = entry.index;
-                    menu.activateSelection();
-                }
+                onClicked: entry.activateEntry()
             }
 
             Behavior on color {

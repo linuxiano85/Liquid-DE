@@ -11,6 +11,7 @@ AppIcon 1.0 AppIcon.qml
 LiquidMark 1.0 LiquidMark.qml
 Glyph 1.0 Glyph.qml
 Tray 1.0 Tray.qml
+TrayMenuModel 1.0 TrayMenuModel.qml
 Widgets 1.0 Widgets.qml
 TaskView 1.0 TaskView.qml
 Toasts 1.0 Toasts.qml

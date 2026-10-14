@@ -307,6 +307,31 @@ ShellRoot {
                 rawMuted: Core.SystemState.muted});
         }
         function open(name:string):void {bar.toggle(name);}
+        function trayState():string {
+            var tray=root.find(bar.contentItem,"windowsTray");
+            var menu=tray.contextMenu;
+            var controls={};
+            root.collect(menu.contentItem,controls,menu.contentItem);
+            var focus=bar.contentItem.Window.window.activeFocusItem;
+            var images=[];
+            function visit(item) {
+                if (item.source !== undefined && item.status !== undefined && String(item.source) !== "")
+                    images.push({source:String(item.source),status:item.status});
+                for (var child of item.children || [])
+                    visit(child);
+            }
+            visit(menu.contentItem);
+            return JSON.stringify({open:menu.visible,items:tray.menuItems,controls:controls,
+                selected:menu.selectedIndex,subSelected:menu.subSelectedIndex,subFocus:menu.subFocus,
+                subitems:menu.subitems,root:{x:menu.testCard.x,y:menu.testCard.y,width:menu.testCard.width,height:menu.testCard.height},
+                width:menu.width,height:menu.height,modelReleased:tray.menuRoot===null,images:images,
+                focus:focus ? focus.objectName:""});
+        }
+        function trayCancelPointerOpen():void {
+            var tray=root.find(bar.contentItem,"windowsTray");
+            tray.contextMenu.openAtCursor([{label:"Prova cancellata",action:"cancelled"}]);
+            tray.contextMenu.close();
+        }
         function focusStartFolder(name:string):bool {
             var button=root.find(bar.contentItem,"windowsStartFolder-"+name);
             if (!button)

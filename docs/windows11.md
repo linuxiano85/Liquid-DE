@@ -740,3 +740,27 @@ resta disabilitata: manca ancora una vista delle risorse di rete equivalente.
 Riferimenti: [personalizzazione di Start Microsoft](https://support.microsoft.com/it-it/windows/experience/personalization/customize-the-windows-start-menu),
 [QML StandardPaths](https://doc.qt.io/qt-6/qml-qtcore-standardpaths.html);
 misure e ordine confrontati con la pagina Cartelle della VM privata.
+
+### Tray e menu delle applicazioni (14 ottobre)
+
+Il pannello delle icone nascoste si naviga con le frecce e Home/Fine; Invio
+e Spazio attivano l’icona. Menu o Maiusc+F10 aprono il menu accanto all’icona
+con focus, anche quando il puntatore è altrove. Il clic centrale mantiene
+l’attivazione secondaria dell’applicazione.
+
+I menu D-Bus vengono letti tramite QsMenuOpener anche per le voci figlie:
+sono mantenuti separatori, disponibilità, immagini fornite dall’app, spunte
+e radio. Le mnemoniche & non vengono mostrate come caratteri letterali; &&
+resta una e commerciale. Home/Fine, frecce, Invio e Spazio operano sulle voci
+disponibili. La rimozione dell’app chiude il menu; chiuderlo libera il modello.
+I menu della tray rispettano i 48 pixel della barra inferiore.
+
+La prova privata usa nove StatusNotifierItem e un vero DBusMenu, con icona
+PNG sintetica, una voce nascosta, una disabilitata, checkbox, radio e un
+sottomenu. Non usa il bus delle applicazioni personali. Il modello limita
+la lettura a sei livelli: la disposizione grafica condivisa mostra ancora
+una sola colonna di sottomenu; le cascate più profonde richiedono un seguito.
+Non è ancora implementata la scelta delle singole icone sempre visibili.
+
+API verificate sulla [documentazione QsMenuEntry](https://quickshell.org/docs/v0.3.2/types/Quickshell/QsMenuEntry/)
+e [QsMenuOpener](https://quickshell.org/docs/v0.3.2/types/Quickshell/QsMenuOpener/).

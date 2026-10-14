@@ -55,7 +55,7 @@ try:
  # Il giro integrale comprende anche il mixer, che vuole il suo PipeWire
  # privato già acceso quando parte la shell. I giri mirati non lo accendono.
  GIRI_MIRATI=('AUDIO_MIXER','VOLUME_CONTEXT','MIXER_SHORTCUT','WIFI','BLUETOOTH','QUICK_TILES',
-     'VOLUME_OVERDRIVE','VOLUME_WHEEL','QUICK_AUDIO','DESKTOP_SAFETY','PREVIEWS_ONLY','START_VIEWS_ONLY','START_BAR_OPTIONS','START_FOLDERS','APP_REFRESH')
+     'VOLUME_OVERDRIVE','VOLUME_WHEEL','QUICK_AUDIO','DESKTOP_SAFETY','PREVIEWS_ONLY','START_VIEWS_ONLY','START_BAR_OPTIONS','START_FOLDERS','TRAY_MENUS','APP_REFRESH')
  giro_integrale=not any(os.environ.get('MINERVA_TEST_'+g)=='1' for g in GIRI_MIRATI)
  if os.environ.get('MINERVA_TEST_AUDIO_MIXER') == '1' or giro_integrale:
      # Senza gestore sessione non si enumerano schede ALSA: questi flussi
@@ -374,6 +374,79 @@ try:
      time.sleep(3)
      check('nessuna scansione periodica con launcher chiusi',scans() == before)
      check('sorgenti invariati durante la prova',source_hashes() == source_snapshot)
+     completed=True
+     raise SystemExit(0)
+ if os.environ.get('MINERVA_TEST_TRAY_MENUS') == '1':
+     tray=spawn([sys.executable,str(ROOT/'tests/fixtures/windows11-tray.py'),tmp+'/tray-events.json'],dict(env,LIQUID_TEST_TRAY_COMPLEX='1'),'tray')
+     wait(lambda:ui_state()['trayCount']==9,15)
+     def tray_state(): return json.loads(call('trayState'))
+     def tray_events(): return json.loads(Path(tmp+'/tray-events.json').read_text()) if Path(tmp+'/tray-events.json').exists() else []
+     def open_tray_menu():
+         click('windowsTrayToggle')
+         click('windowsTrayItem-Demo 1','destro')
+         return wait(lambda:tray_state() if tray_state()['open'] and len(tray_state()['items'])>=8 else None)
+     click('windowsTrayToggle')
+     check('overflow mostra nove icone reali',sum(k.startswith('windowsTrayItem-') for k in ui_state()['controls'])==9)
+     key('Home',[]);key('Down',[]);key('Right',[]);key('Return',[])
+     wait(lambda:'activate-5' in tray_events())
+     check('frecce della griglia e Invio attivano la quinta posizione',True)
+     check('attivare una icona chiude il pannello',ui_state()['panel']=='')
+     menu=open_tray_menu()
+     wait(lambda:any(item.get('label')=='Modalità' and any(c.get('label')=='Normale' for c in item.get('children',[])) for item in tray_state()['items']))
+     menu=tray_state()
+     check('mnemoniche D-Bus rimosse e ampersand conservata',[i.get('label') for i in menu['items'] if not i.get('separator')][:4]==['Apri','Disabilitato','Modalità','Spunta & stato'],menu['items'])
+     check('voce invisibile assente dal menu',all(i.get('label')!='Nascosta' for i in menu['items']))
+     checked=next(i for i in menu['items'] if i.get('label')=='Spunta & stato')
+     check('spunta ricevuta dal servizio',checked['checkable'] and checked['checked'] and not checked['radio'])
+     radios=[i for i in menu['items'] if i.get('radio')]
+     check('stati radio distinti',len(radios)==2 and [i['checked'] for i in radios]==[True,False])
+     check('icona fornita dal servizio conservata',bool(next(i for i in menu['items'] if i.get('label')=='Cartella')['iconUrl']))
+     icon_url=next(i for i in menu['items'] if i.get('label')=='Cartella')['iconUrl']
+     (ART/'stati-menu.json').write_text(json.dumps(tray_state(),indent=2))
+     wait(lambda:any(image['status']==1 and image['source']==icon_url for image in tray_state()['images']))
+     check('icona D-Bus effettivamente decodificata',True)
+     screenshot('tray-menu-stati')
+     key('Home',[]);key('Down',[])
+     check('navigazione salta la voce disabilitata',tray_state()['items'][tray_state()['selected']]['label']=='Modalità')
+     key('Right',[])
+     check('Destra entra nel vero sottomenu',tray_state()['subFocus'] and tray_state()['subitems'][tray_state()['subSelected']]['label']=='Normale')
+     screenshot('tray-menu-sottomenu')
+     key('Return',[])
+     wait(lambda:'menu-4-clicked' in tray_events())
+     check('Invio attiva la voce figlia e non il genitore','menu-3-clicked' not in tray_events())
+     wait(lambda:tray_state()['modelReleased'])
+     check('chiusura libera gli opener del menu',tray_state()['modelReleased'])
+     menu=open_tray_menu()
+     key('Home',[])
+     for _ in range(2):key('Down',[])
+     check('selezione della spunta coerente',tray_state()['items'][tray_state()['selected']]['label']=='Spunta & stato')
+     key('space',[])
+     wait(lambda:'menu-7-clicked' in tray_events())
+     menu=open_tray_menu()
+     wait(lambda:not next(i for i in tray_state()['items'] if i.get('label')=='Spunta & stato')['checked'])
+     check('riapertura legge il nuovo stato dal servizio',True)
+     box=tray_state()['root']
+     check('menu interamente nello schermo',box['x']>=0 and box['y']>=0 and box['x']+box['width']<=tray_state()['width'] and box['y']+box['height']<=tray_state()['height']-48)
+     key('Escape',[])
+     click('windowsTrayToggle')
+     key('Home',[]);key('Right',[])
+     cmd('dito 2 2')
+     key('Menu',[])
+     wait(lambda:tray_state()['open'])
+     check('tasto Menu apre vicino alla icona con focus e non al puntatore',tray_state()['root']['x']>tray_state()['width']/2)
+     key('Escape',[])
+     click('windowsTrayToggle')
+     key('Home',[])
+     key('F10',['Shift_L'])
+     wait(lambda:tray_state()['open'])
+     check('Shift F10 apre il menu della icona con focus',True)
+     os.killpg(tray.pid,signal.SIGTERM);tray.wait(timeout=5)
+     wait(lambda:ui_state()['trayCount']==0)
+     wait(lambda:not tray_state()['open'] and tray_state()['modelReleased'])
+     check('rimuovere il servizio chiude e libera il menu',True)
+     call('trayCancelPointerOpen');time.sleep(.5)
+     check('risposta tardiva del puntatore non riapre un menu cancellato',not tray_state()['open'])
+     check('sorgenti invariati durante la prova',source_hashes()==source_snapshot)
      completed=True
      raise SystemExit(0)
  if os.environ.get('MINERVA_TEST_START_FOLDERS') == '1':
@@ -1574,6 +1647,9 @@ finally:
  bluetooth_log=Path(tmp)/'bluetooth-actions.json'
  if bluetooth_log.exists():
      (ART/'bluetooth-actions.json').write_bytes(bluetooth_log.read_bytes())
+ tray_events_file=Path(tmp)/'tray-events.json'
+ if tray_events_file.exists():
+     (ART/'tray-events.json').write_bytes(tray_events_file.read_bytes())
  action_log=Path(tmp)/'actions.json'
  if action_log.exists():
      (ART/'actions.json').write_bytes(action_log.read_bytes())
