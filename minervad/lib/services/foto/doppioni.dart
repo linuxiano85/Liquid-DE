@@ -36,7 +36,7 @@ class Gruppo {
 /// Perché sono due domande diverse, e solo una ha una risposta certa.
 ///
 /// **Copie esatte**: gli stessi byte. Qui non c'è niente da giudicare, solo da
-/// scegliere quale cartella tenere. Sulla macchina di Giacomo, misurato il 26
+/// scegliere quale cartella tenere. Sulla macchina di il manutentore, misurato il 26
 /// agosto 2026: **295 dei 748 file di `DCIM` sono doppioni esatti** — la stessa
 /// copia del telefono fatta due volte, in `documento rinominato/DCIM` e in
 /// `Scaricati/DCIM`. Verificato con MD5 su 120 coppie: 120 identiche.

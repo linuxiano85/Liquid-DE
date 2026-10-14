@@ -38,7 +38,7 @@
 // Impostazioni, che sono quelle che si toccano di più, e che spesso stanno
 // aperte mentre si fa altro.
 //
-// Scelta di Giacomo il 18 agosto 2026: «sì, ma per gradi e con una rete».
+// Scelta di il manutentore il 18 agosto 2026: «sì, ma per gradi e con una rete».
 //
 // ── Come si usa ─────────────────────────────────────────────────────────────
 //

@@ -8,6 +8,14 @@ python3 tests/test_greeter_state.py
 dart run tests/desktop_launcher_test.dart
 dart run tests/greetd_conversation_test.dart
 dart run tests/osservatore_cartelle_test.dart
+dart run tests/desktop_profiles_classificazione_test.dart
+python3 tests/prova_selettore_preset.py
+dart run tests/segnalibri_gtk_test.dart
+dart run tests/luoghi_remoti_test.dart
+dart run tests/radio_service_test.dart
+dart run tests/icone_nostre_app_test.dart
+dart run tests/notizie_service_test.dart
+python3 tests/prova_impostazioni_schede.py
 tests/compila-shell.sh
 (cd tests/fucina_suite && dart test)
 ```

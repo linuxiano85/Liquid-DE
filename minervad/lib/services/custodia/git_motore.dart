@@ -20,7 +20,7 @@ import 'segreti.dart';
 /// — `git add -A` e poi `commit`, senza eccezioni e senza scelte.
 ///
 /// Il prezzo di questa decisione: non si possono fare due salvataggi separati
-/// di due lavori intrecciati. È un prezzo che Giacomo non pagherà mai, e che
+/// di due lavori intrecciati. È un prezzo che il manutentore non pagherà mai, e che
 /// gli risparmia il concetto che gli avrebbe fatto chiudere il programma.
 ///
 /// ── Perché `--porcelain=v2 -z` e mai l'uscita normale ──────────────────────
@@ -254,7 +254,7 @@ class GitMotore {
 
   // ── Raggruppare per significato ────────────────────────────────────────
   //
-  // «14 file nella scrivania, 3 nel demone, 2 nei documenti» dice a Giacomo
+  // «14 file nella scrivania, 3 nel demone, 2 nei documenti» dice a il manutentore
   // cosa ha fatto stamattina. Un elenco di 110 percorsi non gli dice niente:
   // è il motivo per cui non guarda mai `git status`.
   //

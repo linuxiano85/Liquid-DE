@@ -68,6 +68,10 @@ struct wlr_scene_node {
 	struct wl_list link; // wlr_scene_tree.children
 
 	bool enabled;
+	// Ritaglio di Minerva, relativo al nodo; vale solo con
+	// minerva_viewport_active (un rettangolo vuoto nasconde il nodo).
+	struct wlr_box minerva_viewport;
+	bool minerva_viewport_active;
 	int x, y; // relative to parent
 
 	struct {
@@ -147,6 +151,7 @@ struct wlr_scene_rect {
 	struct wlr_minerva_clip clipped_region;
 	bool minerva_blur; /* il filtro dietro la superficie: l'acquerello (il blur gaussiano non c'è più) */
 	struct wlr_minerva_mercurio minerva_mercurio; /* le forme che si fondono */
+	struct wlr_minerva_acrylic minerva_acrylic; /* la ricetta Acrylic sul filtro, o spenta */
 	struct wlr_scene_buffer *minerva_mask;
 	struct wl_listener minerva_mask_destroy;
 	int width, height;
@@ -207,6 +212,7 @@ struct wlr_scene_buffer {
 	// programma che cambia 70×70 pixel faceva ridipingere tutta la sua
 	// finestra col vetro acceso. Adesso ognuno scrive la sua, e `opacity` è il
 	// prodotto: se nessuna delle due cambia, non cambia niente.
+	float minerva_desaturation;
 	float minerva_alpha;            // del compositore (il vetro); 1 di serie
 	float minerva_alpha_superficie; // del programma (alpha-modifier); 1 di serie
 	enum wlr_scale_filter_mode filter_mode;
@@ -350,6 +356,11 @@ void wlr_scene_node_lower_to_bottom(struct wlr_scene_node *node);
  */
 void wlr_scene_node_reparent(struct wlr_scene_node *node,
 	struct wlr_scene_tree *new_parent);
+/**
+ * Minerva: ritaglia il nodo e i suoi figli a `box` (coordinate relative al
+ * nodo). NULL toglie il ritaglio; un rettangolo vuoto nasconde il nodo.
+ */
+void wlr_minerva_node_set_viewport(struct wlr_scene_node *, const struct wlr_box *);
 /**
  * Get the node's layout-local coordinates.
  *
@@ -804,4 +815,8 @@ struct wlr_scene_rect *wlr_minerva_blur_create(struct wlr_scene_tree *, int, int
  * rettangolo torna normale. */
 void wlr_minerva_rect_set_mercurio(struct wlr_scene_rect *, const struct wlr_minerva_mercurio *);
 void wlr_minerva_blur_set_mask(struct wlr_scene_rect *, struct wlr_scene_buffer *);
+/* La ricetta Acrylic sul filtro (vedi `struct wlr_minerva_acrylic`). NULL o
+ * `attivo` falso: il filtro torna l'acquerello semplice. */
+void wlr_minerva_blur_set_acrylic(struct wlr_scene_rect *, const struct wlr_minerva_acrylic *);
+void wlr_minerva_buffer_set_desaturation(struct wlr_scene_buffer *, float);
 #endif

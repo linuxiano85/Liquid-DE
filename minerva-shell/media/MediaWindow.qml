@@ -34,7 +34,7 @@ FloatingWindow {
     //
     // Il 2 settembre 2026 qui c'era `color: "transparent"` più un
     // `Ui.FondoFinestra` — un rettangolo a tutta finestra col raggio — per
-    // arrotondare gli angoli, che Giacomo aveva chiesto.
+    // arrotondare gli angoli, che il manutentore aveva chiesto.
     //
     // Funzionava, e si è visto nelle fotografie. Costava però **quindici
     // megabyte per applicazione**, misurati: 55 MB senza, 69-72 con. Provato
@@ -150,7 +150,7 @@ FloatingWindow {
     // stesso per il file da tagliare. Il nostro selettore esisteva già —
     // `ui/Scegli.qml`, quello della Custodia — e non lo usava nessuno.
     //
-    // Giacomo, 4 settembre 2026: «rendi tutti i passaggi a portata di click».
+    // il manutentore, 4 settembre 2026: «rendi tutti i passaggi a portata di click».
     property string _scopoScelta: ""
 
     function scegli(scopo, titolo, daDove) {
@@ -374,7 +374,7 @@ FloatingWindow {
     /// Non è «ingrandisci la finestra»: quello lo fa già la barra del titolo.
     /// È il gesto dei lettori video, e serve tutte e due le volte: guardare un
     /// film senza la colonna di sinistra e la scaletta intorno, e guardare il
-    /// disegno dell'audio grande mentre si ascolta. Giacomo, 4 settembre 2026:
+    /// disegno dell'audio grande mentre si ascolta. il manutentore, 4 settembre 2026:
     /// «metti un pulsantino per vedere i video e gli effetti per audio a
     /// schermo intero».
     /// ── E si LEGGE dalla finestra, non si tiene da parte ─────────────────
@@ -479,6 +479,7 @@ FloatingWindow {
         var p = finestra._percorsoFile(percorso);
         if (!p)
             return;
+        finestra.radioInOnda = "";
         finestra._percorsoCorrente = p;
         finestra._titoloCorrente = titolo || finestra._basename(p);
         player.source = "file://" + p;
@@ -514,8 +515,31 @@ FloatingWindow {
             finestra.riproduciIndice(0);
     }
 
+    // ── La radio ─────────────────────────────────────────────────────────
+    //
+    // Suona nello stesso lettore della musica: una radio è un brano senza
+    // fine. `radioInOnda` è il suo `id` mentre c'è una radio nel lettore,
+    // vuoto quando c'è un file.
+
+    property string radioInOnda: ""
+
+    function riproduciRadio(stazione) {
+        if (!stazione || !/^https?:\/\//.test(String(stazione.url)))
+            return;
+        finestra._percorsoCorrente = "";
+        finestra._titoloCorrente = stazione.nome;
+        finestra.radioInOnda = stazione.id;
+        player.source = stazione.url;
+        player.play();
+    }
+
     /// Il brano è finito da sé. Qui «ripeti uno» conta.
     function _finito() {
+        // Una radio «finisce» quando lo stream cade: passare al brano
+        // successivo della scaletta farebbe partire la musica di qualcun
+        // altro al posto della radio. Ci si ferma, e la pagina Radio lo dice.
+        if (finestra.radioInOnda !== "")
+            return;
         if (finestra.ripeti === "uno" && finestra._percorsoCorrente !== "") {
             player.position = 0;
             player.play();
@@ -800,7 +824,7 @@ FloatingWindow {
             }
             Text {
                 text: Core.Strings.lang === "it"
-                      ? "musica, video, tagli" : "music, video, cuts"
+                      ? "musica, video, tagli, radio" : "music, video, cuts, radio"
                 font { family: Theme.Typography.fontDisplay
                        ; pixelSize: Theme.Typography.sizeXS }
                 color: Theme.Colors.textFaint
@@ -812,6 +836,7 @@ FloatingWindow {
             VoceLaterale { icona: "cut"; testo: "Taglia"; pagina: 1 }
             VoceLaterale { icona: "download"; testo: "Download"; pagina: 2 }
             VoceLaterale { icona: "folder"; testo: "Esplora"; pagina: 3 }
+            VoceLaterale { icona: "radio"; testo: "Radio"; pagina: 4 }
         }
     }
 
@@ -1883,6 +1908,19 @@ FloatingWindow {
                     onScaricaVideo: backend.scaricaVideo(model.url)
                 }
             }
+        }
+
+        PaginaRadio {
+            id: paginaRadio
+            anchors.fill: parent
+            visible: finestra.pagina === 4
+            inOnda: finestra.radioInOnda
+            suona: finestra.radioInOnda !== ""
+                   && player.playbackState === MediaPlayer.PlayingState
+            erroreLettore: finestra.radioInOnda !== "" && player.error !== MediaPlayer.NoError
+                           ? player.errorString : ""
+            onAscolta: function (stazione) { finestra.riproduciRadio(stazione); }
+            onFerma: player.stop()
         }
 
         Item {

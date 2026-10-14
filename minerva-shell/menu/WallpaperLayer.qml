@@ -39,7 +39,8 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
 
     anchors { top: true; bottom: true; left: true; right: true }
-    color: Theme.Colors.base
+    color: Core.Wallpaper.tintaUnita || paper.adattamento !== "riempi"
+           ? Core.Wallpaper.colore : Theme.Colors.base
 
     // Nessun clic, mai. Senza questa riga lo sfondo si mangia il tasto destro
     // sulla scrivania — vedi il punto 3 qui sopra.
@@ -47,6 +48,38 @@ PanelWindow {
 
     /// Lo sfondo che si sta guardando, come lo dice il mazzo.
     readonly property string source: Core.Wallpaper.current
+
+    // ── Adattamento e tinta unita (12 ottobre 2026) ──────────────────────
+    //
+    // Come «Scegli un adattamento per l'immagine del desktop» di Windows 11:
+    // Riempi (ritaglia per coprire, quello di sempre), Adatta (intera, con le
+    // bande), Allunga, Affianca, Centra (a grandezza vera) ed Estendi (una
+    // sola immagine distesa su tutti gli schermi). Le bande e il fondo sono
+    // la tinta scelta in «Tinta unita», come in Windows.
+    readonly property string adattamento: Core.Wallpaper.adattamento
+    readonly property bool naturale: paper.adattamento === "centra" || paper.adattamento === "affianca"
+    readonly property int riempimento: {
+        switch (paper.adattamento) {
+        case "adatta":   return Image.PreserveAspectFit;
+        case "allunga":  return Image.Stretch;
+        case "affianca": return Image.Tile;
+        case "centra":   return Image.Pad;
+        }
+        return Image.PreserveAspectCrop;
+    }
+    /// Il rettangolo che copre tutti gli schermi, per «Estendi».
+    readonly property rect tutti: {
+        var s = Quickshell.screens;
+        if (!s || s.length === 0 || !paper.screen)
+            return Qt.rect(0, 0, paper.width, paper.height);
+        var x1 = s[0].x, y1 = s[0].y, x2 = s[0].x + s[0].width, y2 = s[0].y + s[0].height;
+        for (var i = 1; i < s.length; i++) {
+            x1 = Math.min(x1, s[i].x); y1 = Math.min(y1, s[i].y);
+            x2 = Math.max(x2, s[i].x + s[i].width); y2 = Math.max(y2, s[i].y + s[i].height);
+        }
+        return Qt.rect(x1 - paper.screen.x, y1 - paper.screen.y, x2 - x1, y2 - y1);
+    }
+    readonly property bool estendi: paper.adattamento === "estendi"
 
     // ── Una copia già rimpicciolita: PROVATA E SCARTATA ──────────────────
     //
@@ -142,31 +175,37 @@ PanelWindow {
 
     Image {
         id: back
-        anchors.fill: parent
+        x: paper.estendi ? paper.tutti.x : 0
+        y: paper.estendi ? paper.tutti.y : 0
+        width: paper.estendi ? paper.tutti.width : paper.width
+        height: paper.estendi ? paper.tutti.height : paper.height
         source: paper.backSource !== ""
-                ? "file://" + paper.backSource : ""
-        fillMode: Image.PreserveAspectCrop
+                ? Core.Wallpaper.urlFile(paper.backSource) : ""
+        fillMode: paper.estendi ? Image.PreserveAspectCrop : paper.riempimento
         asynchronous: true
         cache: false
         smooth: true
         mipmap: true
-        sourceSize.width: paper.decodeW
+        sourceSize.width: paper.naturale ? -1 : (paper.estendi ? Math.round(paper.tutti.width * paper.densita) : paper.decodeW)
         visible: back.status === Image.Ready
         onStatusChanged: if (back.status === Image.Ready) paper.adeguaDecodifica(back)
     }
 
     Image {
         id: front
-        anchors.fill: parent
+        x: paper.estendi ? paper.tutti.x : 0
+        y: paper.estendi ? paper.tutti.y : 0
+        width: paper.estendi ? paper.tutti.width : paper.width
+        height: paper.estendi ? paper.tutti.height : paper.height
         source: paper.frontSource !== ""
-                ? "file://" + paper.frontSource : ""
-        fillMode: Image.PreserveAspectCrop
+                ? Core.Wallpaper.urlFile(paper.frontSource) : ""
+        fillMode: paper.estendi ? Image.PreserveAspectCrop : paper.riempimento
         asynchronous: true
         cache: false
         smooth: true
         mipmap: true
         opacity: 0
-        sourceSize.width: paper.decodeW
+        sourceSize.width: paper.naturale ? -1 : (paper.estendi ? Math.round(paper.tutti.width * paper.densita) : paper.decodeW)
         visible: front.status === Image.Ready
 
         // Si scopre solo quando l'immagine è davvero pronta: far partire la

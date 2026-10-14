@@ -4,6 +4,7 @@ import "../theme" as Theme
 import "../core" as Core
 import "../ui" as Ui
 import "../menu"
+import Minerva.WindowIdentity 1.0 as Native
 
 // FileManager — Il gestore file di Minerva.
 //
@@ -19,6 +20,8 @@ import "../menu"
 // significa guardare entrambi e premere un tasto.
 FloatingWindow {
     id: manager
+    property string activationToken: ""
+    Native.WindowIdentity {item:manager.contentItem;activationToken:manager.activationToken}
 
     // Tornando alla finestra si rileggono gli appunti di sistema: è il
     // momento in cui «Incolla» deve sapere cosa ha copiato un altro programma.
@@ -33,7 +36,17 @@ FloatingWindow {
 
     /// Il vuoto fra le isole di Liquid DE (la colonna, i riquadri, le
     /// capsule dei comandi) e fra loro e il bordo della finestra.
-    readonly property int isola: Theme.Effects.space2
+    readonly property bool windows: FileStyle.windows
+    readonly property int isola: windows ? 0 : Theme.Effects.space2
+
+    /// Il riquadro a destra, come in Esplora file: «niente», «dettagli» o
+    /// «anteprima» (`PannelloLaterale.qml`). Una preferenza per preset.
+    readonly property string pannelloLaterale: Core.Ipc.get("files.pannelloLaterale", "niente")
+    /// Lo stesso tasto lo accende e lo spegne; l'altro passa all'altro modo.
+    function commutaPannello(modo) {
+        Core.Ipc.setSetting("files.pannelloLaterale",
+                            manager.pannelloLaterale === modo ? "niente" : modo);
+    }
 
     // Non ci si mostra col tema di fabbrica.
     //
@@ -78,7 +91,7 @@ FloatingWindow {
     // a mostrarlo: un programma acceso che non si vede da nessuna parte è il
     // difetto, non la soluzione.
     //
-    // Scelta di Giacomo il 16 agosto 2026, davanti ai due conti. Dal 18 agosto
+    // Scelta di il manutentore il 16 agosto 2026, davanti ai due conti. Dal 18 agosto
     // il meccanismo è di tutte le app e vive in `core/TenutaPronta.qml`: qui
     // resta solo l'interruttore della luce.
     property bool dormiente: false
@@ -103,8 +116,9 @@ FloatingWindow {
     /// arriva LEGATA da fuori, e scriverci sopra spezzerebbe il legame — la
     /// finestra si nasconderebbe una volta e poi mai più.
     function addormenta() {
+        manager.apertureRemote = ({});
         while (manager.tabs.count > 1)
-            manager.tabs.remove(manager.tabs.count - 1);
+            manager.closeTab(manager.tabs.count - 1);
         manager.currentIndex = 0;
         if (manager.current)
             manager.current.navigate(Files.home);
@@ -122,7 +136,7 @@ FloatingWindow {
     //
     // Il 2 settembre 2026 qui c'era `color: "transparent"` più un
     // `Ui.FondoFinestra` — un rettangolo a tutta finestra col raggio — per
-    // arrotondare gli angoli, che Giacomo aveva chiesto.
+    // arrotondare gli angoli, che il manutentore aveva chiesto.
     //
     // Funzionava, e si è visto nelle fotografie. Costava però **quindici
     // megabyte per applicazione**, misurati: 55 MB senza, 69-72 con. Provato
@@ -136,7 +150,7 @@ FloatingWindow {
     // COMPOSITORE, dove costano una volta sola e valgono anche per i
     // programmi degli altri — che è poi dove deve stare anche il «corpo
     // unico» fra barra e finestra.
-    color: Theme.Colors.window
+    color: FileStyle.window
 
     signal requestClose()
 
@@ -208,16 +222,37 @@ FloatingWindow {
     // elenchi identici della stessa cartella non aiutano nessuno, e obbligano
     // a chiedersi ogni volta su quale dei due si sta agendo.
     //
-    // Le schede si affiancano invece di sovrapporsi. È la stessa idea della
-    // doppia visuale portata al numero che serve: vederle tutte è il motivo
-    // per cui esistono, e una scheda nascosta dietro un'altra non serve a
-    // trascinarci dentro un file.
+    // La barra conserva tutte le cartelle aperte. Il preset sceglie se
+    // sovrapporle o affiancarle; il trascinamento sulla barra cambia scheda.
 
     property ListModel tabs: ListModel {}
 
-    /// Quante se ne possono aprire. Oltre le quattro ogni riquadro è più
-    /// stretto dei nomi dei file che deve mostrare.
-    readonly property int maxTabs: 4
+    // Le cartelle aperte sono indipendenti dai riquadri visibili: la quinta
+    // scheda non deve comprimere le prime quattro. Il limite contiene la cache.
+    readonly property int maxTabs: 12
+    readonly property int maxVisiblePanes: 4
+    readonly property real minimumPaneWidth: 320
+    // Nel tiling la finestra può dimezzarsi: si cambia gruppo, senza rendere
+    // illeggibili quattro elenchi o perdere le cartelle già aperte.
+    readonly property int splitCapacity: Math.max(1, Math.min(maxVisiblePanes,
+        Math.floor((panes.width + manager.isola) / (minimumPaneWidth + manager.isola))))
+    property int nextTabId: 0
+    readonly property string disposizione: Core.Ipc.get("files.disposizione", "auto")
+    readonly property bool tabbed: disposizione === "schede"
+                                  || (disposizione === "auto" && Core.DesktopStyle.attuale === "windows")
+    readonly property int firstVisiblePane: tabbed ? currentIndex
+                                                   : Math.floor(currentIndex / splitCapacity) * splitCapacity
+    readonly property int visiblePaneCount: tabbed ? 1
+        : Math.min(splitCapacity, tabs.count - firstVisiblePane)
+
+    function tabIdentity() {
+        nextTabId += 1;
+        return manager.finestraId + "t" + nextTabId;
+    }
+
+    function toggleLayout() {
+        Core.Ipc.setSetting("files.disposizione", tabbed ? "affiancata" : "schede");
+    }
 
     // ── Di quale finestra è un riquadro ──────────────────────────────────
     //
@@ -326,7 +361,7 @@ FloatingWindow {
         var it = Core.Strings.lang === "it";
         if (!manager.other)
             return "";
-        if (manager.panes.length === 2)
+        if (manager.panes.length === 2 && !manager.tabbed)
             return manager.currentIndex === 0
                    ? (it ? "nella scheda di destra" : "to the right tab")
                    : (it ? "nella scheda di sinistra" : "to the left tab");
@@ -345,8 +380,10 @@ FloatingWindow {
     }
 
     function focusIndex(i) {
-        if (i >= 0 && i < manager.panes.length)
+        if (i >= 0 && i < manager.panes.length) {
             manager.focusPane(manager.panes[i]);
+            manager.panes[i].focusContents();
+        }
     }
 
     /// Apre una scheda nuova. Parte dalla cartella che si sta guardando: si
@@ -360,7 +397,8 @@ FloatingWindow {
         var start = path
                     || (manager.current ? manager.current.path : Files.home)
                     || Files.home;
-        manager.tabs.append({ "startPath": start, "seleziona": String(seleziona || "") });
+        manager.tabs.append({ "startPath": start, "seleziona": String(seleziona || ""),
+                              "identity": manager.tabIdentity() });
         // Il fuoco va sulla scheda appena aperta: è quella che si è chiesta.
         focusLater.index = manager.tabs.count - 1;
         focusLater.restart();
@@ -369,15 +407,46 @@ FloatingWindow {
     function closeTab(i) {
         if (manager.tabs.count <= 1 || i < 0 || i >= manager.tabs.count)
             return;
+        var chiusa = manager.tabs.get(i).identity;
+        var pending = Object.assign({}, manager.apertureRemote);
+        for (var richiesta in pending) {
+            if (pending[richiesta].pane === chiusa)
+                delete pending[richiesta];
+        }
+        manager.apertureRemote = pending;
+        // Chiudere una scheda precedente conserva quella attiva e il suo percorso.
+        if (i < manager.currentIndex)
+            manager.currentIndex -= 1;
+        else if (manager.currentIndex >= manager.tabs.count - 1)
+            manager.currentIndex = manager.tabs.count - 2;
+        // Le binding della barra leggono current anche durante la distruzione:
+        // togliere prima il riferimento evita chiamate su un QObject già morto.
+        manager.panes = manager.panes.filter(function(pane, index) {
+            return index !== i;
+        });
         manager.tabs.remove(i);
-        if (manager.currentIndex >= manager.tabs.count)
-            manager.currentIndex = manager.tabs.count - 1;
+        manager.rebuildPanes();
         focusLater.index = manager.currentIndex;
         focusLater.restart();
     }
 
     function closeCurrentTab() {
         manager.closeTab(manager.currentIndex);
+    }
+
+    function moveTab(from, to) {
+        if (from === to || from < 0 || to < 0
+                || from >= tabs.count || to >= tabs.count)
+            return;
+        var activeId = tabs.get(currentIndex).identity;
+        tabs.move(from, to, 1);
+        for (var i = 0; i < tabs.count; i++) {
+            if (tabs.get(i).identity === activeId)
+                currentIndex = i;
+        }
+        rebuildPanes();
+        focusLater.index = currentIndex;
+        focusLater.restart();
     }
 
     // Il riquadro nuovo non esiste ancora nell'istante in cui lo si chiede:
@@ -420,7 +489,8 @@ FloatingWindow {
         manager.tabs.append({
             "startPath": manager.initialPath !== "" ? manager.initialPath
                                                     : Files.home,
-            "seleziona": manager.initialSeleziona
+            "seleziona": manager.initialSeleziona,
+            "identity": manager.tabIdentity()
         });
         // Vedi `watchers` in Files.qml: i dischi si ricontrollano solo
         // mentre c'è una finestra che li guarda.
@@ -897,7 +967,7 @@ FloatingWindow {
     /// e una risposta che si legge invece di un tasto che non fa niente.
     // ── La modalità amministratore ───────────────────────────────────────
     //
-    // Giacomo, 23 agosto 2026: «nel file manager, se entro nelle cartelle di
+    // il manutentore, 23 agosto 2026: «nel file manager, se entro nelle cartelle di
     // root, non posso usare una modalità amministratore come fa Linux Mint,
     // per poter eliminare qualsiasi file di root come se fossi un utente
     // root».
@@ -1016,7 +1086,7 @@ FloatingWindow {
 
     /// ── La password si chiede all'INGRESSO ───────────────────────────────
     ///
-    /// Giacomo, 2 settembre 2026: «non chiede una password per entrare in
+    /// il manutentore, 2 settembre 2026: «non chiede una password per entrare in
     /// modalità amministratore».
     ///
     /// Era vero. Qui si metteva `amministratore = true` e basta: la password
@@ -1307,8 +1377,8 @@ FloatingWindow {
     }
 
     /// «Nome 01.jpg», «Nome 02.png»… nell'ordine in cui si vedono.
-    function rinominaInSerie(base) {
-        var ops = manager.operands();
+    function rinominaInSerie(base, targets) {
+        var ops = targets || manager.operands();
         if (ops.length < 2 || !manager.current)
             return;
         var ordine = {};
@@ -1342,7 +1412,7 @@ FloatingWindow {
         var n = manager.current ? manager.current.operands().length : 0;
         // ── Dove non si può scrivere, non si offre di scrivere ───────────
         //
-        // Giacomo, 18 agosto 2026: «se clicco su sistema posso cancellare
+        // il manutentore, 18 agosto 2026: «se clicco su sistema posso cancellare
         // qualsiasi file di sistema… non c'è nessuna protezione». Cancellare
         // non si poteva davvero, ma «Nuova cartella» e «Nuovo documento»
         // stavano lì a colori pieni sopra `/usr`, e il rifiuto arrivava solo
@@ -1352,7 +1422,7 @@ FloatingWindow {
         // ── E la modalità amministratore riapre quello che i permessi
         //    avevano chiuso ─────────────────────────────────────────────
         //
-        // Giacomo, 2 settembre 2026: «non vedo opzioni come sposta nel cestino
+        // il manutentore, 2 settembre 2026: «non vedo opzioni come sposta nel cestino
         // o altre cose utili» — parlando della modalità amministratore.
         //
         // La causa non era una voce dimenticata: erano TUTTE le voci di
@@ -1381,7 +1451,7 @@ FloatingWindow {
 
         // ── Dentro il cestino la barra dice un'altra cosa ────────────────
         //
-        // Giacomo, 23 agosto 2026: «entrando nel cestino, un tasto nella barra
+        // il manutentore, 23 agosto 2026: «entrando nel cestino, un tasto nella barra
         // degli strumenti che compaia quando si è nel cestino per svuotarlo».
         //
         // «Svuota il cestino» c'era solo nel tasto destro, ed è l'unico posto
@@ -1422,7 +1492,7 @@ FloatingWindow {
         // Peggio: comparivano appena il cursore stava su una riga, senza che
         // nessuno avesse selezionato niente — quindi c'erano SEMPRE, e la
         // barra sembrava una fila fissa di doppioni. È la stessa cosa che
-        // Giacomo aveva già segnalato per «sposta nel cestino»: «propone cose
+        // il manutentore aveva già segnalato per «sposta nel cestino»: «propone cose
         // duplicate, posso farlo col tasto destro».
         //
         // «Copia di là» e «Sposta di là» — gli unici comandi che da nessun'altra
@@ -1495,7 +1565,7 @@ FloatingWindow {
         // Il titolo, e nient'altro.
         //
         // Qui c'era appeso un contatore che saliva di uno al secondo — una
-        // sonda di sviluppo rimasta accesa. Giacomo l'ha vista subito: «al
+        // sonda di sviluppo rimasta accesa. il manutentore l'ha vista subito: «al
         // centro della barra del titolo credo siano secondi di apertura del
         // file manager, non richiesto».
         //
@@ -1509,15 +1579,28 @@ FloatingWindow {
         // animato». Era stata scritta per un colpevole mai identificato, e il
         // colpevole eravamo noi.
         label: manager.title
+        foreground: FileStyle.text
+        mutedForeground: FileStyle.textMuted
+        faintForeground: FileStyle.textFaint
+        fontFamily: FileStyle.font
         onCloseRequested: manager.requestClose()
     }
 
     Item {
         id: toolbar
-        anchors.top: titolo.bottom
+        objectName: "filesToolbar"
+        // Gli ancoraggi reciproci creavano un ciclo durante il cambio preset,
+        // anche se le due condizioni erano complementari. La quota è esplicita.
+        y: titolo.y + titolo.height + (manager.windows ? tabStrip.height : 0)
         anchors.left: parent.left
         anchors.right: parent.right
-        height: 50
+        height: manager.windows ? 48 : 50
+
+        WindowsCommands {
+            anchors.fill: parent
+            controller: manager
+            visible: manager.windows
+        }
 
         // ── Due capsule, non una fascia ─────────────────────────────────
         //
@@ -1527,13 +1610,14 @@ FloatingWindow {
         // pulsanti scivola una goccia sola (`ui/Goccia.qml`).
         Rectangle {
             id: capsulaComandi
+            visible: !manager.windows
             anchors.left: parent.left
             anchors.leftMargin: manager.isola
             anchors.verticalCenter: parent.verticalCenter
             height: 38
             radius: height / 2
             width: comandiRow.implicitWidth + 2 * Theme.Effects.space1
-            color: Theme.Colors.raised
+            color: FileStyle.raised
             Behavior on width {
                 enabled: Theme.Motion.liquido
                 SpringAnimation { spring: Theme.Motion.molla; damping: Theme.Motion.smorzamento }
@@ -1556,7 +1640,7 @@ FloatingWindow {
         // si misurano le etichette vere e si confronta con lo spazio che c'è.
         FontMetrics {
             id: misuraEtichette
-            font.family: Theme.Typography.fontDisplay
+            font.family: FileStyle.font
             font.weight: Theme.Typography.weightRegular
             font.pixelSize: Theme.Typography.sizeSM
         }
@@ -1595,6 +1679,7 @@ FloatingWindow {
 
         Row {
             id: comandiRow
+            visible: !manager.windows
             // Dentro la capsula, ma figlio della barra: la capsula si allarga
             // con la molla, i comandi stanno fermi dove devono stare.
             anchors.left: capsulaComandi.left
@@ -1606,7 +1691,7 @@ FloatingWindow {
                 // ── LA BARRA CAMBIA CON QUELLO CHE HAI IN MANO ───────────
                 //
                 // Prima erano dieci pulsanti sempre uguali, e la metà stava lì
-                // spenta finché non si selezionava qualcosa. Giacomo: «quella
+                // spenta finché non si selezionava qualcosa. il manutentore: «quella
                 // barra degli strumenti propone cose duplicate, come ad
                 // esempio sposta nel cestino che posso farlo con il tasto
                 // destro… in generale è da rendere più intelligente».
@@ -1656,8 +1741,8 @@ FloatingWindow {
                     // tutto il gestore file che non si può annullare, e la
                     // barra non deve farla sembrare una delle altre.
                     readonly property color tone: tool.modelData.danger === true
-                                                  ? Theme.Colors.danger
-                                                  : Theme.Colors.accent
+                                                  ? FileStyle.danger
+                                                  : FileStyle.accent
 
                     width: tool.isSep ? 13
                                       : toolRow.implicitWidth + Theme.Effects.space4
@@ -1676,7 +1761,7 @@ FloatingWindow {
                         visible: tool.isSep
                         width: 1
                         height: 18
-                        color: Theme.Colors.edge
+                        color: FileStyle.edge
                     }
 
                     Row {
@@ -1691,7 +1776,7 @@ FloatingWindow {
                             name: tool.modelData.icon || ""
                             color: (toolMouse.containsMouse && tool.usable)
                                    || tool.modelData.danger === true
-                                   ? tool.tone : Theme.Colors.textFaint
+                                   ? tool.tone : FileStyle.textFaint
                         }
 
                         Text {
@@ -1700,8 +1785,8 @@ FloatingWindow {
                             text: Core.Strings.lang === "it" ? (tool.modelData.it || "")
                                                              : (tool.modelData.en || "")
                             color: tool.modelData.danger === true
-                                   ? Theme.Colors.danger : Theme.Colors.textMuted
-                            font.family: Theme.Typography.fontDisplay
+                                   ? FileStyle.danger : FileStyle.textMuted
+                            font.family: FileStyle.font
                             font.weight: Theme.Typography.weightRegular
                             font.pixelSize: Theme.Typography.sizeSM
                         }
@@ -1740,7 +1825,7 @@ FloatingWindow {
             anchors.margins: -Theme.Effects.space1
             visible: incrocioRow.visible
             radius: height / 2
-            color: Theme.Colors.raised
+            color: FileStyle.raised
         }
 
         Row {
@@ -1753,7 +1838,7 @@ FloatingWindow {
             // Con una scheda sola non c'è nessun «altro riquadro» dove
             // mandare le cose. Il pulsante spariva sotto le dita restando
             // spento: adesso non c'è proprio, e la barra si legge meglio.
-            visible: manager.tabs.count > 1
+            visible: !manager.windows && manager.tabs.count > 1
 
             Repeater {
                 // Le etichette dicono DOVE finisce la roba, non «di là».
@@ -1784,7 +1869,7 @@ FloatingWindow {
                     height: 30
                     radius: height / 2
                     color: crossMouse.containsMouse && usable
-                           ? Qt.alpha(Theme.Colors.accent, 0.14) : "transparent"
+                           ? Qt.alpha(FileStyle.accent, 0.14) : "transparent"
                     Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
                     opacity: usable ? 1 : 0.35
 
@@ -1808,8 +1893,8 @@ FloatingWindow {
                                  : (manager.asksWhere ? "…"
                                     : (cross.toRight ? "  →" : "  ←")))
                         color: crossMouse.containsMouse && cross.usable
-                               ? Theme.Colors.accent : Theme.Colors.textMuted
-                        font.family: Theme.Typography.fontDisplay
+                               ? FileStyle.accent : FileStyle.textMuted
+                        font.family: FileStyle.font
                         font.weight: Theme.Typography.weightRegular
                         font.pixelSize: Theme.Typography.sizeSM
                     }
@@ -1854,10 +1939,14 @@ FloatingWindow {
     /// richiesta di destinazione aperta apriva la conferma del cestino SOPRA
     /// di essa, e a quel punto non si capisce più a che cosa si sta
     /// rispondendo.
-    readonly property bool busy: manager.typing
-                                 || (destination !== null && destination.visible)
-                                 || (trashConfirm !== null && trashConfirm.visible)
-                                 || (fileProps !== null && fileProps.visible)
+    // Scrivere nella ricerca protegge le scorciatoie del testo, ma non deve
+    // disabilitare i pulsanti del mouse. Solo una domanda aperta impedisce
+    // di iniziare un'altra operazione dalla barra.
+    readonly property bool dialogOpen: (prompt !== null && prompt.visible)
+                                       || (destination !== null && destination.visible)
+                                       || (trashConfirm !== null && trashConfirm.visible)
+                                       || (fileProps !== null && fileProps.visible)
+    readonly property bool busy: manager.typing || manager.dialogOpen
 
     Shortcut { sequence: "Ctrl+C"; enabled: !manager.busy; onActivated: manager.doCopy() }
     Shortcut { sequence: "Ctrl+Shift+C"; enabled: !manager.busy; onActivated: manager.doCopyPath() }
@@ -1866,7 +1955,7 @@ FloatingWindow {
     Shortcut { sequence: "Shift+Delete"; enabled: !manager.busy; onActivated: manager.doDeleteForever() }
     Shortcut { sequence: "Ctrl+X"; enabled: !manager.busy; onActivated: manager.doCut() }
     Shortcut { sequence: "Ctrl+V"; enabled: !manager.busy; onActivated: manager.doPaste() }
-    // ── Come su Windows (Giacomo, 4 ottobre 2026) ────────────────────────
+    // ── Come su Windows (il manutentore, 4 ottobre 2026) ────────────────────────
     //
     // Erano nello stile dei gestori a due riquadri: F5 copiava nell'altro
     // riquadro, Ctrl+N faceva una cartella. Chi arriva da Windows premeva F5
@@ -1890,7 +1979,25 @@ FloatingWindow {
     Shortcut { sequence: "Ctrl+T"; enabled: !manager.busy; onActivated: manager.addTab() }
     Shortcut { sequence: "Ctrl+N"; enabled: !manager.busy; onActivated: manager.apriNuovaFinestra() }
     Shortcut { sequence: "Ctrl+W"; enabled: !manager.busy; onActivated: manager.closeCurrentTab() }
+    Shortcut {
+        sequence: "Ctrl+Tab"
+        enabled: !manager.busy && manager.tabs.count > 1
+        onActivated: manager.focusIndex((manager.currentIndex + 1) % manager.tabs.count)
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+Tab"
+        enabled: !manager.busy && manager.tabs.count > 1
+        onActivated: manager.focusIndex((manager.currentIndex + manager.tabs.count - 1) % manager.tabs.count)
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+S"
+        enabled: !manager.busy
+        onActivated: manager.toggleLayout()
+    }
     Shortcut { sequence: "Alt+Return"; enabled: !manager.busy; onActivated: manager.doProperties() }
+    // I due riquadri di Esplora file, con gli stessi tasti.
+    Shortcut { sequence: "Alt+P"; enabled: !manager.typing; onActivated: manager.commutaPannello("anteprima") }
+    Shortcut { sequence: "Alt+Shift+P"; enabled: !manager.typing; onActivated: manager.commutaPannello("dettagli") }
     // Avanti, indietro e su come in ogni gestore file e nel browser. Mancavano:
     // la cronologia c'era, ma solo coi pulsanti (6 ottobre 2026).
     Shortcut { sequence: "Alt+Left";  enabled: !manager.typing; onActivated: if (manager.current) manager.current.goBack() }
@@ -1900,7 +2007,7 @@ FloatingWindow {
     Shortcut { sequence: "Ctrl+H";    enabled: !manager.typing; onActivated: if (manager.current) manager.current.commutaNascosti() }
     Shortcut {
         sequence: "Tab"
-        enabled: !manager.busy && manager.panes.length > 1
+        enabled: !manager.tabbed && !manager.busy && manager.panes.length > 1
         onActivated: manager.focusIndex((manager.currentIndex + 1) % manager.panes.length)
     }
 
@@ -1926,18 +2033,19 @@ FloatingWindow {
     // invece di tante voci che si accendono ognuna per conto suo.
     Rectangle {
         id: places
+        objectName: "filesPlaces"
         anchors.top: toolbar.bottom
         anchors.left: parent.left
         anchors.bottom: transfers.top
         anchors.leftMargin: manager.isola
         anchors.bottomMargin: manager.isola
-        width: 194
-        radius: Theme.Effects.radiusLG
-        color: Theme.Colors.lettura
+        width: manager.windows ? 192 : 194
+        radius: manager.windows ? 0 : Theme.Effects.radiusLG
+        color: FileStyle.lettura
         // Il filo non delimita: fa cogliere la curvatura dell'isola sul vetro
         // della finestra, che su un tema scuro ha quasi lo stesso colore.
-        border.width: Theme.Effects.hairline
-        border.color: Theme.Colors.edge
+        border.width: manager.windows ? 0 : Theme.Effects.hairline
+        border.color: FileStyle.edge
 
         Ui.Scorrimento {
             bersaglio: colonnaPosti
@@ -1958,6 +2066,7 @@ FloatingWindow {
 
             Ui.Goccia {
                 id: gocciaPosti
+                visible: !manager.windows
                 radius: Theme.Effects.radiusSM
             }
 
@@ -2012,8 +2121,8 @@ FloatingWindow {
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: 4
                         text: Core.Strings.lang === "it" ? "FISSATI" : "PINNED"
-                        color: Theme.Colors.textFaint
-                        font.family: Theme.Typography.fontDisplay
+                        color: FileStyle.textFaint
+                        font.family: FileStyle.font
                         font.weight: Theme.Typography.weightRegular
                         font.pixelSize: Theme.Typography.sizeXS
                         font.letterSpacing: 1
@@ -2032,14 +2141,14 @@ FloatingWindow {
                         visible: manager.current
                                  && !Files.isPinned(manager.current.path)
                         color: pinNowMouse.containsMouse
-                               ? Qt.alpha(Theme.Colors.accent, 0.18) : "transparent"
+                               ? Qt.alpha(FileStyle.accent, 0.18) : "transparent"
 
                         Ui.Icon {
                             anchors.centerIn: parent
                             width: 12; height: 12
                             name: "pin"
-                            color: pinNowMouse.containsMouse ? Theme.Colors.accent
-                                                             : Theme.Colors.textFaint
+                            color: pinNowMouse.containsMouse ? FileStyle.accent
+                                                             : FileStyle.textFaint
                         }
 
                         MouseArea {
@@ -2062,8 +2171,8 @@ FloatingWindow {
                     text: Core.Strings.lang === "it"
                           ? "Nessuno. Il pulsante qui sopra fissa la cartella che stai guardando."
                           : "None. The button above pins the folder you are in."
-                    color: Theme.Colors.textFaint
-                    font.family: Theme.Typography.fontDisplay
+                    color: FileStyle.textFaint
+                    font.family: FileStyle.font
                     font.weight: Theme.Typography.weightRegular
                     font.pixelSize: Theme.Typography.sizeXS
                 }
@@ -2105,8 +2214,8 @@ FloatingWindow {
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: 4
                         text: Core.Strings.lang === "it" ? "DISPOSITIVI" : "DEVICES"
-                        color: Theme.Colors.textFaint
-                        font.family: Theme.Typography.fontDisplay
+                        color: FileStyle.textFaint
+                        font.family: FileStyle.font
                         font.weight: Theme.Typography.weightRegular
                         font.pixelSize: Theme.Typography.sizeXS
                         font.letterSpacing: 1
@@ -2175,6 +2284,81 @@ FloatingWindow {
                         }
                     }
                 }
+
+                // ── Rete e telefoni ──────────────────────────────────────
+                //
+                // Cartelle condivise, server e telefoni, attraverso gvfs
+                // (`minervad/lib/services/luoghi_remoti.dart`). Una volta
+                // collegati sono cartelle come le altre, sotto
+                // `/run/user/<uid>/gvfs/`. Il telefono compare solo quando
+                // GVfs lo rileva: nessuna voce vuota o guida separata.
+
+                Item {
+                    width: sideColumn.width
+                    height: 28
+
+                    Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: Theme.Effects.space2
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 4
+                        objectName: "titoloLuoghiRemoti"
+                        text: Files.telefoni.length > 0
+                            ? (Core.Strings.lang === "it" ? "RETE E TELEFONI" : "NETWORK AND PHONES")
+                            : (Core.Strings.lang === "it" ? "RETE" : "NETWORK")
+                        color: FileStyle.textFaint
+                        font.family: FileStyle.font
+                        font.weight: Theme.Typography.weightRegular
+                        font.pixelSize: Theme.Typography.sizeXS
+                        font.letterSpacing: 1
+                    }
+                }
+
+                Repeater {
+                    model: Files.remoti
+
+                    delegate: SideEntry {
+                        id: remoto
+                        required property var modelData
+                        required property int index
+                        objectName: "luogoRemoto-" + index
+                        goccia: gocciaPosti
+                        attiva: manager.current !== null && path !== ""
+                                && manager.current.path === path
+                        onRilasciato: function (sorgenti) {
+                            manager.chiediCopiaOSposta(sorgenti, remoto.path);
+                        }
+                        width: sideColumn.width
+                        icon: modelData.tipo === "telefono" ? "telefono"
+                            : modelData.tipo === "condivisa" ? "network" : "globe"
+                        label: modelData.nome
+                        detail: modelData.uri
+                        path: modelData.montato ? (modelData.percorso || "") : ""
+                        dimmed: !modelData.montato
+                        ejectable: modelData.montato
+
+                        onChosen: {
+                            manager.apriRemoto(modelData);
+                        }
+
+                        onEjected: Core.Ipc.fsScollega(remoto.modelData.uri)
+                    }
+                }
+
+                SideEntry {
+                    width: sideColumn.width
+                    goccia: gocciaPosti
+                    icon: "plus"
+                    label: Core.Strings.lang === "it" ? "Connetti a un server" : "Connect to a server"
+                    // Qui si segnalano solo dipendenze della rete: il
+                    // telefono non rilevato non occupa spazio nella colonna.
+                    detail: Files.reteMancano.length > 0
+                            ? (Core.Strings.lang === "it" ? "manca " : "missing ")
+                              + Files.reteMancano.map(function (p) { return p.replace(/^gvfs-/, ""); })
+                                                   .join(Core.Strings.lang === "it" ? " e " : " and ")
+                            : ""
+                    onChosen: collegaServer.apri()
+                }
             }
         }
     }
@@ -2182,6 +2366,64 @@ FloatingWindow {
     /// Il disco che si è appena chiesto di montare, per andarci quando il
     /// demone risponde col punto di mount.
     property string mountThenOpen: ""
+
+    // Una risposta appartiene alla scheda che ha aperto il dispositivo,
+    // anche quando nel frattempo cambia il focus o parte un altro montaggio.
+    property var apertureRemote: ({})
+    property int prossimaAperturaRemota: 0
+
+    function apriRemoto(dispositivo) {
+        if (!manager.current || !Core.Ipc.connected)
+            return;
+        if (dispositivo.montato && dispositivo.percorso) {
+            manager.current.navigate(dispositivo.percorso);
+            return;
+        }
+        if (!dispositivo.uri)
+            return;
+        prossimaAperturaRemota += 1;
+        var richiesta = manager.current.paneId + "r" + prossimaAperturaRemota;
+        var pending = Object.assign({}, apertureRemote);
+        for (var precedente in pending) {
+            if (pending[precedente].pane === manager.current.paneId)
+                delete pending[precedente];
+        }
+        pending[richiesta] = {
+            pane: manager.current.paneId,
+            path: manager.current.path,
+            uri: dispositivo.uri
+        };
+        apertureRemote = pending;
+        Core.Ipc.fsConnetti(dispositivo.uri, "", "", "", false, richiesta);
+    }
+
+    Connections {
+        target: Core.Ipc
+
+        function onConnessoReceived(r) {
+            var apertura = manager.apertureRemote[r.richiesta];
+            if (!apertura)
+                return;
+            var pending = Object.assign({}, manager.apertureRemote);
+            delete pending[r.richiesta];
+            manager.apertureRemote = pending;
+            var destinatario = manager.panes.find(function(pane) {
+                return pane.paneId === apertura.pane;
+            });
+            // Chi è già andato altrove non deve essere riportato indietro.
+            if (!destinatario || destinatario.path !== apertura.path)
+                return;
+            if (r.ok === true && r.percorso)
+                destinatario.navigate(r.percorso);
+            else if (r.ok !== true)
+                problem.show(r.error || (Core.Strings.lang === "it" ? "Non si apre." : "It does not open."));
+        }
+
+        function onConnectedChanged() {
+            if (!Core.Ipc.connected)
+                manager.apertureRemote = ({});
+        }
+    }
 
     Connections {
         target: Core.Ipc
@@ -2202,18 +2444,49 @@ FloatingWindow {
 
     // ── I due riquadri ───────────────────────────────────────────────────
 
+    FileTabs {
+        id: tabStrip
+        controller: manager
+        y: manager.windows ? titolo.y + titolo.height : toolbar.y + toolbar.height
+        anchors.left: manager.windows ? parent.left : places.right
+        anchors.right: parent.right
+        anchors.margins: manager.isola
+    }
+
+    // ── Il riquadro dei dettagli e dell'anteprima ────────────────────────
+    //
+    // Un Loader: spento non esiste, quindi non legge niente e non ascolta
+    // la selezione. Segue il riquadro attivo, anche cambiando scheda.
+    Loader {
+        id: riquadroLaterale
+        active: manager.pannelloLaterale !== "niente"
+        visible: active
+        anchors.top: panes.top
+        anchors.bottom: panes.bottom
+        anchors.right: parent.right
+        anchors.rightMargin: manager.isola
+        // Come Esplora file: largo abbastanza per un'anteprima, mai più di
+        // un terzo della finestra.
+        width: active ? Math.min(320, Math.max(220, manager.width / 3)) : 0
+
+        sourceComponent: PannelloLaterale {
+            modo: manager.pannelloLaterale
+            pane: manager.current
+        }
+    }
+
     Row {
         id: panes
-        anchors.top: toolbar.bottom
+        anchors.top: manager.windows ? toolbar.bottom : tabStrip.bottom
         anchors.left: places.right
-        anchors.right: parent.right
+        anchors.right: riquadroLaterale.active ? riquadroLaterale.left : parent.right
         anchors.bottom: transfers.top
         anchors.margins: manager.isola
         anchors.topMargin: 0
         spacing: manager.isola
 
-        readonly property real cell: (width - spacing * (manager.tabs.count - 1))
-                                     / Math.max(1, manager.tabs.count)
+        readonly property real cell: Math.max(1, (width - spacing * (manager.visiblePaneCount - 1))
+                                     / Math.max(1, manager.visiblePaneCount))
 
         Repeater {
             id: paneRepeater
@@ -2224,6 +2497,11 @@ FloatingWindow {
                 required property int index
                 required property string startPath
                 required property string seleziona
+                required property string identity
+
+                visible: index >= manager.firstVisiblePane
+                         && index < manager.firstVisiblePane + manager.visiblePaneCount
+                enabled: visible
 
                 solo: manager.tabs.count === 1
                 // Lo stato è della finestra: tutte le schede lo mostrano, così
@@ -2234,10 +2512,10 @@ FloatingWindow {
                 // qui che non è di là», e dipende da qual è «qui».
                 esitoConfronto: tabPane.index === manager.currentIndex
                                 ? manager.esitoConfronto : ({})
-                paneId: manager.finestraId + "t" + index
+                paneId: identity
                 width: panes.cell
                 height: panes.height
-                canClose: manager.tabs.count > 1
+                canClose: !manager.tabbed && manager.tabs.count > 1
 
                 Component.onCompleted: {
                     manager.registerPane(index, tabPane);
@@ -2249,9 +2527,12 @@ FloatingWindow {
 
                 onActivated: manager.focusPane(tabPane)
                 onOpenRequested: function(p) { manager.openExternally(p); }
+                onNewTabRequested: function(p) { manager.addTab(p); }
                 onCloseRequested: manager.closeTab(tabPane.index)
                 onMenuRequested: {
                     manager.focusPane(tabPane);
+                    manager.contextSnapshot = {pane: tabPane.paneId, path: tabPane.path,
+                        selection: tabPane.selection.slice(), cursor: tabPane.shown[tabPane.cursor] ? tabPane.shown[tabPane.cursor].path : ""};
                     paneMenu.openAtCursor(manager.paneMenuItems());
                 }
                 onRilasciato: function(sorgenti, destinazione) {
@@ -2376,10 +2657,10 @@ FloatingWindow {
         height: 34
         radius: Theme.Effects.radiusSM
         color: problem.guasto ? Qt.rgba(0.22, 0.06, 0.10, 0.96)
-                              : Theme.Colors.panel
+                              : FileStyle.panel
         border.width: 1
-        border.color: problem.guasto ? Qt.alpha(Theme.Colors.danger, 0.5)
-                                     : Theme.Colors.edge
+        border.color: problem.guasto ? Qt.alpha(FileStyle.danger, 0.5)
+                                     : FileStyle.edge
         z: 20
 
         opacity: problem.testo !== "" ? 1 : 0
@@ -2406,18 +2687,19 @@ FloatingWindow {
                 name: problem.guasto ? "close"
                                      : (problem.notizia !== "" ? "check"
                                                                : "archive")
-                color: problem.guasto ? Theme.Colors.danger
+                color: problem.guasto ? FileStyle.danger
                                       : (problem.notizia !== ""
-                                         ? Theme.Colors.accent
-                                         : Theme.Colors.textMuted)
+                                         ? FileStyle.accent
+                                         : FileStyle.textMuted)
                 alwaysDrawn: true
             }
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
                 text: problem.testo
-                color: Theme.Colors.text
-                font.family: Theme.Typography.fontDisplay
+                color: FileStyle.text
+                font.family: FileStyle.font
                 font.weight: Theme.Typography.weightRegular
                 font.pixelSize: Theme.Typography.sizeSM
             }
@@ -2492,7 +2774,7 @@ FloatingWindow {
         // ── E la modalità amministratore riapre quello che i permessi
         //    avevano chiuso ─────────────────────────────────────────────
         //
-        // Giacomo, 2 settembre 2026: «non vedo opzioni come sposta nel cestino
+        // il manutentore, 2 settembre 2026: «non vedo opzioni come sposta nel cestino
         // o altre cose utili» — parlando della modalità amministratore.
         //
         // La causa non era una voce dimenticata: erano TUTTE le voci di
@@ -2534,7 +2816,7 @@ FloatingWindow {
 
             // ── Eseguire ─────────────────────────────────────────────────
             //
-            // Richiesta di Giacomo il 17 agosto 2026: «essendo un file .sh
+            // Richiesta di il manutentore il 17 agosto 2026: «essendo un file .sh
             // vorrei poter avere la voce esegui nel terminale».
             if (uno !== "" && manager.eseguibileDi(uno)) {
                 items.push({ "label": it ? "Esegui nel terminale"
@@ -2550,7 +2832,7 @@ FloatingWindow {
         }
         // ── Quello che si fa a qualcosa, e quello che si fa a un posto ──
         //
-        // Giacomo, 16 agosto 2026: «anche se clicco dove non c'è nessun file o
+        // il manutentore, 16 agosto 2026: «anche se clicco dove non c'è nessun file o
         // cartella esce scritto taglia, copia, e dovrebbe essere presente solo
         // se clicco su file».
         //
@@ -2620,7 +2902,7 @@ FloatingWindow {
             items.push({ "separator": true });
             // ── Le due voci non sono la stessa cosa ─────────────────────
             //
-            // Giacomo, 18 agosto 2026: «per impostare lo sfondo devo copiare
+            // il manutentore, 18 agosto 2026: «per impostare lo sfondo devo copiare
             // il percorso dal file manager e incollarlo in impostazioni».
             // Aveva ragione, e la voce che c'era non lo tradiva: è lo sfondo
             // di QUESTA cartella, che è una decorazione del gestore file.
@@ -2890,7 +3172,7 @@ FloatingWindow {
 
     // ── Trascinare e lasciare ────────────────────────────────────────────
     //
-    // Giacomo, 12 agosto 2026: «voglio poter trascinare qualsiasi cosa come in
+    // il manutentore, 12 agosto 2026: «voglio poter trascinare qualsiasi cosa come in
     // KDE, e lasciando mi chiede se copiare o spostare».
     //
     // Si CHIEDE, e non si indovina. Il gesto è lo stesso per due esiti molto
@@ -3046,10 +3328,28 @@ FloatingWindow {
         }
     }
 
+    property var contextSnapshot: null
+    property alias contextMenuForTest: paneMenu
+
     ContextMenu {
         id: paneMenu
+        windowsAppearance: manager.windows
+        fileMenu: true
 
         onTriggered: function(action) {
+            // Una risposta tardiva o un cambio scheda non deve deviare l'azione
+            // sui file di un'altra cartella rispetto a quella del tasto destro.
+            var snapshot = manager.contextSnapshot;
+            if (!snapshot)
+                return;
+            var pane = manager.panes.find(function(p) { return p && p.paneId === snapshot.pane; });
+            if (!pane || pane.path !== snapshot.path)
+                return;
+            manager.focusPane(pane);
+            pane.selection = snapshot.selection.slice();
+            var cursor = pane.shown.findIndex(function(entry) {return entry.path === snapshot.cursor;});
+            if (cursor >= 0)
+                pane.cursor = cursor;
             // ── Le azioni con un argomento dentro il nome ────────────────
             //
             // «trasmetti:<id del televisore>». Il menù consegna una stringa e
@@ -3118,15 +3418,22 @@ FloatingWindow {
 
     Rectangle {
         id: prompt
+        objectName: "fileNamePrompt"
         anchors.fill: parent
-        color: Theme.Colors.scrim
+        color: FileStyle.scrim
         visible: false
 
 
         property string mode: ""
         property string caption: ""
+        property var targets: []
+        property string directory: ""
 
         function begin(m, cap, initial) {
+            // Si fissa l'operando prima di spostare il fuoco: una selezione
+            // aggiornata mentre si scrive non deve rinominare un altro file.
+            prompt.targets = manager.operands().slice();
+            prompt.directory = manager.current ? manager.current.path : "";
             prompt.mode = m;
             prompt.caption = cap;
             prompt.visible = true;
@@ -3142,33 +3449,31 @@ FloatingWindow {
         }
 
         function accept() {
-            var name = promptInput.text.trim();
-            prompt.visible = false;
-            // «.» e «..» non sono nomi: sono la cartella stessa e quella
-            // sopra. Rinominare in «..» spostava il file di un piano.
+            if (!prompt.visible)
+                return;
+            // Il testo incollato da una pagina può contenere ritorni a capo:
+            // un campo per un nome li mostra come spazi, e così li salva.
+            var name = promptInput.text.replace(/[\r\n\u2028\u2029]+[ \t]*/g, " ").trim();
             if (name === "" || name === "." || name === ".."
-                || name.indexOf("/") !== -1 || !manager.current)
+                || name.indexOf("/") !== -1 || name.indexOf("\0") !== -1
+                || prompt.directory === "")
                 return;
-            if (prompt.mode === "newFile") {
-                Core.Ipc.fsTouch(manager.current.path + "/" + name);
-                return;
-            }
-            if (prompt.mode === "newFolder") {
-                // In modalità amministratore la stessa cosa passa
-                // dall'aiutante: il demone gira come te e in `/etc` non
-                // scrive, e il rifiuto arriverebbe dopo aver scritto il nome.
-                if (!manager.radice("crea-cartella",
-                                    [manager.current.path + "/" + name]))
-                    Core.Ipc.fsMakeDirectory(manager.current.path + "/" + name);
-            } else if (prompt.mode === "renameMany") {
-                manager.rinominaInSerie(name);
-            } else if (prompt.mode === "rename") {
-                var ops = manager.operands();
-                if (ops.length === 1) {
-                    var nuovo = Files.parentPath(ops[0]) + "/" + name;
-                    if (!manager.radice("rinomina", [String(ops[0]), nuovo]))
-                        Core.Ipc.fsRename(ops[0], nuovo);
-                }
+            var operation = prompt.mode;
+            var targets = prompt.targets.slice();
+            var directory = prompt.directory;
+            prompt.mode = "";
+            prompt.visible = false;
+            if (operation === "newFile") {
+                Core.Ipc.fsTouch(directory + "/" + name);
+            } else if (operation === "newFolder") {
+                if (!manager.radice("crea-cartella", [directory + "/" + name]))
+                    Core.Ipc.fsMakeDirectory(directory + "/" + name);
+            } else if (operation === "renameMany") {
+                manager.rinominaInSerie(name, targets);
+            } else if (operation === "rename" && targets.length === 1) {
+                var destination = Files.parentPath(targets[0]) + "/" + name;
+                if (!manager.radice("rinomina", [String(targets[0]), destination]))
+                    Core.Ipc.fsRename(targets[0], destination);
             }
         }
 
@@ -3234,9 +3539,9 @@ FloatingWindow {
             width: 360
             height: 148
             radius: Theme.Effects.radiusMD
-            color: Theme.Colors.panel
+            color: FileStyle.panel
             border.width: 1
-            border.color: Theme.Colors.edge
+            border.color: FileStyle.edge
 
             MouseArea {
                 anchors.fill: parent
@@ -3250,8 +3555,8 @@ FloatingWindow {
                 anchors.right: parent.right
                 anchors.margins: Theme.Effects.space4
                 text: prompt.caption
-                color: Theme.Colors.textMuted
-                font.family: Theme.Typography.fontDisplay
+                color: FileStyle.textMuted
+                font.family: FileStyle.font
                 font.weight: Theme.Typography.weightRegular
                 font.pixelSize: Theme.Typography.sizeSM
             }
@@ -3264,24 +3569,26 @@ FloatingWindow {
                 anchors.margins: Theme.Effects.space4
                 height: 36
                 radius: Theme.Effects.radiusXS
-                color: Theme.Colors.sunken
+                color: FileStyle.sunken
                 border.width: 1
-                border.color: Qt.alpha(Theme.Colors.accent, 0.45)
+                border.color: Qt.alpha(FileStyle.accent, 0.45)
 
                 TextInput {
                     id: promptInput
+                    objectName: "fileNameInput"
                     anchors.fill: parent
                     anchors.leftMargin: Theme.Effects.space3
                     anchors.rightMargin: Theme.Effects.space3
                     verticalAlignment: TextInput.AlignVCenter
                     clip: true
-                    color: Theme.Colors.text
-                    selectionColor: Qt.alpha(Theme.Colors.accent, 0.4)
-                    selectedTextColor: Theme.Colors.text
-                    font.family: Theme.Typography.fontDisplay
+                    color: FileStyle.text
+                    selectionColor: Qt.alpha(FileStyle.accent, 0.4)
+                    selectedTextColor: FileStyle.text
+                    font.family: FileStyle.font
                     font.weight: Theme.Typography.weightRegular
                     font.pixelSize: Theme.Typography.sizeMD
 
+                    selectByMouse: true
                     onAccepted: prompt.accept()
                     Keys.onEscapePressed: prompt.visible = false
                 }
@@ -3309,15 +3616,15 @@ FloatingWindow {
                         required property var modelData
 
                         readonly property color tinta: modelData.principale
-                            ? Theme.Colors.accent : Theme.Colors.textMuted
+                            ? FileStyle.accent : FileStyle.textMuted
 
                         width: promptLabel.implicitWidth + Theme.Effects.space5
                         height: 32
                         radius: Theme.Effects.radiusXS
                         color: modelData.principale
                                ? (btnMouse.containsMouse ? Qt.lighter(tinta, 1.1) : tinta)
-                               : (btnMouse.containsMouse ? Theme.Colors.hover
-                                                         : Theme.Colors.raised)
+                               : (btnMouse.containsMouse ? FileStyle.hover
+                                                         : FileStyle.raised)
 
                         Text {
                             id: promptLabel
@@ -3332,9 +3639,9 @@ FloatingWindow {
                                     return it ? "Crea" : "Create";
                                 return it ? "Crea documento" : "Create document";
                             }
-                            color: modelData.principale ? Theme.Colors.textOnAccent
-                                                         : Theme.Colors.textMuted
-                            font.family: Theme.Typography.fontDisplay
+                            color: modelData.principale ? FileStyle.textOnAccent
+                                                         : FileStyle.textMuted
+                            font.family: FileStyle.font
                             font.weight: Theme.Typography.weightRegular
                             font.pixelSize: Theme.Typography.sizeSM
                         }
@@ -3372,7 +3679,7 @@ FloatingWindow {
     Rectangle {
         id: destination
         anchors.fill: parent
-        color: Theme.Colors.scrim
+        color: FileStyle.scrim
         visible: false
         focus: destination.visible
 
@@ -3414,7 +3721,7 @@ FloatingWindow {
 
         // ── Copiare in PIÙ cartelle in un colpo solo ─────────────────────
         //
-        // È la cosa che Giacomo aveva chiesto e che il gestore file non
+        // È la cosa che il manutentore aveva chiesto e che il gestore file non
         // sapeva fare: «copiare un file da una scheda a DUE O PIÙ
         // contemporaneamente — due chiavette USB, lo stesso file su
         // entrambe in un colpo». Farlo a mano vuol dire copiare, andare,
@@ -3503,9 +3810,9 @@ FloatingWindow {
             width: 460
             height: destColumn.implicitHeight + Theme.Effects.space4 * 2
             radius: Theme.Effects.radiusMD
-            color: Theme.Colors.panel
+            color: FileStyle.panel
             border.width: 1
-            border.color: Theme.Colors.edge
+            border.color: FileStyle.edge
 
             MouseArea { anchors.fill: parent }
 
@@ -3532,8 +3839,8 @@ FloatingWindow {
                         return it ? "Copiare " + what + " dove?"
                                   : "Copy " + what + " where?";
                     }
-                    color: Theme.Colors.text
-                    font.family: Theme.Typography.fontDisplay
+                    color: FileStyle.text
+                    font.family: FileStyle.font
                     font.weight: Theme.Typography.weightRegular
                     font.pixelSize: Theme.Typography.sizeMD
                 }
@@ -3548,8 +3855,8 @@ FloatingWindow {
                         width: destColumn.width
                         height: 46
                         radius: Theme.Effects.radiusXS
-                        color: destMouse.containsMouse ? Qt.alpha(Theme.Colors.accent, 0.16)
-                                                       : Theme.Colors.raised
+                        color: destMouse.containsMouse ? Qt.alpha(FileStyle.accent, 0.16)
+                                                       : FileStyle.raised
                         Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
                         Rectangle {
@@ -3559,12 +3866,12 @@ FloatingWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 22; height: 22
                             radius: Theme.Effects.radiusXS
-                            color: Qt.alpha(Theme.Colors.accent, 0.18)
+                            color: Qt.alpha(FileStyle.accent, 0.18)
 
                             Text {
                                 anchors.centerIn: parent
                                 text: destRow.modelData.index + 1
-                                color: Theme.Colors.accent
+                                color: FileStyle.accent
                                 font.family: Theme.Typography.fontMono
                                 font.pixelSize: Theme.Typography.sizeXS
                             }
@@ -3580,8 +3887,8 @@ FloatingWindow {
                             elide: Text.ElideRight
                             text: Files.baseName(destRow.modelData.path)
                                   || destRow.modelData.path
-                            color: Theme.Colors.text
-                            font.family: Theme.Typography.fontDisplay
+                            color: FileStyle.text
+                            font.family: FileStyle.font
                             font.weight: Theme.Typography.weightRegular
                             font.pixelSize: Theme.Typography.sizeSM
                         }
@@ -3595,7 +3902,7 @@ FloatingWindow {
                             anchors.bottomMargin: 5
                             elide: Text.ElideMiddle
                             text: destRow.modelData.path
-                            color: Theme.Colors.textFaint
+                            color: FileStyle.textFaint
                             font.family: Theme.Typography.fontMono
                             font.pixelSize: Theme.Typography.sizeXS
                         }
@@ -3625,18 +3932,18 @@ FloatingWindow {
                             radius: Theme.Effects.radiusXS
                             readonly property bool segnata:
                                 destination.segnata(destRow.modelData.index)
-                            color: segnata ? Theme.Colors.accent : "transparent"
+                            color: segnata ? FileStyle.accent : "transparent"
                             border.width: 1
-                            border.color: segnata ? Theme.Colors.accent
-                                                  : Theme.Colors.edge
+                            border.color: segnata ? FileStyle.accent
+                                                  : FileStyle.edge
                             Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
                             Text {
                                 anchors.centerIn: parent
                                 visible: casella.segnata
                                 text: "✓"
-                                color: Theme.Colors.textOnAccent
-                                font.family: Theme.Typography.fontDisplay
+                                color: FileStyle.textOnAccent
+                                font.family: FileStyle.font
                                 font.pixelSize: Theme.Typography.sizeSM
                                 font.weight: Theme.Typography.weightSemiBold
                             }
@@ -3661,8 +3968,8 @@ FloatingWindow {
                     height: visible ? 40 : 0
                     radius: Theme.Effects.radiusXS
                     color: tuttiMouse.containsMouse
-                           ? Qt.lighter(Theme.Colors.accent, 1.12)
-                           : Theme.Colors.accent
+                           ? Qt.lighter(FileStyle.accent, 1.12)
+                           : FileStyle.accent
                     Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
                     Text {
@@ -3676,8 +3983,8 @@ FloatingWindow {
                             return it ? "Copia in tutte e " + n + " le cartelle"
                                       : "Copy to all " + n + " folders";
                         }
-                        color: Theme.Colors.textOnAccent
-                        font.family: Theme.Typography.fontDisplay
+                        color: FileStyle.textOnAccent
+                        font.family: FileStyle.font
                         font.pixelSize: Theme.Typography.sizeSM
                         font.weight: Theme.Typography.weightSemiBold
                     }
@@ -3702,8 +4009,8 @@ FloatingWindow {
                             ? "Segna più cartelle per copiarci dentro tutte insieme. Esc per lasciar perdere."
                             : "Tick more than one folder to copy into all of them. Esc to leave it.";
                     }
-                    color: Theme.Colors.textFaint
-                    font.family: Theme.Typography.fontDisplay
+                    color: FileStyle.textFaint
+                    font.family: FileStyle.font
                     font.weight: Theme.Typography.weightRegular
                     font.pixelSize: Theme.Typography.sizeXS
                 }
@@ -3809,7 +4116,7 @@ FloatingWindow {
     Rectangle {
         id: tavolozza
         anchors.fill: parent
-        color: Theme.Colors.scrim
+        color: FileStyle.scrim
         visible: false
 
         function apri() { tavolozza.visible = true; }
@@ -3841,9 +4148,9 @@ FloatingWindow {
             width: 452
             height: colonna.implicitHeight + Theme.Effects.space5 * 2
             radius: Theme.Effects.radiusMD
-            color: Theme.Colors.panel
+            color: FileStyle.panel
             border.width: 1
-            border.color: Theme.Colors.edge
+            border.color: FileStyle.edge
 
             MouseArea { anchors.fill: parent }
 
@@ -3856,8 +4163,8 @@ FloatingWindow {
                 Text {
                     text: Core.Strings.lang === "it" ? "Sfondo della cartella"
                                                      : "Folder background"
-                    color: Theme.Colors.text
-                    font.family: Theme.Typography.fontDisplay
+                    color: FileStyle.text
+                    font.family: FileStyle.font
                     font.pixelSize: Theme.Typography.sizeMD
                 }
 
@@ -3876,8 +4183,8 @@ FloatingWindow {
                         Text {
                             text: Core.Strings.lang === "it" ? riga.modelData.it
                                                              : riga.modelData.en
-                            color: Theme.Colors.textFaint
-                            font.family: Theme.Typography.fontDisplay
+                            color: FileStyle.textFaint
+                            font.family: FileStyle.font
                             font.pixelSize: Theme.Typography.sizeXS
                         }
 
@@ -3903,7 +4210,7 @@ FloatingWindow {
                                     radius: Theme.Effects.radiusXS
                                     clip: true
                                     border.width: cellaMouse.containsMouse ? 2 : 0
-                                    border.color: Theme.Colors.text
+                                    border.color: FileStyle.text
                                     // Il campione mostra quello che si otterrà:
                                     // pieno per la parete, sfumato per il vetro,
                                     // con l'icona per il motivo. Un campione che
@@ -3911,7 +4218,7 @@ FloatingWindow {
                                     // grande quanto è comodo il pulsante.
                                     color: riga.modelData.modo === "vetro"
                                            ? "transparent"
-                                           : Qt.tint(Theme.Colors.base,
+                                           : Qt.tint(FileStyle.base,
                                                      Qt.alpha(cella.tinta,
                                                               cella.eMotivo ? 0.34 : 0.55))
                                     gradient: riga.modelData.modo === "vetro"
@@ -3963,9 +4270,9 @@ FloatingWindow {
                     // ascoltato.
                     text: Core.Strings.lang === "it" ? "Nessuno sfondo"
                                                      : "No background"
-                    color: nienteMouse.containsMouse ? Theme.Colors.text
-                                                     : Theme.Colors.textMuted
-                    font.family: Theme.Typography.fontDisplay
+                    color: nienteMouse.containsMouse ? FileStyle.text
+                                                     : FileStyle.textMuted
+                    font.family: FileStyle.font
                     font.pixelSize: Theme.Typography.sizeSM
 
                     MouseArea {
@@ -3993,7 +4300,7 @@ FloatingWindow {
     Rectangle {
         id: impostazioni
         anchors.fill: parent
-        color: Theme.Colors.scrim
+        color: FileStyle.scrim
         visible: false
 
         function apri() { impostazioni.visible = true; }
@@ -4008,9 +4315,9 @@ FloatingWindow {
             width: 448
             height: elenco.implicitHeight + Theme.Effects.space5 * 2
             radius: Theme.Effects.radiusMD
-            color: Theme.Colors.panel
+            color: FileStyle.panel
             border.width: 1
-            border.color: Theme.Colors.edge
+            border.color: FileStyle.edge
 
             MouseArea { anchors.fill: parent }
 
@@ -4023,8 +4330,8 @@ FloatingWindow {
                 Text {
                     text: Core.Strings.lang === "it" ? "Impostazioni"
                                                      : "Settings"
-                    color: Theme.Colors.text
-                    font.family: Theme.Typography.fontDisplay
+                    color: FileStyle.text
+                    font.family: FileStyle.font
                     font.pixelSize: Theme.Typography.sizeMD
                     bottomPadding: Theme.Effects.space1
                 }
@@ -4041,6 +4348,11 @@ FloatingWindow {
                             { "chiave": "files.clicSingolo", "icona": "cursor",
                               "titolo": it ? "Un clic solo per aprire" : "Single click to open",
                               "detta": it ? "Invece di due" : "Instead of two",
+                              "serie": false },
+                            { "chiave": "files.caselleSelezione", "icona": "check",
+                              "titolo": it ? "Caselle di selezione" : "Selection checkboxes",
+                              "detta": it ? "Seleziona più file senza tenere premuto Ctrl"
+                                          : "Select multiple files without holding Ctrl",
                               "serie": false },
                             { "chiave": "files.anteprime", "icona": "image",
                               "titolo": it ? "Anteprime delle immagini" : "Image previews",
@@ -4085,7 +4397,7 @@ FloatingWindow {
     Rectangle {
         id: trashConfirm
         anchors.fill: parent
-        color: Theme.Colors.scrim
+        color: FileStyle.scrim
         visible: false
 
 
@@ -4141,9 +4453,9 @@ FloatingWindow {
                 + Theme.Effects.space2 + confirmNota.implicitHeight
                 + Theme.Effects.space4 + 34 + Theme.Effects.space4)
             radius: Theme.Effects.radiusMD
-            color: Theme.Colors.panel
+            color: FileStyle.panel
             border.width: 1
-            border.color: Theme.Colors.edge
+            border.color: FileStyle.edge
 
             MouseArea {
                 anchors.fill: parent
@@ -4175,8 +4487,8 @@ FloatingWindow {
                     return it ? "Spostare " + n + " elementi nel cestino?"
                               : "Move " + n + " items to the bin?";
                 }
-                color: Theme.Colors.text
-                font.family: Theme.Typography.fontDisplay
+                color: FileStyle.text
+                font.family: FileStyle.font
                 font.weight: Theme.Typography.weightRegular
                 font.pixelSize: Theme.Typography.sizeMD
             }
@@ -4200,7 +4512,7 @@ FloatingWindow {
                     // posta in gioco no: un file su una chiavetta o su un
                     // secondo disco non è un documento che si rifà. Prima la
                     // finestra era identica in tutti i casi — ed è quello che
-                    // Giacomo ha visto come «nessuna protezione».
+                    // il manutentore ha visto come «nessuna protezione».
                     var fuori = trashConfirm.fuoriCasa();
                     var dove = fuori !== ""
                         ? (it ? "Sta fuori dalla tua cartella di casa, in "
@@ -4213,8 +4525,8 @@ FloatingWindow {
                     return dove + (it ? "Restano nel cestino finché non lo svuoti."
                               : "They stay in the bin until you empty it.");
                 }
-                color: Theme.Colors.textFaint
-                font.family: Theme.Typography.fontDisplay
+                color: FileStyle.textFaint
+                font.family: FileStyle.font
                 font.weight: Theme.Typography.weightRegular
                 font.pixelSize: Theme.Typography.sizeXS
             }
@@ -4236,14 +4548,14 @@ FloatingWindow {
                         required property var modelData
 
                         readonly property color tone: modelData.danger
-                                                      ? Theme.Colors.danger
-                                                      : Theme.Colors.textMuted
+                                                      ? FileStyle.danger
+                                                      : FileStyle.textMuted
 
                         width: confirmLabel.implicitWidth + Theme.Effects.space5
                         height: 32
                         radius: Theme.Effects.radiusXS
                         color: confirmMouse.containsMouse ? Qt.alpha(tone, 0.18)
-                                                          : Theme.Colors.raised
+                                                          : FileStyle.raised
                         Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
                         Text {
@@ -4258,9 +4570,9 @@ FloatingWindow {
                                               : "Delete for good";
                                 return it ? "Sposta nel cestino" : "Move to the bin";
                             }
-                            color: confirmBtn.modelData.danger ? Theme.Colors.danger
-                                                               : Theme.Colors.textMuted
-                            font.family: Theme.Typography.fontDisplay
+                            color: confirmBtn.modelData.danger ? FileStyle.danger
+                                                               : FileStyle.textMuted
+                            font.family: FileStyle.font
                             font.weight: Theme.Typography.weightRegular
                             font.pixelSize: Theme.Typography.sizeSM
                         }
@@ -4301,6 +4613,18 @@ FloatingWindow {
 
     }
 
+    // ── Connetti a un server ─────────────────────────────────────────────
+
+    Collega {
+        id: collegaServer
+        anchors.fill: parent
+        z: 50
+        onCollegato: function (percorso) {
+            if (manager.current)
+                manager.current.navigate(percorso);
+        }
+    }
+
     // ── Formattare un disco ──────────────────────────────────────────────
     //
     // È l'unica cosa in Minerva che distrugge dati senza rete: una chiavetta
@@ -4321,7 +4645,7 @@ FloatingWindow {
     Rectangle {
         id: formatta
         anchors.fill: parent
-        color: Theme.Colors.scrim
+        color: FileStyle.scrim
         visible: false
 
 
@@ -4355,9 +4679,9 @@ FloatingWindow {
             width: 460
             height: corpo.implicitHeight + Theme.Effects.space5 * 2
             radius: Theme.Effects.radiusMD
-            color: Theme.Colors.panel
+            color: FileStyle.panel
             border.width: 1
-            border.color: Theme.Colors.edge
+            border.color: FileStyle.edge
 
             MouseArea { anchors.fill: parent }
 
@@ -4373,8 +4697,8 @@ FloatingWindow {
                     width: parent.width
                     text: Core.Strings.lang === "it" ? "Formatta il disco"
                                                      : "Format the disk"
-                    color: Theme.Colors.text
-                    font.family: Theme.Typography.fontDisplay
+                    color: FileStyle.text
+                    font.family: FileStyle.font
                     font.weight: Theme.Typography.weightRegular
                     font.pixelSize: Theme.Typography.sizeMD
                 }
@@ -4384,7 +4708,7 @@ FloatingWindow {
                     width: parent.width
                     height: 46
                     radius: Theme.Effects.radiusSM
-                    color: Theme.Colors.sunken
+                    color: FileStyle.sunken
 
                     Text {
                         anchors.left: parent.left
@@ -4400,7 +4724,7 @@ FloatingWindow {
                                    + "  ·  " + d.size
                                    + (d.fsType ? "  ·  " + d.fsType : "");
                         }
-                        color: Theme.Colors.text
+                        color: FileStyle.text
                         font.family: Theme.Typography.fontMono
                         font.pixelSize: Theme.Typography.sizeXS
                     }
@@ -4412,8 +4736,8 @@ FloatingWindow {
                     text: Core.Strings.lang === "it"
                           ? "Tutto quello che c'è su questo disco viene cancellato. Non finisce nel cestino."
                           : "Everything on this disk is erased. It does not go to the bin."
-                    color: Theme.Colors.danger
-                    font.family: Theme.Typography.fontDisplay
+                    color: FileStyle.danger
+                    font.family: FileStyle.font
                     font.weight: Theme.Typography.weightRegular
                     font.pixelSize: Theme.Typography.sizeSM
                 }
@@ -4423,10 +4747,10 @@ FloatingWindow {
                     width: parent.width
                     height: 34
                     radius: Theme.Effects.radiusSM
-                    color: Theme.Colors.sunken
+                    color: FileStyle.sunken
                     border.width: 1
-                    border.color: nomeNuovo.activeFocus ? Theme.Colors.edgeAccent
-                                                        : Theme.Colors.edge
+                    border.color: nomeNuovo.activeFocus ? FileStyle.edgeAccent
+                                                        : FileStyle.edge
 
                     TextInput {
                         id: nomeNuovo
@@ -4435,12 +4759,12 @@ FloatingWindow {
                         anchors.rightMargin: Theme.Effects.space3
                         verticalAlignment: TextInput.AlignVCenter
                         clip: true
-                        color: Theme.Colors.text
-                        font.family: Theme.Typography.fontDisplay
+                        color: FileStyle.text
+                        font.family: FileStyle.font
                         font.weight: Theme.Typography.weightRegular
                         font.pixelSize: Theme.Typography.sizeSM
                         selectByMouse: true
-                        selectionColor: Theme.Colors.selected
+                        selectionColor: FileStyle.selected
                     }
 
                     Text {
@@ -4449,8 +4773,8 @@ FloatingWindow {
                         visible: nomeNuovo.text === ""
                         text: Core.Strings.lang === "it" ? "Nome del disco"
                                                          : "Disk name"
-                        color: Theme.Colors.textFaint
-                        font.family: Theme.Typography.fontDisplay
+                        color: FileStyle.textFaint
+                        font.family: FileStyle.font
                         font.weight: Theme.Typography.weightRegular
                         font.pixelSize: Theme.Typography.sizeSM
                     }
@@ -4476,11 +4800,11 @@ FloatingWindow {
                             height: 44
                             radius: Theme.Effects.radiusSM
                             color: !scelta.sceglibile ? "transparent"
-                                 : scelta.attivo ? Qt.alpha(Theme.Colors.accent, 0.18)
-                                 : sceltaMouse.containsMouse ? Theme.Colors.hover
-                                 : Theme.Colors.raised
+                                 : scelta.attivo ? Qt.alpha(FileStyle.accent, 0.18)
+                                 : sceltaMouse.containsMouse ? FileStyle.hover
+                                 : FileStyle.raised
                             border.width: 1
-                            border.color: scelta.attivo ? Theme.Colors.edgeAccent
+                            border.color: scelta.attivo ? FileStyle.edgeAccent
                                                         : "transparent"
                             opacity: scelta.sceglibile ? 1 : 0.45
 
@@ -4493,8 +4817,8 @@ FloatingWindow {
 
                                 Text {
                                     text: scelta.modelData.nome
-                                    color: Theme.Colors.text
-                                    font.family: Theme.Typography.fontDisplay
+                                    color: FileStyle.text
+                                    font.family: FileStyle.font
                                     font.weight: Theme.Typography.weightRegular
                                     font.pixelSize: Theme.Typography.sizeSM
                                 }
@@ -4511,8 +4835,8 @@ FloatingWindow {
                                           : (Core.Strings.lang === "it"
                                              ? "Manca «" + scelta.modelData.manca + "»"
                                              : "Missing “" + scelta.modelData.manca + "”")
-                                    color: Theme.Colors.textFaint
-                                    font.family: Theme.Typography.fontDisplay
+                                    color: FileStyle.textFaint
+                                    font.family: FileStyle.font
                                     font.weight: Theme.Typography.weightRegular
                                     font.pixelSize: Theme.Typography.sizeXS
                                 }
@@ -4545,14 +4869,14 @@ FloatingWindow {
                             required property var modelData
 
                             readonly property color tone: modelData.danger
-                                                          ? Theme.Colors.danger
-                                                          : Theme.Colors.textMuted
+                                                          ? FileStyle.danger
+                                                          : FileStyle.textMuted
 
                             width: fLabel.implicitWidth + Theme.Effects.space5
                             height: 34
                             radius: Theme.Effects.radiusXS
                             color: fMouse.containsMouse ? Qt.alpha(fBtn.tone, 0.18)
-                                                        : Theme.Colors.raised
+                                                        : FileStyle.raised
                             Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
                             Text {
@@ -4566,7 +4890,7 @@ FloatingWindow {
                                               : "Erase everything and format";
                                 }
                                 color: fBtn.tone
-                                font.family: Theme.Typography.fontDisplay
+                                font.family: FileStyle.font
                                 font.weight: Theme.Typography.weightRegular
                                 font.pixelSize: Theme.Typography.sizeSM
                             }
@@ -4605,7 +4929,7 @@ FloatingWindow {
     Rectangle {
         id: emptyConfirm
         anchors.fill: parent
-        color: Theme.Colors.scrim
+        color: FileStyle.scrim
         visible: false
 
 
@@ -4631,9 +4955,9 @@ FloatingWindow {
             width: 400
             height: 150
             radius: Theme.Effects.radiusMD
-            color: Theme.Colors.panel
+            color: FileStyle.panel
             border.width: 1
-            border.color: Theme.Colors.edge
+            border.color: FileStyle.edge
 
             MouseArea {
                 anchors.fill: parent
@@ -4649,8 +4973,8 @@ FloatingWindow {
                 wrapMode: Text.WordWrap
                 text: Core.Strings.lang === "it" ? "Svuotare il cestino?"
                                                  : "Empty the bin?"
-                color: Theme.Colors.text
-                font.family: Theme.Typography.fontDisplay
+                color: FileStyle.text
+                font.family: FileStyle.font
                 font.weight: Theme.Typography.weightRegular
                 font.pixelSize: Theme.Typography.sizeMD
             }
@@ -4667,8 +4991,8 @@ FloatingWindow {
                         + "Non c'è un altro cestino sotto questo."
                       : "Everything inside is deleted for good. "
                         + "There is no second bin under this one."
-                color: Theme.Colors.textFaint
-                font.family: Theme.Typography.fontDisplay
+                color: FileStyle.textFaint
+                font.family: FileStyle.font
                 font.weight: Theme.Typography.weightRegular
                 font.pixelSize: Theme.Typography.sizeXS
             }
@@ -4690,14 +5014,14 @@ FloatingWindow {
                         required property var modelData
 
                         readonly property color tone: modelData.danger
-                                                      ? Theme.Colors.danger
-                                                      : Theme.Colors.textMuted
+                                                      ? FileStyle.danger
+                                                      : FileStyle.textMuted
 
                         width: emptyLabel.implicitWidth + Theme.Effects.space5
                         height: 32
                         radius: Theme.Effects.radiusXS
                         color: emptyMouse.containsMouse ? Qt.alpha(tone, 0.18)
-                                                        : Theme.Colors.raised
+                                                        : FileStyle.raised
                         Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
                         Text {
@@ -4709,9 +5033,9 @@ FloatingWindow {
                                     return it ? "Annulla" : "Cancel";
                                 return it ? "Svuota" : "Empty";
                             }
-                            color: emptyBtn.modelData.danger ? Theme.Colors.danger
-                                                             : Theme.Colors.textMuted
-                            font.family: Theme.Typography.fontDisplay
+                            color: emptyBtn.modelData.danger ? FileStyle.danger
+                                                             : FileStyle.textMuted
+                            font.family: FileStyle.font
                             font.weight: Theme.Typography.weightRegular
                             font.pixelSize: Theme.Typography.sizeSM
                         }

@@ -79,7 +79,7 @@ float minerva_coverage() {
  * quarto il filtro sostituisce lo sfondo per intero; sotto, una rampa per i
  * bordi sfumati e le ombre. */
 float minerva_dove() {
- return clamp(texture2D(mask,v_minerva).a*4.0,0.0,1.0);
+ return clamp(texture2D(mask,v_texcoord).a*4.0,0.0,1.0);
 }
 
 /* Il colore di una cella, per indice di cella (tenuto dentro l'area). */
@@ -92,6 +92,55 @@ vec4 acquerello_cella(vec2 c) {
  * a mezza cella del primo acquerello (sommati), `w` quello al centro. */
 float acquerello_peso(vec3 v, int i) {
  return i==0 ? v.x : (i==1 ? v.y : v.z);
+}
+
+/* ── L'Acrylic di Windows 11 ─────────────────────────────────────────────
+ *
+ * La ricetta di WinUI (AcrylicBrush.cpp, MIT): sullo sfondo sfocato
+ *   1. fusione LUMINOSITÀ col colore `ac_luminosita` (alfa = opacità di
+ *      luminosità): tinta e saturazione dello sfondo, chiarezza sua. È ciò
+ *      che rende le schede di Windows «leggermente in blur» e sempre
+ *      leggibili: i colori dello sfondo passano, i contrasti no;
+ *   2. fusione COLORE con `ac_tinta` (alfa = opacità della tinta);
+ *   3. rumore, 2 %.
+ * Le fusioni sono quelle del W3C (Compositing and Blending, «non-separable
+ * blend modes»), le stesse di Direct2D. */
+uniform float ac_attivo;
+uniform vec4 ac_tinta;
+uniform vec4 ac_luminosita;
+uniform float ac_rumore;
+
+float ac_lum(vec3 c) { return dot(c, vec3(0.3, 0.59, 0.11)); }
+vec3 ac_clip(vec3 c) {
+ float l = ac_lum(c);
+ float n = min(min(c.r, c.g), c.b);
+ float x = max(max(c.r, c.g), c.b);
+ if (n < 0.0) c = l + (c - l) * l / max(l - n, 1e-5);
+ if (x > 1.0) c = l + (c - l) * (1.0 - l) / max(x - l, 1e-5);
+ return c;
+}
+vec3 ac_setlum(vec3 c, float l) { return ac_clip(c + (l - ac_lum(c))); }
+
+vec4 acrylic(vec4 sfocato) {
+ if (ac_attivo < 0.5) return sfocato;
+ /* L'Acrylic è sempre pieno: dove dietro non c'è niente (sotto la barra lo
+  * sfondo può mancare) vale il colore della ricetta, come il ripiego di
+  * Windows. Lo sfondo sfocato, premoltiplicato, si compone sopra di lui. */
+ vec3 c = sfocato.rgb + (1.0 - sfocato.a) * ac_luminosita.rgb;
+ /* 1. luminosità: tinta e saturazione di `c`, luminosità del colore */
+ c = mix(c, ac_setlum(c, ac_lum(ac_luminosita.rgb)), ac_luminosita.a);
+ /* 2. colore: tinta e saturazione del colore, luminosità di `c` */
+ c = mix(c, ac_setlum(ac_tinta.rgb, ac_lum(c)), ac_tinta.a);
+ /* 3. rumore: un valore fisso per pixel dello schermo, quindi non scintilla
+  * quando il fotogramma si rifà.
+  *
+  * Niente `fract(sin(…))`: con l'argomento oltre 65 536 il `sin` di questa
+  * scheda (radeonsi) non dà più un numero, e una diagonale di pixel neri
+  * tagliava la barra (11 ottobre 2026). Questo è il rumore a gradiente
+  * intrecciato di Jimenez: solo moltiplicazioni e `fract`, valido ovunque. */
+ float r = fract(52.9829189 * fract(dot(floor(gl_FragCoord.xy), vec2(0.06711056, 0.00583715))));
+ c += (r - 0.5) * ac_rumore;
+ return vec4(clamp(c, 0.0, 1.0), 1.0);
 }
 
 vec4 acquerello() {
@@ -126,7 +175,7 @@ vec4 acquerello() {
  }
  float a=minerva_coverage();
  if(has_mask>0.5) a*=minerva_dove();
- return s/6.0*a;
+ return acrylic(s/6.0)*a;
 }
 
 /* Due mestieri: l'acquerello (fase 2, 3, 4) e la copia di un pezzo di

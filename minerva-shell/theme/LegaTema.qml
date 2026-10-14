@@ -50,7 +50,7 @@ QtObject {
 
     // ── Le animazioni della SHELL, che l'interruttore non toccava ────────
     //
-    // Giacomo, 19 agosto 2026: spegnere le animazioni «non porta a nessun
+    // il manutentore, 19 agosto 2026: spegnere le animazioni «non porta a nessun
     // cambiamento». Era vero: `Compositore.animazioni()` spegne quelle del
     // COMPOSITORE — finestre che si aprono, cambio scrivania — mentre i
     // pannelli, la dock e i menu li anima la shell con le durate di
@@ -84,7 +84,7 @@ QtObject {
 
     property Binding _accent: Binding {
         target: Theme.Colors
-        property: "accent"
+        property: "accentoScelto"
         value: Core.Ipc.get("shell.accent", "#22D3EE")
     }
 
@@ -152,20 +152,15 @@ QtObject {
                : Core.Ipc.get("shell.membraneOpacity", 0.93)
     }
 
-    // Quanto vetro hanno le finestre di Minerva. Separata dalla membrana
-    // perché è un problema diverso: la barra deve restare leggibile sopra
-    // qualunque cosa, una finestra ha dietro solo la scrivania.
-    //
-    // ── E col compositore acceso, la trasparenza è UNA ───────────────────
-    //
-    // Perché altrimenti sono due, e si moltiplicano: 0,90 di qui × 0,73 del
-    // compositore fa 0,66, mentre una finestra di chiunque altro resta a
-    // 0,73. Il perché per esteso sta in `Core.Vetro.effettoAcceso`.
+    // «Nessuno» deve togliere anche il vetro locale: riattivare qui il
+    // vecchio cursore rendeva le app trasparenti proprio spegnendo l'effetto.
+    // Il vetro moltiplica l'alfa nel compositore; l'acquerello invece filtra
+    // soltanto i pixel già traslucidi, quindi gli si dà l'alfa del fondo.
     property Binding _finestre: Binding {
         target: Theme.Colors
         property: "windowOpacity"
-        value: Core.Vetro.effettoAcceso
-               ? 1.0
-               : Core.Ipc.get("shell.windowOpacity", 0.88)
+        value: Core.Vetro.filtroVero
+               ? Core.Ipc.get("windows.effettoOpacita", 0.88)
+               : 1.0
     }
 }

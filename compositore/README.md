@@ -4,7 +4,7 @@ Il compositore di Minerva. Costruito su **wlroots 0.20**.
 
 ## Perché esiste
 
-Giacomo, 19 agosto 2026: «voglio sradicare hyprland anche a costo di creare
+il manutentore, 19 agosto 2026: «voglio sradicare hyprland anche a costo di creare
 tutti i suoi file da 0 [...] voglio solo minerva-wayland e non
 minerva-hyprland-wayland. non voglio limiti imposti da hyprland».
 
@@ -133,7 +133,7 @@ impostata su `autoHide`.
 
 ### Tappe 3 e 4 — Le finestre, e la barra del titolo ✔ 23 agosto 2026
 
-Giacomo, guardando la scrivania dentro il compositore: «non vedo la barra del
+il manutentore, guardando la scrivania dentro il compositore: «non vedo la barra del
 titolo o sbaglio?». Non sbagliava, e la risposta ha portato avanti la Tappa 4
 insieme alla 3, perché erano lo stesso problema.
 
@@ -181,7 +181,7 @@ si è ristretta tirandola dal bordo destro.
    `Quickshell.Hyprland` non cerca Hyprland: legge
    `HYPRLAND_INSTANCE_SIGNATURE` dall'ambiente, che la prova eredita per
    intero. La shell dentro minerva-wayland mandava i suoi comandi al **Hyprland
-   di Giacomo** — regole delle finestre, `follow_mouse`, animazioni — mentre
+   di il manutentore** — regole delle finestre, `follow_mouse`, animazioni — mentre
    credevamo di provare un'altra scrivania. `prova-annidata.sh` adesso la
    toglie ed esporta `MINERVA_COMPOSITORE=minerva-wayland`. Senza la firma la
    shell parte lo stesso e si limita ad avvisare: conferma sul campo che
@@ -191,7 +191,7 @@ si è ristretta tirandola dal bordo destro.
 
 Una finestra si sposta dove si vuole, tranne dove non si potrebbe più
 riprendere. Sono due i modi di perderla, e Minerva li ha visti entrambi:
-sotto il pannello della scrivania (il difetto per cui Giacomo scriveva «non
+sotto il pannello della scrivania (il difetto per cui il manutentore scriveva «non
 hanno la barra e devo chiuderle con super+C») e fuori dal bordo laterale. Il
 tetto è quindi lo spazio **utile**, non lo schermo, e di lato devono restare
 almeno 120 pixel. Il fondo invece resta libero: la barra è in cima, e da lì si
@@ -487,7 +487,7 @@ demone è quello della sessione vera.
 Si è visto a schermo facendo girare Minerva intera qui dentro: la scrivania
 di prova disegnava una barra del titolo per «wlroots - WL-1» — una finestra
 della sessione di fuori, che qui dentro non esiste. Il demone rispondeva con
-le finestre di Giacomo.
+le finestre di il manutentore.
 
 Quella metà era solo confusa da guardare. L'altra no: **ogni impostazione
 cambiata durante una prova finiva nel `settings.json` vero.** Un giro di
@@ -672,7 +672,7 @@ qualcun altro.
 
 **Verificato annidato**, con la catena d'avvio vera (registro, demone, shell,
 scrivania, sfondo, dock, vassoio, batteria, wifi). Restava un difetto che
-solo un occhio poteva vedere, e l'ha visto Giacomo alla prima prova: **il
+solo un occhio poteva vedere, e l'ha visto il manutentore alla prima prova: **il
 puntatore spariva ovunque tranne che sulla barra.** In Wayland, entrando in
 una superficie, che aspetto abbia il cursore lo decide il PROGRAMMA — e
 finché non lo dice, non lo disegna nessuno. Sulla barra la shell lo imposta

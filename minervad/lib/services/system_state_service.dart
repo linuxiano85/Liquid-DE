@@ -23,7 +23,7 @@ import 'processo_limitato.dart';
 ///
 /// La seconda: **i tre non si parlavano**. Spegnendo il Bluetooth dalle
 /// Impostazioni, la barra continuava a mostrarlo acceso fino al proprio giro —
-/// fino a dodici secondi, in media sei. È il ritardo che Giacomo aveva
+/// fino a dodici secondi, in media sei. È il ritardo che il manutentore aveva
 /// segnalato, e non era lentezza: era una finestra che non poteva sapere.
 ///
 /// Qui la lettura è una e il risultato arriva a tutti nello stesso istante.

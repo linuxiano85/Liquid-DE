@@ -7,7 +7,7 @@ import "../ui" as Ui
 
 // ── L'Isola ──────────────────────────────────────────────────────────────
 //
-// Giacomo, 24 settembre 2026: «Il meteo?». Nell'Isola: la capsula in mezzo
+// il manutentore, 24 settembre 2026: «Il meteo?». Nell'Isola: la capsula in mezzo
 // alla barra, con l'ora, la data e il tempo che fa. Toccata, la capsula
 // CRESCE — la stessa forma che si allarga con la molla, non un pannello che
 // compare sotto — e racconta la giornata: che tempo fa adesso, le prossime
@@ -50,6 +50,8 @@ PanelWindow {
     /// La carta sulla schermata: la apre il tasto Stamp.
     property int ritardoSchermata: 0
     function apriSchermata(dove) {
+        if (!Core.Riva.attiva)
+            return;
         if (dove !== undefined && dove !== null && dove.width > 0)
             isola.origine = dove;
         isola.apri();
@@ -58,6 +60,8 @@ PanelWindow {
 
     /// La carta sulle notifiche: la apre la campanella dell'Isola.
     function apriNotifiche(dove) {
+        if (!Core.Riva.attiva)
+            return;
         if (dove !== undefined && dove !== null && dove.width > 0)
             isola.origine = dove;
         isola.apri();
@@ -76,16 +80,22 @@ PanelWindow {
     signal schermataChiesta(string modo, int ritardo)
 
     function apriDa(dove) {
+        if (!Core.Riva.attiva)
+            return;
         if (dove !== undefined && dove !== null && dove.width > 0)
             isola.origine = dove;
         isola.apri();
     }
     /// La stessa carta, girata sul calendario: la apre l'ora nell'Isola.
     function apriCalendario(dove) {
+        if (!Core.Riva.attiva)
+            return;
         isola.apriDa(dove);
         isola.giraSu("mese");
     }
     function apri() {
+        if (!Core.Riva.attiva)
+            return;
         if (isola.aperto) return;
         isola.oggi = new Date();
         isola.faccia = "giorno";
@@ -126,14 +136,25 @@ PanelWindow {
     readonly property var _locale: Core.Strings.lang === "it" ? Qt.locale("it_IT") : Qt.locale("en_GB")
     readonly property bool it: Core.Strings.lang === "it"
 
-    visible: isola.mostrato
+    visible: Core.Riva.attiva && isola.mostrato
+    // Cambiare preset chiude anche lo stato logico, così non riappare tornando.
+    Connections {
+        target: Core.Riva
+        function onAttivaChanged() {
+            if (Core.Riva.attiva)
+                return;
+            isola.chiudi();
+            isola.mostrato = false;
+            spegni.stop();
+        }
+    }
     anchors { top: true; bottom: true; left: true; right: true }
     exclusiveZone: -1
     color: "transparent"
     WlrLayershell.namespace: "liquid-isola"
     WlrLayershell.layer: WlrLayer.Overlay
     // La tastiera subito, come il Centro (qml-fuoco-annulla-clic).
-    WlrLayershell.keyboardFocus: isola.aperto ? WlrKeyboardFocus.Exclusive
+    WlrLayershell.keyboardFocus: Core.Riva.attiva && isola.aperto ? WlrKeyboardFocus.Exclusive
                                               : WlrKeyboardFocus.None
 
     Timer { id: spegni; interval: Theme.Motion.liquido ? 600 : 0; onTriggered: if (!isola.aperto) isola.mostrato = false }

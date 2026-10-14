@@ -20,3 +20,7 @@ DataOra    1.0 DataOra.qml
 Accessibilita 1.0 Accessibilita.qml
 Account    1.0 Account.qml
 Notifiche 1.0 Notifiche.qml
+Scorciatoie 1.0 Scorciatoie.qml
+
+TilingSettings 1.0 TilingSettings.qml
+Preset 1.0 Preset.qml

@@ -153,12 +153,12 @@ class AccessoService {
   ///
   /// ── Perché c'è ───────────────────────────────────────────────────────────
   ///
-  /// Giacomo, 23 agosto 2026: «magari aggiungere un accesso con solo il
+  /// il manutentore, 23 agosto 2026: «magari aggiungere un accesso con solo il
   /// terminale in caso ci siano errori con il desktop environment, per non
   /// rimanere esclusi in caso non ci sia un desktop environment o si rompa».
   ///
   /// Ha ragione, e questo progetto ne ha già le prove: fino a ieri KDE non
-  /// entrava, e per due volte una sessione morta ha lasciato Giacomo davanti a
+  /// entrava, e per due volte una sessione morta ha lasciato il manutentore davanti a
   /// uno schermo nero. Una schermata di accesso che sa aprire SOLO scrivanie è
   /// una porta con una serratura sola.
   ///

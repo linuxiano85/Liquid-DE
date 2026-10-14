@@ -60,7 +60,7 @@ PanelWindow {
     //   'elude'    resta visibile finché nessuna finestra la coprirebbe, e si
     //              ritira quando una ci arriva sopra.
     //
-    // Il terzo l'ha chiesto Giacomo il 2 settembre 2026 — «o che elude le
+    // Il terzo l'ha chiesto il manutentore il 2 settembre 2026 — «o che elude le
     // finestre» — e non esisteva. È il modo che si vorrebbe quasi sempre: la
     // dock c'è quando serve, cioè quando lo schermo è libero, e non ruba
     // spazio a una finestra che lo sta usando tutto.
@@ -270,7 +270,7 @@ PanelWindow {
     /// lo schermo per poter raccogliere il clic che chiude (vedi `Spine.qml`),
     /// e così facendo si prendeva anche il fondo — dove la dock aspetta di
     /// essere sfiorata. Risultato: con il menù aperto la dock non compariva
-    /// più. Giacomo, 2 agosto.
+    /// più. il manutentore, 2 agosto.
     ///
     /// `screenRect` qui sotto non basta, perché esiste solo a dock GIÀ aperta:
     /// è il rettangolo da non coprire, non quello da cui farla uscire.
@@ -314,6 +314,7 @@ PanelWindow {
     Connections {
         target: Core.Windows
         function onAllChanged() { dock.rebuild(); }
+        function onActiveAddressChanged() {dock.rebuild();}
     }
 
     // La dock si rifà anche quando cambia l'ELENCO DEI PROGRAMMI, e non solo
@@ -323,7 +324,7 @@ PanelWindow {
     // il tema delle icone cambia, il demone rimanda l'elenco con i percorsi
     // nuovi, ma le finestre restano quelle di prima. Senza questa riga la dock
     // aspetta il primo movimento di una finestra per accorgersene, e a
-    // scrivania ferma non se ne accorge mai. È metà del difetto che Giacomo ha
+    // scrivania ferma non se ne accorge mai. È metà del difetto che il manutentore ha
     // descritto come «le icone anche se le cambio nella dock non cambiano»;
     // l'altra metà stava nel demone, che l'elenco non lo rimandava affatto.
     Connections {
@@ -331,7 +332,13 @@ PanelWindow {
         function onAllChanged() { dock.rebuild(); }
     }
 
+    readonly property bool localWindows:Core.Ipc.get("windows.dockLocalWindows",true)===true
+    onLocalWindowsChanged:dock.rebuild()
     onPinnedChanged: dock.rebuild()
+    Connections {
+        target:Core.Compositore
+        function onScrivaniaAttivaChanged() {dock.rebuild();}
+    }
     Component.onCompleted: dock.rebuild()
 
     /// Vero se è arrivato un cambiamento mentre si trascinava.
@@ -374,6 +381,8 @@ PanelWindow {
         var wins = Core.Windows.all || [];
         for (i = 0; i < wins.length; i++) {
             var w = wins[i];
+            if(Core.Ipc.get("windows.dockLocalWindows",true)===true && w.workspace!==Core.Compositore.scrivaniaAttiva && Core.Compositore.scrivaniaAttiva>0)
+                continue;
             var wapp = Core.Apps.forWindow(w);
             key = wapp ? wapp.appId : ("class:" + w.appClass);
             if (byKey[key] === undefined) {
@@ -490,7 +499,7 @@ PanelWindow {
     property bool forceReveal: false
 
     /// La riva riservata (una finestra riempie lo schermo): sfiorarla non la
-    /// fa uscire. Giacomo, 25 settembre 2026: «se ho una app a schermo
+    /// fa uscire. il manutentore, 25 settembre 2026: «se ho una app a schermo
     /// intero compaiono le isole passandoci sopra».
     property bool riservata: false
     /// Super tenuto con la riva riservata: esce, sopra a tutto.
@@ -578,7 +587,7 @@ PanelWindow {
     // Prima si fermava al corpo, e la differenza si vedeva: un'icona
     // ingrandita è alta settantadue pixel contro i quarantacinque della sua
     // casella, quindi la sua parte alta sporgeva in una zona che non
-    // raccoglieva clic. Giacomo, 4 agosto: «se la trascino dal lato basso si
+    // raccoglieva clic. il manutentore, 4 agosto: «se la trascino dal lato basso si
     // spostano, se la trascino dal lato alto no, anche l'apertura a volte non
     // va». Si stava cliccando sull'icona — si vedeva benissimo — e non
     // succedeva niente.
@@ -678,7 +687,7 @@ PanelWindow {
 
     // ── Rimettere le icone in ordine trascinandole ───────────────────────
     //
-    // Giacomo, 3 agosto: «la dock non mi fa spostare le icone se voglio
+    // il manutentore, 3 agosto: «la dock non mi fa spostare le icone se voglio
     // cambiare l'ordine». L'ordine c'era già — è `dock.pinned`, e la dock lo
     // rispetta apposta perché la memoria muscolare si formi — ma si poteva
     // cambiare solo togliendo e rimettendo le icone, cioè non si poteva.
@@ -1383,7 +1392,7 @@ PanelWindow {
                     // dell'ingrandimento, e seguirlo faceva scappare il
                     // bersaglio da sotto il dito. Il mezzo passo per parte
                     // chiude anche i vuoti fra un'icona e l'altra: così ogni
-                    // pixel della dock apre qualcosa. Giacomo, 2 agosto: «per
+                    // pixel della dock apre qualcosa. il manutentore, 2 agosto: «per
                     // aprire una app devi metterti giusto al centro
                     // dell'icona».
                     x: -slot.shift - dock.gapPx / 2
@@ -1500,7 +1509,7 @@ PanelWindow {
                             return;
                         }
                         if (m.button === Qt.MiddleButton) {
-                            dock.launch(slot.modelData);
+                            dock.newWindow(slot.modelData);
                             return;
                         }
                         dock.activate(slot.modelData);
@@ -1556,7 +1565,7 @@ PanelWindow {
     /// icone in basso, che si ingrandiscono al passaggio. Chi la guarda legge
     /// «dock», e in una dock il clic PORTA DAVANTI — sempre. Il risultato era
     /// che tornando dalla finestra alla sua icona per riprenderla in mano, la
-    /// finestra spariva. Parole di Giacomo: «se clicco sulla dock Chrome si
+    /// finestra spariva. Parole di il manutentore: «se clicco sulla dock Chrome si
     /// minimizza».
     ///
     /// Ridurre resta a portata di mano in due posti dove è quello che si sta
@@ -1565,7 +1574,7 @@ PanelWindow {
     ///
     /// ── E il clic che riduce, ma solo sulla finestra che hai in mano ─────
     ///
-    /// Giacomo, 4 ottobre 2026: «se clicco su una app aperta in dock posso
+    /// il manutentore, 4 ottobre 2026: «se clicco su una app aperta in dock posso
     /// minimizzarla con un click e reingrandirla». Torna, con la differenza
     /// che spiega il difetto di prima: si riduce SOLO la finestra che ha il
     /// fuoco adesso (`activeAddress`, la prima della pila del compositore).
@@ -1574,7 +1583,7 @@ PanelWindow {
     function activate(item) {
         var addrs = item.addresses;
         if (addrs.length === 0) {
-            dock.launch(item);
+            dock.newWindow(item);
             return;
         }
         if (addrs.length === 1) {
@@ -1656,6 +1665,13 @@ PanelWindow {
         return out;
     }
 
+    function newWindow(item) {
+        if(!item.exec) return;
+        dock._avviando=item.key;
+        fineAvvio.restart();
+        Core.Ipc.launchApp(item.nuovaFinestra || item.exec,item.appId,"new-window");
+    }
+
     function runMenuAction(index, action) {
         var item = dock.items[index];
         if (!item)
@@ -1676,17 +1692,11 @@ PanelWindow {
         // Era `launch`, cioè il comando principale: per un programma a
         // istanza unica — il nostro gestore file — riportava davanti la
         // finestra che c'era già («chiude e riapre la stessa finestra»,
-        // Giacomo, 29 settembre 2026). Il comando giusto lo dichiara il
+        // il manutentore, 29 settembre 2026). Il comando giusto lo dichiara il
         // programma nell'azione `new-window` del suo .desktop; chi non la
         // dichiara riparte col comando principale, come prima.
         case "nuova":
-            if (item.nuovaFinestra && item.nuovaFinestra !== "") {
-                dock._avviando = item.key;
-                fineAvvio.restart();
-                Core.Ipc.launchApp(item.nuovaFinestra, item.appId);
-            } else {
-                dock.launch(item);
-            }
+            dock.newWindow(item);
             break;
         case "minimize":
             for (i = 0; i < item.addresses.length; i++)

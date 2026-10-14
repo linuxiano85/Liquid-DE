@@ -16,7 +16,7 @@ import "../theme" as Theme
 // dietro uno scorrimento, erano fuori dal mondo.
 //
 // Trovato il 5 settembre 2026 guardando le sezioni una per una, ed è
-// esattamente il tipo di difetto che Giacomo chiama «blocco»: l'opzione c'è,
+// esattamente il tipo di difetto che il manutentore chiama «blocco»: l'opzione c'è,
 // si vede che c'è, e non si arriva.
 //
 // Un `Flow` manda a capo quello che non ci sta. Chi ci sta in una riga non

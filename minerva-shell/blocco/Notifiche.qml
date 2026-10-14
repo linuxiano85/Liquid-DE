@@ -8,7 +8,7 @@ import "../ui" as Ui
 
 // Notifiche — Quello che è arrivato mentre eri via, sulla schermata di blocco.
 //
-// Giacomo, 23 settembre 2026: «se mi arrivano mail mi dice solo che ci sono ad
+// il manutentore, 23 settembre 2026: «se mi arrivano mail mi dice solo che ci sono ad
 // esempio 3 email, tipo come gli smartphone», e «sulla parte libera metterei
 // tutte le notifiche».
 //

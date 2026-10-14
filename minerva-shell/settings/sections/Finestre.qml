@@ -23,7 +23,7 @@ Page {
     //
     // Sette voci — mostra, si nasconde, dimensione, ingrandimento, estensione,
     // trasparenza, nome al passaggio — dentro una pagina da milleseicento
-    // righe. C'erano tutte, e Giacomo dopo settimane d'uso ha scritto: «la
+    // righe. C'erano tutte, e il manutentore dopo settimane d'uso ha scritto: «la
     // dock ancora non si nasconde da sola e non ci sono impostazioni per
     // essa». Nel suo file `dock.autoHide` era `false`: era spenta, non rotta.
     //
@@ -92,6 +92,17 @@ Page {
         l.push(v);
         Core.Ipc.setSetting("windows.csdApps", l);
     }
+    Column {
+        width:parent.width;spacing:8
+        property bool expanded:Core.Ipc.get("windows.tilingSettingsExpanded",false)===true
+        Ui.RigaScelta {
+            objectName:"tilingDisclosure";width:parent.width
+            testo:(parent.expanded ? "▾ ":"▸ ")+(page.it ? "Tiling · disposizione, desktop e focus":"Tiling · layout, workspaces and focus")
+            onScelto:Core.Ipc.setSetting("windows.tilingSettingsExpanded",!parent.expanded)
+        }
+        TilingSettings {width:parent.width;visible:parent.expanded}
+    }
+
     Card {
         heading: page.it ? "Barra del titolo" : "Title bar"
 
@@ -206,7 +217,7 @@ Page {
 
         // ── Il colore intorno ────────────────────────────────────────────
         //
-        // Giacomo, 3 settembre 2026: «se voglio che il colore intorno diventi
+        // il manutentore, 3 settembre 2026: «se voglio che il colore intorno diventi
         // tipo rgb e cambi colore costantemente oppure che giri sempre come
         // una striscia led?».
         //
@@ -266,7 +277,7 @@ Page {
 
         // ── Lo spessore ──────────────────────────────────────────────────
         //
-        // Giacomo, 9 settembre 2026: «voglio poter regolare lo spessore del
+        // il manutentore, 9 settembre 2026: «voglio poter regolare lo spessore del
         // colore intorno alla finestra attiva».
         //
         // Era sei pixel fissi, e non per scelta: era lo STESSO numero della
@@ -489,55 +500,13 @@ Page {
         heading: page.it ? "Materiale" : "Material"
 
 
-        // Le finestre sono un problema diverso dalla barra, e per mesi hanno
-        // avuto un'impostazione che nessuno poteva toccare: `shell.windowOpacity`
-        // esisteva, la shell la leggeva, e non c'era un cursore da nessuna
-        // parte. La barra deve restare leggibile sopra qualunque cosa; una
-        // finestra ha dietro solo la scrivania e può permettersi molto di più.
-        // ── E sparisce quando la trasparenza la mette il COMPOSITORE ─────
-        //
-        // Con un effetto acceso questa manopola non farebbe più niente: la
-        // trasparenza delle finestre — di TUTTE le finestre, le nostre e
-        // quelle degli altri — è quella della riga «Quanto si vede
-        // attraverso», due righe più in basso. Lasciarla qui vorrebbe dire un
-        // cursore che si gira a vuoto, che è il difetto che questo progetto si
-        // è messo per iscritto di non commettere.
-        S.SettingRow {
-            width: parent.width
-            visible: !page._effettoAcceso
-            label: page.it ? "Vetro delle finestre di Minerva"
-                           : "Minerva window glass"
-            description: page.it
-                ? "Gestore file, Impostazioni e le altre finestre nostre"
-                : "The file manager, Settings and Minerva's other windows"
-            controlWidth: 220
-
-            control: S.ValueSlider {
-                width: 220
-                // Come per la membrana, il minimo non è la trasparenza massima
-                // possibile ma l'ultima che si legge ancora — vedi
-                // `windowOpacityMin` in `theme/Colors.qml`, dove c'è il conto.
-                // Prima arrivava a 0,55 e chi ci arrivava si ritrovava le
-                // proprie finestre grigie sopra uno sfondo chiaro, col testo
-                // piccolo che spariva. Non era una scelta estetica: era un
-                // cursore che poteva rompere le finestre.
-                from: Theme.Colors.windowOpacityMin
-                to: 1.0
-                value: Core.Ipc.get("shell.windowOpacity", 0.88)
-                onReleased: function(v) {
-                    Core.Ipc.setSetting("shell.windowOpacity",
-                                        Math.round(v * 100) / 100);
-                }
-            }
-        }
-
         // ── L'effetto sulle finestre ─────────────────────────────────────
         //
         // Qui c'era «Sfocatura», quattro scatti da «Nessuna» a «Molta». Erano
         // i numeri che si mandavano a Hyprland, e sotto minerva-wayland non
         // arrivavano da nessuna parte: si sceglieva, e non cambiava niente.
         //
-        // Giacomo, 2 settembre 2026: «ci vorrebbero delle impostazioni per
+        // il manutentore, 2 settembre 2026: «ci vorrebbero delle impostazioni per
         // mettere nessun effetto o blur o vetro e queste impostazioni si
         // dovrebbero applicare alle finestre e in blur o vetro dovrebbero far
         // vedere un solo corpo trasparente [...] la barra e la finestra senza
@@ -549,16 +518,18 @@ Page {
         // dentro il compositore — e dal 20 settembre lo sfoca il NOSTRO
         // fork di wlroots, non più SceneFX. Questa scheda stava in «Aspetto»;
         // sta qui dal 22 settembre 2026, accanto all'elasticità, perché
-        // Giacomo ha chiesto un posto solo per gli effetti.
+        // il manutentore ha chiesto un posto solo per gli effetti.
         S.SettingRow {
             width: parent.width
             label: page.it ? "Effetto delle finestre" : "Window effect"
             description: page.it
-                ? "Col vetro la finestra e la sua barra sono un corpo solo: "
+                ? "Nessuno rende opache le finestre di Minerva. "
+                  + "Col vetro la finestra e la sua barra sono un corpo solo: "
                   + "una trasparenza sola, senza stacchi in mezzo. "
                   + "L'acquerello prende solo il COLORE di quello che sta "
                   + "dietro e lo stende morbido: niente forme dietro il testo."
-                : "With glass, a window and its title bar are one body: a "
+                : "None makes Minerva windows opaque. "
+                  + "With glass, a window and its title bar are one body: a "
                   + "single transparency, with no seam between them. "
                   + "Watercolour takes only the COLOUR of what's behind and "
                   + "spreads it softly: no shapes behind the text."
@@ -609,11 +580,12 @@ Page {
         S.SettingRow {
             width: parent.width
             visible: page._effettoAcceso
-            label: page.it ? "Quanto si vede attraverso" : "How much shows through"
+            label: page.it ? "Opacità delle finestre" : "Window opacity"
             description: page.it
-                ? "Vale per tutte le finestre allo stesso modo: le nostre e "
-                  + "quelle degli altri programmi"
-                : "It applies to every window alike: ours and other apps'"
+                ? "100% è opaco; valori inferiori lasciano vedere attraverso. "
+                  + "L’acquerello rispetta le parti opache delle app esterne."
+                : "100% is opaque; lower values let the background show through. "
+                  + "Watercolour respects opaque content in external apps."
             controlWidth: 220
             control: S.ValueSlider {
                 width: 220

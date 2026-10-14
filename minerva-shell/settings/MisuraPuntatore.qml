@@ -13,7 +13,7 @@ import "." as S
 //  · in «Tastiera e mouse › Puntatore», perché è lì che ci si aspetta ogni
 //    cosa che riguardi il mouse.
 //
-// Giacomo, 5 settembre 2026: «voglio anche un'impostazione per selezionare la
+// il manutentore, 5 settembre 2026: «voglio anche un'impostazione per selezionare la
 // grandezza del puntatore». C'era già — in «Accessibilità» — e nessuno la
 // cercava lì. È lo stesso ragionamento che questa stessa pagina si è già
 // scritta per le animazioni: «non è un doppione: là è una comodità fra le
@@ -79,7 +79,7 @@ Item {
             // mai**. Qui il risultato del comando È la risposta — il nome del
             // tema — quindi serve `sh`, che aspetta.
             //
-            // Giacomo, 7 settembre 2026: «nemmeno ingrandire il puntatore».
+            // il manutentore, 7 settembre 2026: «nemmeno ingrandire il puntatore».
             // Non era una questione di quando si applicava: non si applicava
             // proprio, né all'accesso né premendo il pulsante. Il comando
             // partiva, trovava il tema, e la risposta la buttava via un

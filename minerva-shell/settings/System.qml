@@ -3,6 +3,9 @@ import Quickshell
 import "../theme" as Theme
 import "../core" as Core
 import "../ui" as Ui
+import "../windows11" as Windows11
+import "../windows11/ColorMath.js" as ColorMath
+import "windows/Dati.js" as Dati
 
 // System — Le impostazioni di Minerva e del sistema.
 //
@@ -46,7 +49,7 @@ FloatingWindow {
     //
     // Il 2 settembre 2026 qui c'era `color: "transparent"` più un
     // `Ui.FondoFinestra` — un rettangolo a tutta finestra col raggio — per
-    // arrotondare gli angoli, che Giacomo aveva chiesto.
+    // arrotondare gli angoli, che il manutentore aveva chiesto.
     //
     // Funzionava, e si è visto nelle fotografie. Costava però **quindici
     // megabyte per applicazione**, misurati: 55 MB senza, 69-72 con. Provato
@@ -65,7 +68,7 @@ FloatingWindow {
     // Col renderer software Qt ridipinge solo quello che dichiara sporco. Chi
     // sbaglia a dichiararlo lascia i propri pixel sul posto, e li' restano:
     // e' la famiglia dei «+» delle icone, ed e' quella dei residui che
-    // Giacomo ha visto il 5 settembre 2026 («e' pieno di artefatti»).
+    // il manutentore ha visto il 5 settembre 2026 («e' pieno di artefatti»).
     //
     // Le cause trovate una per una — misure animate a virgola in quattro
     // punti — sono state riparate. Ma tolte quelle il difetto compariva
@@ -84,7 +87,7 @@ FloatingWindow {
     //  · quando cambia un'IMPOSTAZIONE — i «+» che tornavano passando alle
     //    icone classiche: cambiare set di icone non cambia sezione, quindi
     //    non ridipingeva niente e i residui restavano;
-    //  · mentre si SCORRE — le scie verticali che Giacomo ha riconosciuto per
+    //  · mentre si SCORRE — le scie verticali che il manutentore ha riconosciuto per
     //    primo («l'errore si trova sempre in verticale, e sempre sulla parte
     //    dove c'e' l'effetto glass»): una `Shape` dipinge fuori dal ritaglio
     //    del `Flickable`, e sopra l'intestazione ogni fotogramma ne lascia
@@ -100,7 +103,7 @@ FloatingWindow {
     ///
     /// ── Perche' non basta una volta sola ─────────────────────────────────
     ///
-    /// Giacomo, 5 settembre 2026: «appena cliccato su classiche sono
+    /// il manutentore, 5 settembre 2026: «appena cliccato su classiche sono
     /// ricomparse». Un solo ridisegno chiesto con `Qt.callLater` arriva
     /// PRIMA che la pagina abbia finito di ridisporsi: si ridipinge, e un
     /// istante dopo la riga che si sposta deposita la sua scia. Ridipingere
@@ -166,7 +169,7 @@ FloatingWindow {
     // Venti fotogrammi servono al caso per cui il pennello e' nato: cambiare
     // set di icone rifa' la disposizione di tutta la pagina, e le scie si
     // depositano MENTRE le righe si spostano — ridipingere prima non serve a
-    // niente (Giacomo, 5 settembre: «appena cliccato su classiche sono
+    // niente (il manutentore, 5 settembre: «appena cliccato su classiche sono
     // ricomparse»). Girare un cursore non sposta niente: li' basta una
     // pennellata sola.
     property string _firmaIcone: ""
@@ -201,6 +204,8 @@ FloatingWindow {
     // Impostazioni si riprende da dove si era, e la voce corrente deve
     // vedersi senza andarla a cercare dentro un gruppo chiuso.
     onSectionChanged: {
+        settings.paginaCategoria = "";
+        settings.paginaWindows = "";
         settings.apriGruppoDi(settings.section);
         // Dopo che la pagina nuova si e' disposta, non prima: ridipingere la
         // finestra vecchia non cancella i residui di quella nuova.
@@ -208,6 +213,295 @@ FloatingWindow {
     }
 
     readonly property bool it: Core.Strings.lang === "it"
+
+    // ── Nel preset Windows, le Impostazioni di Windows 11 ────────────────
+    //
+    // il manutentore ha scelto il 12 ottobre 2026 che le Impostazioni, nel preset
+    // Windows, si presentino come quelle di Windows 11. Stesse pagine,
+    // stesse funzioni, stesse chiavi: cambia come si presentano.
+    //
+    //  · La colonna a sinistra diventa la navigazione di Windows
+    //    (`NavigazioneWindows.qml`): chi usa il computer, la ricerca, le
+    //    categorie in un elenco piatto.
+    //  · Una categoria con più pagine si apre sulla sua pagina di schede
+    //    (`CategoriaWindows.qml`); la pagina aperta mostra la briciola
+    //    «Sistema › Schermo», e la briciola riporta alla categoria.
+    //  · I colori, i raggi e il carattere sono quelli di Windows 11, presi
+    //    dai gettoni di `windows11/Style.qml` e prestati alla tavolozza di
+    //    questo processo (vedi `presentazione` in `theme/Colors.qml`). Le
+    //    ventiquattro pagine li seguono senza un `if` dentro.
+    readonly property bool stileWindows: Core.DesktopStyle.attuale === "windows"
+
+    readonly property var _coloriWindows: {
+        var st = Windows11.Style;
+        var g = st.gettoni;
+        var base = st.base;
+        var scheda = ColorMath.over(g.cardBackground, base);
+        return {
+            "scura": st.dark,
+            "base": base,
+            "window": base,
+            "membrane": base,
+            "lettura": scheda,
+            "panel": st.surface,
+            "raised": scheda,
+            "raisedHigh": ColorMath.over(g.dividerStroke, scheda),
+            "sunken": g.solidSecondary.replace(/^#FF/, "#"),
+            "hover": st.hover,
+            "pressed": st.pressed,
+            "edge": g.controlStroke,
+            "edgeBright": st.edge,
+            "text": st.text,
+            "textMuted": st.muted,
+            "textFaint": st.muted,
+            "textOnAccent": st.accentForeground,
+            "accent": st.accent,
+            "positive": st.success,
+            "warning": st.caution,
+            "danger": st.critical
+        };
+    }
+
+    // Il valore, e non `when`: un Binding spento rimette il valore che
+    // c'era prima di lui solo se se lo ricorda, e passando da Windows a
+    // Liquid i colori di Windows restavano (trovato dalla prova).
+    Binding {
+        target: Theme.Colors
+        property: "presentazione"
+        value: settings.stileWindows ? settings._coloriWindows : null
+    }
+    Binding {
+        target: Theme.Effects
+        property: "presentazione"
+        value: settings.stileWindows ? ({ "xs": 4, "sm": 4, "md": 8, "lg": 8 }) : null
+    }
+    // Le Impostazioni sono un'app: seguono la modalità delle app
+    // («Personalizzata» in Colori), non quella di Windows.
+    Binding {
+        target: Windows11.Style
+        property: "perApp"
+        value: true
+    }
+    Binding {
+        target: Theme.Typography
+        property: "carattere"
+        value: settings.stileWindows ? Windows11.Style.font : ""
+    }
+
+    /// Le 12 categorie di Impostazioni di Windows 11, coi nomi e l'ordine
+    /// di Windows (macchina di riferimento, `windows/Dati.js`). `pagina` è
+    /// la pagina Windows costruita; `voci` sono le pagine di Liquid che, per
+    /// ora, fanno le veci di quelle Windows non ancora costruite. Ogni
+    /// pagina di Liquid sta in una categoria sola: la prova lo controlla.
+    readonly property var categorieWindows: [
+        { "id": "home", "pagina": "w-home", "voci": [] },
+        { "id": "sistema", "pagina": "w-sistema", "voci": ["display", "audio", "notifiche", "power", "scorciatoie", "shell"] },
+        { "id": "dispositivi", "voci": ["bluetooth", "input", "controller"] },
+        { "id": "rete", "voci": ["network"] },
+        { "id": "personalizzazione", "pagina": "w-personalizzazione",
+          "voci": ["preset", "appearance", "scrivania", "finestre", "dock"] },
+        { "id": "app", "voci": ["defaults", "avvio"] },
+        { "id": "account", "voci": ["utente", "account", "accesso"] },
+        { "id": "ora", "voci": ["dataora"] },
+        { "id": "giochi", "voci": [] },
+        { "id": "accessibilita", "voci": ["accesso-facile"] },
+        { "id": "privacy", "voci": [] },
+        { "id": "update", "pagina": "w-update", "voci": [] }
+    ].map(function (c) {
+        c.it = Dati.t("it", c.id);
+        c.en = Dati.t("en", c.id);
+        c.icona = Qt.resolvedUrl("windows/icone/" + c.id + ".svg");
+        return c;
+    })
+
+    /// Le pagine Windows costruite (`windows/`), con la categoria a cui
+    /// appartengono.
+    readonly property var pagineWindows: ({
+        "w-sistema": { "file": "windows/Sistema.qml", "categoria": "sistema" },
+        "w-home": { "file": "windows/Home.qml", "categoria": "home" },
+        "w-update": { "file": "windows/LiquidUpdate.qml", "categoria": "update" },
+        "w-personalizzazione": { "file": "windows/Personalizzazione.qml", "categoria": "personalizzazione" },
+        "w-sfondo": { "file": "windows/Sfondo.qml", "categoria": "personalizzazione" },
+        "w-colori": { "file": "windows/Colori.qml", "categoria": "personalizzazione" },
+        "w-temi": { "file": "windows/Temi.qml", "categoria": "personalizzazione" },
+        "w-start": { "file": "windows/Start.qml", "categoria": "personalizzazione" },
+        "w-barra": { "file": "windows/Barra.qml", "categoria": "personalizzazione" }
+    })
+
+    /// La riga sotto il nome di una pagina di Liquid nelle schede di una
+    /// categoria (finché la pagina Windows non c'è).
+    readonly property var descrizioniWindows: ({
+        "display": ["Monitor, scala, luce notturna", "Monitors, scale, night light"],
+        "audio": ["Volume, uscita, ingresso, suoni", "Volume, output, input, sounds"],
+        "notifiche": ["Avvisi delle app e del sistema, non disturbare", "Alerts from apps and system, do not disturb"],
+        "power": ["Batteria, sospensione, coperchio", "Battery, sleep, lid"],
+        "scorciatoie": ["Combinazioni di tasti", "Keyboard shortcuts"],
+        "shell": ["Versione, ripristino, informazioni", "Version, reset, about"],
+        "bluetooth": ["Accoppiamento, cuffie, dispositivi", "Pairing, headphones, devices"],
+        "input": ["Tastiera, mouse, touchpad, puntatore", "Keyboard, mouse, touchpad, pointer"],
+        "controller": ["Pad e joystick", "Gamepads and joysticks"],
+        "defaults": ["Browser, posta, app che aprono i file", "Browser, mail, apps that open files"],
+        "avvio": ["App all'avvio e tenute pronte", "Startup apps and apps kept ready"],
+        "utente": ["Nome, foto, password", "Name, picture, password"],
+        "account": ["Account online e sincronizzazione", "Online accounts and sync"],
+        "accesso": ["Schermata di accesso, accesso automatico", "Sign-in screen, automatic sign-in"]
+    })
+
+    /// La pagina di una categoria che si sta guardando (le categorie senza
+    /// pagina Windows). Vuota: si guarda una pagina vera.
+    property string paginaCategoria: ""
+    /// La pagina Windows aperta (`w-…`). Vuota: una pagina di Liquid
+    /// (`section`) o di categoria.
+    property string paginaWindows: ""
+    property string categoriaOrigine: ""
+    property var cronologiaPercorsi: []
+    property var percorsoDaRipristinare: null
+    property int generazionePercorso: 0
+    readonly property int limiteCronologia: 50
+
+    // Si memorizza la navigazione, non una seconda copia delle preferenze.
+    // Le modifiche dell'utente restano nel demone anche tornando indietro.
+    function percorsoAttuale() {
+        return {pagina: paginaWindows, categoria: paginaCategoria,
+            sezione: section, origine: categoriaOrigine,
+            vista: page.item && page.item.vista !== undefined ? page.item.vista : "",
+            scorrimento: page.item && page.item.posizioneScorrimento !== undefined ? page.item.posizioneScorrimento : 0};
+    }
+    function stessoPercorso(a, b) {
+        if (a.pagina || b.pagina)
+            return a.pagina === b.pagina && a.vista === b.vista;
+        if (a.categoria || b.categoria)
+            return a.categoria === b.categoria;
+        return a.sezione === b.sezione && a.origine === b.origine;
+    }
+    function registraPercorso(destinazione) {
+        var attuale = percorsoAttuale();
+        if (!stileWindows || stessoPercorso(attuale, destinazione))
+            return;
+        var lista = cronologiaPercorsi.slice();
+        if (!lista.length || !stessoPercorso(lista[lista.length - 1], attuale))
+            lista.push(attuale);
+        cronologiaPercorsi = lista.slice(-limiteCronologia);
+    }
+    function ripristinaVistaPagina() {
+        var item = page.item;
+        var percorso = percorsoDaRipristinare;
+        if (!item || !percorso)
+            return;
+        if (item.vista !== undefined)
+            item.vista = percorso.vista || "";
+        var generazione = generazionePercorso;
+        Qt.callLater(function() {
+            // Un caricamento tardivo non deve scorrere la pagina successiva.
+            if (generazione !== settings.generazionePercorso || page.item !== item)
+                return;
+            if (item.posizioneScorrimento !== undefined)
+                item.posizioneScorrimento = Math.max(0, percorso.scorrimento || 0);
+        });
+    }
+    function impostaPercorso(percorso, registra) {
+        if (registra)
+            registraPercorso(percorso);
+        generazionePercorso++;
+        percorsoDaRipristinare = stileWindows ? percorso : null;
+        categoriaOrigine = percorso.origine || "";
+        paginaCategoria = percorso.categoria || "";
+        paginaWindows = percorso.pagina || "";
+        if (!paginaWindows && !paginaCategoria)
+            section = percorso.sezione;
+        ripristinaVistaPagina();
+    }
+    function registraVistaInterna(vista) {
+        var prossimo = percorsoAttuale();
+        prossimo.vista = vista;
+        prossimo.scorrimento = 0;
+        registraPercorso(prossimo);
+        generazionePercorso++;
+        percorsoDaRipristinare = prossimo;
+    }
+    function avvioWindows(id) {
+        cronologiaPercorsi = [];
+        apriWindows(id, false);
+    }
+
+    function categoriaPer(id) {
+        for (var i = 0; i < settings.categorieWindows.length; i++)
+            if (settings.categorieWindows[i].id === id)
+                return settings.categorieWindows[i];
+        return null;
+    }
+    function categoriaDi(sezione) {
+        for (var i = 0; i < settings.categorieWindows.length; i++)
+            if (settings.categorieWindows[i].voci.indexOf(sezione) >= 0)
+                return settings.categorieWindows[i];
+        return null;
+    }
+
+    /// La categoria accesa nella navigazione.
+    readonly property string categoriaAttiva: {
+        if (settings.paginaWindows !== "" && settings.pagineWindows[settings.paginaWindows])
+            return settings.pagineWindows[settings.paginaWindows].categoria;
+        if (settings.paginaCategoria !== "")
+            return settings.paginaCategoria;
+        var c = settings.categoriaPer(settings.categoriaOrigine) || settings.categoriaDi(settings.section);
+        return c ? c.id : "";
+    }
+
+    /// La briciola sopra il titolo di una pagina di Liquid aperta in
+    /// Windows: il nome della categoria.
+    readonly property string briciola: {
+        if (!settings.stileWindows || settings.paginaCategoria !== "" || settings.paginaWindows !== "")
+            return "";
+        var c = settings.categoriaPer(settings.categoriaOrigine) || settings.categoriaDi(settings.section);
+        return c && c.voci.length > 1 ? (settings.it ? c.it : c.en) : "";
+    }
+
+    function apriCategoria(id) {
+        var c = settings.categoriaPer(id);
+        if (!c)
+            return;
+        if (c.pagina) {
+            settings.apriWindows(c.pagina);
+            return;
+        }
+        if (c.voci.length === 1) {
+            settings.apriSezione(c.voci[0]);
+        } else {
+            settings.impostaPercorso({pagina:"", categoria:id, sezione:section, origine:"", vista:"", scorrimento:0}, true);
+        }
+    }
+    function apriSezione(id, origine, registra) {
+        settings.impostaPercorso({pagina:"", categoria:"", sezione:id,
+            origine:origine || "", vista:"", scorrimento:0}, registra !== false);
+    }
+    /// Anche la stessa URL può indicare la radice di una sottopagina interna.
+    function apriWindows(id, registra) {
+        if (!id)
+            return;
+        if (String(id).indexOf("w-") === 0) {
+            if (!settings.pagineWindows[id])
+                return;
+            settings.impostaPercorso({pagina:id, categoria:"", sezione:section,
+                origine:"", vista:"", scorrimento:0}, registra !== false);
+        } else {
+            settings.apriSezione(id, "", registra);
+        }
+    }
+    function mostraRiga(cercato) {
+        if (page.item && page.item.revealSetting)
+            page.item.revealSetting(cercato);
+    }
+    // Le due colonne hanno ognuna la sua casella: una ricerca lasciata a
+    // metà in una non deve filtrare l'altra senza che si veda il testo.
+    onStileWindowsChanged: {
+        settings.cronologiaPercorsi = [];
+        settings.percorsoDaRipristinare = null;
+        settings.generazionePercorso++;
+        settings.categoriaOrigine = "";
+        settings.paginaCategoria = "";
+        settings.paginaWindows = "";
+        settings.ricerca = "";
+    }
 
     // ── Il demone c'è? ───────────────────────────────────────────────────
     //
@@ -258,17 +552,21 @@ FloatingWindow {
         // Personalizzazione in quattro pagine, dal 28 settembre 2026: erano
         // sei (Aspetto, Scrivania, Stile, La Riva, Dock e barra, Effetti e
         // animazioni) e si pestavano i piedi — lo sfondo in Aspetto, le
-        // animazioni in due posti, le finestre in tre. Giacomo: «è diventato
+        // animazioni in due posti, le finestre in tre. il manutentore: «è diventato
         // tutto troppo confusionario e servirebbe riorganizzare tutto in
         // maniera più semplice e compatta». I nomi vecchi si traducono in
         // `sezioneNuova`, così un'ultima sezione ricordata o uno script che
         // apre «riva» arrivano nel posto giusto.
+        // Il preset per primo dall'11 ottobre 2026: decide quali opzioni
+        // esistono nelle altre pagine («Pagine che si adattano»).
+        { "id": "preset",     "icon": "screen",    "it": "Preset",        "en": "Preset",
+          "cerca": "preset stile scrivania liquid minerva mac windows 11 libero start barra windows accento tema windows sfondo bloom widget consigliati style" },
         { "id": "appearance", "icon": "image",     "it": "Aspetto",       "en": "Appearance",
-          "cerca": "tema chiaro scuro colore accento colori tinta icone stile preset mac windows minerva libero animazioni velocità movimento theme accent style motion" },
+          "cerca": "tema chiaro scuro colore accento colori tinta icone animazioni velocità movimento promemoria scorciatoie super k suggerimenti theme accent motion cheat sheet" },
         { "id": "scrivania",  "icon": "home",      "it": "Scrivania",     "en": "Desktop",
           "cerca": "sfondo wallpaper immagine cartella icone scrivania griglia widget processore memoria gpu temperatura rete orologio blocca pulita desktop" },
         { "id": "finestre",   "icon": "window",    "it": "Finestre",      "en": "Windows",
-          "cerca": "finestre barra del titolo pulsanti chiudi riduci ingrandisci effetto vetro acquerello trasparenza mercurio cornice anello elasticità wobbly rigidità smorzamento windows" },
+          "cerca": "tiling colonne affiancamento ordine finestre barra del titolo pulsanti chiudi riduci ingrandisci effetto vetro acquerello trasparenza mercurio cornice anello elasticità wobbly rigidità smorzamento windows" },
         { "id": "dock",       "icon": "dock",      "it": "Barra e dock", "en": "Bar & dock",
           "cerca": "barra dock posizione alto basso nascondi elude ingrandimento etichette riva angoli bordi isola molla appunti stanze cassetto consenso super menu applicazioni categorie taskbar" },
         { "id": "display",    "icon": "screen",    "it": "Schermo",       "en": "Display",
@@ -301,14 +599,17 @@ FloatingWindow {
           "cerca": "utente nome foto ritratto password" },
         { "id": "accesso",    "icon": "lock",      "it": "Accesso",       "en": "Login",
           "cerca": "accesso login greeter sfondo aurora automatico" },
-        { "id": "shell",      "icon": "settings",  "it": "Minerva",       "en": "Minerva",
-          "cerca": "aiuto scorciatoie promemoria ripristino valori di fabbrica informazioni about versione sistema" }
+        { "id": "shell",      "icon": "info",      "it": "Informazioni",  "en": "About",
+          "cerca": "minerva ripristino valori di fabbrica informazioni about versione sistema progetto github" },
+        { "id": "scorciatoie", "icon": "keyboard", "it": "Scorciatoie",   "en": "Shortcuts",
+          "cerca": "scorciatoie tasti combinazioni super disattiva attiva wifi bluetooth"
+        }
     ]
 
     // ── Come si presentano ───────────────────────────────────────────────
     //
     // Diciannove voci in un elenco piatto sono un elenco che si scorre, non
-    // che si legge. Giacomo, 4 settembre 2026: «completare il pannello
+    // che si legge. il manutentore, 4 settembre 2026: «completare il pannello
     // impostazioni facendo una sezione come cosmic con tutte le sottosezioni
     // divise per parte del desktop».
     //
@@ -319,7 +620,7 @@ FloatingWindow {
         // Sei gruppi, come COSMIC, dal 20 settembre 2026: prima c'erano
         // sette voci dirette in mezzo e la pagina Energia stava da sola.
         { "id": "g-scrivania", "icon": "image", "it": "Personalizzazione", "en": "Personalization",
-          "voci": ["appearance", "scrivania", "finestre", "dock"] },
+          "voci": ["preset", "appearance", "scrivania", "finestre", "dock"] },
         { "id": "g-dispositivi", "icon": "screen", "it": "Dispositivi", "en": "Devices",
           "voci": ["display", "audio", "input", "bluetooth", "controller"] },
         { "id": "g-connessioni", "icon": "wifi", "it": "Connessioni", "en": "Connections",
@@ -327,7 +628,7 @@ FloatingWindow {
         { "id": "g-app", "icon": "apps", "it": "Applicazioni", "en": "Applications",
           "voci": ["defaults", "avvio"] },
         { "id": "g-sistema", "icon": "settings", "it": "Sistema", "en": "System",
-          "voci": ["notifiche", "power", "utente", "accesso", "dataora", "shell"] },
+          "voci": ["notifiche", "power", "utente", "accesso", "dataora", "shell", "scorciatoie"] },
         { "id": "accesso-facile" }
     ]
 
@@ -368,9 +669,10 @@ FloatingWindow {
         for (var i = 0; i < settings.gruppi.length; i++) {
             var g = settings.gruppi[i];
             if (g.voci && g.voci.indexOf(id) >= 0) {
-                var copia = JSON.parse(JSON.stringify(settings.aperti));
-                copia[g.id] = true;
-                settings.aperti = copia;
+                // Un gruppo solo aperto alla volta: la colonna resta corta.
+                var solo = {};
+                solo[g.id] = true;
+                settings.aperti = solo;
                 return;
             }
         }
@@ -388,15 +690,98 @@ FloatingWindow {
         anchors.left: parent.left
         anchors.right: parent.right
 
-        label: settings.title
+        label: settings.stileWindows ? "" : settings.title
         onCloseRequested: settings.requestClose()
+    }
+
+    // ── La barra del titolo di Impostazioni di Windows 11 ────────────────
+    //
+    // Sopra la nostra barra (che resta per trascinare e per i pulsanti):
+    // Indietro, «Impostazioni» in piccolo e, al centro, «Trova
+    // un'impostazione» larga 516 (misure della macchina di riferimento).
+    TitoloWindows {
+        id: titoloWindows
+        visible: settings.stileWindows
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        finestra: settings
+    }
+    Item {
+        id: limiteContenutoWindows
+        anchors.top: parent.top
+        height: 32
+        // Nella VM il contenuto parte a 32 px; la ricerca arriva a 40,
+        // sovrapponendosi soltanto alla fascia vuota sopra le pagine.
+    }
+
+    /// Indietro ripercorre le visite; un ingresso diretto senza storico
+    /// conserva il padre della pagina come destinazione di ripiego.
+    readonly property bool puoTornare: {
+        if (settings.cronologiaPercorsi.length)
+            return true;
+        if (settings.paginaWindows !== "") {
+            var p = settings.pagineWindows[settings.paginaWindows];
+            var c = p ? settings.categoriaPer(p.categoria) : null;
+            return !!(page.item && page.item.briciole && page.item.briciole.length > 1)
+                || !!(c && c.pagina !== settings.paginaWindows);
+        }
+        return settings.briciola !== "";
+    }
+    function indietro() {
+        if (settings.cronologiaPercorsi.length) {
+            var lista = settings.cronologiaPercorsi.slice();
+            var precedente = lista.pop();
+            settings.cronologiaPercorsi = lista;
+            settings.impostaPercorso(precedente, false);
+            return;
+        }
+        if (settings.paginaWindows !== "") {
+            var percorso = page.item && page.item.briciole ? page.item.briciole : [];
+            if (percorso.length > 1 && percorso[percorso.length - 2].pagina) {
+                var destinazione = percorso[percorso.length - 2].pagina;
+                page.item.briciolaChiesta(destinazione);
+                settings.apriWindows(destinazione, false);
+                return;
+            }
+            var p = settings.pagineWindows[settings.paginaWindows];
+            if (p && settings.puoTornare) {
+                var categoria = settings.categoriaPer(p.categoria);
+                if (categoria && categoria.pagina)
+                    settings.apriWindows(categoria.pagina, false);
+            }
+            return;
+        }
+        var c = settings.categoriaPer(settings.categoriaOrigine) || settings.categoriaDi(settings.section);
+        if (c && c.pagina)
+            settings.apriWindows(c.pagina, false);
+        else if (c)
+            settings.impostaPercorso({pagina:"", categoria:c.id, sezione:section, origine:"", vista:"", scorrimento:0}, false);
+    }
+
+    Shortcut {
+        sequence: "Alt+Left"
+        enabled: settings.stileWindows && settings.puoTornare && !settings.dormiente
+        onActivated: settings.indietro()
     }
 
     // ── Colonna delle sezioni ────────────────────────────────────────────
 
+    NavigazioneWindows {
+        id: navigazioneWindows
+        anchors.top: settings.stileWindows ? limiteContenutoWindows.bottom : titolo.bottom
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        width: 300
+        visible: settings.stileWindows
+        finestra: settings
+    }
+
     Rectangle {
         id: sidebar
-        anchors.top: titolo.bottom
+        objectName: settings.stileWindows ? "" : "colonnaLiquid"
+        visible: !settings.stileWindows
+        anchors.top: settings.stileWindows ? limiteContenutoWindows.bottom : titolo.bottom
         anchors.left: parent.left
         anchors.bottom: parent.bottom
         // 248 e non 208: a 208 «Personalizzazione» e «Data, ora e lingua» si
@@ -594,9 +979,13 @@ FloatingWindow {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
+                                // A fisarmonica (11 ottobre 2026, «menù
+                                // compressi»): aprire un gruppo chiude gli
+                                // altri. Richiuderlo lascia tutto chiuso.
                                 onClicked: {
-                                    var c = JSON.parse(JSON.stringify(settings.aperti));
-                                    c[nodo.modelData.id] = !nodo.aperto;
+                                    var c = {};
+                                    if (!nodo.aperto)
+                                        c[nodo.modelData.id] = true;
                                     settings.aperti = c;
                                 }
                             }
@@ -668,8 +1057,8 @@ FloatingWindow {
     // appena torna questa fascia sparisce da sola.
     Rectangle {
         id: avviso
-        anchors.top: titolo.bottom
-        anchors.left: sidebar.right
+        anchors.top: settings.stileWindows ? limiteContenutoWindows.bottom : titolo.bottom
+        anchors.left: settings.stileWindows ? navigazioneWindows.right : sidebar.right
         anchors.right: parent.right
         height: visible ? riga.implicitHeight + Theme.Effects.space4 * 2 : 0
         visible: settings.senzaDemone
@@ -726,7 +1115,7 @@ FloatingWindow {
     Loader {
         id: page
         anchors.top: avviso.bottom
-        anchors.left: sidebar.right
+        anchors.left: settings.stileWindows ? navigazioneWindows.right : sidebar.right
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         asynchronous: false
@@ -745,6 +1134,10 @@ FloatingWindow {
         onLivelloChanged: page.opacity = page.livello
 
         source: {
+            if (settings.stileWindows && settings.paginaWindows !== "" && settings.pagineWindows[settings.paginaWindows])
+                return settings.pagineWindows[settings.paginaWindows].file;
+            if (settings.stileWindows && settings.paginaCategoria !== "")
+                return "CategoriaWindows.qml";
             switch (settings.section) {
             case "finestre": return "sections/Finestre.qml";
             case "dock":     return "sections/Dock.qml";
@@ -765,6 +1158,8 @@ FloatingWindow {
             case "utente":   return "sections/Utente.qml";
             case "accesso":  return "sections/Accesso.qml";
             case "shell":    return "sections/Shell.qml";
+            case "preset":   return "sections/Preset.qml";
+            case "scorciatoie": return "sections/Scorciatoie.qml";
             default:         return "sections/Appearance.qml";
             }
         }
@@ -776,13 +1171,29 @@ FloatingWindow {
             target: page.item
             ignoreUnknownSignals: true
             function onScorso() { Qt.callLater(settings.ridipingiTutto); }
+            function onBriciolaCliccata() {
+                var c = settings.categoriaPer(settings.categoriaOrigine) || settings.categoriaDi(settings.section);
+                if (c)
+                    settings.apriCategoria(c.id);
+            }
         }
 
         // Le sezioni entrano con una dissolvenza breve. Senza, cambiando voce
         // il contenuto salta di colpo e non si capisce che è cambiato lui e
         // non tutta la finestra.
         opacity: 0
-        onLoaded: fadeIn.start()
+        onLoaded: {
+            // La pagina sa quale sezione è: le schede ci costruiscono la
+            // chiave con cui ricordano se sono aperte.
+            if (page.item && page.item.sezione !== undefined)
+                page.item.sezione = settings.section;
+            if (page.item && page.item.finestra !== undefined)
+                page.item.finestra = settings;
+            if (page.item && page.item.briciola !== undefined)
+                page.item.briciola = Qt.binding(function () { return settings.briciola; });
+            settings.ripristinaVistaPagina();
+            fadeIn.start();
+        }
         NumberAnimation {
             id: fadeIn
             target: page

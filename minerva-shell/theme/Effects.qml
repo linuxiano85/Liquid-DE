@@ -38,10 +38,15 @@ QtObject {
     // Generosi: è la scelta che più di ogni altra fa sembrare un'interfaccia
     // curata invece che assemblata. Il raccordo `shoulder` è quello concavo
     // che unisce i pannelli alla barra — è la firma di Minerva.
-    readonly property int radiusXS:   6
-    readonly property int radiusSM:   10
-    readonly property int radiusMD:   16
-    readonly property int radiusLG:   24
+    //
+    // Una presentazione presa in prestito (vedi `Colors.qml`) li può
+    // stringere: Windows 11 arrotonda 4 i comandi e 8 le superfici. `null`, di
+    // serie, lascia i raggi di Liquid.
+    property var presentazione: null
+    readonly property int radiusXS:   presentazione ? presentazione.xs : 6
+    readonly property int radiusSM:   presentazione ? presentazione.sm : 10
+    readonly property int radiusMD:   presentazione ? presentazione.md : 16
+    readonly property int radiusLG:   presentazione ? presentazione.lg : 24
     readonly property int radiusXL:   32
     readonly property int radiusFull: 999
 

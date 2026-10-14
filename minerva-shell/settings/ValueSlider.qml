@@ -1,5 +1,6 @@
 import QtQuick
 import "../theme" as Theme
+import "../core" as Core
 
 // ValueSlider — Cursore per valori continui, col valore sempre visibile.
 //
@@ -73,7 +74,7 @@ Item {
     /// «normale» — è una posizione su quarantuno, in mezzo, senza niente che
     /// la trattenga.
     ///
-    /// Giacomo si è ritrovato il puntatore a **+1.00**, il massimo
+    /// il manutentore si è ritrovato il puntatore a **+1.00**, il massimo
     /// dell'accelerazione, senza sapere quando: la catena è onesta dal
     /// pannello al compositore, e l'unico che scrive quel valore è questo
     /// cursore. Basta una trascinata lunga per finire in fondo, e riportarsi
@@ -129,6 +130,11 @@ Item {
     implicitWidth: 200
     implicitHeight: 28
 
+    // Nel preset Windows, lo Slider di Windows 11: binario di un grigio
+    // deciso, maniglia tonda da 20 con il punto d'accento che cresce al
+    // passaggio e si stringe premendo.
+    readonly property bool stileWindows: Core.DesktopStyle.attuale === "windows"
+
     readonly property real _fraction: {
         var span = to - from;
         if (span <= 0)
@@ -148,7 +154,7 @@ Item {
         // l'etichetta deve dire quello che l'impostazione vale davvero.
         text: slider.readoutText
         color: Theme.Colors.textMuted
-        font.family: Theme.Typography.fontMono
+        font.family: slider.stileWindows ? Theme.Typography.fontDisplay : Theme.Typography.fontMono
         font.pixelSize: Theme.Typography.sizeSM
     }
 
@@ -165,7 +171,7 @@ Item {
             width: parent.width
             height: 4
             radius: 2
-            color: Theme.Colors.raisedHigh
+            color: slider.stileWindows ? Qt.alpha(Theme.Colors.text, 0.45) : Theme.Colors.raisedHigh
 
             Rectangle {
                 width: parent.width * slider._fraction
@@ -177,16 +183,25 @@ Item {
 
         Rectangle {
             id: handle
-            width: 18
-            height: 18
-            radius: 9
+            width: slider.stileWindows ? 20 : 18
+            height: width
+            radius: width / 2
             anchors.verticalCenter: parent.verticalCenter
             x: Math.max(0, Math.min(parent.width - width,
                                     slider._fraction * parent.width - width / 2))
-            color: Theme.Colors.accent
-            border.width: 2
-            border.color: Qt.rgba(0, 0, 0, 0.35)
-            scale: drag.pressed ? 1.2 : 1.0
+            color: slider.stileWindows ? (Theme.Colors.scura ? "#454545" : "#ffffff") : Theme.Colors.accent
+            border.width: slider.stileWindows ? 1 : 2
+            border.color: slider.stileWindows ? Theme.Colors.edge : Qt.rgba(0, 0, 0, 0.35)
+            scale: drag.pressed && !slider.stileWindows ? 1.2 : 1.0
+
+            Rectangle {
+                anchors.centerIn: parent
+                visible: slider.stileWindows
+                width: drag.pressed ? 10 : (drag.containsMouse ? 14 : 12)
+                height: width
+                radius: width / 2
+                color: Theme.Colors.accent
+            }
 
             Behavior on scale {
                 NumberAnimation { duration: Theme.Motion.instant }
@@ -196,6 +211,7 @@ Item {
         MouseArea {
             id: drag
             anchors.fill: parent
+            hoverEnabled: slider.stileWindows
             cursorShape: Qt.PointingHandCursor
 
             function valueAt(mouseX) {

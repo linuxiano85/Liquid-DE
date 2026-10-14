@@ -11,7 +11,7 @@
 #
 # Perché Minerva dava per scontato di essere l'unica sessione dell'utente, e
 # il 16 agosto 2026 quella supposizione è venuta a galla tutta insieme.
-# Giacomo entra dalla schermata di accesso mentre la sua sessione è già viva,
+# il manutentore entra dalla schermata di accesso mentre la sua sessione è già viva,
 # e non compare niente. Nei registri, tre righe:
 #
 #     unable to lock lockfile /run/user/1000/wayland-1.lock

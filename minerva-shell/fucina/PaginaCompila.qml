@@ -93,8 +93,8 @@ Item {
                       ? "L'archivio ufficiale di kernel.org, così com'è."
                       : (pagina.cachyosEtichetta !== ""
                          ? "L'archivio di CachyOS (" + pagina.cachyosEtichetta + "): il loro "
-                           + "kernel con le loro patch e lo scheduler BORE già dentro, "
-                           + "verificato con la firma dei loro sviluppatori."
+                           + "kernel con le loro patch, verificato con la firma dei loro sviluppatori. "
+                           + "La presenza e l'attivazione di BORE si controllano nei sorgenti e nella configurazione."
                          : pagina.cachyosBase
                          ? "L'archivio ufficiale con sopra la serie base di CachyOS e lo "
                            + "scheduler BORE, come faceva CachyOS per le versioni prima della 6.17."
@@ -192,7 +192,7 @@ Item {
             }
 
             Scelta {
-                testo: "LTO sottile"
+                testo: "ThinLTO"
                 spiega: "Ottimizza fra un file e l'altro: kernel un po' più rapido, "
                         + "compilazione più lunga. Solo con Clang."
                 acceso: pagina.f.lto

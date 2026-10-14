@@ -97,6 +97,25 @@ const struct barra_aspetto *barra_aspetto_ora(void) {
 	return &aspetto;
 }
 
+// Di serie Liquid: un compositore che non riceve mai `stilebarra` (una
+// shell vecchia, o nessuna shell) disegna le barre di sempre.
+static enum barra_stile stile = BARRA_STILE_LIQUID;
+
+bool barra_stile_imposta(enum barra_stile nuovo) {
+	if (nuovo != BARRA_STILE_LIQUID && nuovo != BARRA_STILE_WINDOWS)
+		return false;
+	stile = nuovo;
+	return true;
+}
+
+enum barra_stile barra_stile_ora(void) {
+	return stile;
+}
+
+bool barra_pulsanti_a_destra(void) {
+	return stile == BARRA_STILE_WINDOWS || aspetto.pulsanti_a_destra;
+}
+
 int barra_alta(void) {
 	return aspetto.alta;
 }
@@ -156,6 +175,25 @@ void barra_box_pulsante(int indice, int larghezza, struct wlr_box *fuori) {
 	*fuori = (struct wlr_box){0};
 	if (indice < 0 || indice >= BARRA_PULSANTI || larghezza <= 0)
 		return;
+
+	// ── Windows: tre rettangoli attaccati all'angolo ─────────────────────
+	//
+	// Lo schermo intero non ha pulsante: resta una scatola vuota, e una
+	// scatola vuota `barra_pulsante_a` e il disegno la saltano già.
+	if (stile == BARRA_STILE_WINDOWS) {
+		int dal_bordo;
+		switch (indice) {
+		case PULSANTE_CHIUDI:      dal_bordo = 1; break;
+		case PULSANTE_INGRANDISCI: dal_bordo = 2; break;
+		case PULSANTE_RIDUCI:      dal_bordo = 3; break;
+		default:                   return;
+		}
+		fuori->x = larghezza - BARRA_WINDOWS_PULSANTE * dal_bordo;
+		fuori->y = 0;
+		fuori->width = BARRA_WINDOWS_PULSANTE;
+		fuori->height = aspetto.alta;
+		return;
+	}
 
 	const int lato = aspetto.alta - 10;
 	const int passo = lato + 2;
@@ -263,6 +301,67 @@ static void segno(cairo_t *cr, int quale, bool ingrandita, double x, double y,
 		cairo_stroke(cr);
 		cairo_move_to(cr, B, AY);
 		cairo_line_to(cr, A, BY);
+		cairo_stroke(cr);
+		break;
+
+	default:
+		break;
+	}
+}
+
+// ── I segni in stile Windows ──────────────────────────────────────────────
+//
+// Disegnati da noi sulla forma dei segni Chrome di Windows 11: un quadrato
+// di dieci pixel al centro del pulsante, tratto di un pixel, angoli appena
+// tondi su ingrandisci e ripristina. Il mezzo pixel in più mette il tratto
+// sulla griglia: un tratto da un pixel fra due righe ne colora due, sfocati.
+static void segno_windows(cairo_t *cr, int quale, bool ingrandita,
+		const struct wlr_box *b) {
+	const double S = 10.0;
+	const double x = floor(b->x + (b->width - S) / 2.0) + 0.5;
+	const double y = floor(b->y + (b->height - S) / 2.0) + 0.5;
+
+	cairo_set_line_width(cr, 1.0);
+	cairo_set_line_cap(cr, CAIRO_LINE_CAP_SQUARE);
+	cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+
+	switch (quale) {
+	case PULSANTE_RIDUCI:
+		cairo_move_to(cr, x, y + S / 2.0);
+		cairo_line_to(cr, x + S - 1.0, y + S / 2.0);
+		cairo_stroke(cr);
+		break;
+
+	case PULSANTE_INGRANDISCI:
+		if (!ingrandita) {
+			cairo_new_sub_path(cr);
+			cairo_arc(cr, x + S - 2.0, y + 1.0, 1.0, -M_PI / 2.0, 0);
+			cairo_arc(cr, x + S - 2.0, y + S - 2.0, 1.0, 0, M_PI / 2.0);
+			cairo_arc(cr, x + 1.0, y + S - 2.0, 1.0, M_PI / 2.0, M_PI);
+			cairo_arc(cr, x + 1.0, y + 1.0, 1.0, M_PI, 1.5 * M_PI);
+			cairo_close_path(cr);
+			cairo_stroke(cr);
+		} else {
+			// Il quadrato davanti, più piccolo e in basso a sinistra, e
+			// l'angolo di quello dietro che spunta in alto a destra.
+			const double D = 2.0;
+			cairo_rectangle(cr, x, y + D, S - 1.0 - D, S - 1.0 - D);
+			cairo_stroke(cr);
+			cairo_move_to(cr, x + D, y + D);
+			cairo_line_to(cr, x + D, y);
+			cairo_line_to(cr, x + S - 1.0, y);
+			cairo_line_to(cr, x + S - 1.0, y + S - 1.0 - D);
+			cairo_line_to(cr, x + S - 1.0 - D, y + S - 1.0 - D);
+			cairo_stroke(cr);
+		}
+		break;
+
+	case PULSANTE_CHIUDI:
+		cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
+		cairo_move_to(cr, x - 0.5, y - 0.5);
+		cairo_line_to(cr, x + S - 0.5, y + S - 0.5);
+		cairo_move_to(cr, x + S - 0.5, y - 0.5);
+		cairo_line_to(cr, x - 0.5, y + S - 0.5);
 		cairo_stroke(cr);
 		break;
 
@@ -461,8 +560,44 @@ struct wlr_buffer *barra_disegna(const struct barra_stato *stato) {
 		aspetto.fondo_b, alfa_fondo);
 	cairo_fill(cr);
 
-	// ── I pulsanti ───────────────────────────────────────────────────────
-	for (int i = 0; i < BARRA_PULSANTI; i++) {
+	// ── I pulsanti in stile Windows ──────────────────────────────────────
+	//
+	// Il fondo al passaggio riempie tutto il pulsante, fino al bordo; per
+	// «chiudi» anche l'angolo tondo della barra, quindi si ritaglia sulla
+	// forma della barra prima di riempire. Il grigio è il colore del testo
+	// appena accennato, come il «SubtleFill» di Windows: chiaro sul tema
+	// scuro, scuro su quello chiaro, senza sapere quale dei due è.
+	if (stile == BARRA_STILE_WINDOWS) {
+		cairo_save(cr);
+		tondo_in_cima(cr, l, h, BARRA_RAGGIO);
+		cairo_clip(cr);
+		for (int i = 0; i < BARRA_PULSANTI; i++) {
+			struct wlr_box b;
+			barra_box_pulsante(i, l, &b);
+			if (b.width <= 0)
+				continue;
+			const bool sotto = i == stato->sotto_il_dito;
+			if (sotto) {
+				cairo_rectangle(cr, b.x, b.y, b.width, b.height);
+				if (i == PULSANTE_CHIUDI)
+					cairo_set_source_rgba(cr, 0.769, 0.169, 0.110, 1.0);
+				else
+					cairo_set_source_rgba(cr, aspetto.testo_r,
+						aspetto.testo_g, aspetto.testo_b, 0.08);
+				cairo_fill(cr);
+			}
+			if (sotto && i == PULSANTE_CHIUDI)
+				cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0);
+			else
+				cairo_set_source_rgba(cr, aspetto.testo_r,
+					aspetto.testo_g, aspetto.testo_b, alfa_testo);
+			segno_windows(cr, i, stato->ingrandita, &b);
+		}
+		cairo_restore(cr);
+	}
+
+	// ── I pulsanti di Liquid ─────────────────────────────────────────────
+	for (int i = 0; stile == BARRA_STILE_LIQUID && i < BARRA_PULSANTI; i++) {
 		struct wlr_box b;
 		barra_box_pulsante(i, l, &b);
 		if (b.width <= 0)
@@ -496,7 +631,8 @@ struct wlr_buffer *barra_disegna(const struct barra_stato *stato) {
 	if (stato->titolo != NULL && stato->titolo[0] != '\0') {
 		struct wlr_box primo;
 		barra_box_pulsante(0, l, &primo);
-		int margine = aspetto.pulsanti_a_destra
+		const bool a_destra = barra_pulsanti_a_destra();
+		int margine = a_destra
 			? l - primo.x + 8
 			: primo.x + primo.width + 8;
 		int massimo = l - 2 * margine;
@@ -519,11 +655,11 @@ struct wlr_buffer *barra_disegna(const struct barra_stato *stato) {
 		pango_layout_get_pixel_size(testo, &naturale, &alto_n);
 		(void)alto_n;
 		if (naturale > massimo) {
-			const int libero = aspetto.pulsanti_a_destra
+			const int libero = a_destra
 				? primo.x - 8 - 12
 				: l - 12 - margine;
 			if (libero > massimo) {
-				margine = aspetto.pulsanti_a_destra ? 12 : margine;
+				margine = a_destra ? 12 : margine;
 				massimo = libero;
 			}
 		}

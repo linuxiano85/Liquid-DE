@@ -4,7 +4,7 @@ import "../core" as Core
 
 // RitaglioRitratto — Prendere un pezzo di una foto e farne un ritratto.
 //
-// Giacomo: «se ad esempio ho un'immagine dove ho più persone e voglio
+// il manutentore: «se ad esempio ho un'immagine dove ho più persone e voglio
 // selezionare la mia faccia posso farlo oppure tutta l'immagine».
 //
 // ── Il taglio non lo fa nessun programma esterno ───────────────────────────

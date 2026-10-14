@@ -1,0 +1,19 @@
+{
+  "cosmic-term": {
+    "url": "https://github.com/pop-os/cosmic-term.git",
+    "commit": "9129277bed1e810418a3138d683c1bc15656234f",
+    "version": "1.9.0",
+    "license": "GPL-3.0-only"
+  },
+  "cosmic-files": {
+    "url": "https://github.com/pop-os/cosmic-files.git",
+    "commit": "d1f0af78e64f9e8ddb52c486913d53a234ce3cf2",
+    "version": "1.9.0",
+    "license": "GPL-3.0-only"
+  },
+  "libcosmic": {
+    "url": "https://github.com/pop-os/libcosmic.git",
+    "commit": "08a09e3dfa1f729d52585fcedd6e731130235363",
+    "license": "MPL-2.0"
+  }
+}

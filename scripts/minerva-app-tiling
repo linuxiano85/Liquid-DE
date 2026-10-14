@@ -1,0 +1,28 @@
+#!/bin/sh
+# The system app remains the fallback, and is used outside Minerva.
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+app=${1:?Specify cosmic-term, cosmic-files or shelly-ui}
+shift
+case "$app" in cosmic-term|cosmic-files|shelly-ui) ;; *) exit 2 ;; esac
+program="/usr/bin/$app"
+case ":${XDG_CURRENT_DESKTOP:-}:" in
+    *:Minerva:*|*:Liquid:*) minerva=1 ;;
+    *) minerva=${MINERVA_CANALE:+1} ;;
+esac
+if [ "${minerva:-0}" = 1 ] && [ "${MINERVA_TILED_HEADERS:-1}" != 0 ]; then
+    MINERVA_TILED_HEADERS=1
+    export MINERVA_TILED_HEADERS
+    if [ "$app" != shelly-ui ] && [ -x "$ROOT/libexec/tiling/$app" ]; then
+        program="$ROOT/libexec/tiling/$app"
+    fi
+    if [ "$app" = shelly-ui ] && [ -f "$ROOT/lib/minerva/libminervatiledheaders.so" ]; then
+        # The dynamic loader splits LD_PRELOAD on spaces: an inherited FD
+        # keeps project roots containing spaces valid too.
+        exec 9<"$ROOT/lib/minerva/libminervatiledheaders.so"
+        LD_PRELOAD="/proc/self/fd/9${LD_PRELOAD:+:$LD_PRELOAD}"
+        MINERVA_TILED_HEADERS_FD=9
+        export LD_PRELOAD MINERVA_TILED_HEADERS_FD
+    fi
+fi
+exec "$program" "$@"

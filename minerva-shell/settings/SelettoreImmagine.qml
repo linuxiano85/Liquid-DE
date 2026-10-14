@@ -13,7 +13,7 @@ import "../ui" as Ui
 // immagini, e il commento accanto lo ammetteva già: «Non è un selettore: si
 // copia il percorso col tasto destro e lo si incolla sopra».
 //
-// Giacomo, provandolo: «scegli da disco apre il file manager e da lì non posso
+// il manutentore, provandolo: «scegli da disco apre il file manager e da lì non posso
 // cliccare su seleziona». È esattamente quello: un gestore file non ha modo di
 // restituire una scelta a chi l'ha aperto. Servirebbe il portale del desktop
 // (`xdg-desktop-portal`), che è un'altra cosa e un altro lavoro.
@@ -27,7 +27,7 @@ import "../ui" as Ui
 //
 // `visible: false` NASCONDE, NON SOSPENDE. Un `Repeater` di anteprime dentro
 // un riquadro invisibile costruisce le sue celle e DECODIFICA le sue immagini
-// come se fosse in primo piano: nella cartella di Giacomo erano trecentoundici
+// come se fosse in primo piano: nella cartella di il manutentore erano trecentoundici
 // fotografie. Per questo il modello è vuoto finché non si apre, e non basta
 // nascondere la griglia.
 Rectangle {

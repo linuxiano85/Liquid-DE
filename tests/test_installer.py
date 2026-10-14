@@ -31,6 +31,20 @@ class InstallerTests(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("#!/bin/sh\nexit 0\n")
                 path.chmod(0o755)
+            module = "minerva-shell/native/Minerva/WindowIdentity"
+            (source / module).mkdir(parents=True)
+            for name in ("libminervawindowidentity.so", "qmldir"):
+                shutil.copy2(ROOT / module / name, source / module / name)
+            helper = "lib/minerva/libminervatiledheaders.so"
+            (source / helper).parent.mkdir(parents=True)
+            shutil.copy2(ROOT / helper, source / helper)
+            adapter = source / "libexec/tiling/cosmic-term"
+            adapter.parent.mkdir(parents=True)
+            adapter.write_text("#!/bin/sh\nexit 0\n")
+            adapter.chmod(0o755)
+            license_file = source / "libexec/tiling/licenses/cosmic-term/LICENSE"
+            license_file.parent.mkdir(parents=True)
+            license_file.write_text("Fixture license\n")
             env = dict(os.environ, HOME=str(base / "home"),
                        XDG_CONFIG_HOME=str(base / "config"),
                        LIQUID_PREFISSO=str(base / "installed"))
@@ -40,6 +54,14 @@ class InstallerTests(unittest.TestCase):
             copied = base / "installed/radice/compositore/build-native/minerva-wayland"
             self.assertTrue(copied.is_file())
             self.assertTrue(os.access(copied, os.X_OK))
+            installed_module = base / "installed/radice" / module / "libminervawindowidentity.so"
+            self.assertEqual(installed_module.read_bytes(),
+                             (source / module / "libminervawindowidentity.so").read_bytes())
+            root = base / "installed/radice"
+            self.assertEqual((root / helper).read_bytes(), (source / helper).read_bytes())
+            self.assertTrue(os.access(root / "libexec/tiling/cosmic-term", os.X_OK))
+            self.assertEqual((root / "libexec/tiling/licenses/cosmic-term/LICENSE").read_bytes(),
+                             license_file.read_bytes())
 
     def test_scan_uses_the_real_dependency_list_and_reports_greetd(self):
         with tempfile.TemporaryDirectory() as temporary:

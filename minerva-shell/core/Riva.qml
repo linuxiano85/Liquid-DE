@@ -4,7 +4,7 @@ import "." as Core
 
 // Riva — che cosa fa ogni angolo e ogni bordo, e com'è la molla.
 //
-// Giacomo, 25 settembre 2026: «massima flessibilità: tutto deve essere
+// il manutentore, 25 settembre 2026: «massima flessibilità: tutto deve essere
 // facilmente personalizzabile». La Riva (angoli, bordi, Isola) nasce con
 // le scelte della simulazione, ma ogni scelta è un'impostazione: qui ci
 // sono il catalogo delle azioni e le scelte correnti, lette in un posto
@@ -13,6 +13,11 @@ import "." as Core
 // fa scegliere).
 QtObject {
     id: riva
+
+    // In Windows la riva non deve riapparire da bordi, IPC o cambio stanza.
+    // Il consenso dipende dal preset: non cancelliamo le preferenze di Liquid.
+    readonly property bool attiva: Core.DesktopStyle.attuale !== "windows"
+        && Core.Ipc.get("bar.stile", "isola") !== "windows11"
 
     /// Le azioni che un angolo può avere.
     readonly property var azioni: [
@@ -37,6 +42,8 @@ QtObject {
         return riva._diSerie[chiave] || "niente";
     }
     function angolo(chiave) {
+        if (!riva.attiva)
+            return "niente";
         switch (chiave) {
         case "altoSx":  return riva.altoSx;
         case "altoDx":  return riva.altoDx;
@@ -80,7 +87,7 @@ QtObject {
     /// Il Cassetto a sinistra (e le Stanze a destra).
     readonly property bool cassettoASinistra: Core.Ipc.get("riva.cassetto", "destra") === "sinistra"
     /// Con una finestra che riempie lo schermo, la riva chiede Super.
-    readonly property bool conConsenso: Core.Ipc.get("riva.consenso", true) !== false
+    readonly property bool conConsenso: riva.attiva && Core.Ipc.get("riva.consenso", true) !== false
     /// Il carattere della molla: «calma», «liquida», «viva».
     readonly property string molla: Core.Ipc.get("riva.molla", "liquida")
 

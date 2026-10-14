@@ -1,0 +1,47 @@
+{
+  "project": "Microsoft Fluent System Icons",
+  "commit": "a347af95478f989038cccbf085978865264c048a",
+  "license": "MIT",
+  "sources": [
+    {
+      "name": "cut",
+      "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Cut/SVG/ic_fluent_cut_24_regular.svg",
+      "sha256": "af3d18f0d18afc680385675fdc91d6cb486611753cd7dc2341bc8907b6ae6f24"
+    },
+    {
+      "name": "copy",
+      "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Copy/SVG/ic_fluent_copy_24_regular.svg",
+      "sha256": "ae4268eef9bc6cae4c77a8a2b3b8607861594e0e834e4ed0730667f92e73609e"
+    },
+    {
+      "name": "paste",
+      "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Clipboard%20Paste/SVG/ic_fluent_clipboard_paste_24_regular.svg",
+      "sha256": "2f9053de6de55352a4b244c1ddc15af9b9648ca9f77f6402d33616290aca292b"
+    },
+    {
+      "name": "rename",
+      "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Rename/SVG/ic_fluent_rename_24_regular.svg",
+      "sha256": "b5e15de832d52e2e11c4e543e46a0ec1570ce3e1cbd7a1eb28830b89b49c25ca"
+    },
+    {
+      "name": "delete",
+      "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Delete/SVG/ic_fluent_delete_24_regular.svg",
+      "sha256": "0f0769b54d5862f2390ea7e51aab825e5dc10d4fa36da34d1559acc55799be92"
+    },
+    {
+      "name": "sort",
+      "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Arrow%20Sort/SVG/ic_fluent_arrow_sort_24_regular.svg",
+      "sha256": "f95fb569a4ce30336a11bab1c5a90a465f7f1b1987b191977f1cd2e1f824e48f"
+    },
+    {
+      "name": "more",
+      "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/More%20Horizontal/SVG/ic_fluent_more_horizontal_24_regular.svg",
+      "sha256": "aacb8ee10e503858f5465d18beb79f16d1ad790eb2b802127ee572062129fc3a"
+    },
+    {
+      "name": "view",
+      "url": "https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Apps%20List/SVG/ic_fluent_apps_list_24_regular.svg",
+      "sha256": "9fc94ddf01b7ab8c4ba4ea0f0ca1f32fcb75492817df6fa49113d587b779336c"
+    }
+  ]
+}

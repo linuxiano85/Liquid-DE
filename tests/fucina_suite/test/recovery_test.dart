@@ -93,7 +93,10 @@ void main() {
         '# comment\nusb-storage\nnvme\nnvme\n',
       );
       write('.config/modprobed.db', 'legacy\n');
-      expect((await leggiModprobed(env)).moduli, {'usb_storage', 'nvme'});
+      final diario = await leggiModprobed(env);
+      expect(diario.moduli, {'usb_storage', 'nvme'});
+      expect(diario.trovato, isTrue);
+      expect(diario.leggibile, isTrue);
     },
   );
   test('legacy database remains supported', () async {
@@ -113,7 +116,10 @@ void main() {
   test('empty current database does not resurrect an old database', () async {
     write('.local/share/modprobed-db/modprobed.db', '');
     write('.config/modprobed.db', 'stale\n');
-    expect((await leggiModprobed(env)).moduli, isEmpty);
+    final diario = await leggiModprobed(env);
+    expect(diario.moduli, isEmpty);
+    expect(diario.trovato, isTrue);
+    expect(diario.leggibile, isTrue);
   });
   test('configuration never executes shell expressions', () async {
     write(
@@ -130,7 +136,10 @@ void main() {
       File(
         '${temp.path}/.local/share/modprobed-db/modprobed.db',
       ).writeAsBytesSync([255]);
-      expect((await leggiModprobed(env)).moduli, isEmpty);
+      final diario = await leggiModprobed(env);
+      expect(diario.moduli, isEmpty);
+      expect(diario.trovato, isTrue);
+      expect(diario.leggibile, isFalse);
     },
   );
   test(

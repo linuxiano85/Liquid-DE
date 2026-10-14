@@ -11,7 +11,7 @@ import "../ui" as Ui
 //
 // ── Che cosa NON fa, e perché ────────────────────────────────────────────
 //
-// Non guarda tutta la cartella personale. Misurato sulla macchina di Giacomo
+// Non guarda tutta la cartella personale. Misurato sulla macchina di il manutentore
 // il 26 agosto 2026: **88.982 file** fra immagini e video, di cui 64.115 in
 // `Documenti/Progetti` e 17.303 in `.local/share` — icone e risorse, non
 // ricordi. Le fotografie vere, fuori dai progetti, sono **826**.
@@ -36,6 +36,11 @@ Item {
 
     /// I giorni: `[{giorno, quante}, …]`, dal più recente.
     property var giorni: []
+
+    /// Dove si è arrivati scorrendo: serve a controllare che, tornando da
+    /// una foto (vedi `daGalleria` in Viewer.qml), si ritrovi lo stesso punto.
+    readonly property real scorrimento: lista.contentY
+    function scorri(y) { lista.contentY = y; }
     property int totale: 0
     property int senzaData: 0
     property bool arrivata: false

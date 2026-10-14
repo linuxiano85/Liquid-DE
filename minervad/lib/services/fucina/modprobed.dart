@@ -2,9 +2,8 @@ import 'dart:io';
 
 /// Read current and legacy modprobed-db layouts without executing its shell
 /// configuration. Installed software and a populated database are distinct.
-Future<({String percorso, Set<String> moduli})> leggiModprobed(
-  Map<String, String> ambiente,
-) async {
+Future<({String percorso, Set<String> moduli, bool trovato, bool leggibile})>
+leggiModprobed(Map<String, String> ambiente) async {
   final casa = ambiente['HOME'] ?? '';
   String xdg(String key, String fallback) {
     final value = ambiente[key] ?? '';
@@ -67,15 +66,21 @@ Future<({String percorso, Set<String> moduli})> leggiModprobed(
     break; // The current configuration takes precedence over old copies.
   }
   final paths = configured != null
-      ? ['$configured/modprobed.db']
+      ? [
+          // In modprobed-db DBPATH names the containing directory; the
+          // program itself reads/writes "$DBPATH/modprobed.db".
+          '$configured/modprobed.db',
+        ]
       : [
           '$data/modprobed-db/modprobed.db',
           '$config/modprobed.db',
           '$casa/.config/modprobed.db',
         ];
+  var trovato = false;
   for (final path in paths.toSet()) {
     try {
       final text = await File(path).readAsString();
+      trovato = true;
       final modules = <String>{};
       for (final line in text.split('\n')) {
         final name = line.trim().split(RegExp(r'\s+')).first;
@@ -83,12 +88,27 @@ Future<({String percorso, Set<String> moduli})> leggiModprobed(
           modules.add(name.replaceAll('-', '_'));
         }
       }
-      return (percorso: path, moduli: modules);
+      return (percorso: path, moduli: modules, trovato: true, leggibile: true);
     } on FormatException {
       // Malformed text is not a usable configuration or module database.
+      try {
+        trovato = trovato || await File(path).exists();
+      } on FileSystemException {
+        // Keep checking any supported fallback path.
+      }
     } on FileSystemException {
       // A legacy database is still useful when migration has not happened.
+      try {
+        trovato = trovato || await File(path).exists();
+      } on FileSystemException {
+        // Keep checking any supported fallback path.
+      }
     }
   }
-  return (percorso: paths.first, moduli: <String>{});
+  return (
+    percorso: paths.first,
+    moduli: <String>{},
+    trovato: trovato,
+    leggibile: false,
+  );
 }

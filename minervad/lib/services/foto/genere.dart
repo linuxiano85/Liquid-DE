@@ -86,7 +86,7 @@ enum Genere {
         // un file: si riempie la pancia prima di cominciare, perché di un
         // file conviene averne un pezzo davanti.
         //
-        // Misurato quel giorno sul televisore della cucina, con Giacomo che
+        // Misurato quel giorno sul televisore della cucina, con il manutentore che
         // contava i secondi: **sei secondi di ritardo**, e alzare la banda da
         // 6 a 16 Mbit/s non ne toglieva nemmeno uno. Vuol dire che la scorta
         // del televisore si misura in SECONDI e non in byte — e i secondi non

@@ -7,7 +7,7 @@ import "../ui" as Ui
 //
 // ── A che cosa serve ─────────────────────────────────────────────────────
 //
-// Giacomo, 4 settembre 2026: «posso avere la barra come windows con le app
+// il manutentore, 4 settembre 2026: «posso avere la barra come windows con le app
 // aperte e meteo e tutto simile a windows eccetera». È il pezzo che manca allo
 // stile «Windows»: senza dock, le finestre aperte devono stare da qualche
 // parte, e quella parte è la barra.
@@ -86,6 +86,7 @@ Row {
     onFinestreChanged: {
         lista.sincronizza();
         Qt.callLater(function () {
+            if (!lista) return; // A preset change may already have destroyed this bar.
             var nuovo = [];
             for (var i = 0; i < lista.finestre.length; i++)
                 nuovo.push(lista.finestre[i].address);

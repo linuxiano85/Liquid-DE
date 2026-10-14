@@ -4,12 +4,13 @@ import 'dart:io';
 
 import 'alias.dart';
 import 'catalogo.dart';
+import 'sicurezza_kernel.dart';
 
 /// Il rilievo: che cosa c'è in questo computer e che cosa lo fa funzionare.
 ///
 /// ── Da dove nasce ──────────────────────────────────────────────────────────
 ///
-/// Giacomo, 30 settembre 2026: la vecchia utility incrociava «lspci, lsusb,
+/// il manutentore, 30 settembre 2026: la vecchia utility incrociava «lspci, lsusb,
 /// localmodconfig e modprobe per avere la lista esatta di tutto quello che ci
 /// serve». L'idea dell'incrocio è giusta e resta. Cambiano le fonti, perché
 /// `lspci` e `lsusb` vedono solo due bus: i dispositivi ACPI, I²C, platform e
@@ -24,6 +25,8 @@ import 'catalogo.dart';
 ///    ma «sta lavorando adesso».
 ///  · **caricato** — il modulo è in `/proc/modules`. Comprende i moduli che
 ///    non guidano un dispositivo: filesystem, firewall, cifratura.
+///  · **storico** — il modulo guida una periferica incontrata in un rilievo
+///    precedente, anche se ora è scollegata.
 ///  · **modprobed** — il modulo è nel diario di `modprobed-db`, cioè è stato
 ///    caricato almeno una volta da quando il diario esiste. È la sola fonte
 ///    che ricorda la chiavetta di martedì scorso.
@@ -51,20 +54,30 @@ class Rilevatore {
 
   /// Racconta le tappe, come l'inventario di Manutenzione.
   final void Function(String fase, String testo, int fatte, int quante)?
-      racconta;
+  racconta;
 
   /// Quanti processori ha la macchina. Si passa perché nelle prove non sia
   /// quello di chi le lancia.
   final int nuclei;
+
+  /// Alias visti nei rilievi precedenti. Servono a conservare i moduli che
+  /// guidavano periferiche scollegate al momento della nuova scansione.
+  final Set<String> modaliasStorici;
 
   Rilevatore({
     String radice = '/',
     Map<String, String>? ambiente,
     this.racconta,
     int? nuclei,
-  })  : radice = radice.endsWith('/') ? radice : '$radice/',
-        ambiente = ambiente ?? Platform.environment,
-        nuclei = nuclei ?? Platform.numberOfProcessors;
+    Iterable<String> modaliasStorici = const [],
+  }) : radice = radice.endsWith('/') ? radice : '$radice/',
+       ambiente = ambiente ?? Platform.environment,
+       nuclei = nuclei ?? Platform.numberOfProcessors,
+       modaliasStorici = {
+         for (final a in modaliasStorici)
+           if (a.length <= 1024 && a.contains(':') && !a.contains('\n'))
+             a.trim(),
+       };
 
   String _p(String relativo) => '$radice$relativo';
 
@@ -78,19 +91,24 @@ class Rilevatore {
     final rilascio = (await _leggi('proc/sys/kernel/osrelease')).trim();
     final cartellaModuli = await _cartellaModuli(rilascio);
     if (cartellaModuli == null) {
-      avvisi.add('Non trovo i moduli del kernel in uso ($rilascio): i '
-          'dispositivi si vedono, ma non so dire quale modulo li guidi.');
+      avvisi.add(
+        'Non trovo i moduli del kernel in uso ($rilascio): i '
+        'dispositivi si vedono, ma non so dire quale modulo li guidi.',
+      );
     }
 
     _dici('dispositivi', 'Guardo tutti i dispositivi in /sys.', 1);
     // Prima i dispositivi, poi l'indice: così l'indice tiene solo le regole
     // dei bus che hanno davvero un dispositivo senza driver.
     final grezzi = await _dispositiviGrezzi();
+    final aliasCorrenti = {for (final g in grezzi) g.modalias};
+    final aliasStoriciAssenti = modaliasStorici.difference(aliasCorrenti);
     final busCercati = {
       for (final g in grezzi)
         if (g.driver == null &&
             !_senzaLegame.contains(_primaDeiDuePunti(g.modalias)))
           ?IndiceAlias.busDi(g.modalias),
+      for (final a in aliasStoriciAssenti) ?IndiceAlias.busDi(a),
     };
     final indice = cartellaModuli == null
         ? IndiceAlias()
@@ -113,58 +131,72 @@ class Rilevatore {
     // diceva nessuno: si vedevano «8 moduli» e basta.
     final monolitico = !await File(_p('proc/modules')).exists();
     if (monolitico) {
-      avvisi.add('Il kernel in uso non carica moduli: ha tutto dentro. Il '
-          'rilievo vede i dispositivi ma non sa dire quale modulo li '
-          'guiderebbe, e partendo dalla sua configurazione localmodconfig non '
-          'toglie niente. Essenziali e scorte si cercano nei sorgenti del '
-          'kernel nuovo e si accendono da lì.');
+      avvisi.add(
+        'Il kernel in uso non carica moduli: ha tutto dentro. Il '
+        'rilievo vede i dispositivi ma non sa dire quale modulo li '
+        'guiderebbe, e partendo dalla sua configurazione localmodconfig non '
+        'toglie niente. Essenziali e scorte si cercano nei sorgenti del '
+        'kernel nuovo e si accendono da lì.',
+      );
     }
     final caricati = await _caricati();
     final esterni = await _esterni();
     if (esterni.isNotEmpty) {
-      avvisi.add('Moduli esterni al kernel in uso: ${esterni.join(', ')}. '
-          'Non vengono dai sorgenti del kernel, quindi il kernel nuovo non li '
-          'avrà: se uno di loro è il driver della scheda video (NVIDIA), il '
-          'kernel nuovo partirà senza grafica.');
+      avvisi.add(
+        'Moduli esterni al kernel in uso: ${esterni.join(', ')}. '
+        'Non vengono dai sorgenti del kernel, quindi il kernel nuovo non li '
+        'avrà: se uno di loro è il driver della scheda video (NVIDIA), il '
+        'kernel nuovo partirà senza grafica.',
+      );
     }
     final diario = await _modprobed();
     if (!diario.presente) {
-      avvisi.add('Il diario di modprobed-db è assente, vuoto o non leggibile. '
-          'Senza, il kernel conosce solo quello che è collegato adesso: una '
-          'chiavetta o un controller usati ieri non ci sono.');
+      avvisi.add(
+        'Il diario di modprobed-db è assente, vuoto o non leggibile. '
+        'Senza, il kernel conosce solo quello che è collegato adesso: una '
+        'chiavetta o un controller usati ieri non ci sono.',
+      );
     }
 
     _dici('avvio', 'Cerco quello che serve ad avviare.', 3);
     final avvio = await _avvio();
     if (avvio.dispositivoRadice.isNotEmpty &&
         !avvio.dispositivoRadice.startsWith('/dev/')) {
-      avvisi.add('La radice sta su «${avvio.dispositivoRadice}» '
-          '(${avvio.tipoRadice}), che non è un disco: la Fucina non sa '
-          'seguirne la catena, e non può garantire che il kernel nuovo la '
-          'monti. ZFS, per esempio, è un modulo esterno.');
+      avvisi.add(
+        'La radice sta su «${avvio.dispositivoRadice}» '
+        '(${avvio.tipoRadice}), che non è un disco: la Fucina non sa '
+        'seguirne la catena, e non può garantire che il kernel nuovo la '
+        'monti. ZFS, per esempio, è un modulo esterno.',
+      );
     }
 
     _dici('macchina', 'Guardo processore, memoria e attrezzi.', 4);
     final macchina = await _macchina(rilascio);
     macchina['monolitico'] = monolitico;
     final partenza = await _configPartenza(rilascio);
+    final configKernel = await _configCompilata(
+      await _configKernelInUso(rilascio),
+    );
     if (partenza.endsWith('/fucina-partenza.config')) {
-      avvisi.add('Stai usando un kernel della Fucina: si parte dalla '
-          'configurazione da cui era partito lui ($partenza), non dalla sua, '
-          'che è già scremata. Altrimenti ogni kernel nuovo perderebbe quello '
-          'che il precedente aveva tolto, e non lo ritroverebbe più.');
+      avvisi.add(
+        'Stai usando un kernel della Fucina: si parte dalla '
+        'configurazione da cui era partito lui ($partenza), non dalla sua, '
+        'che è già scremata. Altrimenti ogni kernel nuovo perderebbe quello '
+        'che il precedente aveva tolto, e non lo ritroverebbe più.',
+      );
     }
 
     // ── L'incrocio ─────────────────────────────────────────────────────
     final moduli = <String, VoceModulo>{};
     VoceModulo voce(String nome) => moduli.putIfAbsent(
+      nome,
+      () => VoceModulo(
         nome,
-        () => VoceModulo(
-              nome,
-              famigliaDi(nome, indice.percorsi[nome]),
-              indice.percorsi[nome],
-              indice.incorporati.contains(nome),
-            ));
+        famigliaDi(nome, indice.percorsi[nome]),
+        indice.percorsi[nome],
+        indice.incorporati.contains(nome),
+      ),
+    );
 
     for (final d in dispositivi) {
       if (d.modulo != null) {
@@ -202,8 +234,22 @@ class Rilevatore {
       }
     }
 
-    _dici('fatto', 'Trovati ${dispositivi.length} dispositivi e '
-        '${moduli.length} moduli.', 5);
+    // Una periferica può essere scollegata proprio quando si prepara il
+    // kernel. I suoi modalias sono una prova che è stata vista su questo
+    // computer: si tengono i moduli che l'indice attuale abbina e li si
+    // distingue dai moduli solo candidati.
+    for (final alias in aliasStoriciAssenti) {
+      for (final m in indice.moduliPer(alias)) {
+        voce(m).fonti.add('storico');
+      }
+    }
+
+    _dici(
+      'fatto',
+      'Trovati ${dispositivi.length} dispositivi e '
+          '${moduli.length} moduli.',
+      5,
+    );
 
     return Rilievo(
       rilascio: rilascio,
@@ -212,7 +258,9 @@ class Rilevatore {
       moduli: moduli,
       avvio: avvio,
       modprobed: diario,
+      dispositiviStorici: modaliasStorici.length,
       configPartenza: partenza,
+      configKernel: configKernel,
       indiceRegole: indice.regoleLette,
       avvisi: avvisi,
     );
@@ -247,6 +295,191 @@ class Rilevatore {
     return '';
   }
 
+  /// Configurazione dell'immagine attualmente avviata. Per un kernel Fucina
+  /// non usa fucina-partenza.config: quello è il punto di partenza delle
+  /// compilazioni successive, non descrive l'immagine che sta girando.
+  Future<String> _configKernelInUso(String rilascio) async {
+    for (final c in [
+      'proc/config.gz',
+      if (rilascio.isNotEmpty) 'boot/config-$rilascio',
+      if (rilascio.isNotEmpty) 'usr/lib/modules/$rilascio/build/.config',
+    ]) {
+      if (await File(_p(c)).exists()) return '/$c';
+    }
+    return '';
+  }
+
+  /// Legge le opzioni di sottosistema dalla configurazione del kernel in uso.
+  /// `=y` significa integrata, `=m` significa disponibile come modulo: nessuno
+  /// dei due valori dimostra che una funzione sia attiva in questo momento.
+  /// Non esegue processi e non restituisce opzioni potenzialmente personali.
+  Future<Map<String, dynamic>> _configCompilata(String percorso) async {
+    const famiglie = <String, ({String nome, bool Function(String) include})>{
+      'sicurezza': (nome: 'Sicurezza e audit', include: _opzioneSicurezza),
+      'grafica': (nome: 'Grafica e framebuffer', include: _opzioneGrafica),
+      'filesystem': (nome: 'Filesystem', include: _opzioneFilesystem),
+      'crittografia': (nome: 'Cifratura', include: _opzioneCrittografia),
+      'avvio': (nome: 'Avvio e controller disco', include: _opzioneAvvio),
+      'rete': (nome: 'Rete e filtraggio', include: _opzioneRete),
+      'osservabilita': (
+        nome: 'BPF e tracciamento',
+        include: _opzioneOsservabilita,
+      ),
+      'sistema': (nome: 'Memoria e pianificazione', include: _opzioneSistema),
+    };
+    final risultato = <String, dynamic>{
+      'disponibile': false,
+      'statoLive': await _statoLive(),
+      'famiglie': [
+        for (final e in famiglie.entries)
+          {
+            'id': e.key,
+            'nome': e.value.nome,
+            'integrate': <String>[],
+            'modulari': <String>[],
+          },
+      ],
+    };
+    if (percorso.isEmpty) return risultato;
+
+    try {
+      final bytes = await File(_p(percorso.substring(1))).readAsBytes();
+      final decodificati = percorso.endsWith('.gz')
+          ? gzip.decode(bytes)
+          : bytes;
+      final testo = utf8.decode(decodificati, allowMalformed: true);
+      risultato['protezioni'] = [
+        for (final m in RegExp(
+          r'^CONFIG_([A-Z0-9_]+)=y$',
+          multiLine: true,
+        ).allMatches(testo))
+          if (protezioneKernel(m.group(1)!)) m.group(1)!,
+      ]..sort();
+      final gruppi = risultato['famiglie'] as List<Map<String, dynamic>>;
+      final perId = {for (final g in gruppi) g['id'] as String: g};
+      for (final riga in const LineSplitter().convert(testo)) {
+        final match = RegExp(r'^(CONFIG_[A-Z0-9_]+)=(y|m)$').firstMatch(riga);
+        if (match == null) continue;
+        final simbolo = match.group(1)!;
+        final valore = match.group(2)!;
+        for (final e in famiglie.entries) {
+          if (!e.value.include(simbolo)) continue;
+          (perId[e.key]![valore == 'y' ? 'integrate' : 'modulari'] as List).add(
+            simbolo,
+          );
+          break;
+        }
+      }
+      for (final gruppo in gruppi) {
+        (gruppo['integrate'] as List<String>).sort();
+        (gruppo['modulari'] as List<String>).sort();
+      }
+      risultato['disponibile'] = true;
+    } catch (_) {
+      // Configurazione assente, non leggibile o compressa in modo invalido:
+      // il resto del rilievo resta utilizzabile.
+    }
+    return risultato;
+  }
+
+  Future<Map<String, dynamic>> _statoLive() async {
+    final registrati = <String>{};
+    for (final riga in const LineSplitter().convert(
+      await _leggi('proc/filesystems'),
+    )) {
+      final campi = riga.trim().split(RegExp(r'\s+'));
+      if (campi.isNotEmpty && campi.last.isNotEmpty) registrati.add(campi.last);
+    }
+    final montati = <String>{};
+    for (final riga in const LineSplitter().convert(
+      await _leggi('proc/mounts'),
+    )) {
+      final campi = riga.trim().split(RegExp(r'\s+'));
+      if (campi.length >= 3) montati.add(campi[2]);
+    }
+    final lsm = (await _leggi(
+      'sys/kernel/security/lsm',
+    )).trim().split(',').where((s) => s.isNotEmpty).toSet().toList();
+    return {
+      'filesystemRegistrati': registrati.toList()..sort(),
+      'filesystemMontati': montati.toList()..sort(),
+      // L'ordine è significativo: il kernel chiama gli LSM in questa
+      // sequenza. Non ordinarli alfabeticamente.
+      'lsmAttivi': lsm,
+    };
+  }
+
+  static bool _opzioneSicurezza(String s) =>
+      s.startsWith('CONFIG_SECURITY') ||
+      s.startsWith('CONFIG_LSM') ||
+      s.startsWith('CONFIG_IMA') ||
+      s.startsWith('CONFIG_EVM') ||
+      s.startsWith('CONFIG_AUDIT') ||
+      s.startsWith('CONFIG_LOCK_DOWN');
+
+  static bool _opzioneGrafica(String s) =>
+      s.startsWith('CONFIG_DRM') ||
+      s.startsWith('CONFIG_FB') ||
+      s.startsWith('CONFIG_VT') ||
+      s.startsWith('CONFIG_FRAMEBUFFER_CONSOLE');
+
+  static bool _opzioneFilesystem(String s) =>
+      s.endsWith('_FS') ||
+      s.startsWith('CONFIG_FUSE') ||
+      s.startsWith('CONFIG_OVERLAY_FS') ||
+      s.startsWith('CONFIG_SQUASHFS') ||
+      s.startsWith('CONFIG_TMPFS') ||
+      s.startsWith('CONFIG_RAMFS') ||
+      s == 'CONFIG_HUGETLBFS' ||
+      s == 'CONFIG_UNIX98_PTYS' ||
+      s == 'CONFIG_BPF_SYSCALL' ||
+      s.startsWith('CONFIG_PSTORE') ||
+      s == 'CONFIG_SYSFS' ||
+      s == 'CONFIG_SECURITYFS' ||
+      s == 'CONFIG_CIFS' ||
+      s == 'CONFIG_BINFMT_MISC' ||
+      s == 'CONFIG_POSIX_MQUEUE' ||
+      s == 'CONFIG_SUNRPC';
+
+  static bool _opzioneCrittografia(String s) =>
+      s.startsWith('CONFIG_CRYPTO') ||
+      s.startsWith('CONFIG_DM_CRYPT') ||
+      s.startsWith('CONFIG_BLK_INLINE_ENCRYPTION');
+
+  static bool _opzioneAvvio(String s) =>
+      s.startsWith('CONFIG_BLK_DEV_INITRD') ||
+      s.startsWith('CONFIG_DEVTMPFS') ||
+      s.startsWith('CONFIG_MODULES') ||
+      s.startsWith('CONFIG_EFI') ||
+      s.startsWith('CONFIG_NVME') ||
+      s.startsWith('CONFIG_SCSI') ||
+      s.startsWith('CONFIG_ATA') ||
+      s.startsWith('CONFIG_MMC') ||
+      s.startsWith('CONFIG_VIRTIO_BLK') ||
+      s.startsWith('CONFIG_BLK_DEV_DM') ||
+      s.startsWith('CONFIG_UNIX98_PTYS');
+
+  static bool _opzioneRete(String s) =>
+      s.startsWith('CONFIG_NETFILTER') ||
+      s.startsWith('CONFIG_NF_') ||
+      s.startsWith('CONFIG_IP_NF') ||
+      s.startsWith('CONFIG_NFT_');
+
+  static bool _opzioneOsservabilita(String s) =>
+      s.startsWith('CONFIG_BPF') ||
+      s.startsWith('CONFIG_KPROBE') ||
+      s.startsWith('CONFIG_FTRACE') ||
+      s.startsWith('CONFIG_PERF_EVENTS') ||
+      s.startsWith('CONFIG_TRACING');
+
+  static bool _opzioneSistema(String s) =>
+      s.startsWith('CONFIG_PREEMPT') ||
+      s.startsWith('CONFIG_HZ') ||
+      s.startsWith('CONFIG_NUMA') ||
+      s.startsWith('CONFIG_CGROUP') ||
+      s.startsWith('CONFIG_TRANSPARENT_HUGEPAGE') ||
+      s.startsWith('CONFIG_SCHED_');
+
   /// Un file letto per intero, o una stringa vuota. In `/sys` e `/proc` un
   /// file può sparire fra l'elenco e la lettura (un dispositivo scollegato),
   /// o non essere leggibile da un utente: non è un errore del rilievo.
@@ -277,11 +510,15 @@ class Rilevatore {
   /// I collegamenti NON si seguono: `/sys` ne è pieno (`subsystem`,
   /// `device`, `driver`, `port`) e molti tornano indietro. Seguirli vorrebbe
   /// dire visitare lo stesso dispositivo dieci volte, o per sempre.
-  Future<List<({String cartella, String modalias, String? driver, String? modulo})>>
-      _dispositiviGrezzi() async {
+  Future<
+    List<({String cartella, String modalias, String? driver, String? modulo})>
+  >
+  _dispositiviGrezzi() async {
     final base = Directory(_p('sys/devices'));
     final fuori =
-        <({String cartella, String modalias, String? driver, String? modulo})>[];
+        <
+          ({String cartella, String modalias, String? driver, String? modulo})
+        >[];
     if (!await base.exists()) return fuori;
 
     final tutti = await _fileModalias(base);
@@ -295,7 +532,12 @@ class Rilevatore {
       final modulo = driver == null
           ? null
           : await _nomeDelCollegamento('$cartella/driver/module');
-      fuori.add((cartella: cartella, modalias: alias, driver: driver, modulo: modulo));
+      fuori.add((
+        cartella: cartella,
+        modalias: alias,
+        driver: driver,
+        modulo: modulo,
+      ));
     }
     return fuori;
   }
@@ -304,18 +546,18 @@ class Rilevatore {
   /// in /sys tornano indietro (vedi sopra).
   Future<List<String>> _fileModalias(Directory base) async {
     final tutti = <String>[];
-    await for (final e in base
-        .list(recursive: true, followLinks: false)
-        .handleError((_) {})) {
+    await for (final e
+        in base.list(recursive: true, followLinks: false).handleError((_) {})) {
       if (e is File && e.path.endsWith('/modalias')) tutti.add(e.path);
     }
     return tutti;
   }
 
   List<Dispositivo> _dispositivi(
-      List<({String cartella, String modalias, String? driver, String? modulo})>
-          grezzi,
-      IndiceAlias indice) {
+    List<({String cartella, String modalias, String? driver, String? modulo})>
+    grezzi,
+    IndiceAlias indice,
+  ) {
     final radiceSys = Directory(_p('sys/devices')).path;
     return [
       for (final g in grezzi)
@@ -325,7 +567,8 @@ class Rilevatore {
           bus: _primaDeiDuePunti(g.modalias),
           driver: g.driver,
           modulo: g.modulo == null ? null : normalizza(g.modulo!),
-          candidati: g.driver == null &&
+          candidati:
+              g.driver == null &&
                   !_senzaLegame.contains(_primaDeiDuePunti(g.modalias))
               ? indice.moduliPer(g.modalias)
               : const {},
@@ -393,7 +636,12 @@ class Rilevatore {
 
   Future<DiarioModprobed> _modprobed() async {
     final diario = await leggiModprobed(ambiente);
-    return DiarioModprobed(diario.percorso, diario.moduli);
+    return DiarioModprobed(
+      diario.percorso,
+      diario.moduli,
+      trovato: diario.trovato,
+      leggibile: diario.leggibile,
+    );
   }
 
   // ── Quello che serve ad avviare ───────────────────────────────────────
@@ -408,8 +656,15 @@ class Rilevatore {
 
     // La tastiera che serve per scrivere la password del disco, prima che
     // il sistema sia su: è nell'initramfs o non c'è.
-    for (final m in const ['hid_generic', 'usbhid', 'xhci_pci', 'xhci_hcd',
-                           'ehci_pci', 'ehci_hcd', 'evdev']) {
+    for (final m in const [
+      'hid_generic',
+      'usbhid',
+      'xhci_pci',
+      'xhci_hcd',
+      'ehci_pci',
+      'ehci_hcd',
+      'evdev',
+    ]) {
       tieni(m, 'La tastiera USB all\'avvio, anche per la password del disco.');
     }
     if (await Directory(_p('sys/firmware/efi')).exists()) {
@@ -483,7 +738,8 @@ class Rilevatore {
   /// I punti di montaggio scritti in /etc/fstab, col loro tipo, tranne
   /// quelli `noauto` (che all'avvio non si montano) e lo swap (che non ha un
   /// punto).
-  Future<Map<String, ({String sorgente, String tipo})>> _montaggiDAvvio() async {
+  Future<Map<String, ({String sorgente, String tipo})>>
+  _montaggiDAvvio() async {
     final fuori = <String, ({String sorgente, String tipo})>{};
     for (final riga in (await _leggi('etc/fstab')).split('\n')) {
       final r = riga.trim();
@@ -527,8 +783,13 @@ class Rilevatore {
     return null;
   }
 
-  Future<void> _catena(String blocco, List<String> visti,
-      void Function(String, String) tieni, String dove, int profondita) async {
+  Future<void> _catena(
+    String blocco,
+    List<String> visti,
+    void Function(String, String) tieni,
+    String dove,
+    int profondita,
+  ) async {
     if (profondita > 8 || visti.contains(blocco)) return;
     visti.add(blocco);
     final base = _p('sys/class/block/$blocco');
@@ -541,8 +802,15 @@ class Rilevatore {
         // `sha256_generic` fino al 6.15, `sha256` dopo: si nominano tutti e
         // due, e il passo «completa» dell'officina tace su quello che
         // nell'albero nuovo non c'è.
-        for (final m in const ['dm_crypt', 'aesni_intel', 'xts', 'cbc',
-                               'essiv', 'sha256_generic', 'sha256']) {
+        for (final m in const [
+          'dm_crypt',
+          'aesni_intel',
+          'xts',
+          'cbc',
+          'essiv',
+          'sha256_generic',
+          'sha256',
+        ]) {
           tieni(m, 'Il disco cifrato di «$dove».');
         }
       }
@@ -552,15 +820,24 @@ class Rilevatore {
     if (livello.isNotEmpty) {
       tieni('md_mod', 'RAID software sotto «$dove».');
       if (livello.startsWith('raid')) {
-        tieni(livello == 'raid4' || livello == 'raid5' || livello == 'raid6'
-            ? 'raid456' : livello, 'RAID $livello sotto «$dove».');
+        tieni(
+          livello == 'raid4' || livello == 'raid5' || livello == 'raid6'
+              ? 'raid456'
+              : livello,
+          'RAID $livello sotto «$dove».',
+        );
       }
     }
     // Quello che sta sotto: le partizioni di un volume cifrato o di un RAID.
     try {
       await for (final s in Directory('$base/slaves').list()) {
-        await _catena(s.path.split('/').last, visti, tieni, dove,
-            profondita + 1);
+        await _catena(
+          s.path.split('/').last,
+          visti,
+          tieni,
+          dove,
+          profondita + 1,
+        );
       }
     } catch (_) {}
 
@@ -583,8 +860,9 @@ class Rilevatore {
 
   /// `/proc/mounts` scrive spazi e tabulazioni come `\040` e `\011`.
   static String _senzaOttali(String s) => s.replaceAllMapped(
-      RegExp(r'\\([0-7]{3})'),
-      (m) => String.fromCharCode(int.parse(m.group(1)!, radix: 8)));
+    RegExp(r'\\([0-7]{3})'),
+    (m) => String.fromCharCode(int.parse(m.group(1)!, radix: 8)),
+  );
 
   /// I moduli di un filesystem. Quasi sempre il nome è lo stesso; qui le
   /// eccezioni, che sono quelle che rompono un avvio.
@@ -614,25 +892,54 @@ class Rilevatore {
 
   Future<Map<String, dynamic>> _macchina(String rilascio) async {
     final cpu = await _leggi('proc/cpuinfo');
-    final modello = RegExp(r'^model name\s*:\s*(.+)$', multiLine: true)
-            .firstMatch(cpu)
-            ?.group(1)
-            ?.trim() ??
+    final modello =
+        RegExp(
+          r'^model name\s*:\s*(.+)$',
+          multiLine: true,
+        ).firstMatch(cpu)?.group(1)?.trim() ??
         '';
-    final flags = (RegExp(r'^flags\s*:\s*(.+)$', multiLine: true)
-                .firstMatch(cpu)
-                ?.group(1) ??
-            '')
-        .split(' ')
-        .toSet();
-    final fornitore = RegExp(r'^vendor_id\s*:\s*(\S+)', multiLine: true)
-            .firstMatch(cpu)
-            ?.group(1) ??
+    final flagPerCpu = [
+      for (final m in RegExp(
+        r'^flags[ \t]*:[ \t]*(.*)$',
+        multiLine: true,
+      ).allMatches(cpu))
+        m
+            .group(1)!
+            .trim()
+            .split(RegExp(r'\s+'))
+            .where((s) => s.isNotEmpty)
+            .toSet(),
+    ];
+    final cpuDescritte = RegExp(
+      r'^processor[ \t]*:',
+      multiLine: true,
+    ).allMatches(cpu).length;
+    final flagsCompleti =
+        flagPerCpu.isNotEmpty &&
+        flagPerCpu.every((f) => f.isNotEmpty) &&
+        (cpuDescritte == 0 || flagPerCpu.length == cpuDescritte);
+    final flags = flagPerCpu.isEmpty
+        ? <String>{}
+        : flagPerCpu.reduce((a, b) => a.intersection(b));
+    final uniformi =
+        flagsCompleti &&
+        flagPerCpu.every(
+          (f) => f.length == flags.length && f.containsAll(flags),
+        );
+    final fornitore =
+        RegExp(
+          r'^vendor_id\s*:\s*(\S+)',
+          multiLine: true,
+        ).firstMatch(cpu)?.group(1) ??
         '';
-    final ramKb = int.tryParse(RegExp(r'^MemTotal:\s*(\d+)', multiLine: true)
-                .firstMatch(await _leggi('proc/meminfo'))
-                ?.group(1) ??
-            '') ??
+    final ramKb =
+        int.tryParse(
+          RegExp(
+                r'^MemTotal:\s*(\d+)',
+                multiLine: true,
+              ).firstMatch(await _leggi('proc/meminfo'))?.group(1) ??
+              '',
+        ) ??
         0;
 
     return {
@@ -640,11 +947,15 @@ class Rilevatore {
       'cpu': modello,
       'nuclei': nuclei,
       'ramGB': (ramKb / 1024 / 1024 * 10).round() / 10,
-      'livelloX86': livelloX86(flags),
+      'livelloX86': flagsCompleti ? livelloX86(flags) : '',
+      'cpuConFlags': flagPerCpu.length,
+      'flagsCpuCompleti': flagsCompleti,
+      'flagsCpuUniformi': uniformi,
       'uefi': await Directory(_p('sys/firmware/efi')).exists(),
       'fornitore': fornitore,
-      'cpuPossibili':
-          contaElenco(await _leggi('sys/devices/system/cpu/possible')),
+      'cpuPossibili': contaElenco(
+        await _leggi('sys/devices/system/cpu/possible'),
+      ),
       'nodiNuma': await _nodiNuma(),
       'profilo': profiloHw(fornitore, flags, await _rami()),
       'attrezzi': await _attrezzi(),
@@ -670,8 +981,10 @@ class Rilevatore {
   Future<int> _rami() async {
     for (final pmu in const ['cpu', 'cpu_core']) {
       final v = int.tryParse(
-          (await _leggi('sys/bus/event_source/devices/$pmu/caps/branches'))
-              .trim());
+        (await _leggi(
+          'sys/bus/event_source/devices/$pmu/caps/branches',
+        )).trim(),
+      );
       if (v != null && v > 0) return v;
     }
     return 0;
@@ -716,16 +1029,19 @@ class Rilevatore {
   /// `ex_ret_brn_tkn` (AMD, Zen 1–6, codice 0xc4: lo stesso evento
   /// RETIRED_TAKEN_BRANCH_INSTRUCTIONS della documentazione).
   static Map<String, dynamic> profiloHw(
-      String fornitore, Set<String> flags, int rami) {
+    String fornitore,
+    Set<String> flags,
+    int rami,
+  ) {
     final virtuale = flags.contains('hypervisor');
     Map<String, dynamic> no(String perche) => {
-          'possibile': false,
-          'tipo': '',
-          'perche': virtuale
-              ? '$perche In una macchina virtuale il registro dei salti '
-                  'quasi mai arriva all\'ospite.'
-              : perche,
-        };
+      'possibile': false,
+      'tipo': '',
+      'perche': virtuale
+          ? '$perche In una macchina virtuale il registro dei salti '
+                'quasi mai arriva all\'ospite.'
+          : perche,
+    };
     switch (fornitore) {
       case 'GenuineIntel':
         if (rami > 0 || flags.contains('arch_lbr')) {
@@ -735,8 +1051,10 @@ class Rilevatore {
             'perche': 'Intel con LBR${rami > 0 ? ' ($rami salti)' : ''}.',
           };
         }
-        return no('Il kernel in uso non mostra l\'LBR del processore (né '
-            'caps/branches della PMU, né il segno arch_lbr).');
+        return no(
+          'Il kernel in uso non mostra l\'LBR del processore (né '
+          'caps/branches della PMU, né il segno arch_lbr).',
+        );
       case 'AuthenticAMD':
         if (flags.contains('amd_lbr_v2')) {
           return {
@@ -752,12 +1070,16 @@ class Rilevatore {
             'perche': 'AMD Zen 3 con BRS (EPYC).',
           };
         }
-        return no('Questo AMD non ha un registro dei salti che perf sappia '
-            'leggere: serve Zen 4 o più recente (LbrExtV2), o uno Zen 3 EPYC '
-            '(BRS). I Ryzen Zen 3 e precedenti no.');
+        return no(
+          'Questo AMD non ha un registro dei salti che perf sappia '
+          'leggere: serve Zen 4 o più recente (LbrExtV2), o uno Zen 3 EPYC '
+          '(BRS). I Ryzen Zen 3 e precedenti no.',
+        );
       default:
-        return no('Processore «$fornitore»: AutoFDO su x86 vuole un Intel '
-            'con LBR o un AMD Zen 4 (o uno Zen 3 EPYC).');
+        return no(
+          'Processore «$fornitore»: AutoFDO su x86 vuole un Intel '
+          'con LBR o un AMD Zen 4 (o uno Zen 3 EPYC).',
+        );
     }
   }
 
@@ -765,15 +1087,33 @@ class Rilevatore {
   /// le liste dello standard psABI; un flag che manca ferma il livello.
   static String livelloX86(Set<String> f) {
     bool tutti(List<String> l) => l.every(f.contains);
-    if (!tutti(['lm', 'cmov', 'cx8', 'fpu', 'fxsr', 'mmx', 'syscall',
-                'sse', 'sse2'])) {
+    if (!tutti([
+      'lm',
+      'cmov',
+      'cx8',
+      'fpu',
+      'fxsr',
+      'mmx',
+      'syscall',
+      'sse',
+      'sse2',
+    ])) {
       return f.isEmpty ? '' : 'nessuno';
     }
     if (!tutti(['cx16', 'lahf_lm', 'popcnt', 'sse4_1', 'sse4_2', 'ssse3'])) {
       return 'v1';
     }
-    if (!tutti(['avx', 'avx2', 'bmi1', 'bmi2', 'f16c', 'fma', 'abm', 'movbe',
-                'xsave'])) {
+    if (!tutti([
+      'avx',
+      'avx2',
+      'bmi1',
+      'bmi2',
+      'f16c',
+      'fma',
+      'abm',
+      'movbe',
+      'xsave',
+    ])) {
       return 'v2';
     }
     if (!tutti(['avx512f', 'avx512bw', 'avx512cd', 'avx512dq', 'avx512vl'])) {
@@ -823,8 +1163,13 @@ class Attrezzo {
   final String serve;
   final bool indispensabile;
   final bool intestazione;
-  const Attrezzo(this.nome, this.file, this.serve,
-      {this.indispensabile = true, this.intestazione = false});
+  const Attrezzo(
+    this.nome,
+    this.file,
+    this.serve, {
+    this.indispensabile = true,
+    this.intestazione = false,
+  });
 }
 
 /// L'elenco che si controlla prima di compilare. Il nome è quello del
@@ -832,17 +1177,34 @@ class Attrezzo {
 const List<Attrezzo> attrezzi = [
   Attrezzo('make', 'make', 'dirigere la compilazione'),
   Attrezzo('gcc', 'gcc', 'compilare con GCC', indispensabile: false),
-  Attrezzo('clang', 'clang', 'compilare con Clang e LTO',
-      indispensabile: false),
+  Attrezzo(
+    'clang',
+    'clang',
+    'compilare con Clang e LTO',
+    indispensabile: false,
+  ),
   Attrezzo('lld', 'ld.lld', 'collegare con LLVM', indispensabile: false),
   // `LLVM=1` usa anche llvm-ar, llvm-nm, llvm-objcopy, llvm-strip; e
   // llvm-profgen (stesso pacchetto, su Arch) converte il profilo AutoFDO.
-  Attrezzo('llvm', 'llvm-ar', 'gli attrezzi di LLVM=1 e il profilo AutoFDO',
-      indispensabile: false),
-  Attrezzo('perf', 'perf', 'registrare il profilo AutoFDO',
-      indispensabile: false),
-  Attrezzo('qemu-system-x86', 'qemu-system-x86_64', 'la prova d\'avvio prima di '
-      'installare', indispensabile: false),
+  Attrezzo(
+    'llvm',
+    'llvm-ar',
+    'gli attrezzi di LLVM=1 e il profilo AutoFDO',
+    indispensabile: false,
+  ),
+  Attrezzo(
+    'perf',
+    'perf',
+    'registrare il profilo AutoFDO',
+    indispensabile: false,
+  ),
+  Attrezzo(
+    'qemu-system-x86',
+    'qemu-system-x86_64',
+    'la prova d\'avvio prima di '
+        'installare',
+    indispensabile: false,
+  ),
   Attrezzo('flex', 'flex', 'leggere Kconfig'),
   Attrezzo('bison', 'bison', 'leggere Kconfig'),
   Attrezzo('bc', 'bc', 'calcolare le costanti del tempo'),
@@ -852,8 +1214,7 @@ const List<Attrezzo> attrezzi = [
   Attrezzo('patch', 'patch', 'applicare le patch di CachyOS'),
   Attrezzo('gnupg', 'gpg', 'verificare la firma del kernel'),
   Attrezzo('libelf', 'libelf.h', 'objtool', intestazione: true),
-  Attrezzo('openssl', 'openssl/ssl.h', 'firmare i moduli',
-      intestazione: true),
+  Attrezzo('openssl', 'openssl/ssl.h', 'firmare i moduli', intestazione: true),
   Attrezzo('pahole', 'pahole', 'BTF, cioè sched_ext', indispensabile: false),
   Attrezzo('ccache', 'ccache', 'ricompilare in fretta', indispensabile: false),
 ];
@@ -880,13 +1241,13 @@ class Dispositivo {
   });
 
   Map<String, dynamic> toJson() => {
-        'percorso': percorso,
-        'modalias': modalias,
-        'bus': bus,
-        'driver': driver,
-        'modulo': modulo,
-        'candidati': candidati.toList()..sort(),
-      };
+    'percorso': percorso,
+    'modalias': modalias,
+    'bus': bus,
+    'driver': driver,
+    'modulo': modulo,
+    'candidati': candidati.toList()..sort(),
+  };
 }
 
 class VoceModulo {
@@ -907,21 +1268,28 @@ class VoceModulo {
   bool get tenutoDiSerie => fonti.any((f) => f != 'candidato');
 
   Map<String, dynamic> toJson() => {
-        'nome': nome,
-        'famiglia': famiglia,
-        'percorso': percorso,
-        'incorporato': incorporato,
-        'fonti': fonti.toList()..sort(),
-        'dispositivi': dispositivi,
-        'essenziale': fonti.contains('essenziale'),
-        'diSerie': tenutoDiSerie,
-      };
+    'nome': nome,
+    'famiglia': famiglia,
+    'percorso': percorso,
+    'incorporato': incorporato,
+    'fonti': fonti.toList()..sort(),
+    'dispositivi': dispositivi,
+    'essenziale': fonti.contains('essenziale'),
+    'diSerie': tenutoDiSerie,
+  };
 }
 
 class DiarioModprobed {
   final String percorso;
   final Set<String> moduli;
-  const DiarioModprobed(this.percorso, this.moduli);
+  final bool trovato;
+  final bool leggibile;
+  const DiarioModprobed(
+    this.percorso,
+    this.moduli, {
+    this.trovato = false,
+    this.leggibile = false,
+  });
   bool get presente => moduli.isNotEmpty;
 }
 
@@ -931,8 +1299,13 @@ class Avvio {
   final Set<String> moduli;
   final Map<String, String> perche;
   final List<Map<String, String>> montati;
-  const Avvio(this.dispositivoRadice, this.tipoRadice, this.moduli,
-      this.perche, this.montati);
+  const Avvio(
+    this.dispositivoRadice,
+    this.tipoRadice,
+    this.moduli,
+    this.perche,
+    this.montati,
+  );
 }
 
 class Rilievo {
@@ -942,9 +1315,15 @@ class Rilievo {
   final Map<String, VoceModulo> moduli;
   final Avvio avvio;
   final DiarioModprobed modprobed;
+  final int dispositiviStorici;
+
   /// Dove sta la configurazione del kernel in uso (percorso assoluto sul
   /// computer vero), o una stringa vuota se non si trova.
   final String configPartenza;
+
+  /// Sottosistemi dichiarati nella configurazione trovata. Le opzioni
+  /// distinguono `=y` integrato da `=m` modulare; non attestano lo stato live.
+  final Map<String, dynamic> configKernel;
   final int indiceRegole;
   final List<String> avvisi;
 
@@ -955,7 +1334,9 @@ class Rilievo {
     required this.moduli,
     required this.avvio,
     required this.modprobed,
+    this.dispositiviStorici = 0,
     required this.configPartenza,
+    this.configKernel = const {},
     required this.indiceRegole,
     required this.avvisi,
   });
@@ -967,9 +1348,8 @@ class Rilievo {
       'rilascio': rilascio,
       'macchina': macchina,
       'dispositivi': [for (final d in dispositivi) d.toJson()],
-      'senzaDriver': [
-        for (final d in _senzaDriver()) d.toJson(),
-      ],
+      'dispositiviStorici': dispositiviStorici,
+      'senzaDriver': [for (final d in _senzaDriver()) d.toJson()],
       'moduli': [for (final m in elenco) m.toJson()],
       'famiglie': [for (final f in famiglie) f.toJson()],
       'scorte': [for (final s in scorte) s.toJson()],
@@ -983,11 +1363,89 @@ class Rilievo {
       'modprobed': {
         'percorso': modprobed.percorso,
         'presente': modprobed.presente,
+        'fileTrovato': modprobed.trovato,
+        'leggibile': modprobed.leggibile,
         'voci': modprobed.moduli.length,
       },
       'configPartenza': configPartenza,
+      'configKernel': configKernel,
       'regole': indiceRegole,
       'avvisi': avvisi,
+    };
+  }
+
+  /// Una copia locale del rilievo, priva di percorsi personali e seriali.
+  /// Conserva identificatori standard dei dispositivi (modalias), necessari
+  /// per capire perché un driver è stato proposto.
+  Map<String, dynamic> rapportoJson({DateTime? generato}) {
+    const campiMacchina = [
+      'cpu',
+      'nuclei',
+      'ramGB',
+      'livelloX86',
+      'cpuConFlags',
+      'flagsCpuCompleti',
+      'flagsCpuUniformi',
+      'uefi',
+      'fornitore',
+      'cpuPossibili',
+      'nodiNuma',
+      'profilo',
+      'monolitico',
+    ];
+    final hardware = <String, dynamic>{
+      for (final campo in campiMacchina)
+        if (macchina.containsKey(campo)) campo: macchina[campo],
+    };
+    final elencoModuli = moduli.values.toList()
+      ..sort((a, b) => a.nome.compareTo(b.nome));
+    final dispositiviSenzaDriver = _senzaDriver();
+    return {
+      'formato': 'liquid-de-fucina-rilievo',
+      'versione': 1,
+      'generatoUtc': (generato ?? DateTime.now()).toUtc().toIso8601String(),
+      'kernel': rilascio,
+      'hardware': hardware,
+      'dispositivi': [
+        for (final d in dispositivi)
+          {
+            'bus': d.bus,
+            'modalias': d.modalias,
+            'driver': d.driver,
+            'modulo': d.modulo,
+            'candidati': d.candidati.toList()..sort(),
+          },
+      ],
+      'dispositiviSenzaDriver': [
+        for (final d in dispositiviSenzaDriver)
+          {
+            'bus': d.bus,
+            'modalias': d.modalias,
+            'candidati': d.candidati.toList()..sort(),
+          },
+      ],
+      'moduli': [
+        for (final m in elencoModuli)
+          {
+            'nome': m.nome,
+            'famiglia': m.famiglia,
+            'fonti': m.fonti.toList()..sort(),
+            'dispositivi': m.dispositivi,
+            'incorporato': m.incorporato,
+          },
+      ],
+      'storicoDispositivi': dispositiviStorici,
+      'modprobed': {
+        'letto': modprobed.presente,
+        'moduli': modprobed.moduli.length,
+      },
+      'avvio': {
+        'tipoRadice': avvio.tipoRadice,
+        'moduliEssenziali': avvio.moduli.toList()..sort(),
+      },
+      'configurazionePartenzaTrovata': configPartenza.isNotEmpty,
+      'configKernel': configKernel,
+      'regoleAliasLette': indiceRegole,
     };
   }
 
@@ -1011,8 +1469,8 @@ class Rilievo {
   /// Per le prove e per il registro: il rilievo in una riga.
   @override
   String toString() => jsonEncode({
-        'rilascio': rilascio,
-        'dispositivi': dispositivi.length,
-        'moduli': moduli.length,
-      });
+    'rilascio': rilascio,
+    'dispositivi': dispositivi.length,
+    'moduli': moduli.length,
+  });
 }

@@ -136,6 +136,37 @@ FloatingWindow {
 
     readonly property int indice: viewer.album.indexOf(viewer.corrente)
 
+    // ── Ritorno alla galleria ────────────────────────────────────────────
+    //
+    // il manutentore, 6 ottobre 2026: aperta una foto, «cliccando su home» si deve
+    // tornare alla panoramica di tutto il catalogo, e non c'era modo. Adesso
+    // c'è il pulsante «Galleria» (Alt+Home), e Esc riporta indietro se alla
+    // foto si era arrivati dalla galleria.
+    //
+    // `daGalleria` tiene la galleria COSTRUITA mentre si guarda una foto
+    // aperta da lì (il Loader resta acceso, solo nascosto): tornando si
+    // ritrova lo stesso punto dello scorrimento invece di ripartire dalla cima
+    // di novantamila fotografie. Aperta da fuori (doppio clic nel gestore
+    // file) la galleria non c'è finché non la si chiede: non si paga niente.
+    property bool daGalleria: false
+
+    /// La galleria se è costruita, altrimenti `null`.
+    function galleria() {
+        return galleriaLoader.item || null;
+    }
+
+    function tornaAllaGalleria() {
+        viewer.mostraGriglia = false;
+        viewer.albumImposto = false;
+        // Prima si svuota l'album (così `inGalleria` diventa vero), POI si
+        // spegne `daGalleria`: nell'ordine opposto, per un istante sono
+        // falsi tutti e due, il Loader butta via la galleria e la rifà in
+        // cima.
+        viewer.corrente = "";
+        viewer.grezzo = [];
+        viewer.daGalleria = false;
+    }
+
     /// Se il filtro ha portato via proprio quello che si stava guardando, si
     /// va sul primo che è rimasto invece di restare su un file che l'album
     /// non contiene più.
@@ -166,7 +197,7 @@ FloatingWindow {
     //
     // Il 2 settembre 2026 qui c'era `color: "transparent"` più un
     // `Ui.FondoFinestra` — un rettangolo a tutta finestra col raggio — per
-    // arrotondare gli angoli, che Giacomo aveva chiesto.
+    // arrotondare gli angoli, che il manutentore aveva chiesto.
     //
     // Funzionava, e si è visto nelle fotografie. Costava però **quindici
     // megabyte per applicazione**, misurati: 55 MB senza, 69-72 con. Provato
@@ -241,9 +272,14 @@ FloatingWindow {
     // ── Aprire ───────────────────────────────────────────────────────────
 
     /// Mostra un file, e costruisci l'album dalla cartella che lo contiene.
-    function show(path) {
+    /// `dallaGalleria`: la foto si apre da una miniatura della galleria, e Esc
+    /// ci riporta. Si imposta PRIMA di cambiare foto e con il valore giusto
+    /// in un colpo solo: passando per «falso» anche solo un istante, il Loader
+    /// della galleria si spegneva e la ricostruiva da capo, in cima.
+    function show(path, dallaGalleria) {
         if (!path || path === "")
             return;
+        viewer.daGalleria = dallaGalleria === true;
         if (viewer.grezzo.indexOf(path) !== -1) {
             viewer.corrente = path;
             return;
@@ -260,6 +296,7 @@ FloatingWindow {
     /// Mostra un elenco di file scelti da chi ci ha lanciati: sono loro
     /// l'album, per intero.
     function showAll(paths) {
+        viewer.daGalleria = false;
         var buoni = [];
         for (var i = 0; i < paths.length; i++)
             if (viewer.media(paths[i]))
@@ -282,7 +319,7 @@ FloatingWindow {
 
     // ── Aprire una cartella intera ───────────────────────────────────────
     //
-    // Chiesto da Giacomo: «mettergli sulla finestra una freccetta per aprire
+    // Chiesto da il manutentore: «mettergli sulla finestra una freccetta per aprire
     // una lista per aprire ad esempio una cartella di immagini». Senza, si può
     // arrivare qui solo da fuori — dal gestore file o da un doppio clic — e un
     // programma che non si sa aprire da solo è un programma a metà.
@@ -706,8 +743,8 @@ FloatingWindow {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        active: viewer.inGalleria
-        visible: active
+        active: viewer.inGalleria || viewer.daGalleria
+        visible: viewer.inGalleria
 
         /// Richiede il catalogo — dopo un cestino, per esempio. Passa di qui e
         /// non dritta alla galleria perché quando non si è nell'album la
@@ -719,7 +756,7 @@ FloatingWindow {
         }
 
         sourceComponent: Galleria {
-            onApri: (p) => viewer.show(p)
+            onApri: (p) => viewer.show(p, true)
             // Il percorso NON si butta via: era il difetto per cui nella
             // galleria il tasto destro non apriva niente.
             onMenu: (p, x, y, pr) => viewer.apriMenuGalleria(p, x, y, pr)
@@ -731,7 +768,7 @@ FloatingWindow {
     // Prima qui c'era una scheda col nome e un pulsante che passava il video
     // a Minerva Media, in un'altra finestra: dalla galleria, un filmato del
     // telefono portava in un programma fatto per playlist e scaricamenti
-    // (Giacomo, 6 ottobre 2026: «è disorganizzato»). Adesso si guarda qui,
+    // (il manutentore, 6 ottobre 2026: «è disorganizzato»). Adesso si guarda qui,
     // come le fotografie, e le frecce passano al file dopo. Per playlist,
     // taglio e sottotitoli resta «Apri con… → Media».
     Media.Lettore {
@@ -844,7 +881,7 @@ FloatingWindow {
     ///
     /// Stava sempre in alto a sinistra, sopra la fotografia. Su un ritratto o
     /// su una foto con il soggetto in alto copriva esattamente la parte che si
-    /// era venuti a guardare — Giacomo: «alcune cose si dovrebbero nascondere
+    /// era venuti a guardare — il manutentore: «alcune cose si dovrebbero nascondere
     /// perché coprono le foto, come ad esempio dettagli». Misure e peso sono
     /// una cosa che si consulta, non che si sorveglia: stanno bene dietro un
     /// pulsante, e il pulsante sta nella barra insieme agli altri.
@@ -939,7 +976,7 @@ FloatingWindow {
         // aprire una cartella, e si nascondeva proprio quando non c'era niente
         // di aperto. Chi lanciava Anteprima dal menù trovava uno schermo nero
         // con scritto «Nessuna immagine aperta» e nessun pulsante da premere —
-        // un vicolo cieco. Giacomo: «se lo clicco dal menù mostra uno schermo
+        // un vicolo cieco. il manutentore: «se lo clicco dal menù mostra uno schermo
         // nero e dice nulla da visualizzare».
         opacity: viewer.chromeVisibile ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.Motion.quick } }
@@ -948,6 +985,14 @@ FloatingWindow {
             id: riga
             anchors.centerIn: parent
             spacing: 2
+
+            // La galleria: tutte le foto e i video, la «casa» di Anteprima.
+            // Primo a sinistra, dove si cerca il ritorno a casa.
+            Strumento {
+                icona: "image"
+                tooltip: viewer.it ? "Galleria (Alt+Home)" : "Gallery (Alt+Home)"
+                onClicked: viewer.tornaAllaGalleria()
+            }
 
             // La freccetta per aprire. Icona composta — una cartella con un
             // chevron sotto — perché è l'unico pulsante della barra che apre
@@ -1093,7 +1138,7 @@ FloatingWindow {
     // che si può usare. In finestra si aspetta più a lungo che a schermo
     // intero: lì si è venuti a guardare, qui si sta ancora lavorando.
     //
-    // Giacomo: «anche essa dopo un po' sì deve nascondere e passando con il
+    // il manutentore: «anche essa dopo un po' sì deve nascondere e passando con il
     // mouse ricompare».
     // In galleria la cornice del visualizzatore non c'entra niente: gli
     // strumenti sono «ruota», «ritaglia», «ingrandisci» — comandi che agiscono
@@ -1349,7 +1394,7 @@ FloatingWindow {
         // `mapToGlobal`, ma **su Wayland una finestra non sa dove si trova**:
         // quel «globale» è relativo alla finestra, e il menu comparirebbe
         // spostato di tutta la posizione della finestra. È il difetto che
-        // Giacomo aveva descritto come «menu fuori posto», ed è la ragione
+        // il manutentore aveva descritto come «menu fuori posto», ed è la ragione
         // per cui `openAtCursor` esiste. Provato a scavalcarlo il 4 settembre
         // 2026: il menu non compariva dove si era premuto.
         menuFile.openAtCursor(viewer.vociGalleria(quale));
@@ -1475,22 +1520,28 @@ FloatingWindow {
     // nell'album per aver premuto il tasto che tutti premono per «torna
     // indietro».
     Shortcut { sequence: "G"; onActivated: viewer.mostraGriglia = !viewer.mostraGriglia }
+    Shortcut { sequence: "Alt+Home"; enabled: !viewer.inGalleria; onActivated: viewer.tornaAllaGalleria() }
 
     Shortcut {
         sequence: "Escape"
-        onActivated: {
-            // In ordine, dal più recente al più antico: prima si chiude quello
-            // che si è appena aperto. Un Esc che chiude la finestra mentre si
-            // guarda il provino fa perdere il posto per aver premuto il tasto
-            // che tutti premono per «torna indietro».
-            if (viewer.mostraGriglia)
-                viewer.mostraGriglia = false;
-            else if (galleriaLoader.item && galleriaLoader.item.quanteScelte > 0)
-                galleriaLoader.item.svuotaScelta();
-            else if (viewer.aTuttoSchermo)
-                viewer.schermoIntero();
-            else
-                viewer.requestClose();
-        }
+        onActivated: viewer.indietro()
+    }
+
+    /// Esc. In ordine, dal più recente al più antico: prima si chiude quello
+    /// che si è appena aperto. Un Esc che chiude la finestra mentre si guarda
+    /// il provino fa perdere il posto per aver premuto il tasto che tutti
+    /// premono per «torna indietro». Una funzione e non dentro lo Shortcut:
+    /// la usa anche l'IPC di prova.
+    function indietro() {
+        if (viewer.mostraGriglia)
+            viewer.mostraGriglia = false;
+        else if (viewer.inGalleria && galleriaLoader.item && galleriaLoader.item.quanteScelte > 0)
+            galleriaLoader.item.svuotaScelta();
+        else if (viewer.aTuttoSchermo)
+            viewer.schermoIntero();
+        else if (viewer.daGalleria)
+            viewer.tornaAllaGalleria();
+        else
+            viewer.requestClose();
     }
 }

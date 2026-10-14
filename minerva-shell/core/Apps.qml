@@ -36,6 +36,14 @@ QtObject {
         onTriggered: if (Core.Ipc.connected) Core.Ipc.rescanApps()
     }
 
+    // Il catalogo già caricato non viene più richiesto dal timer iniziale.
+    // Rileggerlo quando si apre un launcher rende visibili installazioni e
+    // rimozioni senza riavviare, né svegliare il desktop mentre è fermo.
+    function aggiorna() {
+        if (Core.Ipc.connected)
+            Core.Ipc.rescanApps();
+    }
+
     // ── Le applicazioni di Minerva ───────────────────────────────────────
     //
     // Il gestore file e le Impostazioni sono applicazioni a tutti gli effetti:

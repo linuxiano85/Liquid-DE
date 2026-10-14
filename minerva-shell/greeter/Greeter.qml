@@ -96,7 +96,7 @@ Item {
 
     // ── Le cose in più, dal 23 settembre 2026 ────────────────────────────
     //
-    // Giacomo: «predisponiamolo anche per meteo e altre cose interessanti e
+    // il manutentore: «predisponiamolo anche per meteo e altre cose interessanti e
     // attraenti». La regola che le tiene insieme: ognuna risponde a una
     // domanda che si fa DAVANTI a questo schermo, prima di entrare — che
     // tempo fa, quanto resta di batteria, perché la password non va — e
@@ -107,13 +107,13 @@ Item {
     /// un posto: le impostazioni del meteo le porta qui `minerva-greetd`.
     readonly property bool conMeteo: Core.Ipc.get("greeter.meteo", true)
                                      && Core.Meteo.attivo
-    /// «Buonasera, Giacomo» al posto del nome secco.
+    /// «Buonasera, il manutentore» al posto del nome secco.
     readonly property bool conSaluto: Core.Ipc.get("greeter.saluto", true)
     /// Batteria e tastiera nell'angolo in alto.
     readonly property bool conStato: Core.Ipc.get("greeter.stato", true)
     /// ── Da che parte ─────────────────────────────────────────────────────
     ///
-    /// Giacomo, 23 settembre 2026: «la riorganizzerei spostando dall'ora
+    /// il manutentore, 23 settembre 2026: «la riorganizzerei spostando dall'ora
     /// fino all'inserimento della password sulla sinistra o destra, e sulla
     /// parte libera metterei tutte le notifiche». L'ora e l'accesso stanno
     /// in una colonna sola, su un asse a un quarto dello schermo; l'altra
@@ -170,7 +170,7 @@ Item {
     // Sbagliato quando l'errore si ripete. Se ciò che si ricomincia fallisce
     // a sua volta — greetd che ha chiuso il socket, il servizio caduto — si
     // ottiene: errore → scossa → riprova → errore → scossa → riprova, ogni
-    // 900 ms, per sempre. È quello che Giacomo ha visto il 10 agosto 2026:
+    // 900 ms, per sempre. È quello che il manutentore ha visto il 10 agosto 2026:
     // «comincia a tremare all'infinito verso destra e sinistra».
     //
     // Il rimedio non è togliere la riprova, che è ciò che rende la schermata
@@ -200,7 +200,7 @@ Item {
     // parola con cui dice «password accettata». Letta nel posto sbagliato,
     // quella parola fa chiedere alla schermata di aprire la sessione — greetd
     // risponde «session is not ready» — e la schermata si chiude portandosi
-    // dietro il compositore. Il 10 agosto 2026 è finita così: Giacomo, dopo
+    // dietro il compositore. Il 10 agosto 2026 è finita così: il manutentore, dopo
     // una password sbagliata, si è ritrovato su un terminale nero.
     //
     // Il rimedio è la stessa cosa che questo file già fa per i due `success`
@@ -300,7 +300,7 @@ Item {
     // ── L'ambiente con cui parte la sessione ─────────────────────────────
     //
     // Qui c'era UNA riga, `XDG_SESSION_DESKTOP`, e le altre scrivanie
-    // partivano senza sapere di esserlo. Il 17 agosto 2026 Giacomo l'ha
+    // partivano senza sapere di esserlo. Il 17 agosto 2026 il manutentore l'ha
     // descritto così: «mi fa entrare solo con cosmic e minerva, hyprland e kde
     // mi portano sempre su minerva».
     //
@@ -404,7 +404,7 @@ Item {
         // come `$0`. Partiva `plasma-dbus-run-session-if-needed` senza il
         // programma da avviare: fa `exec dbus-run-session` a mani vuote, che
         // senza terminale esce subito. Uscita 0, zero secondi, nessun
-        // messaggio — e da fuori sembra una password sbagliata. Giacomo, 23
+        // messaggio — e da fuori sembra una password sbagliata. il manutentore, 23
         // agosto 2026: «niente kde non entra e torna alla login».
         //
         // Un elemento solo, invece, è la riga com'è scritta nel `.desktop`, e
@@ -426,7 +426,7 @@ Item {
     /// Tre gradini, e servono tutti e tre:
     ///
     ///  1. **l'ultima usata**, che la schermata si scrive da sola dopo ogni
-    ///     accesso riuscito (`ricorda()`). È quello che Giacomo ha chiesto il
+    ///     accesso riuscito (`ricorda()`). È quello che il manutentore ha chiesto il
     ///     23 agosto 2026: «ci vorrebbe che il login ricordi l'ultimo desktop
     ///     environment usato e sia già posizionato su di essi».
     ///  2. **Minerva**, se quella di prima non c'è più. Succede davvero:
@@ -960,11 +960,11 @@ Item {
                 if (!greeter.conSaluto)
                     return intero;
                 // Il nome di battesimo, non quello intero: «Buonasera,
-                // Giacomo Rossi» è un modulo, «Buonasera, Giacomo» è un
+                // il manutentore Rossi» è un modulo, «Buonasera, il manutentore» è un
                 // saluto.
                 var primo = String(intero).split(" ")[0];
                 // Senza nome completo resta quello d'accesso, che è minuscolo:
-                // «Buonasera, giacomo» sembra un errore di battitura.
+                // «Buonasera, utente» sembra un errore di battitura.
                 primo = primo.charAt(0).toUpperCase() + primo.slice(1);
                 return greeter.saluto(orologio.adesso) + ", " + primo;
             }

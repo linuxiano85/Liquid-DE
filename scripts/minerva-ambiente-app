@@ -1,4 +1,9 @@
 #!/bin/sh
+
+if [ -n "${ROOT:-}" ] && [ -d "$ROOT/minerva-shell/native" ]; then
+    QML_IMPORT_PATH="$ROOT/minerva-shell/native${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}"
+    export QML_IMPORT_PATH
+fi
 # minerva-ambiente-app — L'ambiente comune delle applicazioni di Minerva.
 #
 # Non si esegue: si include, con `. "$ROOT/scripts/minerva-ambiente-app"`,
@@ -9,7 +14,7 @@
 #
 # ── Perché le nostre app disegnano SENZA scheda video ──────────────────────
 #
-# Giacomo, 18 agosto 2026: «non è possibile che il nostro file manager sia
+# il manutentore, 18 agosto 2026: «non è possibile che il nostro file manager sia
 # 135 MB mentre dolphin 55 [...] il nostro codice è troppo pompato».
 #
 # L'osservazione è giusta, la causa no. Misurato quel giorno sulla macchina
@@ -69,7 +74,7 @@
 #
 # Costo reale, scoperto il 4 settembre 2026: Minerva Media, che è un lettore
 # audio E video, mostrava di sé solo la metà musicale — con lo spettro
-# animato, la scaletta di mp3 e nessun fotogramma. Giacomo l'ha detto senza
+# animato, la scaletta di mp3 e nessun fotogramma. il manutentore l'ha detto senza
 # sapere perché: «i file video li apre minerva media che è un lettore
 # musicale». Non lo sembrava: non poteva essere altro.
 #
@@ -98,7 +103,7 @@ if [ "${MINERVA_APP_GPU:-0}" = "1" ]; then
     unset QT_QUICK_BACKEND
     # ── E la decodifica dei video sul processore ─────────────────────────
     #
-    # 6 ottobre 2026: i video di Giacomo sono AV1, e la sua RX 580 l'AV1 in
+    # 6 ottobre 2026: i video di il manutentore sono AV1, e la sua RX 580 l'AV1 in
     # hardware non lo sa decodificare. FFmpeg ci prova lo stesso (VAAPI),
     # fallisce — «hwaccel initialisation returned error» — e Qt invece di
     # ripiegare sul processore non produce nessun fotogramma: l'audio va,

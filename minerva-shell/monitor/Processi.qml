@@ -3,7 +3,7 @@ import "../core" as Core
 
 // Processi — I dati del gestore dei processi, senza disegno.
 //
-// Stavano dentro `Monitor.qml`, la finestra. Il 28 settembre 2026 Giacomo ha
+// Stavano dentro `Monitor.qml`, la finestra. Il 28 settembre 2026 il manutentore ha
 // scelto che Attività viva ANCHE dentro la shell, come pannello liquido: una
 // finestra Qt Quick a sé costa ~69 MB prima di disegnare una riga
 // (`minerva-peso-app`), un pannello nella shell solo il suo codice. Due
@@ -113,7 +113,7 @@ Item {
 
     // ── Una lista che si aggiorna SUL POSTO ──────────────────────────────
     //
-    // Giacomo, 28 settembre 2026: «se voglio scrollare tutti i processi non
+    // il manutentore, 28 settembre 2026: «se voglio scrollare tutti i processi non
     // si può fermare l'aggiornarsi della lista […] tornando sempre in cima».
     // La lista riceveva `righe`, un elenco JavaScript nuovo ogni due secondi:
     // per Qt è un modello diverso, e un modello diverso vuol dire buttare

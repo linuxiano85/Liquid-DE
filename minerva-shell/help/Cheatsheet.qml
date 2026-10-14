@@ -8,7 +8,7 @@ import "../ui" as Ui
 // Cheatsheet — Pannello a schermo intero con TUTTE le scorciatoie configurate.
 //
 // È la risposta alla domanda «e adesso cosa faccio?»: si apre con Super+K
-// (o F1), lascia intravedere la scrivania dietro di sé, e mostra ogni
+// e lascia intravedere la scrivania dietro di sé, e mostra ogni
 // combinazione tradotta nella lingua dell'utente.
 //
 // Le voci arrivano dal demone, che legge config/scorciatoie.minerva: aggiungere
@@ -41,6 +41,11 @@ PanelWindow {
     }
 
     property string filter: ""
+    property string mode:Core.Tiling.active ? "tiling":"classico"
+    onModeChanged:rebuild()
+    function switchMode() {mode=mode==="tiling" ? "classico":"tiling";}
+    Shortcut {sequence:"Tab";onActivated:sheet.switchMode()}
+    Shortcut {sequence:"Shift+Tab";onActivated:sheet.switchMode()}
 
     /// Scorciatoie raggruppate per categoria: [{ key, entries: [...] }, …]
     ///
@@ -120,7 +125,10 @@ PanelWindow {
         var buckets = {};
 
         for (var i = 0; i < entries.length; i++) {
-            var e = entries[i];
+            var raw=entries[i];
+            if(raw.modes && raw.modes.indexOf(sheet.mode)<0) continue;
+            var e=Object.assign({},raw);
+            e.description=sheet.mode==="tiling" ? raw.tilingDescription || raw.description:raw.classicDescription || raw.description;
             var combos = e.combos || [];
 
             if (needle !== "") {
@@ -230,6 +238,30 @@ PanelWindow {
             anchors.fill: parent
             spacing: 20
 
+            Row {
+                id:modeTabs
+                spacing:12
+                Repeater {
+                    model:[{value:"classico",label:Core.Strings.lang==="it" ? "Classico":"Classic"},{value:"tiling",label:"Tiling"}]
+                    Rectangle {
+                        required property var modelData
+                        width:120;height:36;radius:9
+                        color:sheet.mode===modelData.value ? Theme.Colors.accent:Theme.Colors.raised
+                        Text {anchors.centerIn:parent;text:parent.modelData.label;color:Theme.Colors.text;font.bold:sheet.mode===parent.modelData.value}
+                        MouseArea {anchors.fill:parent;onClicked:sheet.mode=parent.modelData.value}
+                    }
+                }
+                Text {anchors.verticalCenter:parent.verticalCenter;text:Core.Strings.lang==="it" ? "Tab cambia modalità · le scorciatoie comuni sono in entrambe":"Tab switches mode · common shortcuts appear in both";color:Theme.Colors.textMuted;font.pixelSize:12}
+            }
+
+            Text {
+                id:focusOrderHint
+                width:parent.width;visible:sheet.mode==="tiling" && Core.Tiling.focusFirst && Core.Tiling.order==="recenti"
+                height:visible ? implicitHeight:0
+                wrapMode:Text.WordWrap;color:Theme.Colors.textMuted;font.pixelSize:12
+                text:Core.Strings.lang==="it" ? "Focus recente per primo: tieni Super premuto mentre usi le frecce per attraversare i riquadri. In Maestro, ↓ entra nella pila e ↑ risale. Rilascia Super per iniziare dalla nuova disposizione.":"Recent focus first: keep Super held while using arrows to traverse tiles. In Master, ↓ enters the stack and ↑ goes back up. Release Super to start from the new arrangement."
+            }
+
             // Intestazione: titolo, ricerca, suggerimento di chiusura
             Item {
                 id: header
@@ -285,6 +317,8 @@ PanelWindow {
                         clip: true
 
                         onTextChanged: sheet.filter = text
+                        Keys.onTabPressed:function(event) {sheet.switchMode();event.accepted=true;}
+                        Keys.onBacktabPressed:function(event) {sheet.switchMode();event.accepted=true;}
 
                         // Primo Esc: svuota la ricerca. Secondo Esc: chiude.
                         Keys.onEscapePressed: function(event) {
@@ -337,7 +371,7 @@ PanelWindow {
             // diventerebbe un'altra riga.
             Item {
                 width: parent.width
-                height: parent.height - header.height - parent.spacing
+                height: Math.max(0,parent.height - header.height - modeTabs.height - focusOrderHint.height - parent.spacing*(focusOrderHint.visible ? 3:2))
                 visible: sheet.groups.length > 0
 
                 Ui.Scorrimento {
@@ -389,7 +423,8 @@ PanelWindow {
                                         implicitHeight: cardColumn.implicitHeight + 28
 
                                         radius: Theme.Effects.radiusMD
-                                        color: Theme.Colors.raised
+                                        // raised is a translucent veil; flatten it onto the themed panel.
+                                        color: Qt.tint(Qt.rgba(Theme.Colors.panel.r,Theme.Colors.panel.g,Theme.Colors.panel.b,1),Theme.Colors.raised)
                                         border.width: 1
                                         border.color: Theme.Colors.edge
 
@@ -455,8 +490,9 @@ PanelWindow {
                                                         Repeater {
                                                             model: sheet.collapse(row.modelData.combos)
 
-                                                            delegate: Row {
+                                                            delegate: Flow {
                                                                 id: comboRow
+                                                                width:comboFlow.width
                                                                 required property var modelData
                                                                 required property int index
                                                                 spacing: 4

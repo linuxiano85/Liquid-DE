@@ -1,6 +1,6 @@
 // predittore.dart — Cosa stai per scrivere, e perché lo proponiamo.
 //
-// Quello che Giacomo vede in Alacritty è l'autosuggerimento di fish: il
+// Quello che il manutentore vede in Alacritty è l'autosuggerimento di fish: il
 // testo grigio dalla storia, accettato con →. Questo fa quello E dice il
 // perché — ogni proposta ha una spiegazione in italiano accanto — perché
 // pesca da cinque sorgenti, in quest'ordine di peso:

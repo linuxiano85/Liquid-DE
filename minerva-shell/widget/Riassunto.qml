@@ -6,7 +6,7 @@ import "../core" as Core
 //
 // ── Perché non sei scatole ─────────────────────────────────────────────────
 //
-// Giacomo, 9 settembre 2026, guardando i sei widget sparsi: «voglio che sia a
+// il manutentore, 9 settembre 2026, guardando i sei widget sparsi: «voglio che sia a
 // colonna e non così il widget mi raccomando o magari poter avere una singola
 // casella di queste».
 //

@@ -36,12 +36,13 @@ PanelWindow {
     signal calendarioChiesto(rect dove)
     signal notificheChieste(rect dove)
     signal centroChiesto()
+    signal windowSettingsRequested()
     /// Trascinata dall'altra parte dello schermo.
     signal spostaChiesto(bool inBasso)
 
     // ── A scomparsa ──────────────────────────────────────────────────────
     //
-    // Giacomo, 25 settembre 2026: «l'isola alta centrale la vorrei a
+    // il manutentore, 25 settembre 2026: «l'isola alta centrale la vorrei a
     // scomparsa, e passando sulla parte alta deve ricomparire, così
     // recuperiamo spazio». Di serie sta nascosta oltre il bordo e non
     // riserva la fascia: le finestre arrivano fino in cima. Scende con una
@@ -63,7 +64,7 @@ PanelWindow {
     // ── Elude le finestre ────────────────────────────────────────────────
     //
     // Sulla scrivania libera l'ora si deve vedere senza andarla a prendere
-    // (Giacomo, 30 settembre 2026). Si ritira solo quando una finestra
+    // (il manutentore, 30 settembre 2026). Si ritira solo quando una finestra
     // arriva dove starebbe la capsula: lo stesso conto della dock in «elude»
     // (`dock/Dock.qml`, `copertaDaUnaFinestra`). Si guarda il posto dove la
     // capsula sta QUANDO È SU, non dove è adesso: appena ritirata non
@@ -108,8 +109,19 @@ PanelWindow {
                                || isolaBarra.consenso || isolaBarra.tenuta
                                || (isolaBarra.arrivata !== null && !isolaBarra.riservata)
     function svela() {
+        if (!Core.Riva.attiva)
+            return;
         isolaBarra.svelata = true;
         cala.restart();
+    }
+    Connections {
+        target: Core.Riva
+        function onAttivaChanged() {
+            if (Core.Riva.attiva)
+                return;
+            isolaBarra.svelata = false;
+            cala.stop();
+        }
     }
     Timer {
         id: cala
@@ -373,6 +385,19 @@ PanelWindow {
             }
 
             // ── I programmi del vassoio ──
+            Voce {
+                onScelta:Core.Compositore.panoramicaChiesta(isolaBarra.screen ? isolaBarra.screen.name:"")
+                Row {
+                    spacing:6;anchors.verticalCenter:parent.verticalCenter
+                    Ui.Icon {width:17;height:17;name:"screen";color:Theme.Colors.textMuted}
+                    Text {text:Core.Compositore.scrivaniaAttiva;color:Theme.Colors.text;anchors.verticalCenter:parent.verticalCenter}
+                }
+            }
+            Spine.TilingButton {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: !avviso.visible && Core.Compositore.nostro && Core.Tiling.showButton
+                onSettingsRequested: isolaBarra.windowSettingsRequested()
+            }
             Spine.Vassoio {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: !avviso.visible && Core.Riva.isolaVassoio

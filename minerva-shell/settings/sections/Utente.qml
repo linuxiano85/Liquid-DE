@@ -160,7 +160,7 @@ Page {
     // ── La foto ──────────────────────────────────────────────────────────
     //
     // Qui c'era una casella dove incollare un percorso e un bottone «Scegli
-    // dal disco» che apriva il GESTORE FILE. Giacomo, provandolo: «scegli da
+    // dal disco» che apriva il GESTORE FILE. il manutentore, provandolo: «scegli da
     // disco apre il file manager e da lì non posso cliccare su seleziona». Ed
     // era vero — un gestore file non ha modo di restituire una scelta a chi
     // l'ha aperto — ma il commento accanto al codice lo sapeva già e lo dava

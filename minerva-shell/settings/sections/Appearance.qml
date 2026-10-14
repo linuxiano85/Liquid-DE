@@ -7,7 +7,7 @@ import ".." as S
 // Aspetto — com'è fatta la scrivania: lo stile, il tema, i colori, le icone, il
 // movimento. Dal 28 settembre 2026 qui dentro ci sono anche «Stile» e il
 // «Movimento» di «Effetti e animazioni»; lo sfondo e le icone della scrivania
-// sono andati in «Scrivania», le finestre in «Finestre». Giacomo: «è diventato
+// sono andati in «Scrivania», le finestre in «Finestre». il manutentore: «è diventato
 // tutto troppo confusionario e servirebbe riorganizzare tutto in maniera più
 // semplice e compatta».
 Page {
@@ -19,131 +19,6 @@ Page {
               : "The style, the theme, the colours, the icons and motion"
 
     readonly property bool it: Core.Strings.lang === "it"
-    /// Le chiavi che uno stile tocca. Sono anche quelle che «Libero» si
-    /// ricorda: l'elenco è uno solo apposta, o le due cose divergono e
-    /// tornando a «Libero» si riprende metà scrivania.
-    readonly property var _chiavi: [
-        "bar.position", "bar.listaFinestre", "bar.stile",
-        "dock.enabled", "dock.position", "dock.modo",
-        "dock.iconSize", "dock.magnification",
-        "windows.buttonsSide"
-    ]
-    readonly property var _stili: ({
-        // La Riva: al posto della barra l'Isola, una capsula che galleggia in
-        // mezzo con l'ora, il tempo, i segni di stato e le notifiche.
-        "liquid": {
-            "bar.position": "alto",
-            "bar.stile": "isola",
-            "bar.listaFinestre": false,
-            "dock.enabled": true,
-            "dock.position": "basso",
-            "dock.modo": "sempre",
-            "dock.iconSize": 48,
-            "dock.magnification": 1.5,
-            "windows.buttonsSide": "destra"
-        },
-        "minerva": {
-            "bar.position": "alto",
-            "bar.stile": "classica",
-            "bar.listaFinestre": false,
-            "dock.enabled": true,
-            "dock.position": "basso",
-            "dock.modo": "sempre",
-            "dock.iconSize": 48,
-            "dock.magnification": 1.5,
-            "windows.buttonsSide": "destra"
-        },
-        "mac": {
-            "bar.position": "alto",
-            "bar.stile": "classica",
-            "bar.listaFinestre": false,
-            "dock.enabled": true,
-            "dock.position": "basso",
-            // «Elude» e non «sempre»: sul Mac la dock si toglie di mezzo
-            // quando una finestra le arriva addosso.
-            "dock.modo": "elude",
-            "dock.iconSize": 52,
-            "dock.magnification": 1.9,
-            // Il semaforo sta a sinistra. È la cosa che si nota per prima, e
-            // l'unica che nessun altro stile fa.
-            "windows.buttonsSide": "sinistra"
-        },
-        "windows": {
-            // Una barra sola, in basso, con dentro le finestre aperte. La
-            // dock non c'è: sarebbe la stessa cosa detta due volte.
-            "bar.position": "basso",
-            "bar.stile": "classica",
-            "bar.listaFinestre": true,
-            "dock.enabled": false,
-            "dock.position": "alto",
-            "dock.modo": "sempre",
-            "dock.iconSize": 48,
-            "dock.magnification": 1.0,
-            "windows.buttonsSide": "destra"
-        }
-    })
-    readonly property string attuale: Core.Ipc.get("stile.attuale", "libero")
-    /// Fotografa com'è adesso, per poterci tornare.
-    function _fotografa() {
-        var f = ({});
-        for (var i = 0; i < page._chiavi.length; i++) {
-            var k = page._chiavi[i];
-            f[k] = Core.Ipc.get(k, null);
-        }
-        return f;
-    }
-    function applica(nome) {
-        if (nome === page.attuale)
-            return;
-
-        var mappa = ({});
-
-        // ── Si salva PRIMA di cambiare, e solo la prima volta ────────────
-        //
-        // Se si è già dentro uno stile, la fotografia da tenere è quella che
-        // c'era prima di entrarci: risalvare adesso vorrebbe dire che
-        // «Libero» riporta a Mac, cioè che il tuo l'hai perso.
-        //
-        // La fotografia viaggia come TESTO e non come mappa annidata: le
-        // chiavi hanno il punto dentro (`bar.position`), e il demone il punto
-        // lo legge come «scendi di un livello». Una riga di JSON non ha
-        // questo problema e non chiede di inventarsi un carattere al posto
-        // del punto.
-        if (page.attuale === "libero")
-            mappa["stile.libero"] = JSON.stringify(page._fotografa());
-
-        if (nome === "libero") {
-            // Si rimette quello che c'era. Chi non ha mai salvato niente
-            // resta com'è: meglio non fare niente che riportare a valori
-            // inventati.
-            var salvato = null;
-            try {
-                var testo = String(Core.Ipc.get("stile.libero", ""));
-                if (testo !== "")
-                    salvato = JSON.parse(testo);
-            } catch (e) {
-                // Una fotografia illeggibile non deve impedire di cambiare
-                // stile: si torna a «libero» senza spostare niente, che è
-                // meglio che restare bloccati dentro Windows.
-                console.warn("[MINERVA][Stile] fotografia illeggibile:", e);
-            }
-            if (salvato) {
-                for (var chiave in salvato) {
-                    if (salvato[chiave] !== null && salvato[chiave] !== undefined)
-                        mappa[chiave] = salvato[chiave];
-                }
-            }
-        } else {
-            var s = page._stili[nome];
-            if (!s)
-                return;
-            for (var kk in s)
-                mappa[kk] = s[kk];
-        }
-
-        mappa["stile.attuale"] = nome;
-        Core.Ipc.setSettings(mappa);
-    }
     readonly property bool accese: Core.Ipc.get("desktop.animations", true)
     // ── I colori messi a mano ────────────────────────────────────────────
     //
@@ -176,52 +51,10 @@ Page {
     property string coloreAperto: ""
     /// «Colori a mano» aperti: acceso se qualche colore è già stato scelto.
     property bool _coloriAMano: Object.keys(page.scavalca || {}).length > 0
-    Card {
-        heading: page.it ? "Stile della scrivania" : "Desktop style"
-        note: page.it
-              ? "Scegliendo uno stile, la scrivania che hai adesso viene messa da parte: «Libero» la riprende."
-              : "Picking a style puts your current desktop aside: “Free” brings it back."
+    // Lo stile della scrivania e le schede di Windows 11 stavano qui fino
+    // all'11 ottobre 2026: ora sono nella pagina Preset (`Preset.qml`), la
+    // prima di Personalizzazione.
 
-        S.SettingRow {
-            width: parent.width
-            label: page.it ? "Stile" : "Style"
-            // Cosa cambia lo stile SCELTO, e non tutti e cinque sempre in
-            // vista: c'era una scheda intera, «Che cosa cambia», con le
-            // cinque spiegazioni aperte (28 settembre 2026).
-            description: {
-                var d = {
-                    "liquid": page.it
-                        ? "Al posto della barra l'Isola: una capsula che galleggia in mezzo con l'ora, il tempo, i segni di stato e le notifiche. Si trascina in alto o in basso."
-                        : "Instead of the bar, the Island: a capsule floating in the middle with the time, the weather, the status and the notifications. Drag it up or down.",
-                    "minerva": page.it
-                        ? "Barra in alto, dock in fondo sempre visibile, comandi delle finestre a destra."
-                        : "Bar on top, dock always visible at the bottom, window controls on the right.",
-                    "mac": page.it
-                        ? "Come Minerva, ma la dock ingrandisce di più e si toglie di mezzo quando una finestra le arriva addosso, e i comandi delle finestre stanno a sinistra."
-                        : "Like Minerva, but the dock magnifies more and gets out of the way, and the window controls sit on the left.",
-                    "windows": page.it
-                        ? "Una barra sola in fondo, con dentro le finestre aperte. Niente dock."
-                        : "A single bar at the bottom holding the open windows. No dock.",
-                    "libero": page.it
-                        ? "Quello che avevi messo tu, ripreso com'era."
-                        : "Whatever you had set up, brought back as it was."
-                };
-                return d[page.attuale] || "";
-            }
-            controlWidth: 460
-            control: S.ChoicePicker {
-                value: page.attuale
-                options: [
-                    { "value": "liquid",  "label": "Liquid" },
-                    { "value": "minerva", "label": "Minerva" },
-                    { "value": "mac",     "label": "Mac" },
-                    { "value": "windows", "label": "Windows" },
-                    { "value": "libero",  "label": page.it ? "Libero" : "Free" }
-                ]
-                onPicked: function (v) { page.applica(v); }
-            }
-        }
-    }
     // ── Il tema di colore ────────────────────────────────────────────────
     //
     // Sta per primo, prima ancora dello sfondo, ed è una scelta: è la cosa
@@ -1154,5 +987,82 @@ Page {
             }
         }
 
+    }
+
+    // ── Il promemoria delle scorciatoie (Super+K) ────────────────────────
+    //
+    // Stava nella pagina «Minerva» del gruppo Sistema. È una cosa che si
+    // vede, quindi sta qui (11 ottobre 2026).
+    Card {
+        heading: page.it ? "Promemoria e suggerimenti" : "Cheat sheet and hints"
+
+        S.SettingRow {
+            width: parent.width
+            label: Core.Strings.t("showCheatsheet")
+            description: Core.Strings.t("showCheatsheetDesc")
+            controlWidth: 60
+            control: S.ToggleSwitch {
+                checked: Core.Ipc.get("cheatsheet.enabled", true)
+                onToggled: function(v) { Core.Ipc.setSetting("cheatsheet.enabled", v); }
+            }
+        }
+
+        S.SettingRow {
+            width: parent.width
+            label: Core.Strings.t("showOnFirstRun")
+            description: Core.Strings.t("showOnFirstRunDesc")
+            controlWidth: 60
+            enabled: Core.Ipc.get("cheatsheet.enabled", true)
+            opacity: enabled ? 1 : 0.4
+            control: S.ToggleSwitch {
+                checked: Core.Ipc.get("cheatsheet.showOnFirstRun", true)
+                onToggled: function(v) {
+                    Core.Ipc.setSetting("cheatsheet.showOnFirstRun", v);
+                }
+            }
+        }
+
+        S.SettingRow {
+            width: parent.width
+            label: Core.Strings.t("cheatsheetOpacity")
+            description: Core.Strings.t("cheatsheetOpacityDesc")
+            controlWidth: 220
+            enabled: Core.Ipc.get("cheatsheet.enabled", true)
+            opacity: enabled ? 1 : 0.4
+            control: S.ValueSlider {
+                width: 220
+                value: Core.Ipc.get("cheatsheet.backgroundOpacity", 0.55)
+                onReleased: function(v) {
+                    Core.Ipc.setSetting("cheatsheet.backgroundOpacity",
+                                        Math.round(v * 100) / 100);
+                }
+            }
+        }
+
+
+        // ── Le spiegazioni sotto ogni interruttore ───────────────────
+        //
+        // `general.beginnerMode` la legge `menu/DesktopLayer.qml` (il
+        // suggerimento sulla scrivania). Le spiegazioni delle piastrelle della
+        // tendina se ne sono andate con lei (5 ottobre 2026). Era accesa di fabbrica e non si poteva spegnere da
+        // nessuna parte: chi Minerva la conosce si teneva le spiegazioni per
+        // sempre.
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "Suggerimenti per chi comincia"
+                           : "Hints for beginners"
+            description: page.it
+                ? "La riga in fondo alla scrivania vuota: «Super+K per le "
+                  + "scorciatoie · Clic destro qui per il menu». Chi Minerva "
+                  + "la conosce può spegnerla."
+                : "The hint on the desktop. Turn it off once you know Minerva."
+            controlWidth: 60
+            control: S.ToggleSwitch {
+                checked: Core.Ipc.get("general.beginnerMode", true)
+                onToggled: function(v) {
+                    Core.Ipc.setSetting("general.beginnerMode", v);
+                }
+            }
+        }
     }
 }

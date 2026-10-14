@@ -32,7 +32,7 @@ FloatingWindow {
     //
     // Il 2 settembre 2026 qui c'era `color: "transparent"` più un
     // `Ui.FondoFinestra` — un rettangolo a tutta finestra col raggio — per
-    // arrotondare gli angoli, che Giacomo aveva chiesto.
+    // arrotondare gli angoli, che il manutentore aveva chiesto.
     //
     // Funzionava, e si è visto nelle fotografie. Costava però **quindici
     // megabyte per applicazione**, misurati: 55 MB senza, 69-72 con. Provato
@@ -254,7 +254,7 @@ FloatingWindow {
 
     // ── I file aperti da amministratore ──────────────────────────────────
     //
-    // Giacomo, 23 agosto 2026: «inserendo la password posso aprire anche file
+    // il manutentore, 23 agosto 2026: «inserendo la password posso aprire anche file
     // di configurazione come root con il lettore di testi».
     //
     // Si tiene l'elenco dei percorsi aperti così, per due motivi. Il primo è
@@ -1205,7 +1205,7 @@ FloatingWindow {
         // altri». Stava dopo la colonna dei numeri, cioè sopra: i numeri
         // c'erano, erano giusti, e nessuno li ha mai visti — un rettangolo
         // opaco grande quanto tutto il foglio ci stava davanti. È il quarto
-        // difetto di questa colonna, e l'unico che spiega perché a Giacomo
+        // difetto di questa colonna, e l'unico che spiega perché a il manutentore
         // sembrasse che i numeri di riga non ci fossero proprio.
         Rectangle {
             x: 0

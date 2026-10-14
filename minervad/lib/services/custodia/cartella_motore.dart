@@ -5,7 +5,7 @@ import 'dart:io';
 /// ── A cosa serve, visto che c'è già GitHub ─────────────────────────────────
 ///
 /// A tutto quello che GitHub non prende. `Ruby`, nella cartella dei progetti di
-/// Giacomo, sono **286 GB** di immagini ROM Android: GitHub rifiuta ogni file
+/// il manutentore, sono **286 GB** di immagini ROM Android: GitHub rifiuta ogni file
 /// oltre 100 MB e si aspetta archivi sotto il giga. Non è un limite da
 /// aggirare — è lo strumento sbagliato per quel contenuto.
 ///

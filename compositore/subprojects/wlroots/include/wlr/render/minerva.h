@@ -16,10 +16,24 @@ struct wlr_minerva_mercurio {
 	float k, raggio;
 	struct wlr_fbox forme[WLR_MINERVA_MERCURIO_MAX];
 };
+/* L'Acrylic di Windows 11 sopra l'acquerello: la ricetta di WinUI
+ * (microsoft-ui-xaml, AcrylicBrush.cpp, MIT). Sul fondo sfocato prima la
+ * LUMINOSITÀ del colore `luminosita` (rgb) con opacità `luminosita[3]`: tinta
+ * e saturazione restano dello sfondo, la chiarezza la decide lui. Poi il
+ * COLORE della `tinta` con opacità `tinta[3]`. Infine il rumore. Colori non
+ * premoltiplicati, da 0 a 1. Vedi `minerva_blur.frag`. */
+struct wlr_minerva_acrylic {
+	bool attivo;
+	float tinta[4];
+	float luminosita[4];
+	float rumore;
+};
 struct wlr_minerva_style {
+	float desaturation; // 0 = original color, 1 = luminance; alpha unchanged
 	struct wlr_minerva_radii corners;
 	struct wlr_minerva_clip hole;
 	struct wlr_minerva_mercurio mercurio;
+	struct wlr_minerva_acrylic acrylic;
 };
 static inline struct wlr_minerva_radii wlr_minerva_radii_all(float r) {
 	return (struct wlr_minerva_radii){r, r, r, r};

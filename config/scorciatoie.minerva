@@ -73,6 +73,9 @@ Super_L [tieni] -> minerva: tasti
 @ Aprire un posto | Centro di controllo: Wi-Fi, luce notturna, volume, spegnimento
 $mod A -> minerva: control
 
+@ Aprire un posto | Uscita audio e mixer nel preset Windows; impostazioni audio negli altri preset
+$mod CTRL V -> minerva: audio-mixer
+
 @ Aprire un posto | Notifiche
 $mod N -> minerva: notifications
 
@@ -103,21 +106,37 @@ $mod L -> avvia: "$minerva/scripts/minerva-blocca"
 @ Aprire un posto | Tutti i tasti
 $mod K -> minerva: cheatsheet
 
+@ Aprire un posto | Preset della scrivania: Liquid, Minerva, Mac, Windows 11 (di nuovo per il successivo)
+$mod P -> minerva: preset
+
 @ Aprire un posto | Cerca: programmi, conti con «=», comandi con «>»
 $mod R -> minerva: cerca
+
+
+# ───────────────────────────────────────────────────────────────────────────
+#  ACCENDERE E SPEGNERE
+# ───────────────────────────────────────────────────────────────────────────
+#
+# Tasti diretti per le levette del Centro di controllo. In tiling si sta sulla
+# tastiera: accendere il Wi-Fi non deve volere due passi (Super+A e un clic).
+# Ognuno è un `minerva:` e la shell fa il resto; il tasto compare nel riquadro
+# del Centro e nel promemoria di Super+K.
+
+@ Accendere e spegnere | Wi-Fi acceso o spento
+$mod W -> minerva: wifi
 
 
 # ───────────────────────────────────────────────────────────────────────────
 #  LA FINESTRA
 # ───────────────────────────────────────────────────────────────────────────
 
-@ La finestra | Metà sinistra dello schermo
+@ Muoversi | La finestra a sinistra
 $mod left -> sposta-finestra: l
-@ La finestra | Metà destra dello schermo
+@ Muoversi | La finestra a destra
 $mod right -> sposta-finestra: r
-@ La finestra | Ingrandisci
+@ Muoversi | La finestra sopra
 $mod up -> sposta-finestra: u
-@ La finestra | Torna com'era; di nuovo, riduci
+@ Muoversi | La finestra sotto
 $mod down -> sposta-finestra: d
 
 @ La finestra | Chiudi
@@ -153,7 +172,12 @@ $mod Tab -> minerva: stanze
 @ Muoversi | Scrivania libera, e ritorno
 $mod D -> minerva: showdesktop
 
-@ Muoversi | Vai alla stanza 1…10
+@ Muoversi | Porta la finestra alla scrivania prima
+$mod SHIFT left -> porta-a-scrivania: precedente
+@ Muoversi | Porta la finestra alla scrivania dopo
+$mod SHIFT right -> porta-a-scrivania: prossima
+
+@ Muoversi | Vai alla scrivania 1…10
 $mod 1 -> scrivania: 1
 $mod 2 -> scrivania: 2
 $mod 3 -> scrivania: 3
@@ -165,28 +189,19 @@ $mod 8 -> scrivania: 8
 $mod 9 -> scrivania: 9
 $mod 0 -> scrivania: 10
 
-@ Muoversi | Vai alla stanza 1…10 portando la finestra
-$mod SHIFT 1 -> porta-a-scrivania: 1
-$mod SHIFT 2 -> porta-a-scrivania: 2
-$mod SHIFT 3 -> porta-a-scrivania: 3
-$mod SHIFT 4 -> porta-a-scrivania: 4
-$mod SHIFT 5 -> porta-a-scrivania: 5
-$mod SHIFT 6 -> porta-a-scrivania: 6
-$mod SHIFT 7 -> porta-a-scrivania: 7
-$mod SHIFT 8 -> porta-a-scrivania: 8
-$mod SHIFT 9 -> porta-a-scrivania: 9
-$mod SHIFT 0 -> porta-a-scrivania: 10
+@ Muoversi | Porta la finestra alla scrivania 1…10
+$mod ALT 1 -> porta-a-scrivania: 1
+$mod ALT 2 -> porta-a-scrivania: 2
+$mod ALT 3 -> porta-a-scrivania: 3
+$mod ALT 4 -> porta-a-scrivania: 4
+$mod ALT 5 -> porta-a-scrivania: 5
+$mod ALT 6 -> porta-a-scrivania: 6
+$mod ALT 7 -> porta-a-scrivania: 7
+$mod ALT 8 -> porta-a-scrivania: 8
+$mod ALT 9 -> porta-a-scrivania: 9
+$mod ALT 0 -> porta-a-scrivania: 10
 
-@ Muoversi | La stanza dopo
-$mod CTRL right -> scrivania: prossima
-@ Muoversi | La stanza prima
-$mod CTRL left -> scrivania: precedente
-@ Muoversi | La stanza dopo, portando la finestra
-$mod CTRL SHIFT right -> porta-a-scrivania: prossima
-@ Muoversi | La stanza prima, portando la finestra
-$mod CTRL SHIFT left -> porta-a-scrivania: precedente
-
-@ Mouse | Super + rotellina: la stanza accanto
+@ Mouse | Super + rotellina: la scrivania accanto
 $mod mouse_down -> scrivania: prossima
 $mod mouse_up -> scrivania: precedente
 
@@ -312,3 +327,58 @@ XF86AudioStop [anche-bloccato] -> minerva: mediastop
 XF86TouchpadToggle [anche-bloccato] -> minerva: touchpad
 XF86TouchpadOn [anche-bloccato] -> minerva: touchpadon
 XF86TouchpadOff [anche-bloccato] -> minerva: touchpadoff
+
+# In tiling, Super+frecce seleziona le finestre della scrivania attuale.
+# Super+Ctrl+Maiusc+frecce scambia le posizioni mantenendo il focus.
+@ Tiling | Scambia la finestra con quella sopra
+$mod CTRL SHIFT up -> tiling-sposta: u
+@ Tiling | Scambia la finestra con quella sotto
+$mod CTRL SHIFT down -> tiling-sposta: d
+
+@ Tiling | Ingrandisci la finestra
+CTRL up -> tiling-ingrandisci: si
+@ Tiling | Ripristina il riquadro
+CTRL down -> tiling-ingrandisci: no
+@ Tiling | Scambia con la finestra a sinistra
+$mod CTRL SHIFT left -> tiling-sposta: l
+@ Tiling | Scambia con la finestra a destra
+$mod CTRL SHIFT right -> tiling-sposta: r
+
+@ Muoversi | Invia la finestra alla scrivania 1 e resta qui
+$mod SHIFT 1 -> invia-a-scrivania: 1
+
+@ Muoversi | Invia la finestra alla scrivania 2 e resta qui
+$mod SHIFT 2 -> invia-a-scrivania: 2
+
+@ Muoversi | Invia la finestra alla scrivania 3 e resta qui
+$mod SHIFT 3 -> invia-a-scrivania: 3
+
+@ Muoversi | Invia la finestra alla scrivania 4 e resta qui
+$mod SHIFT 4 -> invia-a-scrivania: 4
+
+@ Muoversi | Invia la finestra alla scrivania 5 e resta qui
+$mod SHIFT 5 -> invia-a-scrivania: 5
+
+@ Muoversi | Invia la finestra alla scrivania 6 e resta qui
+$mod SHIFT 6 -> invia-a-scrivania: 6
+
+@ Muoversi | Invia la finestra alla scrivania 7 e resta qui
+$mod SHIFT 7 -> invia-a-scrivania: 7
+
+@ Muoversi | Invia la finestra alla scrivania 8 e resta qui
+$mod SHIFT 8 -> invia-a-scrivania: 8
+
+@ Muoversi | Invia la finestra alla scrivania 9 e resta qui
+$mod SHIFT 9 -> invia-a-scrivania: 9
+
+@ Muoversi | Invia la finestra alla scrivania 10 e resta qui
+$mod SHIFT 0 -> invia-a-scrivania: 10
+
+@ Tiling | Scorri lo spazio a sinistra
+$mod CTRL ALT left -> tiling-scorri: l
+@ Tiling | Scorri lo spazio a destra
+$mod CTRL ALT right -> tiling-scorri: r
+@ Tiling | Scorri lo spazio verso l’alto
+$mod CTRL ALT up -> tiling-scorri: u
+@ Tiling | Scorri lo spazio verso il basso
+$mod CTRL ALT down -> tiling-scorri: d

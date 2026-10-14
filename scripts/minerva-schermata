@@ -72,7 +72,7 @@ NOME="$CARTELLA/$PREFISSO $(date "+%Y-%m-%d $ORA_DI %H.%M.%S").png"
 # suggerimento `x-minerva-file` e cliccandolo la schermata si apre col
 # programma predefinito.
 #
-# Giacomo, 2 settembre 2026: «se scatto uno screenshot e compare la notifica e
+# il manutentore, 2 settembre 2026: «se scatto uno screenshot e compare la notifica e
 # ci clicco devo poter vedere l'immagine con anteprima [...] e questo per tutte
 # le notifiche».
 #

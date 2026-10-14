@@ -8,7 +8,7 @@ import "../widget" as W
 //
 // ── Perché sulla barra, se ci sono già sulla scrivania ─────────────────────
 //
-// Giacomo, 9 settembre 2026: «dei widget sia sulla barra […] e vorrei avere
+// il manutentore, 9 settembre 2026: «dei widget sia sulla barra […] e vorrei avere
 // dei widget sul desktop».
 //
 // Sono due posti per due momenti. Sulla scrivania si guardano quando la

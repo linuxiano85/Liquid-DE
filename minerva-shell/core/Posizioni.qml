@@ -42,7 +42,7 @@ QtObject {
     /// schermi e una barra sola — ma le Impostazioni lo dicono a parole prima
     /// che succeda, che è l'unico avviso che serve.»
     ///
-    /// Giacomo ha deciso il contrario, due volte. Il 4 settembre 2026: «non mi
+    /// il manutentore ha deciso il contrario, due volte. Il 4 settembre 2026: «non mi
     /// è piaciuto ad esempio il fatto che posso mettere in alto anche insieme
     /// la dock e la barra uno sopra l'altro, o ci sta uno o l'altro, se metto
     /// la dock in alto in automatico in basso deve starci la barra».

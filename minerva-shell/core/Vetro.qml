@@ -86,27 +86,9 @@ QtObject {
 
     readonly property bool filtroVero: vetro.effetto === "acquerello"
 
-    /// Vero quando la trasparenza delle finestre la mette IL COMPOSITORE.
-    ///
-    /// ── Perché conta, e perché è una sola ───────────────────────────────
-    ///
-    /// Perché fino al 9 settembre 2026 una finestra di Minerva era trasparente
-    /// DUE volte: `shell.windowOpacity` nel colore di fondo del QML, e
-    /// `windows.effettoOpacita` che il compositore mette su tutto l'albero
-    /// della finestra. Le due si moltiplicano: 0,90 × 0,73 = **0,66**, mentre
-    /// Chrome — che di `windowOpacity` non sa niente — restava a 0,73. Due
-    /// finestre affiancate, due trasparenze diverse, e nessuno dei due cursori
-    /// lo diceva.
-    ///
-    /// Col compositore acceso la trasparenza la mette lui e basta, come per
-    /// qualunque altro programma. `shell.windowOpacity` non muore: è la
-    /// manopola del vetro quando l'effetto è «nessuno», cioè quando il
-    /// compositore non ci mette niente.
-    ///
-    /// E c'è la ragione tecnica, che viene prima del gusto: il blur di SceneFX
-    /// si vede **solo dove la superficie è trasparente**. La trasparenza serve
-    /// al compositore per lavorare; una seconda in QML non aggiunge effetto,
-    /// toglie solo leggibilità.
+    /// Il vetro applica l'alfa nel compositore. L'acquerello filtra dietro
+    /// le parti traslucide: LegaTema regola soltanto il fondo delle nostre
+    /// app. Nessuno e risparmio energetico mantengono il fondo opaco.
     readonly property bool effettoAcceso: vetro.effetto !== "nessuno"
 
     /// Quello che chi disegna deve mettere sotto la tinta: il quadro sfocato,

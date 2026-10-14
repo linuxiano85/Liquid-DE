@@ -3,7 +3,7 @@
 /// ── Perché le esclusioni stanno qui e non in un'opzione ────────────────────
 ///
 /// Perché senza, la richiesta «cerca le foto nella cartella personale» dà una
-/// risposta assurda. Misurato il 26 agosto 2026 sulla casa di Giacomo:
+/// risposta assurda. Misurato il 26 agosto 2026 sulla casa di il manutentore:
 ///
 /// ```
 ///   88.982  file immagine o video in tutta la home
@@ -85,7 +85,7 @@ const Set<String> sempreEscluse = {
 /// Cartelle di primo livello nella casa che di serie non si guardano.
 ///
 /// Non sono vietate: sono **spente all'inizio**. `Scaricati` è quella che
-/// Giacomo ha nominato per primo — e infatti le sue foto ci sono dentro, quindi
+/// il manutentore ha nominato per primo — e infatti le sue foto ci sono dentro, quindi
 /// il programma gliela propone e lui decide, invece di deciderlo noi.
 const Set<String> spenteDiSerie = {
   'Documenti/Progetti',

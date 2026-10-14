@@ -227,12 +227,27 @@ struct wlr_scene_tree *wlr_scene_tree_create(struct wlr_scene_tree *parent) {
 typedef bool (*scene_node_box_iterator_func_t)(struct wlr_scene_node *node,
 	int sx, int sy, void *data);
 
+static void minerva_viewport_region(struct wlr_scene_node *node, pixman_region32_t *region) {
+    for (struct wlr_scene_node *n=node; n; n=n->parent ? &n->parent->node:NULL) {
+        if(!n->minerva_viewport_active) continue;
+        int x,y; wlr_scene_node_coords(n,&x,&y);
+        struct wlr_box b=n->minerva_viewport;
+        pixman_region32_intersect_rect(region,region,x+b.x,y+b.y,b.width,b.height);
+    }
+}
+
 static bool _scene_nodes_in_box(struct wlr_scene_node *node, struct wlr_box *box,
 		scene_node_box_iterator_func_t iterator, void *user_data, int lx, int ly) {
 	if (!node->enabled) {
 		return false;
 	}
 
+	struct wlr_box clipped;
+    if(node->minerva_viewport_active) {
+        clipped=node->minerva_viewport; clipped.x+=lx; clipped.y+=ly;
+        if(!wlr_box_intersection(&clipped,&clipped,box)) return false;
+        box=&clipped;
+    }
 	switch (node->type) {
 	case WLR_SCENE_NODE_TREE:;
 		struct wlr_scene_tree *scene_tree = wlr_scene_tree_from_node(node);
@@ -679,10 +694,12 @@ static bool scene_node_update_iterator(struct wlr_scene_node *node,
 	pixman_region32_intersect_rect(&node->visible, &node->visible,
 		lx, ly, box.width, box.height);
 
+	minerva_viewport_region(node,&node->visible);
 	if (data->calculate_visibility) {
 		pixman_region32_t opaque;
 		pixman_region32_init(&opaque);
 		scene_node_opaque_region(node, lx, ly, &opaque);
+		minerva_viewport_region(node,&opaque);
 		pixman_region32_subtract(data->visible, data->visible, &opaque);
 		pixman_region32_fini(&opaque);
 	}
@@ -1397,6 +1414,17 @@ void wlr_scene_node_lower_to_bottom(struct wlr_scene_node *node) {
 	wlr_scene_node_place_below(node, current_bottom);
 }
 
+void wlr_minerva_node_set_viewport(struct wlr_scene_node *node, const struct wlr_box *box) {
+    struct wlr_box next=box ? *box:(struct wlr_box){0};
+    if(node->minerva_viewport_active==(box!=NULL) && wlr_box_equal(&node->minerva_viewport,&next)) return;
+    bool enabled=node->enabled;
+    if(enabled) wlr_scene_node_set_enabled(node,false);
+    node->minerva_viewport=next;
+    node->minerva_viewport_active=box!=NULL;
+    if(enabled) wlr_scene_node_set_enabled(node,true);
+    else scene_node_update(node,NULL);
+}
+
 void wlr_scene_node_reparent(struct wlr_scene_node *node,
 		struct wlr_scene_tree *new_parent) {
 	assert(new_parent != NULL);
@@ -1486,6 +1514,10 @@ static bool scene_node_at_iterator(struct wlr_scene_node *node,
 
 	double rx = at_data->lx - lx;
 	double ry = at_data->ly - ly;
+    if(node->type==WLR_SCENE_NODE_RECT) {
+        struct wlr_box hole=wlr_scene_rect_from_node(node)->clipped_region.area;
+        if(hole.width>0 && rx>=hole.x && ry>=hole.y && rx<hole.x+hole.width && ry<hole.y+hole.height) return false;
+    }
 
 	if (node->type == WLR_SCENE_NODE_BUFFER) {
 		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
@@ -1541,13 +1573,13 @@ static struct wlr_minerva_style minerva_style(struct wlr_minerva_radii r,
  int xs[4]={0,1,1,0}, ys[4]={0,0,1,1};
  for (int i=0;i<4;i++) {
   struct wlr_box corner={xs[i],ys[i],1,1}, transformed;
-  wlr_box_transform(&transformed,&corner,data->transform,2,2);
+  wlr_box_transform(&transformed,&corner,wlr_output_transform_invert(data->transform),2,2);
   int j=transformed.y == 0 ? (transformed.x == 0 ? 0:1) : (transformed.x == 0 ? 3:2);
   out[j]=v[i]*data->scale;
  }
  struct wlr_minerva_style style={.corners={out[0],out[1],out[2],out[3]}};
  if (hole.area.width>0 && hole.area.height>0) {
-  wlr_box_transform(&style.hole.area,&hole.area,data->transform,width,height);
+  wlr_box_transform(&style.hole.area,&hole.area,wlr_output_transform_invert(data->transform),width,height);
   style.hole.area.x=round(style.hole.area.x*data->scale);
   style.hole.area.y=round(style.hole.area.y*data->scale);
   style.hole.area.width=round(style.hole.area.width*data->scale);
@@ -1581,6 +1613,7 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
 	} else {
 		pixman_region32_copy(&render_region, &node->visible);
 	}
+	minerva_viewport_region(node,&render_region);
 	pixman_region32_translate(&render_region, -data->logical.x, -data->logical.y);
 	logical_to_buffer_coords(&render_region, data, true);
 	pixman_region32_intersect(&render_region, &render_region, &data->damage);
@@ -1623,34 +1656,24 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
 			style.mercurio.raggio = mm->raggio * data->scale;
 			for (int i = 0; i < mm->quante; i++) {
 				struct wlr_fbox f;
-				wlr_fbox_transform(&f, &mm->forme[i], data->transform,
+				wlr_fbox_transform(&f, &mm->forme[i], wlr_output_transform_invert(data->transform),
 					scene_rect->width, scene_rect->height);
 				style.mercurio.forme[i] = (struct wlr_fbox){f.x * data->scale,
 					f.y * data->scale, f.width * data->scale, f.height * data->scale};
 			}
 		}
 		if (scene_rect->minerva_blur) {
+			style.acrylic = scene_rect->minerva_acrylic;
 			struct wlr_scene_buffer *mask_buffer = scene_rect->minerva_mask;
 			struct wlr_render_texture_options mask = {0};
 			if (mask_buffer) {
-				/* Cropped/rotated masks need UV support in the blur shader.
-				 *
-				 * Ma una sorgente grande quanto tutto il buffer non ritaglia
-				 * niente, ed è quella che Qt dichiara sempre (viewporter):
-				 * rifiutarla spegneva in silenzio il filtro dietro OGNI
-				 * superficie della shell — dock, barra, widget, pannelli —
-				 * col blur come con l'acquerello. Trovato il 27 settembre
-				 * 2026: le fotografie dietro la dock erano identiche coi due
-				 * materiali, e nitide. */
-				const struct wlr_fbox *src = &mask_buffer->src_box;
-				bool intera = wlr_fbox_empty(src) || (mask_buffer->buffer != NULL
-					&& src->x == 0 && src->y == 0
-					&& src->width == mask_buffer->buffer->width
-					&& src->height == mask_buffer->buffer->height);
-				if (mask_buffer->transform != WL_OUTPUT_TRANSFORM_NORMAL || !intera)
-					break;
+                // The mask follows the same UV crop and output transform
+                // as the client texture, including rotated and scaled outputs.
 				mask.texture = scene_buffer_get_texture(mask_buffer, data->output->output->renderer);
 				if (!mask.texture) break;
+				mask.src_box = mask_buffer->src_box;
+				mask.transform = wlr_output_transform_compose(
+					wlr_output_transform_invert(mask_buffer->transform), data->transform);
 				mask.wait_timeline = mask_buffer->wait_timeline;
 				mask.wait_point = mask_buffer->wait_point;
 			}
@@ -1680,11 +1703,13 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
 		break;
 	case WLR_SCENE_NODE_BUFFER:;
 		struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
+        struct wlr_minerva_style buffer_style=minerva_style(scene_buffer->corners,(struct wlr_minerva_clip){0},dst_box.width,dst_box.height,data);
+        buffer_style.desaturation=scene_buffer->minerva_desaturation;
 
 		if (scene_buffer->is_single_pixel_buffer) {
 			// Render the buffer as a rect, this is likely to be more efficient
 			wlr_render_pass_add_rect(data->render_pass, &(struct wlr_render_rect_options){
-				.minerva = minerva_style(scene_buffer->corners, (struct wlr_minerva_clip){0}, dst_box.width, dst_box.height, data),
+				.minerva = buffer_style,
 				.box = dst_box,
 				.color = {
 					.r = (float)scene_buffer->single_pixel_buffer_color[0] / (float)UINT32_MAX,
@@ -1722,7 +1747,7 @@ static void scene_entry_render(struct render_list_entry *entry, const struct ren
 		float luminance_multiplier = get_luminance_multiplier(&src_lum, &srgb_lum);
 
 		wlr_render_pass_add_texture(data->render_pass, &(struct wlr_render_texture_options) {
-			.minerva = minerva_style(scene_buffer->corners, (struct wlr_minerva_clip){0}, dst_box.width, dst_box.height, data),
+			.minerva = buffer_style,
 			.texture = texture,
 			.src_box = scene_buffer->src_box,
 			.dst_box = dst_box,
@@ -2181,12 +2206,35 @@ static bool construct_render_list_iterator(struct wlr_scene_node *node,
 	return false;
 }
 
+/// L'area vera di un filtro, in coordinate di scena: il suo rettangolo
+/// ritagliato dal suo viewport, se ne ha uno. Il vetro della barra Windows è
+/// un rettangolo grande quanto lo schermo ritagliato alla striscia
+/// (compositore, `appoggiata_sfocatura`): misurare il rettangolo intero
+/// voleva dire allargare il danno di 66 pixel intorno a OGNI cambiamento
+/// dello schermo, e rifare il vetro. Misurato l'11 ottobre 2026: 930 µs di
+/// GPU per fotogramma invece di 330. Ritorna falso se il filtro non c'è.
+static bool minerva_filtro_area(struct wlr_scene_node *node, int x, int y,
+		struct wlr_box *area) {
+	int width, height;
+	scene_node_get_size(node, &width, &height);
+	*area = (struct wlr_box){ x, y, width, height };
+	if (!node->minerva_viewport_active)
+		return width > 0 && height > 0;
+	struct wlr_box vista = node->minerva_viewport;
+	vista.x += x;
+	vista.y += y;
+	return wlr_box_intersection(area, area, &vista);
+}
+
 static bool minerva_backdrop_bounds(struct wlr_scene_node *node,
 		int lx, int ly, void *user_data) {
 	struct render_data *data = user_data;
 	if (node->type != WLR_SCENE_NODE_RECT || !wlr_scene_rect_from_node(node)->minerva_blur) return false;
-	int width, height;
-	scene_node_get_size(node, &width, &height);
+	struct wlr_box vera;
+	if (!minerva_filtro_area(node, lx, ly, &vera)) return false;
+	lx = vera.x;
+	ly = vera.y;
+	int width = vera.width, height = vera.height;
 	/* Collect hidden filters too, as their output may be sampled by another
 	 * filter drawn above them. L'acquerello legge solo il proprio rettangolo
 	 * (ai bordi ripete il colore): niente margine, oltre l'arrotondamento. */
@@ -2286,6 +2334,11 @@ static enum scene_direct_scanout_result scene_entry_try_direct_scanout(
 		const struct render_data *data) {
 	struct wlr_scene_output *scene_output = data->output;
 	struct wlr_scene_node *node = entry->node;
+	for (struct wlr_scene_node *n = node; n; n = n->parent ? &n->parent->node : NULL) {
+		if (n->minerva_viewport_active) {
+			return SCANOUT_INELIGIBLE;
+		}
+	}
 
 	if (!scene_output->scene->direct_scanout) {
 		return SCANOUT_INELIGIBLE;
@@ -2307,7 +2360,7 @@ static enum scene_direct_scanout_result scene_entry_try_direct_scanout(
 	}
 
 	struct wlr_scene_buffer *buffer = wlr_scene_buffer_from_node(node);
-	if (buffer->buffer == NULL) {
+	if (buffer->buffer == NULL || buffer->minerva_desaturation > 0) {
 		return SCANOUT_INELIGIBLE;
 	}
 
@@ -2645,8 +2698,10 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 		struct wlr_scene_node *n=list_data[i].node;
 		if (n->type!=WLR_SCENE_NODE_RECT || !wlr_scene_rect_from_node(n)->minerva_blur) continue;
 		render_data.minerva_blur = true;
-		int fw, fh;
-		scene_node_get_size(n, &fw, &fh);
+		struct wlr_box vera;
+		if (!minerva_filtro_area(n, list_data[i].x, list_data[i].y, &vera))
+			continue;
+		int fw = vera.width, fh = vera.height;
 		// L'acquerello legge solo il proprio rettangolo (pad 0: il danno
 		// fuori non lo tocca), e un pixel cambiato sposta il colore della
 		// sua cella, che si stende sulle due vicine: tre celle da 32, cioè
@@ -2655,7 +2710,7 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 		const int pad = 0, pad_fisico = 66;
 		if (n_filtri < (int)(sizeof(filtri)/sizeof(filtri[0]))) {
 			filtri[n_filtri++] = (struct minerva_filtro){
-				list_data[i].x, list_data[i].y, fw, fh, pad, pad_fisico, i, false};
+				vera.x, vera.y, fw, fh, pad, pad_fisico, i, false};
 		} else {
 			filtri_troppi = true;
 		}
@@ -2960,7 +3015,7 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 	// fotogramma c'è ancora l'immagine finale di prima — la finestra già
 	// sfocata, col suo testo sopra. Il bordo del pezzo mescolava le due cose,
 	// e usciva un po' diverso dai vicini: linee sottili che si muovevano con
-	// quello che cambiava, fino alla barra del titolo. Giacomo le ha viste
+	// quello che cambiava, fino alla barra del titolo. il manutentore le ha viste
 	// nel terminale il 23 settembre 2026; le prove non le vedevano perché
 	// ammettevano otto livelli di differenza, e le cuciture ne avevano da uno
 	// a dodici.
@@ -2999,11 +3054,12 @@ bool wlr_scene_output_build_state(struct wlr_scene_output *scene_output,
 			int k = minerva_quanti++;
 			pixman_region32_init(&minerva_regioni[k + 1]);
 			pixman_region32_copy(&minerva_regioni[k + 1], &minerva_regioni[k]);
-			int fw, fh;
-			scene_node_get_size(n, &fw, &fh);
+			struct wlr_box vera;
+			if (!minerva_filtro_area(n, list_data[i].x, list_data[i].y, &vera))
+				vera = (struct wlr_box){0};
 			pixman_region32_t tocca;
-			pixman_region32_init_rect(&tocca, list_data[i].x - render_data.logical.x,
-				list_data[i].y - render_data.logical.y, fw, fh);
+			pixman_region32_init_rect(&tocca, vera.x - render_data.logical.x,
+				vera.y - render_data.logical.y, vera.width, vera.height);
 			logical_to_buffer_coords(&tocca, &render_data, true);
 			pixman_region32_intersect(&tocca, &tocca, &minerva_regioni[k]);
 			if (!pixman_region32_empty(&tocca)) {
@@ -3256,6 +3312,10 @@ void wlr_scene_output_for_each_buffer(struct wlr_scene_output *scene_output,
 		iterator, user_data);
 }
 
+void wlr_minerva_buffer_set_desaturation(struct wlr_scene_buffer *b,float amount) {
+ if(!isfinite(amount) || amount<0 || amount>1 || b->minerva_desaturation==amount) return;
+ b->minerva_desaturation=amount;scene_node_update(&b->node,NULL);
+}
 void wlr_minerva_buffer_set_alpha(struct wlr_scene_buffer *b, float alpha) {
  if (!isfinite(alpha) || alpha < 0 || alpha > 1 || b->minerva_alpha == alpha) return;
  b->minerva_alpha = alpha;
@@ -3314,6 +3374,17 @@ void wlr_minerva_blur_set_mask(struct wlr_scene_rect *r, struct wlr_scene_buffer
  r->minerva_mask=b;
  if (b) { r->minerva_mask_destroy.notify=minerva_mask_destroy; wl_signal_add(&b->node.events.destroy,&r->minerva_mask_destroy); }
  scene_node_update(&r->node,NULL);
+}
+void wlr_minerva_blur_set_acrylic(struct wlr_scene_rect *r, const struct wlr_minerva_acrylic *a) {
+	struct wlr_minerva_acrylic nuova = {0};
+	if (a != NULL && a->attivo)
+		nuova = *a;
+	// La stessa ricetta di prima non sporca niente: la shell la rimanda a
+	// ogni cambio di preferenza, e il filtro della barra è grande.
+	if (memcmp(&nuova, &r->minerva_acrylic, sizeof(nuova)) == 0)
+		return;
+	r->minerva_acrylic = nuova;
+	scene_node_update(&r->node, NULL);
 }
 struct wlr_scene_rect *wlr_minerva_blur_create(struct wlr_scene_tree *parent,int width,int height) {
  struct wlr_scene_rect *r=wlr_scene_rect_create(parent,width,height,(float[4]){0,0,0,0});

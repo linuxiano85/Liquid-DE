@@ -19,7 +19,7 @@ import "." as Core
 // le Impostazioni. Tre giri indipendenti, tre volte i comandi lanciati, e
 // soprattutto **i tre non si parlavano**. Spegnendo il Bluetooth dalle
 // Impostazioni, la barra continuava a mostrarlo acceso fino al proprio giro:
-// fino a dodici secondi, in media sei. È il ritardo che Giacomo aveva
+// fino a dodici secondi, in media sei. È il ritardo che il manutentore aveva
 // segnalato, e non era lentezza — era una finestra che non poteva sapere.
 //
 // Adesso legge il demone, che interroga una volta per tutti e annuncia il
@@ -191,7 +191,7 @@ QtObject {
     /// ── Chiedere un volume vuol dire voler sentire ────────────────────────
     ///
     /// Chi alza il volume mentre l'audio è muto **toglie il muto**. Detto
-    /// così sembra ovvio; non lo era, e il difetto lo ha segnalato Giacomo il
+    /// così sembra ovvio; non lo era, e il difetto lo ha segnalato il manutentore il
     /// 5 agosto 2026: «se metto muto e poi clicco su alza o abbassa volume
     /// rimane muto, per riavere l'audio devo premere su muto».
     ///

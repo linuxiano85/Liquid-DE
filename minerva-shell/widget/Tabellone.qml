@@ -7,7 +7,7 @@ import "../ui" as Ui
 //
 // ── Da dove viene ──────────────────────────────────────────────────────────
 //
-// Giacomo, 14 settembre 2026, con l'immagine di un pannello «Monitoraggio
+// il manutentore, 14 settembre 2026, con l'immagine di un pannello «Monitoraggio
 // batteria» di Windows: «ne vorrei uno simile per il bluetooth con icone
 // eccetera, uno per le prestazioni che si vedano le varie misurazioni».
 //
@@ -63,7 +63,7 @@ Item {
     readonly property int altaRiga: 44
     /// Il MINIMO della storia: le righe si contano lasciandole almeno
     /// questo. Poi la storia si prende tutto quello che avanza sotto — il
-    /// primo tabellone lasciava un terzo di casella vuoto (Giacomo, 14
+    /// primo tabellone lasciava un terzo di casella vuoto (il manutentore, 14
     /// settembre 2026: «ha molto spazio sotto vuoto»), perché il grafico
     /// era alto sempre cinquantasei pixel, qualunque fosse la casella.
     readonly property int altaStoria: tabellone.storia !== "" ? 56 : 0

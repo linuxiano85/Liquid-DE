@@ -192,6 +192,10 @@ class Scorciatoie {
     'esci-dalla-sessione',
     'fuoco',
     'sposta-finestra',
+    'tiling-sposta',
+    'tiling-scorri',
+    'tiling-ingrandisci',
+    'invia-a-scrivania',
     'ridimensiona',
   };
 
@@ -232,6 +236,14 @@ class Scorciatoie {
     return true;
   }
 
+  /// Quelle che `perMinervaWayland` salta, col loro tasto: servono a sorvegliare
+  /// che il numero delle saltate resti quello giusto. Se risale, qualcuno ha
+  /// aggiunto una riga che il compositore non riceve e non lo dice a nessuno.
+  List<String> get saltatePerMinervaWayland => tutte
+      .where((s) => !_perLuiVale(s))
+      .map((s) => s.tasti)
+      .toList();
+
   /// Le variabili della sorgente, sciolte.
   ///
   /// `$mod`, `$terminal`, `$browser`. minerva-wayland riceve righe già
@@ -254,10 +266,17 @@ class Scorciatoie {
   }
 
   /// Le righe da mandare a minerva-wayland sul suo canale.
-  List<String> perMinervaWayland({Map<String, String> anche = const {}}) {
+  ///
+  /// `disattivate` sono i `tasti` (come scritti nella sorgente) che l'utente
+  /// ha spento nelle Impostazioni: quelle righe non si mandano, e il tasto
+  /// resta libero invece di essere mangiato da una scorciatoia che non fa
+  /// niente.
+  List<String> perMinervaWayland({Map<String, String> anche = const {},
+      Set<String> disattivate = const {}}) {
     final fuori = <String>['scorciatoie azzera'];
     for (final s in tutte) {
       if (!_perLuiVale(s)) continue;
+      if (disattivate.contains(s.tasti)) continue;
       final mods = s.modificatori
           .map((m) => _sciogli(m, anche).toUpperCase())
           .where((m) => m.isNotEmpty)

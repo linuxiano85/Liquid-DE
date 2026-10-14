@@ -7,7 +7,7 @@ import "../ui" as Ui
 
 // ── Il Sottomarino: il menù delle app di Liquid DE ───────────────────────
 //
-// Giacomo, 23 settembre 2026: «lo farei comparire come un sottomarino
+// il manutentore, 23 settembre 2026: «lo farei comparire come un sottomarino
 // sfruttando gli angoli attivi, e metterei una ricerca intelligente delle
 // app nella quale io possa sia cercare il nome che la sua funzione, come ad
 // esempio browser o chrome o navigare il web, e possa vedere sia in vista
@@ -67,6 +67,55 @@ PanelWindow {
     property string cerca: ""
     /// Quanto spazio lasciare in basso: la dock, finché c'è, non si copre.
     property real margineBasso: 0
+
+    // ── Dentro il preset Windows (11 ottobre 2026) ───────────────────────
+    //
+    // il manutentore: col menu «Liquid» scelto al posto dello Start, il menu si
+    // apriva a sinistra, dove lo apre Liquid, invece che sopra il pulsante;
+    // aveva i colori di Liquid e non quelli della barra; e non c'era modo di
+    // spegnere o riavviare. Chi lo apre dalla barra Windows usa `commutaSopra`
+    // con il centro del pulsante Start, e può cambiargli fondo e bordo e
+    // chiedergli i pulsanti di alimentazione.
+
+    /// Dove ancorare il menu: il centro, in orizzontale, del pulsante che lo
+    /// apre. Negativo: il posto di Liquid, in basso a sinistra.
+    property real ancoraX: -1
+    property color fondo: Qt.rgba(Theme.Colors.panel.r, Theme.Colors.panel.g, Theme.Colors.panel.b,
+                                  Math.max(Theme.Colors.panel.a, 0.98))
+    property color bordo: Theme.Colors.edge
+    /// In fondo: Sospendi, Riavvia, Arresta, Disconnetti.
+    property bool conAlimentazione: false
+    /// Una delle quattro: si esegue subito, come dallo Start di Windows.
+    signal alimentazione(string id)
+
+    /// Aperto dal pulsante Start di Windows: niente periscopio nell'angolo e
+    /// niente attesa, sale dal pulsante in 167 ms come i pannelli di Windows
+    /// 11. il manutentore, 11 ottobre 2026: «si vede il cerchietto in basso come
+    /// quando vado nell'angolo», «in apertura è lento».
+    readonly property bool comeStart: sub.ancoraX >= 0
+
+    /// Da 0 a 1 all'apertura come Start: lo scafo sale di 24 px e compare.
+    property real salita: 1
+    NumberAnimation {
+        id: animaSalita
+        target: sub
+        property: "salita"
+        from: 0
+        to: 1
+        duration: Theme.Motion.liquido ? 167 : 0
+        easing.type: Easing.OutCubic
+    }
+
+    function commutaSopra(x) {
+        if (sub.aperto) {
+            sub.chiudi();
+            return;
+        }
+        sub._sopra = true;
+        sub.ancoraX = x;
+        sub.apri("");
+    }
+    property bool _sopra: false
     /// E in alto: la barra, quando sta in alto, non si copre.
     property real margineAlto: 0
 
@@ -86,6 +135,12 @@ PanelWindow {
             if (testo) campo.text = testo;
             return;
         }
+        Core.Apps.aggiorna();
+        // Aperto in un altro modo (Super, il preset Liquid): torna al suo
+        // posto in basso a sinistra. Solo `commutaSopra` lo vuole altrove.
+        if (!sub._sopra)
+            sub.ancoraX = -1;
+        sub._sopra = false;
         sub.cerca = testo || "";
         campo.text = sub.cerca;
         sub.categoria = sub.categoriaDiApertura();
@@ -106,6 +161,10 @@ PanelWindow {
         spegni.restart();
     }
     function commuta() { sub.aperto ? sub.chiudi() : sub.apri(""); }
+    function sceltaAlimentazione(id) {
+        sub.chiudi();
+        sub.alimentazione(id);
+    }
 
     // Le molle solo dopo il primo fotogramma vero (`Ui.Pronto`), e lo
     // scafo emerge solo DOPO che le molle ci sono: prima la finestra misura
@@ -127,7 +186,16 @@ PanelWindow {
                                             : WlrKeyboardFocus.None
 
     // Prima il periscopio, poi lo scafo; il campo prende i tasti quando c'è.
-    Timer { id: emergi; interval: Theme.Motion.liquido ? 170 : 0; onTriggered: { sub.emerso = true; campo.forceActiveFocus(); } }
+    Timer {
+        id: emergi
+        interval: Theme.Motion.liquido && !sub.comeStart ? 170 : 0
+        onTriggered: {
+            sub.emerso = true;
+            if (sub.comeStart)
+                animaSalita.restart();
+            campo.forceActiveFocus();
+        }
+    }
     // Dopo l'immersione la finestra se ne va: niente superficie montata per niente.
     Timer { id: spegni; interval: Theme.Motion.liquido ? 650 : 0; onTriggered: if (!sub.aperto) sub.mostrato = false }
 
@@ -552,6 +620,7 @@ PanelWindow {
     // ── Il periscopio ───────────────────────────────────────────────────
     Rectangle {
         id: periscopio
+        objectName: "liquidMenuPeriscopio"
         x: 6
         y: sub.height - 6 - height
         width: 34; height: 34
@@ -559,6 +628,7 @@ PanelWindow {
         color: Theme.Colors.panel
         border.width: 1
         border.color: Qt.alpha(Theme.Colors.accent, 0.55)
+        visible: !sub.comeStart
         scale: sub.aperto && !sub.emerso ? 1 : 0
         Behavior on scale {
             enabled: Theme.Motion.liquido
@@ -574,16 +644,22 @@ PanelWindow {
     // ── Lo scafo ────────────────────────────────────────────────────────
     Rectangle {
         id: scafo
+        objectName: "liquidMenuScafo"
         readonly property int margine: Theme.Effects.space4
-        x: margine
+        x: sub.ancoraX < 0 ? margine
+           : Math.max(margine, Math.min(sub.width - width - margine, sub.ancoraX - width / 2))
         readonly property real largMax: sub.width - 2 * margine
         readonly property real altMax: sub.height - 2 * margine - sub.margineBasso - sub.margineAlto
         width: Math.min(largMax, sub.verticale ? sub.largV : sub.largO)
         height: sub.verticale ? altMax : Math.min(altMax, sub.altO)
         y: sub.emerso ? (sub.verticale ? margine + sub.margineAlto : sub.height - margine - sub.margineBasso - height)
                       : sub.height + 30
+        // Aperto come Start la molla non c'è: lo scafo sta già al suo posto
+        // e sale di poco con `salita` (vedi `animaSalita`).
+        transform: Translate { y: sub.comeStart ? (1 - sub.salita) * 24 : 0 }
+        opacity: sub.comeStart ? sub.salita : 1
         Behavior on y {
-            enabled: Theme.Motion.liquido && !sub.ridimensionando && pronto.visto
+            enabled: Theme.Motion.liquido && !sub.ridimensionando && pronto.visto && !sub.comeStart
             SpringAnimation { spring: Theme.Motion.molla * 0.55; damping: 0.42 }
         }
         Behavior on width {
@@ -599,10 +675,9 @@ PanelWindow {
         radius: Theme.Effects.radiusLG
         // Quasi pieno: col vetro trasparente di serie i riquadri della
         // scrivania dietro si leggevano ATTRAVERSO le levette e le app.
-        color: Qt.rgba(Theme.Colors.panel.r, Theme.Colors.panel.g, Theme.Colors.panel.b,
-                       Math.max(Theme.Colors.panel.a, 0.98))
+        color: sub.fondo
         border.width: Theme.Effects.hairline
-        border.color: Theme.Colors.edge
+        border.color: sub.bordo
 
         // I clic dentro lo scafo non chiudono.
         MouseArea { anchors.fill: parent; onClicked: {} }
@@ -622,6 +697,66 @@ PanelWindow {
             anchors.margins: Theme.Effects.space4
             opacity: sub.emerso ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: Theme.Motion.quick } }
+
+            // ── I pulsanti di alimentazione (solo dentro il preset Windows) ──
+            Row {
+                id: piedeAlimentazione
+                objectName: "liquidMenuPower"
+                visible: sub.conAlimentazione
+                anchors.bottom: parent.bottom
+                anchors.right: parent.right
+                height: visible ? 36 : 0
+                spacing: Theme.Effects.space1
+
+                Repeater {
+                    model: [
+                        { "id": "sospendi", "icona": "moon", "it": "Sospendi", "en": "Sleep" },
+                        { "id": "riavvia", "icona": "restart", "it": "Riavvia", "en": "Restart" },
+                        { "id": "spegni", "icona": "power", "it": "Arresta", "en": "Shut down" },
+                        { "id": "esci", "icona": "logout", "it": "Disconnetti", "en": "Sign out" }
+                    ]
+
+                    delegate: Rectangle {
+                        id: tastoAlim
+                        required property var modelData
+                        objectName: "liquidMenuPower-" + modelData.id
+                        width: etichettaAlim.implicitWidth + 40
+                        height: 36
+                        radius: Theme.Effects.radiusSM
+                        color: presaAlim.containsMouse ? Theme.Colors.hover : "transparent"
+                        Accessible.role: Accessible.Button
+                        Accessible.name: sub.it ? modelData.it : modelData.en
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 6
+                            Ui.Icon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 16
+                                height: 16
+                                name: tastoAlim.modelData.icona
+                                alwaysDrawn: true
+                                color: Theme.Colors.textMuted
+                            }
+                            Text {
+                                id: etichettaAlim
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: sub.it ? tastoAlim.modelData.it : tastoAlim.modelData.en
+                                color: Theme.Colors.text
+                                font.family: Theme.Typography.fontDisplay
+                                font.pixelSize: Theme.Typography.sizeSM
+                            }
+                        }
+                        MouseArea {
+                            id: presaAlim
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: sub.sceltaAlimentazione(tastoAlim.modelData.id)
+                        }
+                    }
+                }
+            }
 
             // La ricerca.
             Rectangle {
@@ -794,6 +929,7 @@ PanelWindow {
             // Le categorie, solo nella loro vista.
             Flow {
                 id: chips
+                objectName:"launcherCategories"
                 anchors.top: riga.bottom
                 anchors.topMargin: visible ? Theme.Effects.space2 : 0
                 anchors.left: parent.left
@@ -810,6 +946,7 @@ PanelWindow {
                     model: sub.pastiglie
                     delegate: Rectangle {
                         id: chip
+                        objectName:"launcherCategory-"+modelData.id
                         required property var modelData
                         readonly property bool scelta: sub.categoria === chip.modelData.id
                         readonly property bool conNuove: sub.categoriaNuova(chip.modelData.id)
@@ -867,7 +1004,8 @@ PanelWindow {
                 anchors.topMargin: Theme.Effects.space3
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.bottom: parent.bottom
+                anchors.bottom: sub.conAlimentazione ? piedeAlimentazione.top : parent.bottom
+                anchors.bottomMargin: sub.conAlimentazione ? Theme.Effects.space2 : 0
                 clip: true
                 contentHeight: colonna.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds

@@ -473,6 +473,24 @@ QtObject {
 
     property var volumes: []
 
+    /// Cartelle di rete, server e telefoni (gvfs): `{nome, uri, tipo,
+    /// montato, percorso}`. Vedi `minervad/lib/services/luoghi_remoti.dart`.
+    property var remoti: []
+
+    /// I pacchetti che mancano per aprire telefoni o cartelle Samba.
+    property var remotiMancano: []
+    readonly property var telefoni: remoti.filter(function(luogo) {
+        return luogo.tipo === "telefono";
+    })
+    readonly property var telefoniMancano: remotiMancano.filter(function(pacchetto) {
+        return pacchetto === "gvfs-mtp" || pacchetto === "gvfs-gphoto2";
+    })
+    readonly property var reteMancano: remotiMancano.filter(function(pacchetto) {
+        return pacchetto !== "gvfs-mtp" && pacchetto !== "gvfs-gphoto2";
+    })
+    property bool remotiNoti: false
+    property string remotiErrore: ""
+
     property Connections _fromDaemon: Connections {
         target: Core.Ipc
 
@@ -484,9 +502,17 @@ QtObject {
             files.volumes = payload.volumes || [];
         }
 
+        function onRemotiReceived(payload) {
+            files.remoti = payload.luoghi || [];
+            files.remotiMancano = payload.mancano || [];
+            files.remotiErrore = payload.error || "";
+            files.remotiNoti = true;
+        }
+
         // Il demone parte una volta e la shell si ricarica spesso: si chiede
         // tutto a ogni connessione, non una volta sola all'avvio.
         function onConnectedChanged() {
+            files.remotiNoti = false;
             if (Core.Ipc.connected)
                 files.refresh();
         }
@@ -495,6 +521,7 @@ QtObject {
     function refresh() {
         Core.Ipc.fsPlaces();
         Core.Ipc.fsVolumes();
+        Core.Ipc.fsRemoti();
     }
 
     Component.onCompleted: if (Core.Ipc.connected) files.refresh()
@@ -516,7 +543,11 @@ QtObject {
         interval: 8000
         repeat: true
         running: Core.Ipc.connected && files.watchers > 0
-        onTriggered: Core.Ipc.fsVolumes()
+        onTriggered: {
+            Core.Ipc.fsVolumes();
+            // Un telefono attaccato adesso deve comparire come una chiavetta.
+            Core.Ipc.fsRemoti();
+        }
     }
 
     // ── Appunti dei file ─────────────────────────────────────────────────

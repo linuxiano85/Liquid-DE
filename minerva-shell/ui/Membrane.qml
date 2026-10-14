@@ -74,7 +74,7 @@ Item {
     // ── E il raccordo va all'INFUORI, non all'indentro ────────────────────
     //
     // Prima li avevo smussati togliendo materiale alla barra: l'angolo veniva
-    // tagliato, e sotto restava un morso di scrivania. Giacomo: «la barra
+    // tagliato, e sotto restava un morso di scrivania. il manutentore: «la barra
     // arrotondata la volevo verso l'esterno non verso l'interno, in modo che
     // una finestra a schermo intero combaci con la barra».
     //

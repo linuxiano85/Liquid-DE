@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import "../core" as Core
+import Minerva.WindowIdentity 1.0 as Native
 
 // WindowTitleBar — La barra del titolo DENTRO le finestre di Minerva.
 //
@@ -11,7 +12,7 @@ import "../core" as Core
 // finestra chiedendo al compositore dove si trovasse. Costava tutto questo:
 //
 //  · la barra arrivava in ritardo. Spostando la finestra in fretta restava
-//    indietro e poi la raggiungeva a scatti; in una schermata di Giacomo si
+//    indietro e poi la raggiungeva a scatti; in una schermata di il manutentore si
 //    vede staccata di cento pixel dalla finestra a cui appartiene. Nessun
 //    inseguimento può essere perfetto: fra il momento in cui la finestra si
 //    muove e quello in cui lo veniamo a sapere passa del tempo, e quel tempo
@@ -35,9 +36,18 @@ import "../core" as Core
 // riga di separazione che questo file esiste per togliere.
 Item {
     id: bar
+    objectName:"minervaWindowTitleBar"
+
+    Native.WindowIdentity { id: identity; item: bar }
 
     /// Il titolo mostrato al centro.
     property string label: ""
+    // Il corpo può usare un tema locale (File Windows scuro): anche titolo
+    // e comandi devono leggerne l'inchiostro, senza cambiare le altre app.
+    property alias foreground: titleContent.foreground
+    property alias mutedForeground: titleContent.mutedForeground
+    property alias faintForeground: titleContent.faintForeground
+    property alias fontFamily: titleContent.fontFamily
 
     /// L'icona del programma.
     ///
@@ -120,8 +130,8 @@ Item {
     // di mezzo e resta la sua. Una sola, sempre.
     readonly property bool nostraCasa: Core.Compositore.comandabile
 
-    visible: !bar.aTuttoSchermo && bar.nostraCasa
-    height: (bar.aTuttoSchermo || !bar.nostraCasa)
+    visible: !bar.aTuttoSchermo && !(bar.mia && bar.mia.tiling) && bar.nostraCasa
+    height: (bar.aTuttoSchermo || (bar.mia && bar.mia.tiling) || !bar.nostraCasa)
             ? 0 : Core.Ipc.get("windows.titleHeight", 34)
 
     // ── Lo stato della finestra arriva, non si va a prendere ─────────────
@@ -137,46 +147,11 @@ Item {
     // messaggio.
     Component.onCompleted: Core.Windows.refresh()
 
-    // ── Che cosa siamo, per il compositore ───────────────────────────────
-    //
-    // Qui c'era `"pid:" + Quickshell.processId`, e basta. Il ragionamento era
-    // che il numero di processo lo sappiamo senza chiedere niente a nessuno,
-    // mentre l'indirizzo va cercato nell'elenco delle finestre.
-    //
-    // Era vero finché ogni applicazione era un processo suo. **Non lo è più.**
-    // Calcolatrice, Editor, Anteprima, Attività e Custodia vivono tutte dentro
-    // `minerva-shell/app.qml`, per non pagare cinque volte il pavimento di Qt
-    // (vedi `minerva-app-pronte`): con due di loro aperte insieme, `pid:` non
-    // nomina una finestra — ne nomina due, e il compositore prende la prima
-    // che trova.
-    //
-    // Il difetto che ne veniva, misurato il 25 agosto 2026 con la Custodia e
-    // la Calcolatrice aperte nello stesso processo: premere «riduci» sulla
-    // Calcolatrice non riduceva la Calcolatrice. E non era solo il riduci —
-    // `mia` è la finestra da cui si leggono la geometria e lo stato di
-    // «ingrandita», quindi ogni pulsante della barra guardava la finestra
-    // sbagliata.
-    //
-    // Il titolo, invece, le distingue: è quello che ogni nostra finestra si dà
-    // per essere riconosciuta nella dock e nell'Alt+Tab, ed è unico dentro un
-    // processo. Quando siamo l'unica finestra del processo si resta sul PID,
-    // che non ha bisogno di nessun elenco e c'è anche prima che l'elenco
-    // arrivi.
+    // The native surface binds this bar to exactly one window. Duplicate
+    // titles and multiple applications in a shared process are legitimate.
     readonly property string me: {
-        var pid = Quickshell.processId;
-        var tutte = Core.Windows.all || [];
-        var miei = [];
-        for (var i = 0; i < tutte.length; i++)
-            if (tutte[i].pid === pid)
-                miei.push(tutte[i]);
-        if (miei.length <= 1)
-            return "pid:" + pid;
-        for (var j = 0; j < miei.length; j++)
-            if (miei[j].title === bar.label)
-                return "address:" + miei[j].address;
-        // L'elenco può essere di un istante fa, e il titolo può essere appena
-        // cambiato: meglio il vecchio ripiego che nessun bersaglio.
-        return "pid:" + pid;
+        var w=Core.Windows.findSurface(Quickshell.processId,identity.surfaceId);
+        return w ? "address:"+w.address:"";
     }
 
     // ── I comandi ────────────────────────────────────────────────────────
@@ -297,7 +272,7 @@ Item {
             // Sotto i tre pixel non è un trascinamento: è una mano ferma che
             // trema, o un clic. Senza questa soglia, premere sulla barra per
             // portare avanti la finestra la faceva partire di lato — è il
-            // difetto che Giacomo ha descritto come «se tengo premuto sulla
+            // difetto che il manutentore ha descritto come «se tengo premuto sulla
             // barra del titolo senza spostare il mouse la barra si sposta e si
             // stacca dalla finestra».
             //
@@ -326,11 +301,13 @@ Item {
     // Dichiarato DOPO l'area del mouse, così i pulsanti stanno sopra di essa
     // e si prendono i propri clic invece di far partire un trascinamento.
     TitleBarContent {
+        id: titleContent
         anchors.fill: parent
         label: bar.label
         iconPath: bar.iconPath
         active: bar.active
         side: bar.side
+        stileWindows: Core.DesktopStyle.attuale === "windows"
         maximized: bar.maximized
         fullscreen: bar.aTuttoSchermo
 

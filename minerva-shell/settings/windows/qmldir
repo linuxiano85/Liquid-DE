@@ -1,0 +1,25 @@
+module windows
+SchedaImpostazione 1.0 SchedaImpostazione.qml
+EspansoreImpostazione 1.0 EspansoreImpostazione.qml
+GruppoImpostazioni 1.0 GruppoImpostazioni.qml
+AnteprimaDesktop 1.0 AnteprimaDesktop.qml
+TendinaWindows 1.0 TendinaWindows.qml
+PulsanteWindows 1.0 PulsanteWindows.qml
+GrigliaColori 1.0 GrigliaColori.qml
+PaginaWindows 1.0 PaginaWindows.qml
+ScegliColoreWindows 1.0 ScegliColoreWindows.qml
+Sfondo 1.0 Sfondo.qml
+Colori 1.0 Colori.qml
+Temi 1.0 Temi.qml
+Personalizzazione 1.0 Personalizzazione.qml
+CatalogoTemi 1.0 CatalogoTemi.qml
+Start 1.0 Start.qml
+Barra 1.0 Barra.qml
+AnteprimaStart 1.0 AnteprimaStart.qml
+ScegliFileWindows 1.0 ScegliFileWindows.qml
+LiquidUpdate 1.0 LiquidUpdate.qml
+Home 1.0 Home.qml
+SchedaHome 1.0 SchedaHome.qml
+RiepilogoDispositivo 1.0 RiepilogoDispositivo.qml
+Sistema 1.0 Sistema.qml
+IntestazioneDispositivo 1.0 IntestazioneDispositivo.qml

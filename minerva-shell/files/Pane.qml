@@ -46,6 +46,12 @@ Item {
     /// Vero quando è questo il riquadro che riceve i comandi.
     property bool focused: false
 
+    function focusContents() {
+        view.forceActiveFocus();
+    }
+
+    signal newTabRequested(string path)
+
     /// Vero mentre si sta scrivendo un percorso a mano. Chi lo guarda: le
     /// scorciatoie della finestra, che devono farsi da parte — Ctrl+C mentre
     /// si scrive deve copiare il testo, non i file.
@@ -59,7 +65,11 @@ Item {
     /// rivuole spenti alla prossima finestra, e tutte le schede devono
     /// vedere la stessa cosa — altrimenti una scheda mostra metà dei file e
     /// l'altra l'altra metà, e ci si chiede dove sia finita la roba.
-    property bool showHidden: Core.Ipc.get("files.showHidden", false)
+    readonly property bool showHidden: Core.Ipc.get("files.showHidden", false)
+    onShowHiddenChanged: {
+        if (pane.path !== "")
+            pane.reload();
+    }
     property var entries: []
     property string error: ""
 
@@ -96,6 +106,9 @@ Item {
 
     /// Quello che si sta cercando dentro la cartella. Vuoto = si vede tutto.
     property string filter: ""
+    // Il campo Windows resta raggiungibile anche in affiancamento stretto:
+    // sotto i 600 px passa alla riga successiva senza schiacciare il percorso.
+    readonly property bool inlineSearch: FileStyle.windows && width >= 600
 
     /// L'elenco come si vede: filtrato e ordinato. Tutto quello che ragiona
     /// per indici — il cursore, la selezione a intervallo, le frecce — guarda
@@ -212,6 +225,17 @@ Item {
         ? pane.risultati
         : Files.filterEntries(pane._ordinate, pane.filter)
 
+    onShownChanged: {
+        // A refresh/filter can remove the delegate holding the mouse grab.
+        // Restore the old selection before pruning paths that disappeared.
+        if (rectangleSelection) rectangleSelection.cancel();
+        var present=Object.create(null);
+        for (var entry of (pane.shown || [])) present[entry.path]=true;
+        var next=(pane.selection || []).filter(function(path) {return present[path]===true;});
+        if (JSON.stringify(next)!==JSON.stringify(pane.selection)) pane.selection=next;
+    }
+    onViewModeChanged: if (rectangleSelection) rectangleSelection.cancel()
+
     /// Apre la riga di ricerca e ci mette dentro il fuoco.
     function startFilter() {
         pane.activated();
@@ -267,7 +291,7 @@ Item {
 
     // ── Lo sfondo della cartella ─────────────────────────────────────────
     //
-    // GNOME 2 lo faceva e nessuno lo fa più. Giacomo, 12 agosto 2026: «ho
+    // GNOME 2 lo faceva e nessuno lo fa più. il manutentore, 12 agosto 2026: «ho
     // nostalgia dai tempi di GNOME 2, lo sfondo dietro le cartelle
     // personalizzabile».
     //
@@ -304,7 +328,7 @@ Item {
     ///
     /// Il cursore esiste sempre — la tastiera ha bisogno di un punto da cui
     /// partire — ma disegnarlo appena si apre una cartella faceva sembrare
-    /// selezionato il primo file di ogni scheda. Segnalato da Giacomo il
+    /// selezionato il primo file di ogni scheda. Segnalato da il manutentore il
     /// 12 agosto 2026: «quando apro il gestore file c'è sempre qualcosa di
     /// selezionato, e se apro un'altra scheda ogni scheda ha qualcosa di
     /// selezionato, ed è fastidioso».
@@ -316,14 +340,14 @@ Item {
 
     // ── Trascinare ───────────────────────────────────────────────────────
     //
-    // Giacomo, 12 agosto 2026: «voglio poter trascinare qualsiasi cosa come in
+    // il manutentore, 12 agosto 2026: «voglio poter trascinare qualsiasi cosa come in
     // KDE, e lasciando mi chiede se copiare o spostare».
     //
     // Il trascinamento è quello VERO del sistema (`Drag.Automatic`): esce dalla
     // finestra, arriva agli altri programmi, e i file che arrivano da fuori
     // entrano qui. La prima versione usava il trascinamento interno di Qt —
     // funzionava fra i due riquadri e moriva sul bordo della finestra, ed è la
-    // prima cosa che Giacomo ha provato a fare.
+    // prima cosa che il manutentore ha provato a fare.
     //
     // Il prezzo è che si parla la lingua di tutti, `text/uri-list`, e non la
     // nostra: chi lascia non ci consegna un oggetto ma un elenco di indirizzi
@@ -340,7 +364,7 @@ Item {
     /// Fino al 28 settembre 2026 il trascinamento dava un'immagine solo per
     /// le fotografie («un'icona sbagliata è peggio di nessuna icona»): per
     /// tutto il resto sotto il puntatore non c'era niente, e il gesto sembrava
-    /// non esistere. Giacomo: «voglio il trascinamento delle icone e cartelle
+    /// non esistere. il manutentore: «voglio il trascinamento delle icone e cartelle
     /// anche nel file manager che manca da sempre» — funzionava, e non si
     /// vedeva. Adesso si fotografa la cella afferrata (icona e nome, com'è
     /// sullo schermo), come fa la scrivania, e l'immagine sta sotto il dito
@@ -528,9 +552,9 @@ Item {
 
     /// Mostra o nasconde i file nascosti, e lo ricorda. Il pulsante e Ctrl+H.
     function commutaNascosti() {
+        // setSetting aggiorna subito il binding: invertirlo di nuovo dava
+        // due inversioni e scollegava la scheda dalle altre (11 ottobre).
         Core.Ipc.setSetting("files.showHidden", !pane.showHidden);
-        pane.showHidden = !pane.showHidden;
-        pane.reload();
     }
 
     function goUp() {
@@ -558,6 +582,7 @@ Item {
     }
 
     onPathChanged: {
+        rectangleSelection.cancel();
         pane._dfPresto.restart();
         pane.scrivendoPercorso = false;
         // Cambiando cartella la ricerca non ha più senso: cercava DENTRO
@@ -581,6 +606,9 @@ Item {
 
         function onFileListingReceived(listing) {
             if (listing.pane !== pane.paneId)
+                return;
+            // Una navigazione più recente può precedere la risposta precedente.
+            if (listing.path !== undefined && listing.path !== pane.path)
                 return;
             // ── La stessa cartella riletta non torna in cima ─────────────
             //
@@ -809,13 +837,13 @@ Item {
         // Il fondo non si toglie mai: senza, sotto l'elenco resterebbe il
         // vetro nudo della finestra e il terminale dietro si leggerebbe
         // ATTRAVERSO i nomi dei file.
-        radius: Theme.Effects.radiusLG
-        color: Theme.Colors.lettura
-        border.width: Theme.Effects.hairline
+        radius: FileStyle.windows ? 0 : Theme.Effects.radiusLG
+        color: FileStyle.lettura
+        border.width: FileStyle.windows && !pane.canClose ? 0 : Theme.Effects.hairline
         // Il riquadro col fuoco si riconosce dal bordo. Non dal colore di
         // sfondo: due sfondi diversi affiancati sembrano due programmi.
-        border.color: pane.focused && !pane.solo ? Qt.alpha(Theme.Colors.accent, 0.55)
-                                                 : Theme.Colors.edge
+        border.color: pane.focused && !pane.solo ? Qt.alpha(FileStyle.accent, 0.55)
+                                                 : FileStyle.edge
         Behavior on border.color { ColorAnimation { duration: Theme.Motion.instant } }
     }
 
@@ -844,8 +872,8 @@ Item {
         Rectangle {
             anchors.fill: navRow
             anchors.margins: -2
-            radius: height / 2
-            color: Theme.Colors.raised
+            radius: FileStyle.windows ? 4 : height / 2
+            color: FileStyle.raised
         }
 
         Row {
@@ -870,9 +898,13 @@ Item {
                       : modelData.id === "forward" ? pane.canGoForward
                       : pane.canGoUp
 
+                    // Quattro riquadri non devono lasciare 38 px al percorso:
+                    // Alt+Sinistra/Destra conserva la cronologia nel formato stretto.
+                    visible: modelData.id === "up" || pathBar.width >= 260
+
                     width: 30; height: 30
-                    radius: height / 2
-                    color: navMouse.containsMouse && usable ? Theme.Colors.hover
+                    radius: FileStyle.windows ? 4 : height / 2
+                    color: navMouse.containsMouse && usable ? FileStyle.hover
                                                             : "transparent"
                     Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
@@ -880,7 +912,7 @@ Item {
                         anchors.centerIn: parent
                         width: 15; height: 15
                         name: navBtn.modelData.icon
-                        color: navBtn.usable ? Theme.Colors.textMuted : Theme.Colors.textFaint
+                        color: navBtn.usable ? FileStyle.textMuted : FileStyle.textFaint
                         // «Indietro» senza niente dietro non si può premere:
                         // deve vedersi anche con le icone classiche.
                         spenta: !navBtn.usable
@@ -923,13 +955,14 @@ Item {
             id: pathBox
             anchors.left: navRow.right
             anchors.leftMargin: Theme.Effects.space2
-            anchors.right: closeTab.visible ? closeTab.left : parent.right
-            anchors.rightMargin: closeTab.visible ? Theme.Effects.space1 : 0
+            anchors.right: pane.inlineSearch ? filterBox.left
+                : closeTab.visible ? closeTab.left : parent.right
+            anchors.rightMargin: pane.inlineSearch ? 8 : closeTab.visible ? Theme.Effects.space1 : 0
             anchors.verticalCenter: parent.verticalCenter
             height: 34
-            radius: height / 2
+            radius: FileStyle.windows ? 4 : height / 2
             // Una capsula sempre, più chiara quando ci si scrive dentro.
-            color: pathInput.activeFocus ? Theme.Colors.raisedHigh : Theme.Colors.raised
+            color: pathInput.activeFocus ? FileStyle.raisedHigh : FileStyle.raised
             Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
             // ── Le briciole, e sotto il testo ────────────────────────────
@@ -949,6 +982,7 @@ Item {
                     pane.rilasciato(sorgenti, dove);
                 }
                 id: briciole
+                objectName: "pathBreadcrumb-" + pane.paneId
                 anchors.fill: parent
                 anchors.leftMargin: Theme.Effects.space3
                 anchors.rightMargin: Theme.Effects.space3
@@ -971,9 +1005,9 @@ Item {
                 clip: true
                 visible: pane.scrivendoPercorso
                 text: pane.path
-                color: pane.focused ? Theme.Colors.text : Theme.Colors.textFaint
-                selectionColor: Qt.alpha(Theme.Colors.accent, 0.4)
-                selectedTextColor: Theme.Colors.text
+                color: pane.focused ? FileStyle.text : FileStyle.textFaint
+                selectionColor: Qt.alpha(FileStyle.accent, 0.4)
+                selectedTextColor: FileStyle.text
                 font.family: Theme.Typography.fontMono
                 font.pixelSize: Theme.Typography.sizeSM
                 selectByMouse: true
@@ -1018,7 +1052,7 @@ Item {
             width: 24; height: 24
             radius: Theme.Effects.radiusXS
             visible: pane.canClose
-            color: closeMouse.containsMouse ? Qt.alpha(Theme.Colors.danger, 0.20)
+            color: closeMouse.containsMouse ? Qt.alpha(FileStyle.danger, 0.20)
                                             : "transparent"
             Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
@@ -1026,8 +1060,8 @@ Item {
                 anchors.centerIn: parent
                 width: 12; height: 12
                 name: "close"
-                color: closeMouse.containsMouse ? Theme.Colors.danger
-                                                : Theme.Colors.textFaint
+                color: closeMouse.containsMouse ? FileStyle.danger
+                                                : FileStyle.textFaint
             }
 
             MouseArea {
@@ -1080,20 +1114,24 @@ Item {
         anchors.right: parent.right
         anchors.leftMargin: Theme.Effects.space2
         anchors.rightMargin: Theme.Effects.space2
-        height: filterBar.open ? 30 : 0
+        height: FileStyle.windows ? (pane.inlineSearch ? 0 : 38) : filterBar.open ? 30 : 0
         visible: height > 0
         clip: true
         Behavior on height { NumberAnimation { duration: Theme.Motion.instant } }
 
         Rectangle {
-            anchors.fill: parent
-            anchors.topMargin: 2
-            anchors.bottomMargin: 4
-            radius: Theme.Effects.radiusXS
-            color: Theme.Colors.raised
+            id: filterBox
+            objectName: "filesSearchBox-" + pane.paneId
+            parent: pane.inlineSearch ? pathBar : filterBar
+            x: pane.inlineSearch ? parent.width - width : 0
+            y: pane.inlineSearch ? 0 : 2
+            width: pane.inlineSearch ? Math.min(240, pane.width * 0.3) : parent.width
+            height: pane.inlineSearch ? parent.height : parent.height - 6
+            radius: FileStyle.windows ? 4 : Theme.Effects.radiusXS
+            color: FileStyle.raised
             border.width: 1
             border.color: filterInput.activeFocus
-                          ? Qt.alpha(Theme.Colors.accent, 0.45)
+                          ? Qt.alpha(FileStyle.accent, 0.45)
                           : "transparent"
 
             Ui.Icon {
@@ -1103,12 +1141,13 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 13; height: 13
                 name: "search"
-                color: Theme.Colors.textFaint
+                color: FileStyle.textFaint
                 alwaysDrawn: true
             }
 
             TextInput {
                 id: filterInput
+                objectName: "filesSearchInput-" + pane.paneId
                 anchors.left: filterIcon.right
                 anchors.leftMargin: Theme.Effects.space2
                 anchors.right: filterCount.left
@@ -1116,10 +1155,10 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 clip: true
                 text: pane.filter
-                color: Theme.Colors.text
-                selectionColor: Qt.alpha(Theme.Colors.accent, 0.4)
-                selectedTextColor: Theme.Colors.text
-                font.family: Theme.Typography.fontDisplay
+                color: FileStyle.text
+                selectionColor: Qt.alpha(FileStyle.accent, 0.4)
+                selectedTextColor: FileStyle.text
+                font.family: FileStyle.font
                 font.weight: Theme.Typography.weightRegular
                 font.pixelSize: Theme.Typography.sizeSM
                 selectByMouse: true
@@ -1153,7 +1192,7 @@ Item {
                         pane.stopFilter();
                 }
                 Keys.onReturnPressed: function (e) {
-                    if ((e.modifiers & Qt.ControlModifier) || pane.shown.length === 0) {
+                    if (FileStyle.windows || (e.modifiers & Qt.ControlModifier) || pane.shown.length === 0) {
                         pane.cercaSotto();
                         return;
                     }
@@ -1166,9 +1205,11 @@ Item {
                     anchors.fill: parent
                     verticalAlignment: Text.AlignVCenter
                     visible: filterInput.text === ""
-                    text: Core.Strings.lang === "it" ? "Filtra questa cartella…"
-                                                     : "Filter this folder…"
-                    color: Theme.Colors.textFaint
+                    text: FileStyle.windows
+                        ? (Core.Strings.lang === "it" ? "Cerca nella cartella" : "Search this folder")
+                        : (Core.Strings.lang === "it" ? "Filtra questa cartella…" : "Filter this folder…")
+                    elide: Text.ElideRight
+                    color: FileStyle.textFaint
                     font: filterInput.font
                 }
             }
@@ -1178,8 +1219,16 @@ Item {
             // Quando il filtro non trova niente qui dentro, il numero rosso
             // dice solo che non c'è. Dirlo e basta è la parte facile: la parte
             // utile è dire che si può guardare più in là, e come.
+            FontMetrics {
+                id: countMeasure
+                font: filterCount.font
+            }
             Text {
                 id: filterCount
+                // Text eliso può ricalcolare implicitWidth dalla larghezza
+                // assegnata. Una misura esterna evita l'anello di layout.
+                width: FileStyle.windows ? (visible ? Math.min(countMeasure.advanceWidth(text), parent.width * 0.28) : 0) : countMeasure.advanceWidth(text)
+                elide: Text.ElideRight
                 anchors.right: filterClose.left
                 anchors.rightMargin: Theme.Effects.space2
                 anchors.verticalCenter: parent.verticalCenter
@@ -1198,11 +1247,11 @@ Item {
                                   : "nothing here · ↵ search everywhere";
                     return pane.shown.length + " / " + pane.entries.length;
                 }
-                color: pane.cercando ? Theme.Colors.accent
-                     : pane.shown.length === 0 ? Theme.Colors.warning
-                     : Theme.Colors.textFaint
+                color: pane.cercando ? FileStyle.accent
+                     : pane.shown.length === 0 ? FileStyle.warning
+                     : FileStyle.textFaint
                 font.family: pane.shown.length === 0 && !pane.cercando
-                             ? Theme.Typography.fontDisplay
+                             ? FileStyle.font
                              : Theme.Typography.fontMono
                 font.pixelSize: Theme.Typography.sizeXS
             }
@@ -1214,14 +1263,14 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 20; height: 20
                 radius: Theme.Effects.radiusXS
-                color: filterCloseMouse.containsMouse ? Theme.Colors.hover
+                color: filterCloseMouse.containsMouse ? FileStyle.hover
                                                       : "transparent"
 
                 Ui.Icon {
                     anchors.centerIn: parent
                     width: 11; height: 11
                     name: "close"
-                    color: Theme.Colors.textFaint
+                    color: FileStyle.textFaint
                     alwaysDrawn: true
                 }
 
@@ -1254,13 +1303,14 @@ Item {
     // guardando.
     Item {
         id: titolo
+        visible: !FileStyle.windows || pane.cercando
         anchors.top: filterBar.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.leftMargin: Theme.Effects.space3
         anchors.rightMargin: Theme.Effects.space3
-        anchors.topMargin: Theme.Effects.space2
-        height: 34
+        anchors.topMargin: visible ? Theme.Effects.space2 : 0
+        height: visible ? 34 : 0
 
         Text {
             id: nomeCartella
@@ -1285,8 +1335,8 @@ Item {
                     return "Home";
                 return p.split("/").pop();
             }
-            color: pane.focused ? Theme.Colors.text : Theme.Colors.textMuted
-            font.family: Theme.Typography.fontDisplay
+            color: pane.focused ? FileStyle.text : FileStyle.textMuted
+            font.family: FileStyle.font
             font.pixelSize: Theme.Typography.sizeLG
             font.weight: Theme.Typography.weightSemiBold
             font.letterSpacing: Theme.Typography.trackingTitle
@@ -1330,8 +1380,8 @@ Item {
                 var libero = Core.Formato.peso(pane.spazioLibero) + (it ? " liberi" : " free");
                 return quanti === "" ? libero : quanti + "  ·  " + libero;
             }
-            color: Theme.Colors.textFaint
-            font.family: Theme.Typography.fontDisplay
+            color: FileStyle.textFaint
+            font.family: FileStyle.font
             font.pixelSize: Theme.Typography.sizeSM
             font.weight: Theme.Typography.weightMedium
         }
@@ -1355,7 +1405,7 @@ Item {
         // modalità amministratore, dentro una cartella non scrivibile, erano
         // veri entrambi.
         //
-        // Giacomo, guardandolo: «viene coperto dalla scritta amministratore e
+        // il manutentore, guardandolo: «viene coperto dalla scritta amministratore e
         // quindi non si capisce cosa c'è scritto». È la stessa famiglia delle
         // due «cartella vuota» sovrapposte: due oggetti validi, nessun errore
         // da nessuna parte, e si vede solo guardando lo schermo.
@@ -1374,16 +1424,16 @@ Item {
                              + Theme.Effects.space2 * 2 : 0
             height: 20
             radius: Theme.Effects.radiusXS
-            color: Qt.alpha(Theme.Colors.warning, 0.14)
+            color: Qt.alpha(FileStyle.warning, 0.14)
             border.width: Theme.Effects.hairline
-            border.color: Qt.alpha(Theme.Colors.warning, 0.4)
+            border.color: Qt.alpha(FileStyle.warning, 0.4)
 
             Text {
                 id: solaLetturaTesto
                 anchors.centerIn: parent
                 text: Core.Strings.lang === "it" ? "sola lettura" : "read only"
-                color: Theme.Colors.warning
-                font.family: Theme.Typography.fontDisplay
+                color: FileStyle.warning
+                font.family: FileStyle.font
                 font.pixelSize: Theme.Typography.sizeXS
                 font.weight: Theme.Typography.weightMedium
             }
@@ -1409,17 +1459,17 @@ Item {
                              + Theme.Effects.space2 * 2 : 0
             height: 20
             radius: Theme.Effects.radiusXS
-            color: Qt.alpha(Theme.Colors.danger, 0.18)
+            color: Qt.alpha(FileStyle.danger, 0.18)
             border.width: Theme.Effects.hairline
-            border.color: Qt.alpha(Theme.Colors.danger, 0.55)
+            border.color: Qt.alpha(FileStyle.danger, 0.55)
 
             Text {
                 id: daRootTesto
                 anchors.centerIn: parent
                 text: Core.Strings.lang === "it" ? "amministratore"
                                                  : "administrator"
-                color: Theme.Colors.danger
-                font.family: Theme.Typography.fontDisplay
+                color: FileStyle.danger
+                font.family: FileStyle.font
                 font.pixelSize: Theme.Typography.sizeXS
                 font.weight: Theme.Typography.weightSemiBold
             }
@@ -1432,8 +1482,8 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.leftMargin: Theme.Effects.space2
-        anchors.rightMargin: Theme.Effects.space2
-        height: visible ? 22 : 0
+        anchors.rightMargin: Theme.Effects.space2 + fileScrollBar.width
+        height: visible ? (FileStyle.windows ? 30 : 22) : 0
         // Solo in elenco: in griglia non ci sono colonne da intitolare, e
         // l'ordinamento si cambia dal pulsante in basso.
         visible: pane.viewMode === "list"
@@ -1467,7 +1517,7 @@ Item {
                        : (col.isSize ? pane.sizeColumn : pane.timeColumn)
                 height: 20
                 radius: Theme.Effects.radiusXS
-                color: colMouse.containsMouse ? Theme.Colors.hover : "transparent"
+                color: colMouse.containsMouse ? FileStyle.hover : "transparent"
                 Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
                 Row {
@@ -1487,9 +1537,9 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         text: Core.Strings.lang === "it" ? col.modelData.it
                                                          : col.modelData.en
-                        color: col.active ? Theme.Colors.textMuted
-                                          : Theme.Colors.textFaint
-                        font.family: Theme.Typography.fontDisplay
+                        color: col.active ? FileStyle.textMuted
+                                          : FileStyle.textFaint
+                        font.family: FileStyle.font
                         font.weight: Theme.Typography.weightRegular
                         font.pixelSize: Theme.Typography.sizeXS
                     }
@@ -1500,7 +1550,7 @@ Item {
                         visible: col.active
                         name: "chevron"
                         thickness: 2.2
-                        color: Theme.Colors.accent
+                        color: FileStyle.accent
                         rotation: pane.sortDesc ? 0 : 180
                     }
                 }
@@ -1523,7 +1573,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             height: 1
-            color: Theme.Colors.edge
+            color: FileStyle.edge
         }
     }
 
@@ -1625,14 +1675,14 @@ Item {
         readonly property string tipo: sfondo.a ? sfondo.a.tipo : ""
         readonly property color tinta: (sfondo.a && sfondo.a.valore
                                         && sfondo.tipo !== "immagine")
-                                       ? sfondo.a.valore : Theme.Colors.accent
+                                       ? sfondo.a.valore : FileStyle.accent
 
         // La parete. Serve anche al motivo, che ci si appoggia sopra.
         Rectangle {
             anchors.fill: parent
             radius: Theme.Effects.radiusSM
             visible: sfondo.tipo === "tinta" || sfondo.tipo === "motivo"
-            color: Qt.tint(Theme.Colors.base, Qt.alpha(sfondo.tinta,
+            color: Qt.tint(FileStyle.base, Qt.alpha(sfondo.tinta,
                            sfondo.tipo === "motivo" ? 0.34 : 0.55))
         }
 
@@ -1701,7 +1751,7 @@ Item {
         Rectangle {
             anchors.fill: parent
             visible: sfondo.tipo === "immagine"
-            color: Theme.Colors.base
+            color: FileStyle.base
             opacity: 0.45
         }
     }
@@ -1730,6 +1780,7 @@ Item {
     // la riga dopo si esegue a trascinamento finito.
     Item {
         id: fardello
+        objectName: "fileDragPayload"
         width: 1
         height: 1
         property var percorsi: []
@@ -1744,7 +1795,7 @@ Item {
         // toglie la presa del mouse, e quella perdita le arriva come
         // `onCanceled` — cioè uguale a un'interruzione.
         //
-        // Giacomo, 7 settembre 2026: «perché ancora non trascina i file?».
+        // il manutentore, 7 settembre 2026: «perché ancora non trascina i file?».
         // Il registro diceva, due righe di fila:
         //
         //     [TR] acceso
@@ -1823,8 +1874,8 @@ Item {
                     : emptyState.filtrando ? "search"
                     : Files.inTrash(pane.path) ? "trash"
                     : "folder"
-                color: pane.error !== "" ? Theme.Colors.danger
-                                         : Theme.Colors.textFaint
+                color: pane.error !== "" ? FileStyle.danger
+                                         : FileStyle.textFaint
             }
 
             Text {
@@ -1846,9 +1897,9 @@ Item {
                         return it ? "Il cestino è vuoto" : "The bin is empty";
                     return it ? "Cartella vuota" : "Empty folder";
                 }
-                color: pane.error !== "" ? Theme.Colors.danger
-                                         : Theme.Colors.textFaint
-                font.family: Theme.Typography.fontDisplay
+                color: pane.error !== "" ? FileStyle.danger
+                                         : FileStyle.textFaint
+                font.family: FileStyle.font
                 font.weight: Theme.Typography.weightRegular
                 font.pixelSize: Theme.Typography.sizeMD
             }
@@ -1857,7 +1908,7 @@ Item {
 
     // ── La barra di scorrimento ──────────────────────────────────────────
     //
-    // È il punto che l'ha fatta chiedere: Giacomo, 4 settembre 2026, «nel file
+    // È il punto che l'ha fatta chiedere: il manutentore, 4 settembre 2026, «nel file
     // manager manca la barretta laterale che posso trascinare con il mouse per
     // spostare la discesa e slitta più velocemente». Una cartella come Camera
     // ha 311 file: senza, si scorreva senza sapere né dove si era né quanto
@@ -1866,10 +1917,12 @@ Item {
     // Sorella della griglia e non sua figlia, ancorata ai suoi BORDI, che
     // stanno fermi mentre il contenuto scorre.
     Ui.Scorrimento {
+        id: fileScrollBar
+        objectName: "filesScrollBar-" + pane.paneId
         bersaglio: view
         anchors {
-            right: view.right
-            rightMargin: Theme.Effects.space1
+            right: parent.right
+            rightMargin: Theme.Effects.space2
             top: view.top
             bottom: view.bottom
         }
@@ -1877,11 +1930,14 @@ Item {
 
     GridView {
         id: view
+        objectName: "filesGrid"
         anchors.top: header.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: statusBar.top
         anchors.margins: Theme.Effects.space2
+        // Il binario ha una corsia propria: non copre date, selezione o file.
+        anchors.rightMargin: Theme.Effects.space2 + fileScrollBar.width
         anchors.topMargin: pane.viewMode === "list" ? 0 : Theme.Effects.space1
         clip: true
         model: pane.shown
@@ -1894,9 +1950,10 @@ Item {
         // insieme alle celle.
         Ui.Goccia {
             id: gocciaCelle
+            visible: !FileStyle.windows
             margine: view.gridMode ? pane.gridPadding : 0
             radius: view.gridMode ? Theme.Effects.radiusMD : Theme.Effects.radiusSM
-            color: Theme.Colors.raised
+            color: FileStyle.raised
         }
 
         // ── Cliccare il vuoto deseleziona ─────────────────────────────────
@@ -1907,20 +1964,47 @@ Item {
         // guardando. Su ogni altro gestore file il clic sul vuoto pulisce,
         // e anche il tasto destro sul vuoto riparte da zero.
         //
-        // `TapHandler` e non `MouseArea`: un MouseArea si terrebbe la
-        // pressione e spegnerebbe lo scorrimento dell'elenco, che è la
-        // prima cosa che si fa in un elenco.
+        // L'overlay riceve solo le pressioni sul vuoto. Le celle conservano
+        // clic e trascinamento; la rotella continua a scorrere GridView.
+        Ui.DragSelection {
+            id: rectangleSelection
+            objectName: "fileRectangleSelection"
+            accent: FileStyle.accent
+            parent: pane
+            x: view.x; y: view.y; width: view.width; height: view.height
+            z: 2
+            overlay: true
+            acceptsPoint: function(point) {
+                return view.indexAt(point.x+view.contentX,point.y+view.contentY)<0;
+            }
+            scrollView: view
+            selection: pane.selection
+            onStarted: {pane.activated();pane.cursoreMostrato=false;}
+            onFinished: view.forceActiveFocus()
+            onSelectionRequested: function(keys) {pane.selection=keys;pane.anchorIndex=-1;}
+            hitTest: function(rect) {
+                if(rect.width<=0 || rect.height<=0) return [];
+                var hits=[],cols=view.columns,cw=view.cellWidth,ch=view.cellHeight;
+                var first=Math.max(0,Math.floor((rect.y-view.originY)/ch));
+                var last=Math.min(Math.ceil(pane.shown.length/cols)-1,Math.ceil((rect.y+rect.height-view.originY)/ch)-1);
+                var left=Math.max(0,Math.floor(rect.x/cw));
+                var right=Math.min(cols-1,Math.ceil((rect.x+rect.width)/cw)-1);
+                for(var row=first;row<=last;row++) for(var col=left;col<=right;col++) {
+                    var index=row*cols+col;
+                    if(index<pane.shown.length) hits.push(pane.shown[index].path);
+                }
+                return hits;
+            }
+        }
         TapHandler {
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            onTapped: function (ep, button) {
+            acceptedButtons: Qt.RightButton
+            onTapped: {
                 pane.activated();
                 view.forceActiveFocus();
                 pane.selection = [];
-                pane.anchorIndex = -1;
-                pane.cursor = 0;
                 pane.cursoreMostrato = false;
-                if (button === Qt.RightButton)
-                    pane.menuRequested();
+                pane.anchorIndex = -1;
+                pane.menuRequested();
             }
         }
         // Qualche riga oltre il bordo tenuta pronta: scorrere una cartella di
@@ -2047,6 +2131,7 @@ Item {
 
         delegate: Item {
             id: cell
+            objectName: "fileCell-" + modelData.name
             required property var modelData
             required property int index
 
@@ -2068,14 +2153,14 @@ Item {
                 anchors.margins: Theme.Effects.space2
                 width: Math.max(height, conta.implicitWidth + Theme.Effects.space3)
                 height: 22
-                radius: height / 2
-                color: Theme.Colors.accent
+                radius: FileStyle.windows ? 4 : height / 2
+                color: FileStyle.accent
                 Text {
                     id: conta
                     anchors.centerIn: parent
                     text: pane._targaQuante
-                    color: Theme.Colors.textOnAccent
-                    font.family: Theme.Typography.fontDisplay
+                    color: FileStyle.textOnAccent
+                    font.family: FileStyle.font
                     font.weight: Theme.Typography.weightBold
                     font.pixelSize: Theme.Typography.sizeXS
                 }
@@ -2101,7 +2186,7 @@ Item {
             // accendeva un rettangolo enorme attorno a un'icona piccola, senza
             // niente di vuoto in mezzo.
             //
-            // Giacomo: «la parte di cornice selezionabile intorno alle icone è
+            // il manutentore: «la parte di cornice selezionabile intorno alle icone è
             // troppo ampia e non hai vuoto intorno alla icona».
             //
             // Adesso il margine è `gridPadding`, che è **lo stesso** con cui
@@ -2120,15 +2205,15 @@ Item {
                 id: bg
                 anchors.fill: parent
                 anchors.margins: cell.gridMode ? pane.gridPadding : 0
-                radius: cell.gridMode ? Theme.Effects.radiusMD
-                                      : Theme.Effects.radiusSM
+                radius: FileStyle.windows ? 3 : (cell.gridMode ? Theme.Effects.radiusMD
+                                      : Theme.Effects.radiusSM)
                 // Il passaggio del mouse lo disegna la goccia della griglia;
                 // qui restano le cose che non si muovono col puntatore.
                 color: bersaglio.sopra === cell.index
-                       ? Qt.alpha(Theme.Colors.accent, 0.34)
+                       ? Qt.alpha(FileStyle.accent, 0.34)
                      : cell.selected
-                       ? Qt.alpha(Theme.Colors.accent, pane.focused ? 0.22 : 0.07)
-                     : cell.atCursor ? Theme.Colors.hover
+                       ? (FileStyle.windows ? FileStyle.selected : Qt.alpha(FileStyle.accent, pane.focused ? 0.22 : 0.07))
+                     : cell.atCursor || (FileStyle.windows && cellMouse.containsMouse) ? FileStyle.hover
                      : "transparent"
                 Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
             }
@@ -2152,8 +2237,8 @@ Item {
                 anchors.bottomMargin: cell.gridMode ? 3 : 2
                 width: 3
                 radius: 1.5
-                color: cell.esito === "solo" ? Theme.Colors.accent
-                                             : Theme.Colors.warning
+                color: cell.esito === "solo" ? FileStyle.accent
+                                             : FileStyle.warning
             }
 
             // ── L'icona, o la fotografia vera ────────────────────────────
@@ -2178,6 +2263,7 @@ Item {
                         ? cell.height - pane.gridPadding * 2 - pane.gridNameHeight - 4
                         : pane.iconSize
                 x: cell.gridMode ? pane.gridPadding : Theme.Effects.space2 + 2
+                    + (Core.Ipc.get("files.caselleSelezione", false) ? 26 : 0)
                 y: cell.gridMode ? pane.gridPadding
                                  : Math.round((cell.height - height) / 2)
 
@@ -2249,7 +2335,7 @@ Item {
                     visible: status === Image.Ready
                 }
 
-                Ui.Icon {
+                FileIcon {
                     anchors.centerIn: parent
                     width: cell.gridMode
                            ? Math.min(parent.width, parent.height) * 0.62
@@ -2258,8 +2344,8 @@ Item {
                     visible: !preview.visible
                     name: Files.iconFor(cell.modelData)
                     thickness: cell.gridMode ? 1.4 : 1.7
-                    color: cell.modelData.isDir ? Theme.Colors.accent
-                                                : Theme.Colors.textFaint
+                    color: cell.modelData.isDir ? FileStyle.accent
+                                                : FileStyle.textFaint
                 }
 
                 // Un video si distingue da una foto: il triangolo del «play».
@@ -2292,7 +2378,7 @@ Item {
                     name: "back"
                     thickness: 2.4
                     rotation: 180
-                    color: Theme.Colors.accentAlt
+                    color: FileStyle.accentAlt
                 }
             }
 
@@ -2332,10 +2418,10 @@ Item {
                                                                 : Text.NoWrap
                 maximumLineCount: (cell.gridMode && nameText.breakable) ? 2 : 1
                 text: cell.modelData.name
-                color: cell.selected && pane.focused ? Theme.Colors.text
-                     : pane.focused ? Theme.Colors.textMuted
-                     : Theme.Colors.textFaint
-                font.family: Theme.Typography.fontDisplay
+                color: cell.selected && pane.focused ? FileStyle.text
+                     : pane.focused ? FileStyle.textMuted
+                     : FileStyle.textFaint
+                font.family: FileStyle.font
                 font.weight: Theme.Typography.weightRegular
                 font.pixelSize: Theme.Typography.sizeSM
             }
@@ -2363,7 +2449,7 @@ Item {
                         d = d.substring(pane.path.length) || "/";
                     return d;
                 }
-                color: Theme.Colors.textFaint
+                color: FileStyle.textFaint
                 font.family: Theme.Typography.fontMono
                 font.pixelSize: Theme.Typography.sizeXS
             }
@@ -2379,7 +2465,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 horizontalAlignment: Text.AlignRight
                 text: cell.modelData.isDir ? "" : Core.Formato.peso(cell.modelData.size)
-                color: Theme.Colors.textFaint
+                color: FileStyle.textFaint
                 font.family: Theme.Typography.fontMono
                 font.pixelSize: Theme.Typography.sizeXS
             }
@@ -2391,7 +2477,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 horizontalAlignment: Text.AlignRight
                 text: Files.humanTime(cell.modelData.modified)
-                color: Theme.Colors.textFaint
+                color: FileStyle.textFaint
                 font.family: Theme.Typography.fontMono
                 font.pixelSize: Theme.Typography.sizeXS
             }
@@ -2400,17 +2486,21 @@ Item {
                 id: cellMouse
                 anchors.fill: parent
                 hoverEnabled: true
-                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
                 onContainsMouseChanged: gocciaCelle.punta(cell, cellMouse.containsMouse)
 
                 /// Da dove è partito il dito. Serve alla soglia: senza, ogni
                 /// clic con un tremito di due pixel diventerebbe un
                 /// trascinamento, e selezionare un file sarebbe una lotteria.
                 property point partenza: Qt.point(0, 0)
+                property bool collapseClick: false
+                property bool bandGesture: false
+                property bool suppressClick: false
 
                 onPositionChanged: function (m) {
                     if (!cellMouse.pressed)
                         return;
+                    if(cellMouse.bandGesture) {rectangleSelection.move(cell.mapToItem(view,m.x,m.y));return;}
                     var p = cell.mapToItem(pane, m.x, m.y);
                     if (pane.trascinando) {
                         pane.muoviTrascinamento(p);
@@ -2430,20 +2520,33 @@ Item {
                         Qt.point(cellMouse.partenza.x, cellMouse.partenza.y));
                 }
 
-                onReleased: pane.finisciTrascinamento()
+                onReleased: {
+                    if(cellMouse.bandGesture) {rectangleSelection.finish();cellMouse.bandGesture=false;return;}
+                    if(cellMouse.collapseClick && !pane.trascinando) pane.selectOnly(cell.modelData.path);
+                    pane.finisciTrascinamento();cellMouse.collapseClick=false;
+                }
                 // Perdere la presa NON vuol dire che il gesto è finito: se il
                 // trascinamento di sistema è partito, è proprio lui ad avercela
                 // tolta. Lo chiude `Drag.onDragFinished`.
                 onCanceled: {
+                    if(cellMouse.bandGesture) {rectangleSelection.cancel();cellMouse.bandGesture=false;}
+                    cellMouse.collapseClick=false;
                     if (!pane.trascinando)
                         pane.trascinando = false;
                 }
 
                 onPressed: function(m) {
+                    if (m.button === Qt.MiddleButton)
+                        return;
                     pane.activated();
                     view.forceActiveFocus();
                     pane.cursoreMostrato = true;
                     cellMouse.partenza = Qt.point(m.x, m.y);
+                    cellMouse.collapseClick=false;cellMouse.bandGesture=false;cellMouse.suppressClick=false;
+                    if(m.button===Qt.LeftButton && !cell.gridMode && m.x>cell.width-100) {
+                        cellMouse.bandGesture=true;cellMouse.suppressClick=true;
+                        rectangleSelection.begin(cell.mapToItem(view,m.x,m.y),m.modifiers);return;
+                    }
 
                     if (m.button === Qt.RightButton) {
                         // Il tasto destro su una voce non selezionata la
@@ -2464,7 +2567,8 @@ Item {
                     } else if (m.modifiers & Qt.ShiftModifier) {
                         pane.extendTo(cell.index);
                     } else {
-                        pane.selectOnly(cell.modelData.path);
+                        if(cell.selected) cellMouse.collapseClick=true;
+                        else pane.selectOnly(cell.modelData.path);
                         pane.anchorIndex = cell.index;
                     }
                     pane.cursor = cell.index;
@@ -2476,7 +2580,12 @@ Item {
                 /// pressione vorrebbe dire aprire ogni volta che si prova a
                 /// spostare qualcosa.
                 onClicked: function (m) {
-                    if (m.button !== Qt.LeftButton)
+                    if (m.button === Qt.MiddleButton) {
+                        if (cell.modelData.isDir)
+                            pane.newTabRequested(cell.modelData.path);
+                        return;
+                    }
+                    if (m.button !== Qt.LeftButton || cellMouse.suppressClick)
                         return;
                     if (m.modifiers & (Qt.ControlModifier | Qt.ShiftModifier))
                         return;
@@ -2484,13 +2593,56 @@ Item {
                         cellMouse.apri();
                 }
 
-                onDoubleClicked: cellMouse.apri()
+                onDoubleClicked: function(event) {
+                    if (event.button === Qt.LeftButton)
+                        cellMouse.apri();
+                }
 
                 function apri() {
                     if (cell.modelData.isDir)
                         pane.navigate(cell.modelData.path);
                     else
                         pane.openRequested(cell.modelData.path);
+                }
+            }
+
+            Rectangle {
+                // La casella modifica la selezione del riquadro, la stessa di
+                // tastiera e rettangolo. Non apre il file neppure con doppio clic.
+                objectName: "fileCheck-" + cell.modelData.name
+                visible: Core.Ipc.get("files.caselleSelezione", false)
+                z: 2
+                x: cell.gridMode ? pane.gridPadding + 4 : 6
+                y: cell.gridMode ? pane.gridPadding + 4 : (cell.height - height) / 2
+                width: 18
+                height: 18
+                radius: 4
+                color: cell.selected ? FileStyle.accent : FileStyle.raised
+                border.width: 1
+                border.color: cell.selected ? FileStyle.accent : FileStyle.textMuted
+                Accessible.role: Accessible.CheckBox
+                Accessible.name: cell.modelData.name
+                Accessible.checked: cell.selected
+
+                Ui.Icon {
+                    anchors.centerIn: parent
+                    width: 12
+                    height: 12
+                    visible: cell.selected
+                    name: "check"
+                    alwaysDrawn: true
+                    color: FileStyle.textOnAccent
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        pane.activated();
+                        pane.focusContents();
+                        pane.toggleSelection(cell.modelData.path);
+                        pane.cursor = cell.index;
+                        pane.anchorIndex = cell.index;
+                    }
                 }
             }
         }
@@ -2505,7 +2657,7 @@ Item {
         // Non si sovrapponevano esattamente — corpo del testo diverso (SM
         // contro MD), icona diversa (34 contro 42), e centrate in due
         // contenitori diversi — quindi il risultato erano due scritte
-        // leggermente sfalsate una sopra l'altra. È quello che Giacomo ha
+        // leggermente sfalsate una sopra l'altra. È quello che il manutentore ha
         // visto cancellando tutti i file di una cartella.
         //
         // ── Perché è sopravvissuto quello di FUORI ───────────────────────
@@ -2540,13 +2692,13 @@ Item {
             anchors.rightMargin: -Theme.Effects.space1
             anchors.topMargin: -3
             anchors.bottomMargin: -3
-            radius: height / 2
-            color: Theme.Colors.raised
+            radius: FileStyle.windows ? 4 : height / 2
+            color: FileStyle.windows ? "transparent" : FileStyle.raised
 
             Ui.Goccia {
                 id: gocciaVista
-                radius: height / 2
-                color: Qt.alpha(Theme.Colors.accent, 0.22)
+                radius: FileStyle.windows ? 4 : height / 2
+                color: Qt.alpha(FileStyle.accent, 0.22)
             }
         }
 
@@ -2563,8 +2715,8 @@ Item {
                     return pane.selection.length + (it ? " selezionati di " : " selected of ") + n;
                 return n + (it ? " elementi" : " items");
             }
-            color: Theme.Colors.textFaint
-            font.family: Theme.Typography.fontDisplay
+            color: FileStyle.textFaint
+            font.family: FileStyle.font
             font.weight: Theme.Typography.weightRegular
             font.pixelSize: Theme.Typography.sizeXS
         }
@@ -2588,8 +2740,8 @@ Item {
                 height: 20
                 anchors.verticalCenter: parent.verticalCenter
                 radius: Theme.Effects.radiusXS
-                color: pane.showHidden ? Qt.alpha(Theme.Colors.accent, 0.16)
-                     : hiddenMouse.containsMouse ? Theme.Colors.hover
+                color: pane.showHidden ? Qt.alpha(FileStyle.accent, 0.16)
+                     : hiddenMouse.containsMouse ? FileStyle.hover
                      : "transparent"
                 Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
@@ -2597,8 +2749,8 @@ Item {
                     id: hiddenText
                     anchors.centerIn: parent
                     text: Core.Strings.lang === "it" ? "nascosti" : "hidden"
-                    color: pane.showHidden ? Theme.Colors.accent : Theme.Colors.textFaint
-                    font.family: Theme.Typography.fontDisplay
+                    color: pane.showHidden ? FileStyle.accent : FileStyle.textFaint
+                    font.family: FileStyle.font
                     font.weight: Theme.Typography.weightRegular
                     font.pixelSize: Theme.Typography.sizeXS
                 }
@@ -2615,7 +2767,7 @@ Item {
             Rectangle {
                 width: 1; height: 14
                 anchors.verticalCenter: parent.verticalCenter
-                color: Theme.Colors.edge
+                color: FileStyle.edge
             }
 
             // Ordinamento, per la griglia che non ha intestazioni di colonna.
@@ -2625,16 +2777,16 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: pane.viewMode === "grid"
                 radius: Theme.Effects.radiusXS
-                color: sortMenu.visible ? Qt.alpha(Theme.Colors.accent, 0.16)
-                     : sortMouse.containsMouse ? Theme.Colors.hover
+                color: sortMenu.visible ? Qt.alpha(FileStyle.accent, 0.16)
+                     : sortMouse.containsMouse ? FileStyle.hover
                      : "transparent"
 
                 Ui.Icon {
                     anchors.centerIn: parent
                     width: 13; height: 13
                     name: "sort"
-                    color: sortMenu.visible ? Theme.Colors.accent
-                                            : Theme.Colors.textFaint
+                    color: sortMenu.visible ? FileStyle.accent
+                                            : FileStyle.textFaint
                 }
 
                 MouseArea {
@@ -2669,9 +2821,9 @@ Item {
 
                     width: 26; height: 22
                     anchors.verticalCenter: parent.verticalCenter
-                    radius: height / 2
+                    radius: FileStyle.windows ? 4 : height / 2
                     // La vista attiva la segna la goccia della capsula.
-                    color: !modeBtn.active && modeMouse.containsMouse ? Theme.Colors.hover
+                    color: !modeBtn.active && modeMouse.containsMouse ? FileStyle.hover
                                                                       : "transparent"
                     Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
@@ -2680,8 +2832,8 @@ Item {
                         width: 13; height: 13
                         name: modeBtn.modelData.icon
                         thickness: 1.5
-                        color: modeBtn.active ? Theme.Colors.accent
-                                              : Theme.Colors.textFaint
+                        color: modeBtn.active ? FileStyle.accent
+                                              : FileStyle.textFaint
                     }
 
                     MouseArea {
@@ -2700,7 +2852,7 @@ Item {
             Rectangle {
                 width: 1; height: 14
                 anchors.verticalCenter: parent.verticalCenter
-                color: Theme.Colors.edge
+                color: FileStyle.edge
             }
 
             // Grandezza delle icone. Cinque scatti e non uno scorrevole: gli
@@ -2725,7 +2877,7 @@ Item {
                     radius: Theme.Effects.radiusXS
                     opacity: zoomBtn.usable ? 1 : 0.3
                     color: zoomMouse.containsMouse && zoomBtn.usable
-                           ? Theme.Colors.hover : "transparent"
+                           ? FileStyle.hover : "transparent"
                     Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
                     Ui.Icon {
@@ -2733,7 +2885,7 @@ Item {
                         width: 12; height: 12
                         name: zoomBtn.modelData.icon
                         thickness: 2
-                        color: Theme.Colors.textFaint
+                        color: FileStyle.textFaint
                         alwaysDrawn: true
                     }
 
@@ -2768,9 +2920,9 @@ Item {
         width: 148
         height: sortColumn.implicitHeight + Theme.Effects.space2 * 2
         radius: Theme.Effects.radiusSM
-        color: Theme.Colors.panel
+        color: FileStyle.panel
         border.width: 1
-        border.color: Theme.Colors.edge
+        border.color: FileStyle.edge
         visible: false
         z: 5
 
@@ -2797,7 +2949,7 @@ Item {
                     width: parent.width
                     height: 24
                     radius: Theme.Effects.radiusXS
-                    color: sortRowMouse.containsMouse ? Theme.Colors.hover
+                    color: sortRowMouse.containsMouse ? FileStyle.hover
                                                       : "transparent"
 
                     Text {
@@ -2806,9 +2958,9 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         text: Core.Strings.lang === "it" ? sortRow.modelData.it
                                                          : sortRow.modelData.en
-                        color: sortRow.active ? Theme.Colors.accent
-                                              : Theme.Colors.textMuted
-                        font.family: Theme.Typography.fontDisplay
+                        color: sortRow.active ? FileStyle.accent
+                                              : FileStyle.textMuted
+                        font.family: FileStyle.font
                         font.weight: Theme.Typography.weightRegular
                         font.pixelSize: Theme.Typography.sizeXS
                     }
@@ -2821,7 +2973,7 @@ Item {
                         visible: sortRow.active
                         name: "chevron"
                         thickness: 2.2
-                        color: Theme.Colors.accent
+                        color: FileStyle.accent
                         rotation: pane.sortDesc ? 0 : 180
                     }
 

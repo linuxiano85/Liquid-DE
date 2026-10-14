@@ -24,6 +24,10 @@ progetto.
   applicazioni e controlli senza occupare sempre lo schermo.
 - **La shell** comprende scrivania, blocco schermo, impostazioni e applicazioni
   per file, media, testo e attività.
+- **Il preset Windows 11** offre barra centrata, Start classico, anteprime,
+  tray, impostazioni rapide, calendario e meteo. Gli sfondi Bloom di Microsoft
+  non sono nel repository: si usano se li hai già sul disco.
+  [Scelte e guida](docs/windows11.md).
 - **L'installer grafico** controlla le dipendenze, mostra l'avanzamento e alla
   fine permette di scegliere il gestore di accesso. Include Minerva Login
   basato su `greetd`.
@@ -66,6 +70,15 @@ Per installare dal terminale, senza la guida grafica:
 ./scripts/minerva-compila
 ./scripts/install-minerva.sh
 ```
+
+## Aggiornamenti dell’interfaccia
+
+Il preset Windows è in sviluppo: include nuove pagine delle impostazioni,
+cronologia di navigazione e miglioramenti a file manager, pannelli e tiling.
+Consulta il [riepilogo delle modifiche](docs/aggiornamenti-2026-10-13.md)
+per funzionalità disponibili e limiti attuali.
+
+![Impostazioni del preset Windows con dati dimostrativi](docs/screenshots/impostazioni-windows.png)
 
 ## Architettura
 

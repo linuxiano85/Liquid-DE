@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import "." as Core
+import Minerva.WindowIdentity 1.0 as Native
 
 // TenutaPronta — Un'app che, chiusa, non se ne va: si toglie di mezzo.
 //
@@ -79,6 +80,7 @@ import "." as Core
 // e chi la lancia da fuori chiama `pronta.risveglia()` dal suo `IpcHandler`.
 Item {
     id: pronta
+    Native.WindowIdentity {id:identity;item:pronta.laFinestra ? pronta.laFinestra.contentItem:null}
 
     /// Il nome dell'app. Da qui escono la chiave delle impostazioni e il nome
     /// della variabile d'ambiente: non si scrivono a mano due volte, o prima o
@@ -89,7 +91,7 @@ Item {
     /// per primo, il 16 agosto, con `files.tieniAcceso` e
     /// `MINERVA_FILES_DORMIENTE` già scritti nelle Impostazioni e nell'avvio
     /// automatico. Rinominarli per simmetria avrebbe spento in silenzio la
-    /// scelta che Giacomo aveva già fatto.
+    /// scelta che il manutentore aveva già fatto.
     property string chiave: "preload." + pronta.nome
     property string variabile:
         "MINERVA_" + pronta.nome.toUpperCase() + "_DORMIENTE"
@@ -121,7 +123,7 @@ Item {
     /// Che cosa vale se dell'impostazione non si sa ancora niente.
     ///
     /// Falso per tutte tranne il gestore file, che era già acceso per scelta
-    /// di Giacomo. Sei app tenute pronte sono circa 700 MB: è una cosa che si
+    /// di il manutentore. Sei app tenute pronte sono circa 700 MB: è una cosa che si
     /// sceglie una alla volta guardando il prezzo, non un valore di fabbrica.
     property bool ripiego: false
 
@@ -191,8 +193,9 @@ Item {
     }
 
     /// Torna a farsi vedere, e davanti a tutto.
-    function risveglia() {
+    function risveglia(activationToken) {
         pronta.dormiente = false;
+        if(activationToken) {insistenza.stop();return;}
         pronta.portaDavanti();
     }
 
@@ -243,32 +246,11 @@ Item {
     /// fuori — `finestra: finestra` si legherebbe a sé stessa.
     property var laFinestra: null
 
-    /// Il fuoco alla NOSTRA finestra, non a una qualsiasi del processo.
-    ///
-    /// Qui c'era `Compositore.fuocoAlNostroProcesso()`, cioè `focuswindow
-    /// pid:…`. Era giusto finché ogni applicazione era un processo suo; da
-    /// quando Calcolatrice, Editor, Anteprima, Attività e Custodia vivono
-    /// tutte dentro `app.qml`, quel `pid:` nomina fino a cinque finestre e il
-    /// compositore prende la prima che trova.
-    ///
-    /// Il risultato: rilanciare la Calcolatrice mentre la Custodia è aperta
-    /// portava avanti la Custodia. È lo stesso difetto di
-    /// `ui/WindowTitleBar.qml::me`, e si chiude allo stesso modo — il titolo
-    /// distingue le nostre finestre, il numero di processo no.
+    /// Focus the actual Qt window's Wayland surface. Wait for its model
+    /// entry instead of selecting another window with the same PID/title.
     function _fuocoAllaMia() {
-        var f = pronta.laFinestra;
-        var titolo = f ? String(f.title || "") : "";
-        var tutte = Core.Windows.all || [];
-        for (var i = 0; i < tutte.length; i++) {
-            if (tutte[i].pid === Quickshell.processId
-                    && tutte[i].title === titolo && titolo !== "") {
-                Core.Windows.focus(tutte[i].address);
-                return;
-            }
-        }
-        // Prima che l'elenco arrivi, o se il titolo è appena cambiato: meglio
-        // il vecchio ripiego che nessun fuoco.
-        Core.Compositore.fuocoAlNostroProcesso();
+        var w=Core.Windows.findSurface(Quickshell.processId,identity.surfaceId);
+        if(w) Core.Windows.focus(w.address);
     }
 
     Timer {
@@ -282,7 +264,7 @@ Item {
         property int rimasti: 0
         onTriggered: {
             if (insistenza.rimasti <= 0
-                    || (pronta.laFinestra && pronta.laFinestra.active)) {
+                    || (identity.item && identity.item.Window.active)) {
                 insistenza.stop();
                 return;
             }

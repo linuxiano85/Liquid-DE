@@ -72,7 +72,7 @@ Canvas {
     /// tela è grande — non quanto è lungo il tratto. `onda` la chiedeva tre
     /// volte a fotogramma e `neon` due, sedici volte al secondo.
     ///
-    /// Il risultato l'ha detto Giacomo il 4 settembre 2026: «2 dei 4 effetti
+    /// Il risultato l'ha detto il manutentore il 4 settembre 2026: «2 dei 4 effetti
     /// per audio vanno molto lentamente e sono scattosi» — e i due erano
     /// esattamente **onda e neon**, cioè gli unici due che usavano
     /// `shadowBlur`. `barre` e `radiale`, che non lo usano, andavano lisci.

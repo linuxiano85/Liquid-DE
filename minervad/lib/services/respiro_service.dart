@@ -10,7 +10,7 @@ import '../providers/minerva/minerva_provider.dart';
 ///
 /// ── Perché ────────────────────────────────────────────────────────────────
 ///
-/// Giacomo, 28 settembre 2026: «rendere tutto veloce, piccolo, senza singolo
+/// il manutentore, 28 settembre 2026: «rendere tutto veloce, piccolo, senza singolo
 /// processo». Un processo Qt Quick ha un pavimento di ~10 MB suoi e una
 /// nostra app ne occupa 30–90: restando processi separati non si possono
 /// rimpicciolire. Si può fare quello che fa Android con le app in secondo

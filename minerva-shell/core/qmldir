@@ -22,3 +22,10 @@ singleton Vetro         1.0 Vetro.qml
 singleton Posizioni     1.0 Posizioni.qml
 singleton Riva          1.0 Riva.qml
 singleton Formato       1.0 Formato.qml
+singleton Tiling 1.0 Tiling.qml
+
+singleton Anteprime 1.0 Anteprime.qml
+
+singleton DesktopStyle 1.0 DesktopStyle.qml
+WifiController 1.0 WifiController.qml
+singleton Utente        1.0 Utente.qml

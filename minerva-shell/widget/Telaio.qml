@@ -37,7 +37,7 @@ Item {
 
     /// ── Con o senza vetro ───────────────────────────────────────────────
     ///
-    /// Giacomo, 9 settembre 2026: «voglio poterli avere anche trasparenti e
+    /// il manutentore, 9 settembre 2026: «voglio poterli avere anche trasparenti e
     /// vedere solo i numeri o grafici senza cornice o vetro perché metti caso
     /// che voglio poter vedere lo sfondo come faccio?».
     ///
@@ -122,7 +122,7 @@ Item {
 
     // ── I bordi: si ridimensiona da tutti e quattro, come una finestra ─────
     //
-    // Giacomo, 14 settembre 2026: «non sono ridimensionabili quando siamo in
+    // il manutentore, 14 settembre 2026: «non sono ridimensionabili quando siamo in
     // modalità modifica». C'era una maniglia sola, sedici pixel nell'angolo
     // in basso a destra, e non la trovava nessuno: chi vuole allargare una
     // cosa tira il suo bordo, come fa con ogni finestra. La maniglia resta,

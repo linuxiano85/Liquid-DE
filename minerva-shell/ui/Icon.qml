@@ -79,7 +79,7 @@ Item {
     /// Prima l'immagine prendeva `opacity: color.a` sempre, e siccome nel
     /// gestore file le icone dei file sono disegnate con `textFaint`, con le
     /// icone classiche accese OGNI file compariva al 34%. È il difetto che
-    /// Giacomo ha descritto come «alcune icone di documenti o altri file sono
+    /// il manutentore ha descritto come «alcune icone di documenti o altri file sono
     /// trasparenti»: non mancavano, erano quasi invisibili.
     property bool spenta: false
 
@@ -113,13 +113,28 @@ Item {
     /// stati dello STESSO pulsante e devono avere lo stesso peso ottico, cosa
     /// che nessun tema garantisce; `more` sono i tre puntini di un menu, che
     /// è parte del disegno del componente e non iconografia.
-    readonly property var _segni: ["play", "pause", "next", "prev", "more"]
+    // «radio» (11 ottobre 2026): un segno nostro, mai del tema. Chiesta al
+    // tema come «globe», nel tema Win11 diventava il logo di un browser.
+    readonly property var _segni: ["play", "pause", "next", "prev", "more", "radio"]
+
+    /// Sempre il disegno grande del tema, anche in piccolo.
+    ///
+    /// Molti temi (Win11, Papirus…) a 22 pixel non hanno la cartella gialla
+    /// ma un segno monocromatico per i pannelli: giusto nella barra, sbagliato
+    /// per i FILE. il manutentore, 11 ottobre 2026: «il gestore file ha solo icone
+    /// monocromatiche e se cambio icone rimangono le stesse». Era il 22 del
+    /// tema Win11, `places/22/folder.svg`, grigio `#dedede`. Le icone dei file
+    /// (`files/FileIcon.qml`) chiedono quindi il disegno grande, rimpicciolito
+    /// (è un SVG), come fa Esplora file.
+    property bool sempreGrande: false
 
     readonly property string classicFile: {
         if (icon.alwaysDrawn || icon._segni.indexOf(icon.name) >= 0) return "";
         if (Core.Ipc.get("icons.style", "minerva") === "minerva") return "";
         var entry = Core.Ipc.iconMap[icon.name];
         if (entry === undefined || entry === null) return "";
+        if (icon.sempreGrande)
+            return entry.l || entry.s || "";
         return (icon.width <= 28 ? entry.s : entry.l) || "";
     }
 
@@ -158,6 +173,9 @@ Item {
         "back":      "M19 12H5 M11 6l-6 6 6 6",
 
         // ── Sistema ──────────────────────────────────────────────────────
+        "user":      "M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z M4 21v-2a8 6 0 0 1 16 0v2",
+        "network":   "M3 4h18v12H3z M12 16v4 M8 20h8",
+        "camera":    "M3 7h4l2-3h6l2 3h4v14H3z M12 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8z",
         "wifi":      "M2.6 8.6a15 15 0 0 1 18.8 0 M5.7 12.2a10.3 10.3 0 0 1 12.6 0 M8.8 15.8a5.6 5.6 0 0 1 6.4 0 M12 19.2h.01",
         "bluetooth": "M7 7.5l10 9-5 3.5V4l5 3.5-10 9",
         "volume":    "M4 9.5v5h3.5l4.5 3.5v-12L7.5 9.5H4z M16 9.6a3.6 3.6 0 0 1 0 4.8 M18.6 7a7.4 7.4 0 0 1 0 10",
@@ -235,6 +253,9 @@ Item {
         "gamepad":   "M8 10v4 M6 12h4 M15.5 11h.01 M17.5 13.5h.01 M7 7.5h10a4 4 0 0 1 4 4v1a4 4 0 0 1-7 2.7h-4A4 4 0 0 1 3 12.5v-1a4 4 0 0 1 4-4z",
         "image":     "M3.5 5h17v14h-17z M8 11a1.6 1.6 0 1 0 0-3.2A1.6 1.6 0 0 0 8 11z M4 17l5-5 4 3.5 3-2.5 4 4",
         "music":     "M9 18V6l10-2v12 M9 18a2.6 2.6 0 1 1-5.2 0 2.6 2.6 0 0 1 5.2 0z M19 16a2.6 2.6 0 1 1-5.2 0 2.6 2.6 0 0 1 5.2 0z",
+        // La radio di Media: apparecchio, antenna, altoparlante. «globe»
+        // passava dal tema, e nel tema Win11 diventava il logo di un browser.
+        "radio":     "M3.5 9.5h17v10h-17z M7 9.5L17.5 4.5 M15.5 12a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z M6.5 13h4 M6.5 16h4",
         // Il download e la condivisione: servono a Minerva Media. La freccia
         // del download scende dentro il vassoio, quella della condivisione
         // esce dalla scatola — la stessa forma, dall'altra parte.
@@ -257,7 +278,7 @@ Item {
         // il PDF, uno per il foglio di calcolo, uno per il codice sorgente.
         // Chiedendo «document» per tutti si buttava via quella ricchezza e si
         // vedevano dieci icone dove il gestore file di KDE ne mostra cento —
-        // che è quello che Giacomo ha descritto come «alcune icone non
+        // che è quello che il manutentore ha descritto come «alcune icone non
         // vengono riconosciute». Ogni nome qui sotto ha una controparte nella
         // tabella del demone (`icon_names.dart`), ed è quella a portarci al
         // disegno del tema.
@@ -289,7 +310,7 @@ Item {
         "cpu":       "M8 8h8v8H8z M4.5 10h3 M4.5 14h3 M16.5 10h3 M16.5 14h3 M10 4.5v3 M14 4.5v3 M10 16.5v3 M14 16.5v3",
         // ── I quattro dei widget della barra ─────────────────────────────
         //
-        // Giacomo, 14 settembre 2026: «quelli sulla barra sono confusionari
+        // il manutentore, 14 settembre 2026: «quelli sulla barra sono confusionari
         // perché non hanno un simbolo per capire che valori monitorano».
         // Tre numeri in fila — «6 % · 21 % · 49°» — non dicono di cosa.
         //
@@ -441,7 +462,7 @@ Item {
         // riaprendo la finestra spariscono, che è il modo lungo per dire che
         // sono pixel e non oggetti.
         //
-        // Giacomo, quel giorno: «oltre al fatto che compaiono tutti quei segni
+        // il manutentore, quel giorno: «oltre al fatto che compaiono tutti quei segni
         // + sovrapposti per un certo tot di secondi non ben definiti non mi fa
         // cambiare sezione, opzione specifica o chiudere impostazioni».
         //

@@ -32,7 +32,7 @@ class Voce {
   final String categoria;
 
   /// Dove sta, per esteso. Si mostra sempre: «cache» non vuol dire niente,
-  /// `/home/giacomo/.cache/ccache` sì.
+  /// `/home/utente/.cache/ccache` sì.
   final String dove;
 
   final int byte;
@@ -108,7 +108,7 @@ class Voce {
 ///
 /// ── Perché esiste, e perché NON cancella niente ────────────────────────────
 ///
-/// Giacomo, 8 settembre 2026, chiedendo un'app di manutenzione: «tipo Stacer»,
+/// il manutentore, 8 settembre 2026, chiedendo un'app di manutenzione: «tipo Stacer»,
 /// che è abbandonato. Stacer è un cruscotto con tre cerchi grandi e un pulsante
 /// che «ottimizza».
 ///
@@ -143,7 +143,7 @@ class Inventario {
 
   // ── Raccontare mentre si lavora ──────────────────────────────────────────
   //
-  // Giacomo, 8 settembre 2026: «mettiamoci barre di progresso e live log».
+  // il manutentore, 8 settembre 2026: «mettiamoci barre di progresso e live log».
   //
   // La scansione dura fra mezzo secondo e qualche secondo — `du` su
   // `~/.cache` sono decine di migliaia di file, e su `/var/cache/pacman/pkg`
@@ -416,7 +416,7 @@ class Inventario {
 
     // ── Quanto si può togliere NON è quanto pesa la cartella ────────────
     //
-    // Giacomo, 9 settembre 2026, dopo aver premuto: «perché non è scomparsa
+    // il manutentore, 9 settembre 2026, dopo aver premuto: «perché non è scomparsa
     // dalle voci?». Il pulsante prometteva 6,97 GB e ne sono usciti 130.
     //
     // Perché `paccache` tiene le ultime due versioni di ogni pacchetto, e su
@@ -439,7 +439,7 @@ class Inventario {
       id: 'cache-pacchetti',
       // ── Il nome, e perché è cambiato ─────────────────────────────────
       //
-      // Si chiamava «Pacchetti già installati», e Giacomo ha chiesto:
+      // Si chiamava «Pacchetti già installati», e il manutentore ha chiesto:
       // «intendi pacchetti installati?». La domanda è la prova che il nome
       // era sbagliato — in un programma che cancella, «pacchetti installati»
       // suona come i PROGRAMMI, non come le loro scatole. Chi legge si chiede

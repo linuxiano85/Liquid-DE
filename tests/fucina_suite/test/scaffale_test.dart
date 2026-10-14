@@ -32,18 +32,39 @@ void main() {
     file('proc/sys/kernel/osrelease', '6.17.2-arch1-1\n');
     // Due kernel installati: quello della distribuzione e uno nostro.
     Directory('$r/usr/lib/modules/6.17.2-arch1-1').createSync(recursive: true);
-    Directory('$r/usr/lib/modules/6.17.2-fucina-vecchio')
-        .createSync(recursive: true);
+    Directory(
+      '$r/usr/lib/modules/6.17.2-fucina-vecchio',
+    ).createSync(recursive: true);
     file('boot/vmlinuz-6.17.2-fucina-vecchio', 'x');
     // Uno pronto in uscita, e una cartella che non è un kernel nostro.
-    file('lavoro/uscita/6.17.2-fucina-nuovo/fucina.json',
-        jsonEncode({'quando': '2026-09-30T08:00:00', 'moduli': 120}));
+    file(
+      'lavoro/uscita/6.17.2-fucina-nuovo/fucina.json',
+      jsonEncode({
+        'rilascio': '6.17.2-fucina-nuovo',
+        'quando': '2026-09-30T08:00:00',
+        'moduli': 120,
+        'secondiPreparazione': 367,
+        'log': '$statoDir/log-compilazioni/prova/compilazione.log',
+      }),
+    );
+    file(
+      'lavoro/uscita/6.17.2-fucina-nuovo/boot/vmlinuz-6.17.2-fucina-nuovo',
+      'immagine',
+    );
+    file(
+      'lavoro/uscita/6.17.2-fucina-nuovo/boot/config-6.17.2-fucina-nuovo',
+      'CONFIG_MODULES=y\n',
+    );
+    Directory(
+      '$lavoro/uscita/6.17.2-fucina-nuovo/lib/modules/6.17.2-fucina-nuovo',
+    ).createSync(recursive: true);
     file('lavoro/uscita/linux/fucina.json', '{}');
   });
 
   tearDown(() => tana.deleteSync(recursive: true));
 
-  Scaffale scaffale() => Scaffale(radice: '$r/', lavoro: lavoro, statoDir: statoDir);
+  Scaffale scaffale() =>
+      Scaffale(radice: '$r/', lavoro: lavoro, statoDir: statoDir);
 
   group('il nome di un kernel nostro', () {
     test('si riconosce', () {
@@ -54,9 +75,17 @@ void main() {
 
     test('e tutto il resto no', () {
       for (final n in [
-        '6.17.2-arch1-1', '6.17.2-cachyos', 'linux', '', '6.17.2-fucina-',
-        '6.17.2-fucina-../../etc', '6.17.2-fucina-a/b', '../6.17-fucina-a',
-        '6.17.2-fucina-A', '6.17.2-fucina-a\n', 'x6.17.2-fucina-a',
+        '6.17.2-arch1-1',
+        '6.17.2-cachyos',
+        'linux',
+        '',
+        '6.17.2-fucina-',
+        '6.17.2-fucina-../../etc',
+        '6.17.2-fucina-a/b',
+        '../6.17-fucina-a',
+        '6.17.2-fucina-A',
+        '6.17.2-fucina-a\n',
+        'x6.17.2-fucina-a',
       ]) {
         expect(Scaffale.nostro(n), isFalse, reason: '«$n»');
       }
@@ -67,14 +96,168 @@ void main() {
     final e = await scaffale().elenco();
     expect(e['inUso'], '6.17.2-arch1-1');
     final k = {for (final x in e['kernel'] as List) x['rilascio']: x};
-    expect(k.keys, unorderedEquals(['6.17.2-fucina-nuovo', '6.17.2-fucina-vecchio']));
+    expect(
+      k.keys,
+      unorderedEquals(['6.17.2-fucina-nuovo', '6.17.2-fucina-vecchio']),
+    );
     expect(k['6.17.2-fucina-nuovo']['pronto'], isTrue);
     expect(k['6.17.2-fucina-nuovo']['moduli'], 120);
+    expect(k['6.17.2-fucina-nuovo']['secondiPreparazione'], 367);
+    expect(
+      k['6.17.2-fucina-nuovo']['log'],
+      '$statoDir/log-compilazioni/prova/compilazione.log',
+    );
     expect(k['6.17.2-fucina-vecchio']['installato'], isTrue);
     expect(k['6.17.2-fucina-vecchio']['immagine'], isTrue);
   });
 
+  test(
+    'esporta un report locale minimale e conserva solo gli ultimi dieci',
+    () async {
+      file('proc/cpuinfo', '''
+model name : Processore di prova
+vendor_id : GenuineIntel
+flags : sse2 avx avx2
+''');
+      file('sys/devices/platform/periferica/modalias', 'platform:PROVA0001\n');
+      final servizio = FucinaService(
+        lavoro: lavoro,
+        statoDir: statoDir,
+        radice: (verbo, argomenti) async => {'ok': true},
+        nuovoRilevatore: (racconta, alias) => Rilevatore(
+          radice: r,
+          ambiente: {'HOME': '$r/casa-privata', 'PATH': ''},
+          modaliasStorici: alias,
+        ),
+      );
+
+      Map<String, dynamic>? ultimo;
+      for (var i = 0; i < 11; i++) {
+        final risultato = await servizio.esportaRilievo();
+        expect(risultato['ok'], isTrue);
+        ultimo = risultato;
+      }
+      final rapporto = File(ultimo!['percorso'] as String);
+      final testo = rapporto.readAsStringSync();
+      expect(testo, contains('Processore di prova'));
+      expect(testo, contains('platform:PROVA0001'));
+      expect(testo, isNot(contains('casa-privata')));
+      expect(testo, isNot(contains('configPartenza')));
+      final rapporti = Directory(
+        '$statoDir/rapporti',
+      ).listSync().whereType<File>().where((f) => f.path.endsWith('.json'));
+      expect(rapporti, hasLength(10));
+    },
+  );
+
+  test(
+    'il rilievo ricorda una periferica e la conserva da scollegata',
+    () async {
+      const alias = 'usb:v1d6Bp0246d0001dc00dsc00dp00ic03isc00ip00in00';
+      final rel = '6.17.2-arch1-1';
+      file(
+        'usr/lib/modules/$rel/modules.alias',
+        'alias usb:v1d6Bp0246d* xpad\n',
+      );
+      file(
+        'usr/lib/modules/$rel/modules.dep',
+        'kernel/drivers/input/joystick/xpad.ko.zst:\n',
+      );
+      file('sys/devices/usb1/1-7/modalias', '$alias\n');
+
+      final ricevuti = <List<String>>[];
+      FucinaService servizio() => FucinaService(
+        lavoro: lavoro,
+        statoDir: statoDir,
+        radice: (verbo, argomenti) async => {'ok': true},
+        nuovoRilevatore: (racconta, storici) {
+          ricevuti.add(storici);
+          return Rilevatore(
+            radice: r,
+            ambiente: {'HOME': '$r/casa', 'PATH': '$r/bin'},
+            nuclei: 4,
+            modaliasStorici: storici,
+          );
+        },
+      );
+
+      final primo = await servizio().rileva(null);
+      expect(primo['dispositiviStorici'], 0);
+      expect(File('$statoDir/dispositivi-visti.json').existsSync(), isTrue);
+
+      File('$r/sys/devices/usb1/1-7/modalias').deleteSync();
+      final secondo = await servizio().rileva(null);
+      expect(ricevuti.last, contains(alias));
+      final xpad = (secondo['moduli'] as List).cast<Map>().firstWhere(
+        (m) => m['nome'] == 'xpad',
+      );
+      expect(xpad['fonti'], contains('storico'));
+      expect(xpad['diSerie'], isTrue);
+    },
+  );
+
   group('la verifica al primo avvio', () {
+    Future<Map<String, dynamic>> verificaAlias({
+      int attesi = 1,
+      int presenti = 1,
+      bool driver = true,
+      bool esatto = false,
+    }) async {
+      file('proc/sys/kernel/osrelease', '6.17.2-fucina-nuovo\n');
+      file(
+        'stato/attesi-6.17.2-fucina-nuovo.json',
+        jsonEncode([
+          for (var i = 0; i < attesi; i++)
+            {
+              'percorso': '/usb/vecchio$i',
+              'modalias': 'hid:modello',
+              'modulo': 'hid_generic',
+              'driver': 'hid-generic',
+            },
+        ]),
+      );
+      for (var i = 0; i < presenti; i++) {
+        final path =
+            'sys/devices/usb/${esatto && i == 0 ? 'vecchio0' : 'nuovo$i'}';
+        file('$path/modalias', 'hid:modello\n');
+        if (driver)
+          Link('$r/$path/driver').createSync('/fake/drivers/hid-generic');
+      }
+      return scaffale().verifica();
+    }
+
+    test('ritrova HID a un percorso nuovo per alias univoco', () async {
+      final v = await verificaAlias();
+      expect(v['aPosto'], 1);
+      expect(v['assenti'], isEmpty);
+      expect((v['ricollocati'] as List).single['metodo'], 'modalias-univoco');
+    });
+    test('HID ricollocato senza driver resta un problema', () async {
+      final v = await verificaAlias(driver: false);
+      expect(v['aPosto'], 0);
+      expect(v['orfani'], hasLength(1));
+    });
+    test('un solo HID non copre due periferiche attese', () async {
+      final v = await verificaAlias(attesi: 2);
+      expect(v['aPosto'], 0);
+      expect(v['assenti'], hasLength(2));
+      expect(v['ambigui'], hasLength(2));
+    });
+    test(
+      'due modelli identici non vengono assegnati arbitrariamente',
+      () async {
+        final v = await verificaAlias(presenti: 2);
+        expect(v['aPosto'], 0);
+        expect(v['ambigui'], hasLength(1));
+      },
+    );
+    test('il percorso esatto viene riservato prima del fallback', () async {
+      final v = await verificaAlias(attesi: 2, presenti: 1, esatto: true);
+      expect(v['aPosto'], 1);
+      expect(v['assenti'], hasLength(1));
+      expect(v['ricollocati'], isEmpty);
+    });
+
     test('sul kernel della distribuzione non si applica, e lo dice', () async {
       final v = await scaffale().verifica();
       expect(v['applicabile'], isFalse);
@@ -83,20 +266,38 @@ void main() {
 
     test('trova i dispositivi rimasti senza driver', () async {
       file('proc/sys/kernel/osrelease', '6.17.2-fucina-nuovo\n');
-      file('stato/attesi-6.17.2-fucina-nuovo.json', jsonEncode([
-        {'percorso': '/pci0000:00/audio', 'modalias': 'pci:a',
-         'driver': 'snd_hda_intel', 'modulo': 'snd_hda_intel'},
-        {'percorso': '/pci0000:00/rete', 'modalias': 'pci:b',
-         'driver': 'r8169', 'modulo': 'r8169'},
-        {'percorso': '/usb1/chiavetta', 'modalias': 'usb:c',
-         'driver': 'usb-storage', 'modulo': 'usb_storage'},
-      ]));
+      file(
+        'stato/attesi-6.17.2-fucina-nuovo.json',
+        jsonEncode([
+          {
+            'percorso': '/pci0000:00/audio',
+            'modalias': 'pci:a',
+            'driver': 'snd_hda_intel',
+            'modulo': 'snd_hda_intel',
+          },
+          {
+            'percorso': '/pci0000:00/rete',
+            'modalias': 'pci:b',
+            'driver': 'r8169',
+            'modulo': 'r8169',
+          },
+          {
+            'percorso': '/usb1/chiavetta',
+            'modalias': 'usb:c',
+            'driver': 'usb-storage',
+            'modulo': 'usb_storage',
+          },
+        ]),
+      );
       // L'audio ha ancora il driver; la rete c'è ma senza; la chiavetta non
       // c'è proprio.
       Directory('$r/sys/devices/pci0000:00/audio').createSync(recursive: true);
-      Directory('$r/sys/bus/pci/drivers/snd_hda_intel').createSync(recursive: true);
-      Link('$r/sys/devices/pci0000:00/audio/driver')
-          .createSync('../../../bus/pci/drivers/snd_hda_intel');
+      Directory(
+        '$r/sys/bus/pci/drivers/snd_hda_intel',
+      ).createSync(recursive: true);
+      Link(
+        '$r/sys/devices/pci0000:00/audio/driver',
+      ).createSync('../../../bus/pci/drivers/snd_hda_intel');
       Directory('$r/sys/devices/pci0000:00/rete').createSync(recursive: true);
 
       final v = await scaffale().verifica();
@@ -110,9 +311,12 @@ void main() {
   group('AutoFDO: lo scaffale sa chi è pronto al profilo', () {
     test('dal vmlinux messo da parte e dal profilo accanto', () async {
       file('lavoro/profili/6.17.2-fucina-nuovo/vmlinux', 'V');
-      file('lavoro/uscita/6.17.2-fucina-nuovo-afdo/fucina.json', jsonEncode({
-        'scelte': {'profilo': '6.17.2-fucina-nuovo'},
-      }));
+      file(
+        'lavoro/uscita/6.17.2-fucina-nuovo-afdo/fucina.json',
+        jsonEncode({
+          'scelte': {'profilo': '6.17.2-fucina-nuovo'},
+        }),
+      );
       var k = {
         for (final x in (await scaffale().elenco())['kernel'] as List)
           x['rilascio']: x,
@@ -120,7 +324,10 @@ void main() {
       expect(k['6.17.2-fucina-nuovo']['prontoAlProfilo'], isTrue);
       expect(k['6.17.2-fucina-nuovo']['profilo'], isFalse);
       expect(k['6.17.2-fucina-vecchio']['prontoAlProfilo'], isFalse);
-      expect(k['6.17.2-fucina-nuovo-afdo']['colProfiloDi'], '6.17.2-fucina-nuovo');
+      expect(
+        k['6.17.2-fucina-nuovo-afdo']['colProfiloDi'],
+        '6.17.2-fucina-nuovo',
+      );
       file('lavoro/profili/6.17.2-fucina-nuovo/autofdo.prof', 'P');
       k = {
         for (final x in (await scaffale().elenco())['kernel'] as List)
@@ -144,14 +351,19 @@ void main() {
         lavoro: lavoro,
         statoDir: statoDir,
         scaffale: scaffale(),
-        nuovoRilevatore: (racconta) =>
-            Rilevatore(radice: r, ambiente: {'HOME': '$r/casa'}, nuclei: 4),
+        nuovoRilevatore: (racconta, modaliasStorici) => Rilevatore(
+          radice: r,
+          ambiente: {'HOME': '$r/casa'},
+          nuclei: 4,
+          modaliasStorici: modaliasStorici,
+        ),
         radice: (verbo, argomenti) async {
           chiesti.add([verbo, argomenti]);
           return {
             'ok': true,
             'uscita': utf8.encode(
-                'fatto ${FucinaService.cartellaRegistrazioni}/$nostro.data\n'),
+              'fatto ${FucinaService.cartellaRegistrazioni}/$nostro.data\n',
+            ),
           };
         },
         esegui: (e, a) async {
@@ -168,36 +380,56 @@ void main() {
       file('lavoro/profili/$nostro/vmlinux', 'VMLINUX');
     });
 
-    test('registra da root col tipo di processore, poi converte come te',
-        () async {
-      final s = servizio();
-      final e = await s.profila(nostro, 10);
-      expect(e['ok'], isTrue, reason: '$e');
-      expect(chiesti.single, ['fucina-profila', ['600', 'intel']]);
-      expect(lanciati.single, [
-        'llvm-profgen', '--kernel', '--binary=$lavoro/profili/$nostro/vmlinux',
-        '--perfdata=${FucinaService.cartellaRegistrazioni}/$nostro.data',
-        '-o', '$lavoro/profili/$nostro/autofdo.prof.nuovo',
-      ]);
-      expect(File('$lavoro/profili/$nostro/autofdo.prof').readAsStringSync(),
-          'llvm-profgen\n');
-      expect(e['sommato'], isFalse);
-    });
+    test(
+      'registra da root col tipo di processore, poi converte come te',
+      () async {
+        final s = servizio();
+        final e = await s.profila(nostro, 10);
+        expect(e['ok'], isTrue, reason: '$e');
+        expect(chiesti.single, [
+          'fucina-profila',
+          ['600', 'intel'],
+        ]);
+        expect(lanciati.single, [
+          'llvm-profgen',
+          '--kernel',
+          '--binary=$lavoro/profili/$nostro/vmlinux',
+          '--perfdata=${FucinaService.cartellaRegistrazioni}/$nostro.data',
+          '-o',
+          '$lavoro/profili/$nostro/autofdo.prof.nuovo',
+        ]);
+        expect(
+          File('$lavoro/profili/$nostro/autofdo.prof').readAsStringSync(),
+          'llvm-profgen\n',
+        );
+        expect(e['sommato'], isFalse);
+      },
+    );
 
-    test('la seconda volta il profilo nuovo si somma a quello di prima',
-        () async {
-      file('lavoro/profili/$nostro/autofdo.prof', 'VECCHIO');
-      final s = servizio();
-      final e = await s.profila(nostro, 5);
-      expect(e['ok'], isTrue, reason: '$e');
-      expect(e['sommato'], isTrue);
-      expect(lanciati.last.take(4),
-          ['llvm-profdata', 'merge', '--sample', '--extbinary']);
-      expect(File('$lavoro/profili/$nostro/autofdo.prof').readAsStringSync(),
-          'llvm-profdata\n');
-      expect(File('$lavoro/profili/$nostro/autofdo.prof.nuovo').existsSync(),
-          isFalse);
-    });
+    test(
+      'la seconda volta il profilo nuovo si somma a quello di prima',
+      () async {
+        file('lavoro/profili/$nostro/autofdo.prof', 'VECCHIO');
+        final s = servizio();
+        final e = await s.profila(nostro, 5);
+        expect(e['ok'], isTrue, reason: '$e');
+        expect(e['sommato'], isTrue);
+        expect(lanciati.last.take(4), [
+          'llvm-profdata',
+          'merge',
+          '--sample',
+          '--extbinary',
+        ]);
+        expect(
+          File('$lavoro/profili/$nostro/autofdo.prof').readAsStringSync(),
+          'llvm-profdata\n',
+        );
+        expect(
+          File('$lavoro/profili/$nostro/autofdo.prof.nuovo').existsSync(),
+          isFalse,
+        );
+      },
+    );
 
     test('i minuti restano fra 1 e 60', () async {
       final s = servizio();
@@ -254,46 +486,63 @@ void main() {
       );
     }
 
-    test('installa un kernel pronto passando il nome e la SUA cartella',
-        () async {
-      final s = servizio();
-      final e = await s.installa('6.17.2-fucina-nuovo');
-      expect(e['ok'], isTrue);
-      expect(e['note'], ['nota: fatto']);
-      expect(chiesti.single[0], 'fucina-installa');
-      expect(chiesti.single[1],
-          ['$lavoro/uscita/6.17.2-fucina-nuovo', '6.17.2-fucina-nuovo']);
-    });
+    test(
+      'installa un kernel pronto passando il nome e la SUA cartella',
+      () async {
+        final s = servizio();
+        final e = await s.installa('6.17.2-fucina-nuovo');
+        expect(e['ok'], isTrue);
+        expect(e['note'], ['nota: fatto']);
+        expect(chiesti.single[0], 'fucina-installa');
+        expect(chiesti.single[1], [
+          '$lavoro/uscita/6.17.2-fucina-nuovo',
+          '6.17.2-fucina-nuovo',
+        ]);
+      },
+    );
 
     test('non installa un nome che non è nostro, né uno non pronto', () async {
       final s = servizio();
-      for (final n in ['6.17.2-arch1-1', '../../etc', '6.17.2-fucina-vecchio',
-                       null, 42]) {
+      for (final n in [
+        '6.17.2-arch1-1',
+        '../../etc',
+        '6.17.2-fucina-vecchio',
+        null,
+        42,
+      ]) {
         final e = await s.installa(n);
         expect(e['ok'], isFalse, reason: '$n');
       }
-      expect(chiesti, isEmpty, reason: 'root non deve nemmeno sentirne parlare');
+      expect(
+        chiesti,
+        isEmpty,
+        reason: 'root non deve nemmeno sentirne parlare',
+      );
     });
 
-    test('non toglie il kernel in uso, né quello della distribuzione',
-        () async {
-      final s = servizio();
-      expect((await s.togli('6.17.2-arch1-1'))['ok'], isFalse);
-      file('proc/sys/kernel/osrelease', '6.17.2-fucina-vecchio\n');
-      final e = await s.togli('6.17.2-fucina-vecchio');
-      expect(e['ok'], isFalse);
-      expect(e['errore'], contains('stai usando'));
-      expect(chiesti, isEmpty);
-    });
+    test(
+      'non toglie il kernel in uso, né quello della distribuzione',
+      () async {
+        final s = servizio();
+        expect((await s.togli('6.17.2-arch1-1'))['ok'], isFalse);
+        file('proc/sys/kernel/osrelease', '6.17.2-fucina-vecchio\n');
+        final e = await s.togli('6.17.2-fucina-vecchio');
+        expect(e['ok'], isFalse);
+        expect(e['errore'], contains('stai usando'));
+        expect(chiesti, isEmpty);
+      },
+    );
 
     test('toglie uno dei nostri, per nome', () async {
       final s = servizio();
       expect((await s.togli('6.17.2-fucina-vecchio'))['ok'], isTrue);
-      expect(chiesti.single, ['fucina-togli', ['6.17.2-fucina-vecchio']]);
+      expect(chiesti.single, [
+        'fucina-togli',
+        ['6.17.2-fucina-vecchio'],
+      ]);
     });
 
-    test('mentre si installa non si può compilare: riscriverebbe i file',
-        () async {
+    test('non sovrappone rimozione e installazione', () async {
       final radiceLenta = Completer<Map<String, dynamic>>();
       final s = FucinaService(
         lavoro: lavoro,
@@ -301,21 +550,60 @@ void main() {
         scaffale: scaffale(),
         radice: (_, _) => radiceLenta.future,
       );
-      final installa = s.installa('6.17.2-fucina-nuovo');
-      final avvia = await s.avvia({'nome': 'nuovo', 'versione': '6.17.2'});
-      expect(avvia['ok'], isFalse);
-      expect(avvia['errore'], contains('installazione'));
-      final seconda = await s.installa('6.17.2-fucina-nuovo');
-      expect(seconda['ok'], isFalse);
+      final rimozione = s.togli('6.17.2-fucina-vecchio');
+      final installazione = await s.installa('6.17.2-fucina-nuovo');
+      expect(installazione['ok'], isFalse);
+      expect(installazione['errore'], contains('operazione sui kernel'));
       radiceLenta.complete({'ok': true, 'uscita': <int>[]});
-      expect((await installa)['ok'], isTrue);
+      expect((await rimozione)['ok'], isTrue);
     });
 
+    test('non avvia due rimozioni privilegiate insieme', () async {
+      final radiceLenta = Completer<Map<String, dynamic>>();
+      final s = FucinaService(
+        lavoro: lavoro,
+        statoDir: statoDir,
+        scaffale: scaffale(),
+        radice: (_, _) => radiceLenta.future,
+      );
+      final prima = s.togli('6.17.2-fucina-vecchio');
+      final seconda = await s.togli('6.17.2-fucina-vecchio');
+      expect(seconda['ok'], isFalse);
+      expect(seconda['errore'], contains('operazione sui kernel'));
+      radiceLenta.complete({'ok': true, 'uscita': <int>[]});
+      expect((await prima)['ok'], isTrue);
+    });
+
+    test(
+      'mentre si installa non si può compilare: riscriverebbe i file',
+      () async {
+        final radiceLenta = Completer<Map<String, dynamic>>();
+        final s = FucinaService(
+          lavoro: lavoro,
+          statoDir: statoDir,
+          scaffale: scaffale(),
+          radice: (_, _) => radiceLenta.future,
+        );
+        final installa = s.installa('6.17.2-fucina-nuovo');
+        final avvia = await s.avvia({'nome': 'nuovo', 'versione': '6.17.2'});
+        expect(avvia['ok'], isFalse);
+        expect(avvia['errore'], contains('installazione'));
+        final seconda = await s.installa('6.17.2-fucina-nuovo');
+        expect(seconda['ok'], isFalse);
+        radiceLenta.complete({'ok': true, 'uscita': <int>[]});
+        expect((await installa)['ok'], isTrue);
+      },
+    );
+
     test('un kernel che in QEMU non è partito non si installa', () async {
-      file('lavoro/uscita/6.17.2-fucina-nuovo/fucina.json', jsonEncode({
-        'quando': '2026-10-01T08:00:00',
-        'provaAvvio': {'ok': false, 'perche': 'panico'},
-      }));
+      file(
+        'lavoro/uscita/6.17.2-fucina-nuovo/fucina.json',
+        jsonEncode({
+          'rilascio': '6.17.2-fucina-nuovo',
+          'quando': '2026-10-01T08:00:00',
+          'provaAvvio': {'ok': false, 'perche': 'panico'},
+        }),
+      );
       final s = servizio();
       final e = await s.installa('6.17.2-fucina-nuovo');
       expect(e['ok'], isFalse);
@@ -328,8 +616,11 @@ void main() {
         lavoro: lavoro,
         statoDir: statoDir,
         scaffale: scaffale(),
-        radice: (_, _) async =>
-            {'ok': false, 'annullato': true, 'error': 'Annullato.'},
+        radice: (_, _) async => {
+          'ok': false,
+          'annullato': true,
+          'error': 'Annullato.',
+        },
       );
       final e = await s.togli('6.17.2-fucina-vecchio');
       expect(e['ok'], isFalse);
@@ -337,4 +628,3 @@ void main() {
     });
   });
 }
-

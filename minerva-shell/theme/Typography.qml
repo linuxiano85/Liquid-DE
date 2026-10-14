@@ -15,7 +15,7 @@ import QtQuick
 //
 // ── Il 3 settembre 2026: perché sono cambiate tutte e due ────────────────
 //
-// Giacomo: «un sacco di gente sta dicendo che sembra vecchio già dalla sua
+// il manutentore: «un sacco di gente sta dicendo che sembra vecchio già dalla sua
 // creazione [...] dicono che ha un aspetto brutto e superato».
 //
 // Erano Rajdhani e Share Tech Mono. Sono due caratteri belli e sono anche una
@@ -29,7 +29,7 @@ import QtQuick
 // La cosa che si è vista solo mettendo in fila i numeri. Rajdhani è
 // condensato e ha aste sottili, quindi:
 //
-//   · a corpo 14 il testo LEGGEVA grigio (Giacomo, 10 agosto) benché il
+//   · a corpo 14 il testo LEGGEVA grigio (il manutentore, 10 agosto) benché il
 //     colore fosse giusto — e la cura è stata portare il corpo a 500;
 //   · così `weightRegular` e `weightMedium` sono diventati **lo stesso
 //     numero**, in 263 punti che chiedevano due pesi diversi e ne
@@ -46,7 +46,7 @@ import QtQuick
 //
 // Rimettendo `Rajdhani` e `Share Tech Mono` qui sotto, `weightRegular` a 500 e
 // le crenature a 1.6 / 0.9 / 0.5 / 1.2. Sono sei righe: è una scelta di
-// Giacomo, e deve restare facile da disfare.
+// il manutentore, e deve restare facile da disfare.
 //
 // La scala è più ampia di quella precedente. I 10–12px di prima erano scelti
 // per far stare tutto; il risultato era denso e faticoso. Meglio mostrare meno
@@ -64,13 +64,17 @@ QtObject {
     // si legge come «adesso» e non come un'epoca. Ha tutti i pesi, dal
     // ExtraLight al Black, e questo conta: la gerarchia qui sotto ne usa
     // quattro, e con Rajdhani due di quei quattro erano lo stesso.
-    readonly property string fontDisplay: "Adwaita Sans"
+    // Una presentazione presa in prestito (vedi `Colors.qml`) può chiedere
+    // un'altra faccia: le Impostazioni nel preset Windows usano quella di
+    // Windows 11. Vuota, di serie, resta Adwaita Sans.
+    property string carattere: ""
+    readonly property string fontDisplay: carattere !== "" ? carattere : "Adwaita Sans"
     readonly property string fontMono:    "Noto Sans Mono"
 
     // ── Scala ────────────────────────────────────────────────────────────
     // ── Alzata di un punto, il 2 agosto 2026 ─────────────────────────────
     //
-    // Giacomo: «rendi i caratteri leggermente più grandi di base, sono poco
+    // il manutentore: «rendi i caratteri leggermente più grandi di base, sono poco
     // leggibili». Un punto per gradino, non due: la scala deve restare la
     // stessa proporzione, e Rajdhani è un condensato — cresce in altezza più
     // che in larghezza, quindi un punto si sente più di quanto sembri.
@@ -98,7 +102,7 @@ QtObject {
     //
     // ── PERCHÉ IL CORPO DEL TESTO È MEDIUM E NON REGULAR ─────────────────
     //
-    // Giacomo, 10 agosto 2026: «il testo dovrebbe essere più bianco perché
+    // il manutentore, 10 agosto 2026: «il testo dovrebbe essere più bianco perché
     // allo stato attuale sembra grigio e quindi non ben visibile».
     //
     // Il colore era già giusto, e si può dimostrare: il testo di Minerva sul

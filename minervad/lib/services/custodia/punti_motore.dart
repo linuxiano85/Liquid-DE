@@ -10,7 +10,7 @@ import '../../core/minerva_paths.dart';
 /// un istante — `.git` compreso, la roba compilata compresa, i file che git non
 /// ha mai visto compresi, le prove lasciate a metà comprese.
 ///
-/// Sono cose diverse e servono a momenti diversi. Quando Giacomo scrive
+/// Sono cose diverse e servono a momenti diversi. Quando il manutentore scrive
 /// «se rompiamo qualcosa possiamo tornare ad un backup del progetto
 /// precedente», sta parlando di **questo**, non di un commit: quello che si
 /// rompe, di solito, è proprio la roba che git non guarda.
@@ -28,7 +28,7 @@ import '../../core/minerva_paths.dart';
 /// Otto kilobyte. È il motivo per cui questo programma può permettersi di
 /// prendere un punto di ritorno **prima di ogni singola operazione
 /// pericolosa**, senza chiedere il permesso e senza far pesare la scelta a
-/// nessuno. Le quattro copie che Giacomo si era fatto a mano in
+/// nessuno. Le quattro copie che il manutentore si era fatto a mano in
 /// `Documenti/Progetti/Minerva-Copie/` costano 114 MB e ci sono solo perché lui
 /// si è ricordato di farle.
 ///
@@ -60,7 +60,7 @@ class PuntiMotore {
   // ── Il nome di un punto ────────────────────────────────────────────────
   //
   // `2026-08-24_1725_prima-della-custodia`. Data, ora, e cosa stavi per fare —
-  // che è esattamente la convenzione che Giacomo aveva già inventato da solo
+  // che è esattamente la convenzione che il manutentore aveva già inventato da solo
   // per i suoi archivi. Non la cambio: era giusta.
   //
   // La nota diventa un **nome di cartella**, e un nome di cartella che arriva

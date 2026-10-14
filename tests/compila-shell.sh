@@ -15,6 +15,7 @@ set -eu
 
 QUI="$(cd "$(dirname "$0")/.." && pwd)"
 SHELL_DIR="$QUI/minerva-shell"
+export QML_IMPORT_PATH="$SHELL_DIR/native${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}"
 PROVA="$SHELL_DIR/_prova_compila.qml"
 trap 'rm -f "$PROVA"' EXIT INT TERM
 

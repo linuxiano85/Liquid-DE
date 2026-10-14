@@ -11,6 +11,7 @@ import '../services/manutenzione/escluse.dart';
 import '../services/manutenzione/setaccio.dart';
 import '../core/settings_api.dart';
 import '../providers/compositor_provider.dart';
+import '../providers/minerva/minerva_provider.dart';
 import '../services/app_scanner.dart';
 import '../services/desktop_launcher.dart';
 import '../services/vetro.dart';
@@ -32,15 +33,19 @@ import '../services/greetd_conversation.dart';
 import '../services/accesso_service.dart';
 import '../services/gestori_accesso_service.dart';
 import '../services/radice_service.dart';
+import '../services/liquid_update_service.dart';
 import '../services/schermi_esterni.dart';
 import '../services/trasmetti_service.dart';
 import '../services/account_service.dart';
 import '../services/custodia_service.dart';
 import '../services/archive_service.dart';
+import '../services/luoghi_remoti.dart';
 import '../services/autostart_service.dart';
 import '../services/data_ora_service.dart';
 import '../services/lingua_service.dart';
 import '../services/meteo_service.dart';
+import '../services/radio_service.dart';
+import '../services/notizie_service.dart';
 import '../services/ricerca_service.dart';
 import '../services/system_audio_service.dart';
 import '../services/condivisione_service.dart';
@@ -49,6 +54,8 @@ import '../services/bluetooth_pairing_service.dart';
 import '../services/tema_icone_service.dart';
 import '../services/foto_service.dart';
 import '../services/fucina_service.dart';
+import '../services/fucina/target_compilatori.dart';
+import '../services/fucina/risorse_compilazione.dart';
 import 'canale_segreto.dart';
 import 'lanciatori.dart';
 import 'righe.dart';
@@ -120,8 +127,10 @@ class WebSocketServer {
     final v = detto?.trim() ?? '';
     if (v.isEmpty) return socketPredefinito();
     if (!v.startsWith('/')) {
-      print('[MINERVA][IPC][WARN] MINERVA_IPC_SOCKET="$detto" non è un '
-          'percorso completo: uso ${socketPredefinito()}');
+      print(
+        '[MINERVA][IPC][WARN] MINERVA_IPC_SOCKET="$detto" non è un '
+        'percorso completo: uso ${socketPredefinito()}',
+      );
       return socketPredefinito();
     }
     // ── Il limite che non si vede finché non si supera ──────────────────
@@ -130,9 +139,11 @@ class WebSocketServer {
     // è un limite del kernel, non di Dart. Un percorso più lungo non dà un
     // errore chiaro: dà un `bind` fallito con un messaggio che parla d'altro.
     if (v.length > 100) {
-      print('[MINERVA][IPC][WARN] MINERVA_IPC_SOCKET è troppo lungo '
-          '(${v.length} caratteri, il massimo è 100): uso '
-          '${socketPredefinito()}');
+      print(
+        '[MINERVA][IPC][WARN] MINERVA_IPC_SOCKET è troppo lungo '
+        '(${v.length} caratteri, il massimo è 100): uso '
+        '${socketPredefinito()}',
+      );
       return socketPredefinito();
     }
     return v;
@@ -153,8 +164,10 @@ class WebSocketServer {
   final CompositorProvider _compositorProvider;
   final AppScanner _appScanner;
   late final DesktopLauncher _desktopLauncher = DesktopLauncher(
-    parse: (path, content) => _appScanner.parseContent(path, content, launcherOnly: true),
-    commandFor: (app) => app.needsTerminal ? dentroUnTerminale(app.exec) : app.exec,
+    parse: (path, content) =>
+        _appScanner.parseContent(path, content, launcherOnly: true),
+    commandFor: (app) =>
+        app.needsTerminal ? dentroUnTerminale(app.exec) : app.exec,
   );
   final IconResolver _iconResolver;
   final AppUsageTracker _appUsageTracker;
@@ -166,10 +179,17 @@ class WebSocketServer {
   /// Le cartelle aperte nei riquadri del gestore file, guardate con inotify:
   /// quando cambiano da fuori, il riquadro rilegge (`fs_changed`).
   late final OsservatoreCartelle _osservatore = OsservatoreCartelle(
-      (client, messaggio) => (client as WebSocketClientConnection).send(messaggio));
+    (client, messaggio) =>
+        (client as WebSocketClientConnection).send(messaggio),
+  );
+  final LiquidUpdateService _liquidUpdate = LiquidUpdateService();
+  StreamSubscription<Map<String, dynamic>>? _liquidUpdateSub;
   final RicercaService _ricerca = RicercaService();
   final RecentiService _recenti = RecentiService();
   final MiniatureService _miniature = MiniatureService();
+
+  /// Cartelle di rete e telefoni, attraverso gvfs.
+  final LuoghiRemoti _luoghiRemoti = LuoghiRemoti();
 
   /// La galleria. Non tiene stato fra una richiesta e l'altra tranne il
   /// catalogo, che è esattamente il punto: caricarlo una volta e riusarlo.
@@ -190,6 +210,7 @@ class WebSocketServer {
   /// perché restano accesi per tutto il giorno mentre il Monitor si apre e si
   /// chiude.
   final Set<WebSocketClientConnection> _iscrittiMacchina = {};
+
   /// Il socket su cui si ascolta davvero. Non c'è più niente da cercare: il
   /// percorso contiene il nome della sessione, quindi due demoni non si
   /// incontrano. Vedi `_ascolta`.
@@ -203,7 +224,10 @@ class WebSocketServer {
 
   /// Mandare un file fuori di qui: Bluetooth, posta. Ha bisogno di `_mime`
   /// per sapere chi gestisce `mailto:`, e quindi si costruisce dopo di lui.
-  late final CondivisioneService _condivisione = CondivisioneService(_mime, _trasmetti);
+  late final CondivisioneService _condivisione = CondivisioneService(
+    _mime,
+    _trasmetti,
+  );
 
   /// Accoppiare un dispositivo che vuole confrontare un codice — un telefono.
   /// Tiene una sessione di `bluetoothctl` aperta per volta, quindi è uno solo
@@ -228,7 +252,9 @@ class WebSocketServer {
     automatico: () =>
         _settingsApi.getValue('input.controllerAutomatico', true) == true,
     tipo: () => _settingsApi.getString(
-        'input.controllerTipo', ControllerService.tipoPredefinito),
+      'input.controllerTipo',
+      ControllerService.tipoPredefinito,
+    ),
     perPad: () {
       final v = _settingsApi.getValue('input.controllerPad');
       return v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
@@ -268,7 +294,7 @@ class WebSocketServer {
         'ok': false,
         'error': trovati.isEmpty
             ? 'Nessun televisore in rete. Deve essere acceso e sulla stessa '
-                'rete di questo computer.'
+                  'rete di questo computer.'
             : 'Non trovo «$id» fra i televisori accesi.',
       },
     });
@@ -278,7 +304,12 @@ class WebSocketServer {
   /// Minerva Fucina: kernel su misura per questo computer. Compila come te,
   /// nella tua cache; installare e togliere passano dall'aiutante di root,
   /// che riceve una funzione e basta. Vedi `services/fucina_service.dart`.
-  late final FucinaService _fucina = FucinaService(radice: _radice.chiedi);
+  late final FucinaService _fucina = FucinaService(
+    radice: _radice.chiedi,
+    statoAmministrazione: _radice.statoFucina,
+    targetCompilatori: TargetCompilatori().leggi,
+    risorseCompilazione: const RisorseCompilazione().leggi,
+  );
 
   /// Chi guarda la Fucina riceve il racconto della compilazione in corso.
   ///
@@ -300,8 +331,9 @@ class WebSocketServer {
     });
   }
 
-  late final TrasmettiService _trasmetti =
-      TrasmettiService(permesso: _radice.chiedi);
+  late final TrasmettiService _trasmetti = TrasmettiService(
+    permesso: _radice.chiedi,
+  );
 
   /// La Custodia: la storia e la sicurezza delle cartelle di chi usa Minerva.
   /// Vive qui e non nella shell perché tutto quello che può perdere lavoro sta
@@ -326,16 +358,16 @@ class WebSocketServer {
   final Escluse _escluse = Escluse();
 
   Inventario _perChiGuarda(WebSocketClientConnection client) => Inventario(
-        racconta: (fase, testo, fatte, quante) => client.send({
-          'event': 'manutenzione_passo',
-          'payload': {
-            'fase': fase,
-            'testo': testo,
-            'fatte': fatte,
-            'quante': quante,
-          },
-        }),
-      );
+    racconta: (fase, testo, fatte, quante) => client.send({
+      'event': 'manutenzione_passo',
+      'payload': {
+        'fase': fase,
+        'testo': testo,
+        'fatte': fatte,
+        'quante': quante,
+      },
+    }),
+  );
 
   /// Gli account online. Lo stesso registro che la Custodia userà
   /// come destinazioni: uno solo, o si finisce a collegare kDrive due
@@ -354,18 +386,25 @@ class WebSocketServer {
   /// vedi la testa di `meteo_service.dart` per che cosa esce da qui.
   final MeteoService _meteo = MeteoService();
 
+  /// Le radio di Minerva Media: vedi la testa di `radio_service.dart`.
+  final RadioService _radio = RadioService();
+
+  /// Le notizie della bacheca Widget: vedi la testa di `notizie_service.dart`.
+  final NotizieService _notizie = NotizieService();
+
   /// Il dialogo con greetd. Nasce alla PRIMA richiesta del greeter e non
   /// prima: in una sessione normale `GREETD_SOCK` non esiste, e un servizio
   /// che prova a connettersi a ogni avvio scriverebbe un avviso nel registro
   /// di ogni demone che gira sul computer.
-  late final _greetdConversation = GreetdConversation<WebSocketClientConnection>(
-    GreetdService(),
-    (client, reply) {
-      if (_clients.contains(client)) {
-        client.send({'event': 'greeter_message', 'payload': reply});
-      }
-    },
-  );
+  late final _greetdConversation =
+      GreetdConversation<WebSocketClientConnection>(GreetdService(), (
+        client,
+        reply,
+      ) {
+        if (_clients.contains(client)) {
+          client.send({'event': 'greeter_message', 'payload': reply});
+        }
+      });
 
   // ── Tre risposte che si ricalcolavano da capo ogni volta ────────────────
   //
@@ -375,16 +414,21 @@ class WebSocketServer {
   // ha un filo solo: quei millisecondi sono fermi per TUTTE le finestre, non
   // solo per chi ha chiesto. Vedi `core/ricorda_un_po.dart`.
   final _fontRicordati = RicordaUnPo<List<String>>(const Duration(seconds: 30));
-  final _formatiRicordati =
-      RicordaUnPo<Map<String, dynamic>>(const Duration(seconds: 30));
+  final _formatiRicordati = RicordaUnPo<Map<String, dynamic>>(
+    const Duration(seconds: 30),
+  );
   // Questo si dimentica a mano: cambiare il programma predefinito di un tipo
   // di file CAMBIA la risposta, e mezzo minuto di attesa per vedere la propria
   // scelta sarebbe un difetto peggiore del costo che toglie.
-  final _categorieRicordate =
-      RicordaUnPo<List<dynamic>>(const Duration(seconds: 30));
+  final _categorieRicordate = RicordaUnPo<List<dynamic>>(
+    const Duration(seconds: 30),
+  );
 
   Future<void> _greetdRichiesta(
-      WebSocketClientConnection client, String action, Map message) async {
+    WebSocketClientConnection client,
+    String action,
+    Map message,
+  ) async {
     await _greetdConversation.handle(client, action, message);
   }
 
@@ -398,7 +442,7 @@ class WebSocketServer {
   ///
   /// ── Perché serve, e perché non lo può fare la shell ────────────────────
   ///
-  /// Sulla scrivania di Giacomo c'erano cinque quadrati azzurri identici
+  /// Sulla scrivania di il manutentore c'erano cinque quadrati azzurri identici
   /// chiamati `steam.desktop`, `Tomba! Special Edition.desktop`, `Tomb Raider
   /// I-III Remastered Starring Lara Croft.desktop`. Un file `.desktop` non È
   /// un file: è il biglietto da visita di un programma, e mostrarne il nome
@@ -530,8 +574,10 @@ class WebSocketServer {
     if (Ambiente.eGreeter) return;
 
     _iconMap = resolveMinervaIcons(_iconResolver);
-    print('[MINERVA][MATRIX][INFO] Icone classiche pronte: '
-        '${_iconMap.length}/${minervaIconNames.length} da "${_iconResolver.activeTheme}"');
+    print(
+      '[MINERVA][MATRIX][INFO] Icone classiche pronte: '
+      '${_iconMap.length}/${minervaIconNames.length} da "${_iconResolver.activeTheme}"',
+    );
   }
 
   /// L'elenco dei programmi come lo vede la shell, con le icone GIÀ risolte
@@ -543,51 +589,51 @@ class WebSocketServer {
   /// faceva restare la dock con le icone di prima — vedi
   /// `_applyIconThemeFromSettings()`.
   List<Map<String, dynamic>> get _allAppsPayload => [
-        for (final app in _appScanner.apps)
-          {
-            'appId': app.id,
-            'name': app.name,
-            'exec': app.exec,
-            // «Apri una nuova finestra» della dock (azione `new-window`).
-            'nuovaFinestra': app.nuovaFinestra,
-            'icon': _iconResolver.resolve(app.icon),
-            'categories': app.categories,
-            'isNew': _appScanner.novita.nuove.contains(app.id),
-            // La classe che la finestra dichiarerà al compositore: è ciò che
-            // permette alla dock di legare una finestra aperta alla sua icona
-            // invece di mostrare un quadrato con l'iniziale.
-            'wmClass': app.wmClass,
-            // Per cercare un'app per quello che FA, non solo per nome: «browser»,
-            // «navigatore», «navigare il web». Sono le parole che il programma
-            // dichiara nel suo `.desktop`, nella lingua dell'utente.
-            'generico': app.generico,
-            'descrizione': app.descrizione,
-            'parole': app.parole,
-            'lanci': _appUsageTracker.lanci(app.id),
-            'adesso': _appUsageTracker.adesso(app.id),
-          }
-      ];
+    for (final app in _appScanner.apps)
+      {
+        'appId': app.id,
+        'name': app.name,
+        'exec': app.exec,
+        // «Apri una nuova finestra» della dock (azione `new-window`).
+        'nuovaFinestra': app.nuovaFinestra,
+        'icon': _iconResolver.resolve(app.icon),
+        'categories': app.categories,
+        'isNew': _appScanner.novita.nuove.contains(app.id),
+        // La classe che la finestra dichiarerà al compositore: è ciò che
+        // permette alla dock di legare una finestra aperta alla sua icona
+        // invece di mostrare un quadrato con l'iniziale.
+        'wmClass': app.wmClass,
+        // Per cercare un'app per quello che FA, non solo per nome: «browser»,
+        // «navigatore», «navigare il web». Sono le parole che il programma
+        // dichiara nel suo `.desktop`, nella lingua dell'utente.
+        'generico': app.generico,
+        'descrizione': app.descrizione,
+        'parole': app.parole,
+        'lanci': _appUsageTracker.lanci(app.id),
+        'adesso': _appUsageTracker.adesso(app.id),
+      },
+  ];
 
   Map<String, dynamic> get _iconPayload => {
-        'style': _settingsApi.getString('icons.style', 'minerva'),
-        'theme': _iconResolver.activeTheme,
-        // La FAMIGLIA scelta, non il nome salvato: nelle impostazioni può
-        // esserci ancora «Colloid-Light», scritto quando l'elenco mostrava
-        // anche le varianti, e l'elenco di oggi ha solo «Colloid».
-        'chosen': _iconResolver.chosenTheme,
-        'map': _iconMap,
-        // ── Quanto copre il tema scelto ────────────────────────────────
-        //
-        // Il registro lo scriveva già («71/89 da Colloid») e nessuno lo
-        // leggeva. Giacomo, guardando la barra: «ci sono icone che non si
-        // trovano» — ed è vero, ma finché è una sensazione non si ripara.
-        // Con un numero e un elenco diventa una cosa che si può guardare:
-        // sono i nomi che QUESTO tema non ha, non difetti nostri.
-        'chieste': minervaIconNames.length,
-        'mancanti': (minervaIconNames.keys.toList()
-              ..removeWhere(_iconMap.containsKey))
-            ..sort(),
-      };
+    'style': _settingsApi.getString('icons.style', 'minerva'),
+    'theme': _iconResolver.activeTheme,
+    // La FAMIGLIA scelta, non il nome salvato: nelle impostazioni può
+    // esserci ancora «Colloid-Light», scritto quando l'elenco mostrava
+    // anche le varianti, e l'elenco di oggi ha solo «Colloid».
+    'chosen': _iconResolver.chosenTheme,
+    'map': _iconMap,
+    // ── Quanto copre il tema scelto ────────────────────────────────
+    //
+    // Il registro lo scriveva già («71/89 da Colloid») e nessuno lo
+    // leggeva. il manutentore, guardando la barra: «ci sono icone che non si
+    // trovano» — ed è vero, ma finché è una sensazione non si ripara.
+    // Con un numero e un elenco diventa una cosa che si può guardare:
+    // sono i nomi che QUESTO tema non ha, non difetti nostri.
+    'chieste': minervaIconNames.length,
+    'mancanti':
+        (minervaIconNames.keys.toList()..removeWhere(_iconMap.containsKey))
+          ..sort(),
+  };
 
   /// Il tema di icone scelto in Impostazioni può essere cambiato da qualunque
   /// finestra; chi lo scopre è il demone, leggendo le impostazioni salvate.
@@ -601,12 +647,14 @@ class WebSocketServer {
     // sono disegnati per un fondo preciso, e su quello sbagliato le icone
     // monocromatiche spariscono. Vedi `services/schemi.dart`.
     final scuro = Schemi.eScuro(
-        _settingsApi.getString('shell.scheme', Schemi.predefinito),
-        personaleScuro:
-            _settingsApi.getValue('shell.versoPersonale', true) == true);
+      _settingsApi.getString('shell.scheme', Schemi.predefinito),
+      personaleScuro:
+          _settingsApi.getValue('shell.versoPersonale', true) == true,
+    );
     final cambiatoSfondo = _iconResolver.setInterfacciaScura(scuro);
-    final cambiatoTema =
-        _iconResolver.setTheme(_settingsApi.getString('icons.theme', ''));
+    final cambiatoTema = _iconResolver.setTheme(
+      _settingsApi.getString('icons.theme', ''),
+    );
     if (!cambiatoTema && !cambiatoSfondo) {
       return;
     }
@@ -622,7 +670,7 @@ class WebSocketServer {
     // Passano per due strade diverse perché nascono in due posti diversi — le
     // prime da un elenco di nomi nostro, le seconde dal campo `Icon=` di ogni
     // file `.desktop` — e qui si mandava solo la prima. Il risultato è quello
-    // che Giacomo ha visto: si cambia tema di icone, cambiano le icone della
+    // che il manutentore ha visto: si cambia tema di icone, cambiano le icone della
     // shell, e la dock resta identica. Non era la dock a non ascoltare: erano
     // i percorsi dei programmi a non essere mai stati ricalcolati, perché li
     // si risolveva soltanto rispondendo a `get_all_apps`.
@@ -647,9 +695,9 @@ class WebSocketServer {
     this._processi, {
     String? socket,
     String? fileSegreto,
-  })  : _percorsoSocket = socket ?? socketConfigurato,
-        // ignore: prefer_initializing_formals
-        _fileSegreto = fileSegreto;
+  }) : _percorsoSocket = socket ?? socketConfigurato,
+       // ignore: prefer_initializing_formals
+       _fileSegreto = fileSegreto;
 
   /// Dove scrivere la parola d'ordine, se non nel posto di sempre
   /// (`CanaleSegreto.candidati`). Serve alle prove che accendono il server
@@ -665,10 +713,13 @@ class WebSocketServer {
       // traduzione delle nostre icone in quel tema. Il primo client riceve la
       // mappa già dentro `init_state`, così la barra non compare mai con le
       // icone sbagliate per poi correggersi sotto gli occhi.
-      _iconResolver.setInterfacciaScura(Schemi.eScuro(
+      _iconResolver.setInterfacciaScura(
+        Schemi.eScuro(
           _settingsApi.getString('shell.scheme', Schemi.predefinito),
           personaleScuro:
-              _settingsApi.getValue('shell.versoPersonale', true) == true));
+              _settingsApi.getValue('shell.versoPersonale', true) == true,
+        ),
+      );
       _iconResolver.setTheme(_settingsApi.getString('icons.theme', ''));
       _rebuildIconMap();
 
@@ -691,9 +742,13 @@ class WebSocketServer {
       // percorso; e prima di accettare chiunque, perché un demone che ascolta
       // e non ha ancora una parola d'ordine è un demone che non la chiede.
       _segreto = await CanaleSegreto.scriviNuovo(
-          percorsoFile: _fileSegreto, socket: _percorsoSocket);
-      print('[MINERVA][IPC][OK] Indirizzo del canale in '
-          '${CanaleSegreto.scrittoIn} (sessione «${CanaleSegreto.sessione()}»)');
+        percorsoFile: _fileSegreto,
+        socket: _percorsoSocket,
+      );
+      print(
+        '[MINERVA][IPC][OK] Indirizzo del canale in '
+        '${CanaleSegreto.scrittoIn} (sessione «${CanaleSegreto.sessione()}»)',
+      );
 
       _server!.listen(_handleNewClient);
 
@@ -717,8 +772,10 @@ class WebSocketServer {
           }
           _broadcastEvent(event);
         } catch (e, dove) {
-          print('[MINERVA][IPC][ERRORE] Non sono riuscito a inoltrare '
-              '«${event.type}»: $e');
+          print(
+            '[MINERVA][IPC][ERRORE] Non sono riuscito a inoltrare '
+            '«${event.type}»: $e',
+          );
           print(dove);
         }
       });
@@ -728,9 +785,19 @@ class WebSocketServer {
       // eventi rari a cui ci si iscrive.
       // I pad: chi guarda la pagina riceve i cambi, e il servizio parte
       // subito per accorgersi da solo dei pad che si accendono.
+      _liquidUpdateSub = _liquidUpdate.changes.stream.listen((state) {
+        _aTutti({'event': 'liquid_update', 'payload': state},
+            solo: (client) => client.isSubscribed('liquid_update'));
+      });
+      await _liquidUpdate.init();
+      if (Platform.environment['MINERVA_PROVA'] != '1') {
+        _liquidUpdate.startAutomatic();
+      }
       _controllerSub = _controller.changes.stream.listen((stato) {
-        _aTutti({'event': 'controller_state', 'payload': stato},
-            solo: (c) => c.isSubscribed('controller_state'));
+        _aTutti({
+          'event': 'controller_state',
+          'payload': stato,
+        }, solo: (c) => c.isSubscribed('controller_state'));
       });
       unawaited(_controller.start());
 
@@ -760,12 +827,16 @@ class WebSocketServer {
       //
       // Se il socket è occupato lo si dice per nome, perché è il caso che
       // capita davvero e la causa non si indovina da «Address already in use».
-      print('[MINERVA][IPC][ERRORE] Impossibile ascoltare su '
-          '$_percorsoSocket: $e');
+      print(
+        '[MINERVA][IPC][ERRORE] Impossibile ascoltare su '
+        '$_percorsoSocket: $e',
+      );
       if (e is SocketException && e.osError?.errorCode == 98) {
-        print('[MINERVA][IPC][ERRORE] Il socket è già di qualcuno: c\'è un '
-            'altro minervad acceso su questa stessa sessione. Se questo è il '
-            'greeter, dagli un socket suo con MINERVA_IPC_SOCKET.');
+        print(
+          '[MINERVA][IPC][ERRORE] Il socket è già di qualcuno: c\'è un '
+          'altro minervad acceso su questa stessa sessione. Se questo è il '
+          'greeter, dagli un socket suo con MINERVA_IPC_SOCKET.',
+        );
       }
       rethrow;
     }
@@ -809,25 +880,34 @@ class WebSocketServer {
       // nome — un `MINERVA_IPC_SOCKET` scritto male che punta a un documento —
       // non è un avanzo nostro, e cancellarlo sarebbe distruggere il lavoro
       // di qualcuno per un errore di battitura.
-      final tipo =
-          await FileSystemEntity.type(_percorsoSocket, followLinks: false);
+      final tipo = await FileSystemEntity.type(
+        _percorsoSocket,
+        followLinks: false,
+      );
       if (tipo != FileSystemEntityType.unixDomainSock) {
-        throw StateError('$_percorsoSocket esiste e non è un socket: non lo '
-            'tocco. Scegli un altro percorso con MINERVA_IPC_SOCKET.');
+        throw StateError(
+          '$_percorsoSocket esiste e non è un socket: non lo '
+          'tocco. Scegli un altro percorso con MINERVA_IPC_SOCKET.',
+        );
       }
       if (await _rispondeQualcuno(_percorsoSocket)) {
         throw StateError(
-            'C\'è già un minervad in ascolto su $_percorsoSocket. Due demoni '
-            'sulla stessa sessione non si possono: se questo è il greeter, '
-            'dagli un socket suo con MINERVA_IPC_SOCKET.');
+          'C\'è già un minervad in ascolto su $_percorsoSocket. Due demoni '
+          'sulla stessa sessione non si possono: se questo è il greeter, '
+          'dagli un socket suo con MINERVA_IPC_SOCKET.',
+        );
       }
-      print('[MINERVA][IPC][INFO] $_percorsoSocket era rimasto per terra da un '
-          'avvio precedente e non risponde a nessuno: lo tolgo.');
+      print(
+        '[MINERVA][IPC][INFO] $_percorsoSocket era rimasto per terra da un '
+        'avvio precedente e non risponde a nessuno: lo tolgo.',
+      );
       await file.delete();
     }
 
     final s = await ServerSocket.bind(
-        InternetAddress(_percorsoSocket, type: InternetAddressType.unix), 0);
+      InternetAddress(_percorsoSocket, type: InternetAddressType.unix),
+      0,
+    );
 
     // I permessi del socket sono la serratura, adesso che non c'è più una
     // porta. `$XDG_RUNTIME_DIR` è già 0700 e da solo basterebbe, ma il file
@@ -847,8 +927,10 @@ class WebSocketServer {
   static Future<bool> _rispondeQualcuno(String percorso) async {
     try {
       final s = await Socket.connect(
-          InternetAddress(percorso, type: InternetAddressType.unix), 0,
-          timeout: const Duration(seconds: 2));
+        InternetAddress(percorso, type: InternetAddressType.unix),
+        0,
+        timeout: const Duration(seconds: 2),
+      );
       s.destroy();
       return true;
     } catch (_) {
@@ -870,17 +952,23 @@ class WebSocketServer {
   /// un collegamento, del nostro utente, non scrivibile da gruppo e altri.
   static Future<void> _cartellaNostra(Directory cartella) async {
     final tipo = await FileSystemEntity.type(cartella.path, followLinks: false);
-    final proprietario =
-        await Process.run('stat', ['-c', '%u', '--', cartella.path]);
+    final proprietario = await Process.run('stat', [
+      '-c',
+      '%u',
+      '--',
+      cartella.path,
+    ]);
     final io = await Process.run('id', ['-u']);
     if (tipo == FileSystemEntityType.link ||
         proprietario.exitCode != 0 ||
         io.exitCode != 0 ||
         '${proprietario.stdout}'.trim() != '${io.stdout}'.trim() ||
         ((await cartella.stat()).mode & 0x12) != 0) {
-      throw StateError('La cartella del socket (${cartella.path}) non è una '
-          'cartella privata di questo utente: non ci ascolto. Dev\'essere '
-          'tua e non scrivibile da altri (chmod 700).');
+      throw StateError(
+        'La cartella del socket (${cartella.path}) non è una '
+        'cartella privata di questo utente: non ci ascolto. Dev\'essere '
+        'tua e non scrivibile da altri (chmod 700).',
+      );
     }
   }
 
@@ -895,7 +983,9 @@ class WebSocketServer {
       if (_clients.contains(client)) _removeClient(client);
     };
     _clients.add(client);
-    print('[MINERVA][IPC][INFO] Client connesso (Totale connessi: ${_clients.length})');
+    print(
+      '[MINERVA][IPC][INFO] Client connesso (Totale connessi: ${_clients.length})',
+    );
 
     // ── Prima di tutto: chi sei? ──────────────────────────────────────────
     //
@@ -909,8 +999,10 @@ class WebSocketServer {
     // che si riavvia non riesce più a rientrare.
     Timer(const Duration(seconds: 5), () {
       if (!client.autenticato && _clients.contains(client)) {
-        print('[MINERVA][IPC][ATTENZIONE] Un client non ha detto la parola '
-            "d'ordine entro cinque secondi: chiuso.");
+        print(
+          '[MINERVA][IPC][ATTENZIONE] Un client non ha detto la parola '
+          "d'ordine entro cinque secondi: chiuso.",
+        );
         _removeClient(client);
       }
     });
@@ -960,15 +1052,20 @@ class WebSocketServer {
         // Il caso resta gestito allo stesso modo — il client si toglie — e
         // ogni altro errore continua a scriversi per intero.
         final testo = '$err';
-        final normale = err is SocketException &&
+        final normale =
+            err is SocketException &&
             (err.osError?.errorCode == 104 || err.osError?.errorCode == 32);
         if (normale) {
-          print('[MINERVA][IPC][INFO] Un client se n\'è andato senza '
-              'salutare (${err.osError?.errorCode == 104 ? "reset" : "pipe"}): '
-              'è come si chiude una finestra.');
+          print(
+            '[MINERVA][IPC][INFO] Un client se n\'è andato senza '
+            'salutare (${err.osError?.errorCode == 104 ? "reset" : "pipe"}): '
+            'è come si chiude una finestra.',
+          );
         } else {
-          print('[MINERVA][IPC][ERRORE] Errore di connessione del client: '
-              '$testo');
+          print(
+            '[MINERVA][IPC][ERRORE] Errore di connessione del client: '
+            '$testo',
+          );
         }
         _removeClient(client);
       },
@@ -1003,8 +1100,10 @@ class WebSocketServer {
     } on FormatException catch (e) {
       // Come prima, quando era il flusso a rompersi: chi manda byte che non
       // sono UTF-8 non sta parlando il nostro protocollo.
-      print('[MINERVA][IPC][ERRORE] Un client ha mandato una riga che non è '
-          'UTF-8: $e');
+      print(
+        '[MINERVA][IPC][ERRORE] Un client ha mandato una riga che non è '
+        'UTF-8: $e',
+      );
       _removeClient(client);
       return;
     }
@@ -1014,26 +1113,36 @@ class WebSocketServer {
   void _rigaTroppoLunga(WebSocketClientConnection client) {
     if (!_clients.contains(client)) return;
     if (!client.autenticato) {
-      print('[MINERVA][IPC][ATTENZIONE] Un client non ancora presentato ha '
-          'mandato più di $rigaMassimaPrimaDelSaluto byte senza un a-capo: '
-          'chiuso.');
+      print(
+        '[MINERVA][IPC][ATTENZIONE] Un client non ancora presentato ha '
+        'mandato più di $rigaMassimaPrimaDelSaluto byte senza un a-capo: '
+        'chiuso.',
+      );
       _removeClient(client);
       return;
     }
     // Uno dei nostri: il messaggio si butta e lo si dice, ma la connessione
     // resta — una finestra che ha provato a salvare un documento enorme non
     // deve perdere anche la barra.
-    print('[MINERVA][IPC][ERRORE] Un messaggio di oltre $rigaMassima byte è '
-        'stato scartato.');
-    _nonSonoRiuscito(client, null,
-        'messaggio troppo lungo (oltre $rigaMassima byte): scartato');
+    print(
+      '[MINERVA][IPC][ERRORE] Un messaggio di oltre $rigaMassima byte è '
+      'stato scartato.',
+    );
+    _nonSonoRiuscito(
+      client,
+      null,
+      'messaggio troppo lungo (oltre $rigaMassima byte): scartato',
+    );
   }
 
   /// La parola d'ordine è giusta: da qui in poi il client è uno di noi, e
   /// riceve quello che riceveva prima appena connesso.
   void _saluta(WebSocketClientConnection client) {
     client.autenticato = true;
-    client.send({'event': 'ciao', 'payload': {'ok': true}});
+    client.send({
+      'event': 'ciao',
+      'payload': {'ok': true},
+    });
 
     // Manda subito lo stato corrente, le impostazioni e il tema al client alla connessione
     client.send({
@@ -1044,7 +1153,7 @@ class WebSocketServer {
         'keybindings': _keybindService.toJson(),
         'icons': _iconPayload,
         'system': _systemState.state,
-      }
+      },
     });
 
     // Adesso c'è qualcuno che guarda: il servizio riprende a interrogare il
@@ -1078,7 +1187,9 @@ class WebSocketServer {
     _desktopLauncher.forget(client);
     _clients.remove(client);
     client.close();
-    print('[MINERVA][IPC][INFO] Client disconnesso (Totale connessi: ${_clients.length})');
+    print(
+      '[MINERVA][IPC][INFO] Client disconnesso (Totale connessi: ${_clients.length})',
+    );
 
     // Andato via l'ultimo, si smette di guardare.
     _finestre.clienti(_clients.length);
@@ -1140,12 +1251,20 @@ class WebSocketServer {
     final candidati = [
       if (scelto != null && scelto.isNotEmpty) scelto,
       'minerva-terminale',
-      'alacritty', 'foot', 'kitty', 'konsole', 'gnome-terminal',
-      'xfce4-terminal', 'xterm',
+      'alacritty',
+      'foot',
+      'kitty',
+      'konsole',
+      'gnome-terminal',
+      'xfce4-terminal',
+      'xterm',
     ];
     final protetta = protettaPerShell(riga);
     final quale = candidati
-        .map((t) => 'command -v $t >/dev/null 2>&1 && exec $t -e sh -c \'$protetta\'')
+        .map(
+          (t) =>
+              'command -v $t >/dev/null 2>&1 && exec $t -e sh -c \'$protetta\'',
+        )
         .join('; ');
     return quale;
   }
@@ -1180,12 +1299,12 @@ class WebSocketServer {
   /// invece di comporre una riga — vedi `mime_service.dart`, che lo fa. Qui
   /// non si può: un `Exec=` **è** una riga di shell, con pipe e variabili, e
   /// spezzarla sugli spazi la romperebbe.
-  static String protettaPerShell(String riga) =>
-      riga.replaceAll("'", r"'\''");
+  static String protettaPerShell(String riga) => riga.replaceAll("'", r"'\''");
 
-
-
-  void _handleClientMessage(WebSocketClientConnection client, String rawData) async {
+  void _handleClientMessage(
+    WebSocketClientConnection client,
+    String rawData,
+  ) async {
     // Fuori dal `try` perché serve al `catch`: per dire «questa richiesta non
     // è andata» bisogna sapere QUALE, e se la dichiarazione sta dentro il try
     // il catch non la vede. Resta `null` solo se è il `jsonDecode` a fallire,
@@ -1212,11 +1331,16 @@ class WebSocketServer {
         // Non si dice se la parola d'ordine era sbagliata o se mancava, e non
         // si lascia la connessione aperta per riprovare: chi ce l'ha la dice
         // al primo colpo, chi non ce l'ha non deve poterla cercare.
-        print('[MINERVA][IPC][ATTENZIONE] Rifiutato un client senza parola '
-            "d'ordine (azione «$action»).");
+        print(
+          '[MINERVA][IPC][ATTENZIONE] Rifiutato un client senza parola '
+          "d'ordine (azione «$action»).",
+        );
         client.send({
           'event': 'ciao',
-          'payload': {'ok': false, 'errore': "parola d'ordine mancante o errata"},
+          'payload': {
+            'ok': false,
+            'errore': "parola d'ordine mancante o errata",
+          },
         });
         _removeClient(client);
         return;
@@ -1241,13 +1365,12 @@ class WebSocketServer {
       // e le sue risposte restano identiche a prima.
       await runZoned(
         () => _eseguiAzione(client, action, msg),
-        zoneValues: {
-          _chiaveId: msg['id'],
-          _chiaveCliente: client,
-        },
+        zoneValues: {_chiaveId: msg['id'], _chiaveCliente: client},
       );
     } catch (e) {
-      print('[MINERVA][IPC][ERRORE] Errore nel processare messaggio del client: $e');
+      print(
+        '[MINERVA][IPC][ERRORE] Errore nel processare messaggio del client: $e',
+      );
       // ── E lo si dice a chi ha chiesto ─────────────────────────────────
       //
       // Fino al 7 settembre 2026 qui c'era solo la riga qui sopra. Se una
@@ -1269,12 +1392,16 @@ class WebSocketServer {
   /// ragione precisa: il cancello, la zona dell'identificativo e la rete
   /// che prende le eccezioni valgono per TUTTE le azioni, e devono stare
   /// fuori — dove non si possano dimenticare aggiungendone una nuova.
-  Future<void> _launcherRequest(WebSocketClientConnection client, String action,
-      Map<String, dynamic> msg) async {
+  Future<void> _launcherRequest(
+    WebSocketClientConnection client,
+    String action,
+    Map<String, dynamic> msg,
+  ) async {
     final request = msg['request'] is String ? msg['request'] as String : '';
     final path = msg['path'] is String ? msg['path'] as String : '';
     final event = action == 'prepare_desktop'
-        ? 'desktop_launch_prepared' : 'desktop_launch_result';
+        ? 'desktop_launch_prepared'
+        : 'desktop_launch_result';
     try {
       if (request.isEmpty || request.length > 80) {
         throw DesktopLaunchError('Identificativo della richiesta non valido.');
@@ -1285,12 +1412,17 @@ class WebSocketServer {
           _desktopLauncher.forget(client);
           return;
         }
-        client.send({'event': event, 'payload': {...preview, 'request': request}});
+        client.send({
+          'event': event,
+          'payload': {...preview, 'request': request},
+        });
         return;
       }
       final token = msg['token'];
       if (token is! String || token.isEmpty || token.length > 128) {
-        throw DesktopLaunchError('Questo launcher richiede una conferma esplicita.');
+        throw DesktopLaunchError(
+          'Questo launcher richiede una conferma esplicita.',
+        );
       }
       if (action == 'cancel_desktop') {
         _desktopLauncher.cancel(client, token);
@@ -1298,21 +1430,37 @@ class WebSocketServer {
       }
       final launch = await _desktopLauncher.approve(client, path, token);
       if (!_clients.contains(client)) return;
-      await Process.start('sh', ['-c', launch.command], mode: ProcessStartMode.detached);
-      client.send({'event': event, 'payload': {'request': request, 'path': path, 'ok': true}});
+      await Process.start('sh', [
+        '-c',
+        launch.command,
+      ], mode: ProcessStartMode.detached);
+      client.send({
+        'event': event,
+        'payload': {'request': request, 'path': path, 'ok': true},
+      });
       await _appUsageTracker.recordLaunch(launch.app.id);
       _aTutti({'event': 'all_apps', 'payload': _allAppsPayload});
     } catch (error) {
       // No token in diagnostics. No launch on parse/consent/file errors.
       if (_clients.contains(client)) {
-        client.send({'event': event, 'payload': {'request': request,
-          'path': path, 'error': error.toString(), 'ok': false}});
+        client.send({
+          'event': event,
+          'payload': {
+            'request': request,
+            'path': path,
+            'error': error.toString(),
+            'ok': false,
+          },
+        });
       }
     }
   }
 
-  Future<void> _eseguiAzione(WebSocketClientConnection client, Object? action,
-      Map<String, dynamic> msg) async {
+  Future<void> _eseguiAzione(
+    WebSocketClientConnection client,
+    Object? action,
+    Map<String, dynamic> msg,
+  ) async {
     switch (action) {
       // ── Qui c'era la SECONDA porta verso il compositore ───────────────
       //
@@ -1353,12 +1501,23 @@ class WebSocketServer {
           final app = id == null ? null : _appScanner.getAppById(id);
           final vuoleTerminale =
               app?.needsTerminal == true || msg['terminal'] == true;
-          final comando =
-              vuoleTerminale ? dentroUnTerminale(exec) : exec;
-          print('[MINERVA][IPC][INFO] Lancio applicazione: $comando '
-              '(ID: $id${vuoleTerminale ? ", nel terminale" : ""})');
-          await Process.start('sh', ['-c', comando],
-              mode: ProcessStartMode.detached);
+          final newWindow = msg['intent'] == 'new-window';
+          final selectedExec = newWindow && app != null && app.nuovaFinestra.isNotEmpty ? app.nuovaFinestra : exec;
+          final comando = vuoleTerminale ? dentroUnTerminale(selectedExec) : selectedExec;
+          final activationToken = msg['activationToken'];
+          final launchEnvironment = <String,String>{};
+          if (activationToken is String && RegExp(r'^[A-Za-z0-9_-]{1,256}$').hasMatch(activationToken)) {
+            launchEnvironment['XDG_ACTIVATION_TOKEN'] = activationToken;
+            launchEnvironment['DESKTOP_STARTUP_ID'] = activationToken;
+          }
+          print(
+            '[MINERVA][IPC][INFO] Lancio applicazione: $comando '
+            '(ID: $id${vuoleTerminale ? ", nel terminale" : ""})',
+          );
+          await Process.start('sh', [
+            '-c',
+            comando,
+          ], mode: ProcessStartMode.detached, environment: launchEnvironment);
           if (id != null && id.isNotEmpty) {
             await _appUsageTracker.recordLaunch(id);
             await _appScanner.novita.vista(id);
@@ -1414,8 +1573,9 @@ class WebSocketServer {
       case 'unsubscribe_processes':
         if (_iscrittiProcessi.remove(client)) {
           _processi.disiscrivi();
-          client.subscribedEvents =
-              client.subscribedEvents.where((e) => e != 'processes').toList();
+          client.subscribedEvents = client.subscribedEvents
+              .where((e) => e != 'processes')
+              .toList();
         }
         break;
       // ── E l'iscrizione leggera, per i widget della scrivania ────────
@@ -1431,8 +1591,10 @@ class WebSocketServer {
         if (_iscrittiMacchina.add(client)) {
           _processi.iscriviMacchina();
           if (!client.subscribedEvents.contains('machine_state')) {
-            client.subscribedEvents =
-                [...client.subscribedEvents, 'machine_state'];
+            client.subscribedEvents = [
+              ...client.subscribedEvents,
+              'machine_state',
+            ];
           }
         }
         break;
@@ -1482,8 +1644,11 @@ class WebSocketServer {
         if (path is! String || path.isEmpty) {
           _nonSonoRiuscito(client, action, 'manca il percorso');
         } else if (!await _settingsApi.setValue(path, msg['value'])) {
-          _nonSonoRiuscito(client, action,
-              'l\'impostazione «$path» non esiste nei valori di fabbrica');
+          _nonSonoRiuscito(
+            client,
+            action,
+            'l\'impostazione «$path» non esiste nei valori di fabbrica',
+          );
         }
         break;
       case 'set_settings':
@@ -1491,14 +1656,18 @@ class WebSocketServer {
         if (values is! Map) {
           _nonSonoRiuscito(client, action, 'manca l\'elenco dei valori');
         } else {
-          final rifiutate = await _settingsApi
-              .setValues(Map<String, dynamic>.from(values));
+          final rifiutate = await _settingsApi.setValues(
+            Map<String, dynamic>.from(values),
+          );
           // Le altre sono passate lo stesso: un preset che ne contiene una
           // sbagliata deve applicare le altre. Ma va detto quali no.
           if (rifiutate.isNotEmpty) {
-            _nonSonoRiuscito(client, action,
-                'queste impostazioni non esistono nei valori di fabbrica: '
-                '${rifiutate.join(", ")}');
+            _nonSonoRiuscito(
+              client,
+              action,
+              'queste impostazioni non esistono nei valori di fabbrica: '
+              '${rifiutate.join(", ")}',
+            );
           }
         }
         break;
@@ -1525,7 +1694,8 @@ class WebSocketServer {
             // Quelli che si possono togliere: stanno nella cartella
             // dell'utente (Impostazioni › Aspetto, «Togli»).
             'installati': TemaIconeService.installati(
-                Platform.environment['HOME'] ?? ''),
+              Platform.environment['HOME'] ?? '',
+            ),
           },
         });
         break;
@@ -1544,9 +1714,14 @@ class WebSocketServer {
       // nessuna parte, perché un'azione ignota qui non risponde e non si
       // lamenta. La prova in `test/finestre_test.dart` esiste per questo.
       case 'get_windows':
+        final provider = _compositorProvider;
+        final raw = provider is MinervaProvider
+            ? await provider.finestreSeRisponde()
+            : await provider.getClientsRaw();
+        if (raw == null) break;
         client.send({
           'event': 'windows_state',
-          'payload': await _compositorProvider.getClientsRaw(),
+          'payload': raw,
         });
         break;
       case 'get_monitors':
@@ -1588,7 +1763,10 @@ class WebSocketServer {
               '${msg['query'] ?? ''}',
               ancheNascosti: msg['hidden'] == true,
             )) {
-              client.send({'event': 'fs_search', 'payload': {...pezzo, 'id': id}});
+              client.send({
+                'event': 'fs_search',
+                'payload': {...pezzo, 'id': id},
+              });
             }
           } finally {
             _ricercheDi[client]?.remove(chiave);
@@ -1607,7 +1785,10 @@ class WebSocketServer {
       // libreria vera costa qualche secondo — quasi tutto `ffprobe` sui
       // video — e chi apre la galleria deve vedere qualcosa subito.
       case 'foto_cartelle':
-        client.send({'event': 'foto_cartelle', 'payload': _foto.vediCartelle()});
+        client.send({
+          'event': 'foto_cartelle',
+          'payload': _foto.vediCartelle(),
+        });
         break;
 
       // A parte, perché costa: cercare dove sono le fotografie vuol dire
@@ -1633,8 +1814,10 @@ class WebSocketServer {
       case 'foto_escludi':
         client.send({
           'event': 'foto_cartelle',
-          'payload':
-              _foto.escludi(msg['percorso'] as String?, msg['si'] == true),
+          'payload': _foto.escludi(
+            msg['percorso'] as String?,
+            msg['si'] == true,
+          ),
         });
         break;
 
@@ -1667,11 +1850,15 @@ class WebSocketServer {
 
       case 'foto_scansiona_ferma':
         _foto.fermaScansione(
-            _chiaveDi(client, '${msg['id'] ?? client.hashCode}'));
+          _chiaveDi(client, '${msg['id'] ?? client.hashCode}'),
+        );
         break;
 
       case 'foto_panoramica':
-        client.send({'event': 'foto_panoramica', 'payload': _foto.panoramica()});
+        client.send({
+          'event': 'foto_panoramica',
+          'payload': _foto.panoramica(),
+        });
         break;
       // Butta le copie in più di UN gruppo. Passa dai rifiuti di
       // `scartoDoppioni` — che rendono «butta tutte le copie» una cosa non
@@ -1718,8 +1905,7 @@ class WebSocketServer {
       case 'foto_miniatura':
         {
           final lato = (msg['lato'] as num?)?.toInt() ?? 256;
-          final r =
-              await _foto.miniaturaDi(msg['percorso'] as String?, lato);
+          final r = await _foto.miniaturaDi(msg['percorso'] as String?, lato);
           client.send({
             'event': 'foto_miniatura',
             'payload': {...r, 'percorsoFoto': msg['percorso']},
@@ -1787,6 +1973,28 @@ class WebSocketServer {
         client.send({'event': 'system_state', 'payload': _systemState.state});
         break;
 
+      case 'liquid_update_subscribe':
+        if (!client.subscribedEvents.contains('liquid_update')) {
+          client.subscribedEvents = [...client.subscribedEvents, 'liquid_update'];
+        }
+        client.send({'event': 'liquid_update', 'payload': _liquidUpdate.state});
+        break;
+      case 'liquid_update_unsubscribe':
+        client.subscribedEvents = client.subscribedEvents.where((event) => event != 'liquid_update').toList();
+        break;
+      case 'liquid_update_check':
+        await _liquidUpdate.check();
+        break;
+      case 'liquid_update_download':
+        if (msg['revision'] is String) await _liquidUpdate.download(msg['revision']);
+        break;
+      case 'liquid_update_cancel':
+        _liquidUpdate.cancel();
+        break;
+      case 'liquid_update_pause':
+        if (msg['days'] is int) await _liquidUpdate.pause(msg['days']);
+        break;
+
       case 'rescan_apps':
         await _appScanner.scan();
         // I candidati di ogni categoria vengono dall'elenco delle
@@ -1797,10 +2005,7 @@ class WebSocketServer {
         break;
 
       case 'get_all_apps':
-        client.send({
-          'event': 'all_apps',
-          'payload': _allAppsPayload,
-        });
+        client.send({'event': 'all_apps', 'payload': _allAppsPayload});
         break;
 
       // ── Gestore file ──────────────────────────────────────────────────
@@ -1809,15 +2014,17 @@ class WebSocketServer {
           final path = msg['path'];
           final showHidden = msg['showHidden'] == true;
           if (path is String && path.isNotEmpty) {
-            final result =
-                await _fileService.list(path, showHidden: showHidden);
+            final result = await _fileService.list(
+              path,
+              showHidden: showHidden,
+            );
             await _vestiILauncher(result['entries']);
             result['pane'] = msg['pane'] ?? '';
             client.send({'event': 'fs_listing', 'payload': result});
             // Da qui in poi quello che cambia in questa cartella si dice da
             // sé: vedi `OsservatoreCartelle`.
             final riquadro = (msg['pane'] ?? '').toString();
-            if (riquadro.isNotEmpty && (result['error'] ?? '') == '') {
+            if (riquadro.isNotEmpty && msg['watch'] != false && (result['error'] ?? '') == '') {
               _osservatore.guarda(client, riquadro, path);
             }
           }
@@ -1827,7 +2034,9 @@ class WebSocketServer {
       case 'fs_unwatch':
         {
           final riquadro = (msg['pane'] ?? '').toString();
-          if (riquadro.isNotEmpty) _osservatore.smettiRiquadro(client, riquadro);
+          if (riquadro.isNotEmpty) {
+            _osservatore.smettiRiquadro(client, riquadro);
+          }
         }
         break;
 
@@ -1885,7 +2094,9 @@ class WebSocketServer {
           final a = msg['aspetto'];
           if (path is String && path.isNotEmpty) {
             final r = await _fileService.impostaAspetto(
-                path, a is Map ? Map<String, dynamic>.from(a) : null);
+              path,
+              a is Map ? Map<String, dynamic>.from(a) : null,
+            );
             client.send({'event': 'fs_result', 'payload': r});
           }
         }
@@ -1969,15 +2180,70 @@ class WebSocketServer {
           final lat = (msg['lat'] as num?)?.toDouble();
           final lon = (msg['lon'] as num?)?.toDouble();
           if (lat == null || lon == null) {
-            client.send({'event': 'weather', 'payload': {'spento': true}});
+            client.send({
+              'event': 'weather',
+              'payload': {'spento': true},
+            });
             break;
           }
           client.send({
             'event': 'weather',
-            'payload': await _meteo.previsioni(lat, lon,
-                forza: msg['force'] == true),
+            'payload': await _meteo.previsioni(
+              lat,
+              lon,
+              forza: msg['force'] == true,
+            ),
           });
         }
+        break;
+
+      // ── La radio ──────────────────────────────────────────────────
+      // ── Le notizie della bacheca Widget ───────────────────────────
+      case 'notizie':
+        {
+          List<String> elenco(dynamic v) =>
+              v is List ? v.whereType<String>().toList() : <String>[];
+          final lingua = '${msg['lingua'] ?? 'it'}' == 'en' ? 'en' : 'it';
+          client.send({
+            'event': 'notizie',
+            'payload': await _notizie.notizie(
+              lingua: lingua,
+              interessiScelti: msg['interessi'] is List
+                  ? elenco(msg['interessi'])
+                  : NotizieService.interessi,
+              spente: elenco(msg['spente']),
+            ),
+          });
+        }
+        break;
+
+      case 'notizie_fonti':
+        {
+          final lingua = '${msg['lingua'] ?? 'it'}' == 'en' ? 'en' : 'it';
+          final spente = msg['spente'] is List
+              ? (msg['spente'] as List).whereType<String>().toList()
+              : <String>[];
+          client.send({
+            'event': 'notizie_fonti',
+            'payload': {'fonti': _notizie.elencoFonti(lingua, spente)},
+          });
+        }
+        break;
+
+      case 'radio_cerca':
+        client.send({
+          'event': 'radio_stazioni',
+          'payload': {
+            ...await _radio.cerca(
+              testo: '${msg['testo'] ?? ''}',
+              paese: '${msg['paese'] ?? ''}',
+            ),
+            // Chi ha chiesto cosa: due ricerche di fila possono rispondere
+            // nell'ordine sbagliato, e la pagina tiene solo l'ultima.
+            'testo': '${msg['testo'] ?? ''}',
+            'paese': '${msg['paese'] ?? ''}',
+          },
+        });
         break;
 
       // ── Lingua del sistema ────────────────────────────────────────
@@ -2067,7 +2333,9 @@ class WebSocketServer {
                 : {'ok': false, 'error': 'Manca il file.'};
           } else if (action == 'autostart_add') {
             r = await _avvio.aggiungi(
-                '${msg['name'] ?? ''}', '${msg['command'] ?? ''}');
+              '${msg['name'] ?? ''}',
+              '${msg['command'] ?? ''}',
+            );
           } else {
             final f = msg['file'];
             r = f is String && f.isNotEmpty
@@ -2101,8 +2369,9 @@ class WebSocketServer {
       case 'fs_formats':
         client.send({
           'event': 'fs_formats',
-          'payload': await _formatiRicordati
-              .chiedi(_fileService.formatiDisponibili),
+          'payload': await _formatiRicordati.chiedi(
+            _fileService.formatiDisponibili,
+          ),
         });
         break;
 
@@ -2125,7 +2394,9 @@ class WebSocketServer {
                   if (nome.isNotEmpty && visti.add(nome)) trovate.add(nome);
                 }
               }
-              trovate.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+              trovate.sort(
+                (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
+              );
               return trovate;
             });
             client.send({
@@ -2145,10 +2416,15 @@ class WebSocketServer {
         {
           final device = msg['device'];
           final fs = msg['fs'];
-          if (device is String && device.isNotEmpty &&
-              fs is String && fs.isNotEmpty) {
+          if (device is String &&
+              device.isNotEmpty &&
+              fs is String &&
+              fs.isNotEmpty) {
             final r = await _fileService.formatVolume(
-                device, fs, '${msg['label'] ?? ''}');
+              device,
+              fs,
+              '${msg['label'] ?? ''}',
+            );
             client.send({'event': 'fs_result', 'payload': r});
             // L'elenco dei dischi cambia: etichetta nuova, tipo nuovo, e
             // il punto di montaggio non è più quello di prima.
@@ -2163,7 +2439,8 @@ class WebSocketServer {
       // ── Cestino ───────────────────────────────────────────────────────
       case 'fs_rinomina_molti':
         {
-          final coppie = (msg['coppie'] as List?)?.whereType<Map>().toList() ?? [];
+          final coppie =
+              (msg['coppie'] as List?)?.whereType<Map>().toList() ?? [];
           if (coppie.isNotEmpty) {
             final r = await _fileService.rinominaMolti(coppie);
             client.send({'event': 'fs_result', 'payload': r});
@@ -2173,7 +2450,8 @@ class WebSocketServer {
 
       case 'fs_symlink':
         {
-          final paths = (msg['paths'] as List?)?.whereType<String>().toList() ?? [];
+          final paths =
+              (msg['paths'] as List?)?.whereType<String>().toList() ?? [];
           final prefisso = '${msg['prefisso'] ?? ''}'.replaceAll('/', '');
           if (paths.isNotEmpty) {
             final r = await _fileService.collega(paths, prefisso);
@@ -2205,7 +2483,12 @@ class WebSocketServer {
           final voci = await _recenti.leggi();
           client.send({
             'event': 'fs_search',
-            'payload': {'id': id, 'voci': voci, 'fine': true, 'trovati': voci.length},
+            'payload': {
+              'id': id,
+              'voci': voci,
+              'fine': true,
+              'trovati': voci.length,
+            },
           });
         }
         break;
@@ -2213,7 +2496,8 @@ class WebSocketServer {
       // «Annulla» di uno spostamento: i file tornano da dove venivano.
       case 'fs_rimetti':
         {
-          final coppie = (msg['coppie'] as List?)?.whereType<Map>().toList() ?? [];
+          final coppie =
+              (msg['coppie'] as List?)?.whereType<Map>().toList() ?? [];
           if (coppie.isNotEmpty) {
             final r = await _fileService.rimetti(coppie);
             client.send({'event': 'fs_result', 'payload': r});
@@ -2310,7 +2594,10 @@ class WebSocketServer {
         {
           final da = msg['path'];
           final r = da is String && da.isNotEmpty
-              ? await _temiIcone.installa(da, Platform.environment['HOME'] ?? '')
+              ? await _temiIcone.installa(
+                  da,
+                  Platform.environment['HOME'] ?? '',
+                )
               : {'ok': false, 'error': 'Non hai detto quale file.'};
           client.send({'event': 'icone_esito', 'payload': r});
         }
@@ -2320,7 +2607,10 @@ class WebSocketServer {
         {
           final dove = msg['path'];
           final r = dove is String && dove.isNotEmpty
-              ? await _temiIcone.disinstalla(dove, Platform.environment['HOME'] ?? '')
+              ? await _temiIcone.disinstalla(
+                  dove,
+                  Platform.environment['HOME'] ?? '',
+                )
               : {'ok': false, 'error': 'Non hai detto quale tema.'};
           client.send({'event': 'icone_esito', 'payload': r});
         }
@@ -2380,37 +2670,51 @@ class WebSocketServer {
       // Le richieste singole leggono lo stato adesso: l'ascolto continuo
       // serve solo a chi si è iscritto.
       case 'system_audio_state':
-        client.send({'event': 'system_audio_state',
-            'payload': await _systemAudio.status()});
+        client.send({
+          'event': 'system_audio_state',
+          'payload': await _systemAudio.status(),
+        });
         break;
       case 'system_audio_select':
-        client.send({'event': 'system_audio_select',
-            'payload': await _systemAudio.select(msg)});
+        client.send({
+          'event': 'system_audio_select',
+          'payload': await _systemAudio.select(msg),
+        });
         break;
       case 'subscribe_audio':
         _systemAudioSub ??= _systemAudio.changes.stream.listen((state) {
-          _aTutti({'event': 'system_audio_state', 'payload': state},
-              solo: (c) => c.isSubscribed('system_audio_state'));
+          _aTutti({
+            'event': 'system_audio_state',
+            'payload': state,
+          }, solo: (c) => c.isSubscribed('system_audio_state'));
         });
         await _systemAudio.start();
         if (!client.subscribedEvents.contains('system_audio_state')) {
-          client.subscribedEvents =
-              [...client.subscribedEvents, 'system_audio_state'];
+          client.subscribedEvents = [
+            ...client.subscribedEvents,
+            'system_audio_state',
+          ];
         }
         break;
       // `subscribe_controller` — come l'audio, ma il servizio è già acceso
       // da `start()`: iscriversi vuol solo dire ricevere i cambi.
       case 'controller_state':
-        client.send({'event': 'controller_state',
-            'payload': await _controller.status()});
+        client.send({
+          'event': 'controller_state',
+          'payload': await _controller.status(),
+        });
         break;
       case 'subscribe_controller':
         if (!client.subscribedEvents.contains('controller_state')) {
-          client.subscribedEvents =
-              [...client.subscribedEvents, 'controller_state'];
+          client.subscribedEvents = [
+            ...client.subscribedEvents,
+            'controller_state',
+          ];
         }
-        client.send({'event': 'controller_state',
-            'payload': await _controller.status()});
+        client.send({
+          'event': 'controller_state',
+          'payload': await _controller.status(),
+        });
         break;
       case 'unsubscribe_controller':
         client.subscribedEvents = client.subscribedEvents
@@ -2489,6 +2793,22 @@ class WebSocketServer {
         }
         break;
 
+      // ── Il riquadro di anteprima del gestore file ─────────────────────
+      //
+      // Dettagli e prime righe in una risposta sola, con un tetto alla
+      // lettura (`FileService.anteprima`). La `richiesta` torna com'è
+      // arrivata: il riquadro scarta le risposte di una selezione vecchia.
+      case 'fs_anteprima':
+        {
+          final path = msg['path'];
+          if (path is String && path.isNotEmpty) {
+            final r = await _fileService.anteprima(path);
+            r['richiesta'] = msg['richiesta'];
+            client.send({'event': 'fs_anteprima', 'payload': r});
+          }
+        }
+        break;
+
       // ── Proprietà di un file ──────────────────────────────────────────
       case 'fs_info':
         {
@@ -2522,8 +2842,11 @@ class WebSocketServer {
           final path = msg['path'];
           final mode = msg['mode'];
           if (path is String && mode is String) {
-            final r = await _fileService.chmod(path, mode,
-                recursive: msg['recursive'] == true);
+            final r = await _fileService.chmod(
+              path,
+              mode,
+              recursive: msg['recursive'] == true,
+            );
             client.send({'event': 'fs_result', 'payload': r});
           }
         }
@@ -2564,6 +2887,44 @@ class WebSocketServer {
         }
         break;
 
+      // ── Rete e telefoni ───────────────────────────────────────────────
+      case 'fs_remoti':
+        client.send({'event': 'fs_remoti', 'payload': await _luoghiRemoti.elenco()});
+        break;
+
+      case 'fs_connetti':
+        {
+          final indirizzo = msg['indirizzo'];
+          if (indirizzo is String) {
+            final r = await _luoghiRemoti.collega(
+              indirizzo,
+              utente: '${msg['utente'] ?? ''}',
+              dominio: '${msg['dominio'] ?? ''}',
+              password: '${msg['password'] ?? ''}',
+              fidati: msg['fidati'] == true,
+            );
+            final richiesta = msg['richiesta'];
+            client.send({'event': 'fs_connesso', 'payload': {
+              ...r,
+              'richiesta': richiesta is String && richiesta.length <= 256
+                  ? richiesta : '',
+            }});
+            client.send({'event': 'fs_remoti', 'payload': await _luoghiRemoti.elenco()});
+          }
+        }
+        break;
+
+      case 'fs_scollega':
+        {
+          final uri = msg['uri'];
+          if (uri is String) {
+            final r = await _luoghiRemoti.scollega(uri);
+            client.send({'event': 'fs_result', 'payload': r});
+            client.send({'event': 'fs_remoti', 'payload': await _luoghiRemoti.elenco()});
+          }
+        }
+        break;
+
       // ── La schermata di accesso ───────────────────────────────────────
       //
       // Perché il dialogo con greetd passa di qui invece di stare nella
@@ -2579,7 +2940,9 @@ class WebSocketServer {
         client.send({
           'event': 'greeter_info',
           'payload': {
-            'sessioni': (await _accesso.sessioni()).map((s) => s.toJson()).toList(),
+            'sessioni': (await _accesso.sessioni())
+                .map((s) => s.toJson())
+                .toList(),
             'utenti': (await _accesso.utenti()).map((u) => u.toJson()).toList(),
             'greetd': GreetdService.percorsoSocket != null,
             // Se c'è, la sessione si avvia attraverso di lui e lascia
@@ -2645,9 +3008,11 @@ class WebSocketServer {
           client.send({
             'event': 'custodia_esito',
             'payload': p is String && p.isNotEmpty
-                ? await _custodia.aggiungi(p,
+                ? await _custodia.aggiungi(
+                    p,
                     nome: msg['nome'] as String?,
-                    motore: msg['motore'] as String?)
+                    motore: msg['motore'] as String?,
+                  )
                 : {'ok': false, 'errore': 'Nessuna cartella.'},
           });
         }
@@ -2671,8 +3036,7 @@ class WebSocketServer {
           client.send({
             'event': 'custodia_esito',
             'payload': p is String && p.isNotEmpty
-                ? await _custodia.prendiPunto(p,
-                    nota: '${msg['nota'] ?? ''}')
+                ? await _custodia.prendiPunto(p, nota: '${msg['nota'] ?? ''}')
                 : {'ok': false, 'errore': 'Nessun progetto.'},
           });
         }
@@ -2733,7 +3097,11 @@ class WebSocketServer {
             'event': 'custodia_esito',
             'payload': p is String && t is String && d is String
                 ? await _custodia.aggiungiDestinazione(
-                    p, t, '${msg['nome'] ?? ''}', d)
+                    p,
+                    t,
+                    '${msg['nome'] ?? ''}',
+                    d,
+                  )
                 : {'ok': false, 'errore': 'Richiesta incompleta.'},
           });
         }
@@ -2845,29 +3213,27 @@ class WebSocketServer {
       case 'manutenzione_pulisci':
         final quali = (msg['ids'] as List?)?.cast<String>() ?? const <String>[];
         final esitoPulizia = await Pulitore(
-            // Quello che sta fuori dalla tua cartella passa dall'aiutante di
-            // root, che ha un elenco chiuso di verbi. Il pulitore non sa
-            // nemmeno cosa sia `pkexec`: gli arriva una funzione.
-            radice: _radice.chiedi,
-            racconta: (fase, testo, fatte, quante) => client.send({
-              'event': 'manutenzione_passo',
-              'payload': {
-                'fase': fase,
-                'testo': testo,
-                'fatte': fatte,
-                'quante': quante,
-              },
-            }),
-          ).pulisci(quali);
+          // Quello che sta fuori dalla tua cartella passa dall'aiutante di
+          // root, che ha un elenco chiuso di verbi. Il pulitore non sa
+          // nemmeno cosa sia `pkexec`: gli arriva una funzione.
+          radice: _radice.chiedi,
+          racconta: (fase, testo, fatte, quante) => client.send({
+            'event': 'manutenzione_passo',
+            'payload': {
+              'fase': fase,
+              'testo': testo,
+              'fatte': fatte,
+              'quante': quante,
+            },
+          }),
+        ).pulisci(quali);
         // Nel quaderno ci vanno i byte USCITI, non quelli promessi: è la
         // bugia più facile da dire qui dentro, perché nessuno può
         // controllarla.
-        esitoPulizia['recuperato'] =
-            await _quaderno.segna((esitoPulizia['liberati'] as int?) ?? 0);
-        client.send({
-          'event': 'manutenzione_pulito',
-          'payload': esitoPulizia,
-        });
+        esitoPulizia['recuperato'] = await _quaderno.segna(
+          (esitoPulizia['liberati'] as int?) ?? 0,
+        );
+        client.send({'event': 'manutenzione_pulito', 'payload': esitoPulizia});
         break;
 
       // ── I file che ci sono due volte ───────────────────────────────────
@@ -2897,7 +3263,7 @@ class WebSocketServer {
 
       // ── E come si tolgono ──────────────────────────────────────────────
       //
-      // **Nel cestino, mai cancellati.** Sono file di Giacomo, non cache: la
+      // **Nel cestino, mai cancellati.** Sono file di il manutentore, non cache: la
       // differenza fra «hai liberato sette giga» e «hai perso i video di tuo
       // figlio» è una rete sotto, e il cestino di sistema è già quella rete
       // (`FileService.trash`, che scrive anche il `.trashinfo` per il
@@ -2908,8 +3274,9 @@ class WebSocketServer {
       case 'manutenzione_doppioni_cestina':
         final quali =
             (msg['percorsi'] as List?)?.cast<String>() ?? const <String>[];
-        final vaglio =
-            await Setaccio(escluse: await _escluse.leggi()).daButtare(quali);
+        final vaglio = await Setaccio(
+          escluse: await _escluse.leggi(),
+        ).daButtare(quali);
         if (vaglio['ok'] != true) {
           client.send({
             'event': 'manutenzione_doppioni_tolti',
@@ -2938,8 +3305,9 @@ class WebSocketServer {
             'rifiutati': vaglio['rifiutati'],
             if ('${esitoCestino['error']}'.isNotEmpty)
               'errore': esitoCestino['error'],
-            'recuperato': await _quaderno
-                .segna(esitoCestino['ok'] == true ? liberati : 0),
+            'recuperato': await _quaderno.segna(
+              esitoCestino['ok'] == true ? liberati : 0,
+            ),
             'liberati': esitoCestino['ok'] == true ? liberati : 0,
           },
         });
@@ -2960,8 +3328,7 @@ class WebSocketServer {
         client.send({
           'event': 'manutenzione_escluse',
           'payload': {
-            'percorsi':
-                await _escluse.aggiungi('${msg['percorso'] ?? ''}'),
+            'percorsi': await _escluse.aggiungi('${msg['percorso'] ?? ''}'),
           },
         });
         break;
@@ -3015,16 +3382,69 @@ class WebSocketServer {
       case 'fucina_rileva':
         client.send({
           'event': 'fucina_rilievo',
-          'payload': await _fucina.rileva((fase, testo, fatte, quante) =>
-              client.send({
-                'event': 'fucina_guardo',
-                'payload': {
-                  'fase': fase,
-                  'testo': testo,
-                  'fatte': fatte,
-                  'quante': quante,
-                },
-              })),
+          'payload': await _fucina.rileva(
+            (fase, testo, fatte, quante) => client.send({
+              'event': 'fucina_guardo',
+              'payload': {
+                'fase': fase,
+                'testo': testo,
+                'fatte': fatte,
+                'quante': quante,
+              },
+            }),
+          ),
+        });
+        break;
+
+      case 'fucina_profili':
+        client.send({
+          'event': 'fucina_profili',
+          'payload': await _fucina.profili(),
+        });
+        break;
+
+      case 'fucina_profilo_salva':
+        client.send({
+          'event': 'fucina_profilo_salvato',
+          'payload': await _fucina.salvaProfilo(msg['nome'], msg['scelte']),
+        });
+        break;
+
+      case 'fucina_profilo_carica':
+        client.send({
+          'event': 'fucina_profilo_caricato',
+          'payload': await _fucina.caricaProfilo(msg['id']),
+        });
+        break;
+
+      case 'fucina_profilo_elimina':
+        client.send({
+          'event': 'fucina_profilo_eliminato',
+          'payload': await _fucina.eliminaProfilo(msg['id']),
+        });
+        break;
+
+      case 'fucina_regola_modulo':
+        client.send({
+          'event': 'fucina_regola_modulo',
+          'payload': await _fucina.impostaRegolaModulo(
+            msg['modulo'],
+            msg['scelta'],
+          ),
+        });
+        break;
+
+      case 'fucina_dimentica_dispositivi':
+        client.send({
+          'event': 'fucina_storico',
+          'payload': await _fucina.dimenticaDispositivi(),
+        });
+        break;
+
+      case 'fucina_esporta_rilievo':
+        client.send({
+          'event': 'fucina_report_esportato',
+          'payload': await _fucina.esportaRilievo(),
         });
         break;
 
@@ -3036,9 +3456,14 @@ class WebSocketServer {
         break;
 
       case 'fucina_ricetta':
+        final richiesta = '${msg['richiesta'] ?? ''}';
+        final risultato = await _fucina.ricetta(msg['scelte']);
         client.send({
           'event': 'fucina_ricetta',
-          'payload': await _fucina.ricetta(msg['scelte']),
+          'payload': {
+            ...risultato,
+            if (richiesta.isNotEmpty) 'richiesta': richiesta,
+          },
         });
         break;
 
@@ -3083,6 +3508,13 @@ class WebSocketServer {
         });
         break;
 
+      case 'fucina_cache_recupera':
+        client.send({
+          'event': 'fucina_cache_recuperata',
+          'payload': await _fucina.recuperaCache(msg['token']),
+        });
+        break;
+
       case 'fucina_togli':
         client.send({
           'event': 'fucina_tolto',
@@ -3121,9 +3553,11 @@ class WebSocketServer {
           client.send({
             'event': 'custodia_github',
             'payload': n is String && n.isNotEmpty
-                ? await _custodia.attendiGitHub(n,
+                ? await _custodia.attendiGitHub(
+                    n,
                     ogni: msg['ogni'] is int ? msg['ogni'] : 5,
-                    scadeFra: msg['scadeFra'] is int ? msg['scadeFra'] : 900)
+                    scadeFra: msg['scadeFra'] is int ? msg['scadeFra'] : 900,
+                  )
                 : {'ok': false, 'errore': 'Manca il codice di questo accesso.'},
           });
         }
@@ -3150,8 +3584,11 @@ class WebSocketServer {
           client.send({
             'event': 'custodia_esito',
             'payload': p is String && n is String
-                ? await _custodia.creaArchivioGitHub(p, n,
-                    privato: msg['privato'] != false)
+                ? await _custodia.creaArchivioGitHub(
+                    p,
+                    n,
+                    privato: msg['privato'] != false,
+                  )
                 : {'ok': false, 'errore': 'Richiesta incompleta.'},
           });
         }
@@ -3164,10 +3601,7 @@ class WebSocketServer {
       // non torna più indietro. Nessuna di queste risposte la contiene.
 
       case 'account_elenco':
-        client.send({
-          'event': 'account',
-          'payload': await _account.elenco(),
-        });
+        client.send({'event': 'account', 'payload': await _account.elenco()});
         break;
 
       case 'account_collega':
@@ -3221,7 +3655,7 @@ class WebSocketServer {
       case 'account_google_collega':
         {
           // Questa richiesta può stare aperta dei minuti — il tempo che
-          // Giacomo entri in Google e dica di sì. Non blocca niente: il
+          // il manutentore entri in Google e dica di sì. Non blocca niente: il
           // demone continua a rispondere a tutti gli altri mentre aspetta.
           final esito = await _account.collegaGoogle((url) {
             client.send({
@@ -3275,7 +3709,9 @@ class WebSocketServer {
           final t = await _trasmetti.cerca();
           client.send({
             'event': 'trasmetti_schermi',
-            'payload': {'schermi': [for (final s in t) s.toJson()]},
+            'payload': {
+              'schermi': [for (final s in t) s.toJson()],
+            },
           });
         }
         break;
@@ -3348,17 +3784,16 @@ class WebSocketServer {
         break;
 
       case 'trasmetti_stato':
-        client.send({
-          'event': 'trasmetti_stato',
-          'payload': _trasmetti.stato,
-        });
+        client.send({'event': 'trasmetti_stato', 'payload': _trasmetti.stato});
         break;
 
       case 'trasmetti_permesso':
         {
           final apri = msg['apri'] != false;
           final r = await _radice.chiedi(
-              apri ? 'trasmetti-apri' : 'trasmetti-chiudi', const []);
+            apri ? 'trasmetti-apri' : 'trasmetti-chiudi',
+            const [],
+          );
           client.send({'event': 'trasmetti_permesso', 'payload': r});
         }
         break;
@@ -3461,8 +3896,9 @@ class WebSocketServer {
         client.send({
           'event': 'gestori_accesso',
           'payload': {
-            'gestori':
-                (await _gestori.elenco()).map((g) => g.toJson()).toList(),
+            'gestori': (await _gestori.elenco())
+                .map((g) => g.toJson())
+                .toList(),
             'attuale': await _gestori.unitaAttuale(),
           },
         });
@@ -3492,10 +3928,9 @@ class WebSocketServer {
           client.send({
             'event': 'mime_categories',
             'payload': {
-                'categories':
-                    await _categorieRicordate.chiedi(_mimeCategories),
-                'famiglie': MimeService.famiglie,
-              },
+              'categories': await _categorieRicordate.chiedi(_mimeCategories),
+              'famiglie': MimeService.famiglie,
+            },
           });
         }
         break;
@@ -3619,9 +4054,11 @@ class WebSocketServer {
       // programmi: chi chiede resta ad aspettare per sempre e non ha modo di
       // sapere che nessuno risponderà.
       default:
-        print('[MINERVA][IPC][WARN] Azione sconosciuta: "$action". '
-            'Il messaggio è arrivato ma nessuno lo gestisce — '
-            'shell e demone non combaciano.');
+        print(
+          '[MINERVA][IPC][WARN] Azione sconosciuta: "$action". '
+          'Il messaggio è arrivato ma nessuno lo gestisce — '
+          'shell e demone non combaciano.',
+        );
         _nonSonoRiuscito(client, action, 'azione sconosciuta');
         break;
     }
@@ -3655,7 +4092,10 @@ class WebSocketServer {
   /// «type 'int' is not a subtype of type 'String?'», che dice anche DOVE
   /// guardare.
   void _nonSonoRiuscito(
-      WebSocketClientConnection client, Object? azione, String perche) {
+    WebSocketClientConnection client,
+    Object? azione,
+    String perche,
+  ) {
     client.send({
       'event': 'azione_fallita',
       'payload': {
@@ -3685,15 +4125,19 @@ class WebSocketServer {
   /// convertito in JSON una volta per finestra aperta. Con l'elenco dei
   /// processi — 59 KB, fra 1,3 e 8,9 ms — bastavano tre finestre per passare i
   /// venti millisecondi, e in quel tempo il demone non risponde a nessuno.
-  void _aTutti(Map<String, dynamic> data,
-      {bool Function(WebSocketClientConnection)? solo}) {
+  void _aTutti(
+    Map<String, dynamic> data, {
+    bool Function(WebSocketClientConnection)? solo,
+  }) {
     if (_clients.isEmpty) return;
     final String testo;
     try {
       testo = jsonEncode(data);
     } catch (e) {
-      print('[MINERVA][IPC][ERRORE] L\'evento "${data['event']}" non si lascia '
-          'convertire in JSON: $e');
+      print(
+        '[MINERVA][IPC][ERRORE] L\'evento "${data['event']}" non si lascia '
+        'convertire in JSON: $e',
+      );
       return;
     }
     final evento = '${data['event']}';
@@ -3716,6 +4160,8 @@ class WebSocketServer {
   }
 
   Future<void> stop() async {
+    await _liquidUpdateSub?.cancel();
+    await _liquidUpdate.close();
     await _systemAudioSub?.cancel();
     await _systemAudio.close();
     await _controllerSub?.cancel();
@@ -3801,7 +4247,7 @@ class WebSocketClientConnection {
 
   /// ── L'errore di scrittura NON torna a chi ha scritto ────────────────────
   ///
-  /// È il difetto che il 31 agosto 2026 ha lasciato Giacomo senza dock e senza
+  /// È il difetto che il 31 agosto 2026 ha lasciato il manutentore senza dock e senza
   /// menù, in tutte e due le sessioni. `send()` ha un `try/catch` intorno al
   /// `write`, e sembra coperto. Non lo è: nella traccia, fra `_IOSinkImpl.write`
   /// e l'errore, c'è `_RootZone.runUnaryGuarded`. Dart non rilancia
@@ -3820,8 +4266,10 @@ class WebSocketClientConnection {
   /// che nessuno può costruire una di queste connessioni dimenticandosi di
   /// farlo. La rete vera è comunque un'altra, ed è in `bin/minervad.dart`:
   /// questa dice CHI è morto, quella garantisce che il demone non muoia con lui.
-  WebSocketClientConnection(this._socket,
-      {this.inAttesaMassimo = inAttesaPredefinito}) {
+  WebSocketClientConnection(
+    this._socket, {
+    this.inAttesaMassimo = inAttesaPredefinito,
+  }) {
     _socket.done.then((_) => _muore(null), onError: _muore);
   }
 
@@ -3836,15 +4284,18 @@ class WebSocketClientConnection {
     if (_chiuso) return;
     _chiuso = true;
     if (errore != null) {
-      print('[MINERVA][IPC][WARN] Una connessione si è chiusa di colpo: '
-          '$errore');
+      print(
+        '[MINERVA][IPC][WARN] Una connessione si è chiusa di colpo: '
+        '$errore',
+      );
     }
     alMorire?.call();
   }
 
   bool isSubscribed(String eventType) {
     // Di default sottoscrive a tutti gli eventi critici
-    return subscribedEvents.contains(eventType) || subscribedEvents.contains('*');
+    return subscribedEvents.contains(eventType) ||
+        subscribedEvents.contains('*');
   }
 
   /// Quante spedizioni sono fallite su questa connessione.
@@ -3905,8 +4356,10 @@ class WebSocketClientConnection {
       testo = jsonEncode(data);
     } catch (e) {
       falliti++;
-      print('[MINERVA][IPC][ERRORE] L\'evento "${data['event']}" non si lascia '
-          'convertire in JSON: $e');
+      print(
+        '[MINERVA][IPC][ERRORE] L\'evento "${data['event']}" non si lascia '
+        'convertire in JSON: $e',
+      );
       return;
     }
     sendGrezzo(testo, '${data['event']}');
@@ -3951,8 +4404,10 @@ class WebSocketClientConnection {
     // I caratteri e non i byte: un conto per difetto sui caratteri accentati,
     // che per un tetto di decine di mega non cambia niente.
     if (_inAttesa + riga.length > inAttesaMassimo) {
-      print('[MINERVA][IPC][WARN] Un client non legge più da un pezzo '
-          '(${_inAttesa ~/ 1024} KB in attesa, fermo su "$evento"): chiuso.');
+      print(
+        '[MINERVA][IPC][WARN] Un client non legge più da un pezzo '
+        '(${_inAttesa ~/ 1024} KB in attesa, fermo su "$evento"): chiuso.',
+      );
       falliti++;
       _muore(null);
       _socket.destroy();

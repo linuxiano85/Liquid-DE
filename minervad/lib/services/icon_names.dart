@@ -159,6 +159,12 @@ const Map<String, List<String>> minervaIconNames = {
     'media-removable'
   ],
   'globe': ['applications-internet', 'web-browser', 'network-workgroup'],
+  // Dall'11 ottobre 2026: la prova `icon_names_test` le trovava senza
+  // traduzione. «network» è la cartella condivisa nella colonna del gestore
+  // file; «user» l'account dello Start di Windows; «link» il collegamento.
+  'network': ['folder-remote', 'network-workgroup', 'network-server'],
+  'user': ['avatar-default', 'user-info', 'system-users'],
+  'link': ['insert-link', 'emblem-symbolic-link'],
   // La nuvola degli account online. Nei temi classici la «nuvola» non esiste
   // come cosa a sé: quello che le corrisponde è la cartella in rete, che è poi
   // esattamente ciò che un account di archiviazione è.

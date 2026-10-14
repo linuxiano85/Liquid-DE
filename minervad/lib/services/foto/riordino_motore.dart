@@ -29,7 +29,7 @@ class Fatto {
 /// toccato una sola fotografia vera. Su btrfs non costa nemmeno spazio:
 /// `cp --reflink` fa due nomi per gli stessi dati.
 ///
-/// È l'idea di Giacomo del 26 agosto 2026, ed è la ragione per cui questa
+/// È l'idea di il manutentore del 26 agosto 2026, ed è la ragione per cui questa
 /// parte è provabile invece che sperabile.
 ///
 /// ── E perché «sposta» non parte senza un punto di ritorno ────────────────

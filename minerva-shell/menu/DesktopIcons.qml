@@ -3,6 +3,7 @@ import Quickshell
 import "../theme" as Theme
 import "../core" as Core
 import "../ui" as Ui
+import "../ui/Selection.js" as Selection
 // Senza alias: `files` è un modulo con un singleton, e con un alias il
 // singleton si troverebbe sotto un doppio nome (`Files.Files`) — le funzioni
 // di Files risulterebbero «non funzioni». Il gestore file fa così.
@@ -152,7 +153,7 @@ Item {
         }
     }
 
-    onCartellaChanged: icons.ricarica()
+    onCartellaChanged: {icons.selezionati=[];icons.ricarica();}
 
     // ── Le modifiche fatte DA FUORI ───────────────────────────────────────
     //
@@ -360,7 +361,7 @@ Item {
     ///
     /// ── Perché si fissa tutto ────────────────────────────────────────────
     ///
-    /// Giacomo, 27 settembre 2026: spostando Stumble Guys a destra è sparita,
+    /// il manutentore, 27 settembre 2026: spostando Stumble Guys a destra è sparita,
     /// spostando FORScan è ricomparsa a destra, e rimettendola a posto
     /// «ricompariva in automatico a destra ogni volta». Le posizioni erano
     /// pixel fuori griglia (FORScan [100, 35], Stumble Guys [63, 134]) e i
@@ -405,7 +406,7 @@ Item {
     /// Prepara il posto a file che STANNO PER arrivare, lasciati nel punto
     /// (px, py) del puntatore.
     ///
-    /// Giacomo, 28 settembre 2026: le icone portate dal gestore file «hanno
+    /// il manutentore, 28 settembre 2026: le icone portate dal gestore file «hanno
     /// qualche problemino di spostamento». Il punto del rilascio serviva solo
     /// ad aprire il menù «Copia / Sposta»: il file nuovo, senza un posto
     /// ricordato, finiva nella prima cella libera in alto a sinistra — lontano
@@ -603,7 +604,7 @@ Item {
     // file a qualcun altro: è muovere una cosa dentro la finestra in cui sta
     // già. Il trascinamento di sistema (`Drag.Automatic`) invece è una
     // TRATTATIVA fra due programmi, e fatta per questo dava tre difetti
-    // insieme — tutti e tre segnalati da Giacomo il 16 agosto 2026:
+    // insieme — tutti e tre segnalati da il manutentore il 16 agosto 2026:
     //
     //  1. **l'icona non seguiva la mano.** `startDrag()` di Qt entra in un
     //     ciclo di eventi suo e non torna finché non si lascia: fra la presa e
@@ -626,6 +627,10 @@ Item {
 
     /// Il nome dell'icona sotto la mano, o vuoto.
     property string preso: ""
+    property var presi: []
+    property var prese: ({})
+    property real partenzaX: 0
+    property real partenzaY: 0
     /// Vera quando la soglia è stata superata: da lì è un trascinamento e non
     /// un clic con la mano che trema.
     property bool inMano: false
@@ -665,6 +670,52 @@ Item {
         icons.spostaIcona(nome, x + icons.cellaW / 2, y + icons.riquadro / 2);
     }
 
+    // Reserve the whole group before moving any icon. Saving each icon on
+    // its own would treat the other selected icons as obstacles.
+    function posaGruppo() {
+        var moved=Object.create(null), occupied=Object.create(null), map=Object.create(null);
+        var d=icons.disposizione, old=icons.posizioni || ({});
+        var names=icons.presi.filter(function(name) {return !!icons.prese[name];});
+        if(!names.length) return;
+        for(var name of names) moved[name]=true;
+        for(var name in old) map[name]=old[name];
+        for(var name in d) {
+            map[name]=[Math.round(d[name].x),Math.round(d[name].y)];
+            if(!moved[name]) {
+                var cell=icons.cellaDiPunto(d[name].x,d[name].y);
+                occupied[cell.x+","+cell.y]=true;
+            }
+        }
+        var dx=icons.manoX-icons.partenzaX,dy=icons.manoY-icons.partenzaY;
+        if(icons.allinea || icons.autoDisponi) {
+            var cells=names.map(function(name) {var p=icons.prese[name];return icons.cellaDiPunto(p.x,p.y);});
+            var wantedX=Math.round(dx/icons.cellaW),wantedY=Math.round(dy/icons.cellaH);
+            var best=null,distance=Infinity;
+            for(var x=-icons.colonne+1;x<icons.colonne;x++) for(var y=-icons.righe+1;y<icons.righe;y++) {
+                var cost=(x-wantedX)*(x-wantedX)+(y-wantedY)*(y-wantedY);
+                if(cost>=distance) continue;
+                var fits=cells.every(function(cell) {
+                    var c=cell.x+x,r=cell.y+y;
+                    return c>=0 && c<icons.colonne && r>=0 && r<icons.righe && !occupied[c+","+r];
+                });
+                if(fits) {best=Qt.point(x,y);distance=cost;}
+            }
+            // The current arrangement always fits unless the screen or its
+            // contents changed during the drag. Repack only in that case.
+            for(var i=0;i<names.length;i++) {
+                var p=icons.prese[names[i]];
+                var cell=best ? Qt.point(cells[i].x+best.x,cells[i].y+best.y):icons.cellaLibera(p.x+dx,p.y+dy,occupied);
+                occupied[cell.x+","+cell.y]=true;
+                var target=icons.puntoDiCella(cell.x,cell.y);
+                map[names[i]]=[target.x,target.y];
+            }
+        } else {
+            for(var name of names) {var p=icons.prese[name];map[name]=[Math.round(p.x+dx),Math.round(p.y+dy)];}
+        }
+        icons._appena=map;
+        Core.Ipc.setSettings({"files.desktopPositions":map,"desktop.iconAutoArrange":false});
+    }
+
     /// C'è una finestra di un altro programma sotto questo punto?
     ///
     /// La scrivania sta sotto tutto, quindi mentre si trascina il puntatore
@@ -700,7 +751,7 @@ Item {
         if (!icona || !icona.voce || icons.consegnato)
             return;
         icons.consegnato = true;
-        fardello.percorsi = [icona.voce.path];
+        fardello.percorsi = icons.percorsiSelezionati();
         // La fotografia si scatta PRIMA di lasciare la presa: mollandola
         // subito, l'icona tornerebbe nella sua cella per un fotogramma e la
         // foto ritrarrebbe una cella vuota.
@@ -767,7 +818,7 @@ Item {
 
             readonly property var voce: icona.modelData
             readonly property string nome: icona.voce ? icona.voce.name : ""
-            readonly property bool selezionata: icons.selezione === nome
+            readonly property bool selezionata: icons.selezionati.indexOf(nome)>=0
             readonly property bool siRinomina: icons.rinomina === nome
 
             /// Quello che si legge sotto l'icona.
@@ -795,15 +846,15 @@ Item {
                 && Core.Ipc.get("files.anteprime", true)
 
             /// In volo: la si sta trascinando adesso. Vedi «Le mani», più su.
-            readonly property bool inVolo: icons.inMano && icons.preso === icona.nome
+            readonly property bool inVolo: icons.inMano && icons.presi.indexOf(icona.nome)>=0
 
             width: icons.cellaW - 12
             height: icons.cellaH - 12
 
             // Mentre è in mano segue il puntatore al pixel, e non passa dalla
             // griglia: la griglia è dove ATTERRA, non dove vola.
-            x: icona.inVolo ? icons.manoX - icons.presaDx : icons.postoPer(nome).x
-            y: icona.inVolo ? icons.manoY - icons.presaDy : icons.postoPer(nome).y
+            x: icona.inVolo && icons.prese[nome] ? icons.prese[nome].x+icons.manoX-icons.partenzaX : icons.postoPer(nome).x
+            y: icona.inVolo && icons.prese[nome] ? icons.prese[nome].y+icons.manoY-icons.partenzaY : icons.postoPer(nome).y
             z: icona.inVolo ? 10 : 0
             scale: icona.inVolo ? 1.08 : 1
             opacity: icona.inVolo ? 0.85 : 1
@@ -952,15 +1003,32 @@ Item {
                 preventStealing: true
 
                 property point partenza: Qt.point(0, 0)
+                property bool collapseClick: false
 
                 onPressed: function (m) {
-                    icons.selezione = icona.nome;
+                    icons.forceActiveFocus();
+                    presa.collapseClick=false;
+                    if(m.button===Qt.RightButton) {
+                        if(!icona.selezionata) icons.selezionati=[icona.nome];
+                    } else if(m.modifiers & Qt.ControlModifier) {
+                        icons.selezionati=Selection.merge(icons.selezionati,[icona.nome],"toggle");
+                    } else if(m.modifiers & Qt.ShiftModifier) {
+                        icons.selezionati=Selection.merge(icons.selezionati,[icona.nome],"add");
+                    } else if(!icona.selezionata) icons.selezionati=[icona.nome];
+                    else presa.collapseClick=true;
                     presa.partenza = Qt.point(m.x, m.y);
                     if (m.button === Qt.RightButton) {
                         icons.menuSu(icona.nome, mapToGlobal(m.x, m.y));
                         return;
                     }
                     icons.preso = icona.nome;
+                    var origin=mapToItem(icons,m.x,m.y);
+                    icons.partenzaX=origin.x;icons.partenzaY=origin.y;
+                    icons.manoX=origin.x;icons.manoY=origin.y;
+                    icons.presi=icons.selezionati.slice();
+                    var positions=Object.create(null);
+                    for(var i=0;i<icons.presi.length;i++) positions[icons.presi[i]]=icons.postoPer(icons.presi[i]);
+                    icons.prese=positions;
                     // Il punto in cui l'icona è stata AFFERRATA. Senza, al
                     // primo movimento l'icona salta col suo angolo sotto il
                     // puntatore: si prende per il centro e scatta di mezza
@@ -977,6 +1045,10 @@ Item {
                         && Math.abs(m.y - presa.partenza.y) < 8)
                         return;
                     icons.inMano = true;
+                    if(icons.presi.indexOf(icona.nome)<0) {
+                        icons.selezionati=[icona.nome];icons.presi=[icona.nome];
+                        var positions=Object.create(null);positions[icona.nome]=icons.postoPer(icona.nome);icons.prese=positions;
+                    }
                     var p = mapToItem(icons, m.x, m.y);
                     icons.manoX = p.x;
                     icons.manoY = p.y;
@@ -993,10 +1065,9 @@ Item {
                         // Si posa dove sta l'icona, non dove sta il puntatore:
                         // sono due punti diversi di mezza cella, ed è quello
                         // che si sta guardando a dover atterrare.
-                        icons.posa(icona.nome,
-                                   icons.manoX - icons.presaDx,
-                                   icons.manoY - icons.presaDy);
+                        icons.posaGruppo();
                     }
+                    if(!icons.inMano && presa.collapseClick) icons.selezionati=[icona.nome];
                     icons.lascia();
                 }
 
@@ -1073,7 +1144,7 @@ Item {
     // accento, angoli arrotondati. È esattamente il disegno con cui il
     // compositore annuncia l'aggancio in alto, cioè «questa finestra diventa
     // grande così»: trascinando un'icona lo schermo si accendeva tutto e
-    // sembrava di stare per ingrandire qualcosa. Giacomo, 16 agosto: «lo
+    // sembrava di stare per ingrandire qualcosa. il manutentore, 16 agosto: «lo
     // schermo diventa tutto azzurrino come se volessi passare una finestra a
     // schermo intero».
     //
@@ -1108,8 +1179,25 @@ Item {
         }
     }
 
-    /// L'icona selezionata, per nome. Una sola per tutta la scrivania.
-    property string selezione: ""
+    /// Stable filenames, shared by rectangle, keyboard, menu and drag actions.
+    property var selezionati: []
+    readonly property string selezione: selezionati.length===1 ? selezionati[0]:""
+    function percorsiSelezionati() {
+        return entries.filter(function(e) {return icons.selezionati.indexOf(e.name)>=0;}).map(function(e) {return e.path;});
+    }
+    onEntriesChanged: {
+        desktopSelection.cancel();
+        var names=entries.map(function(e){return e.name;});
+        selezionati=selezionati.filter(function(n){return names.indexOf(n)>=0;});
+    }
+    Keys.onPressed: function(event) {
+        if(event.key===Qt.Key_Escape) {desktopSelection.cancel();icons.selezionati=[];event.accepted=true;}
+        else if(event.key===Qt.Key_A && (event.modifiers & Qt.ControlModifier)) {icons.selezionati=entries.map(function(e){return e.name;});event.accepted=true;}
+        else if(event.key===Qt.Key_C && (event.modifiers & Qt.ControlModifier)) {Files.copyToClipboard(percorsiSelezionati());event.accepted=true;}
+        else if(event.key===Qt.Key_X && (event.modifiers & Qt.ControlModifier)) {Files.cutToClipboard(percorsiSelezionati());event.accepted=true;}
+        else if(event.key===Qt.Key_Delete) {icons.cestina();event.accepted=true;}
+        else if(event.key===Qt.Key_F2) {icons.iniziaRinomina();event.accepted=true;}
+    }
 
     /// Il menu su un'icona: lo chiede alla shell, che ha il ContextMenu.
     signal menuSu(string nome, point dove)
@@ -1137,21 +1225,22 @@ Item {
     }
 
     function cestina() {
-        var v = icons.voceSelezionata();
-        if (v)
-            Core.Ipc.fsTrash([v.path]);
+        var paths=icons.percorsiSelezionati();
+        if(paths.length) Core.Ipc.fsTrash(paths);
     }
 
     function elimina() {
-        var v = icons.voceSelezionata();
-        if (v)
-            Core.Ipc.fsDelete([v.path]);
+        var paths=icons.percorsiSelezionati();
+        if(paths.length) Core.Ipc.fsDelete(paths);
+    }
+
+    function copiaFile(cut) {
+        if(cut) Files.cutToClipboard(percorsiSelezionati());
+        else Files.copyToClipboard(percorsiSelezionati());
     }
 
     function copiaPercorso() {
-        var v = icons.voceSelezionata();
-        if (v)
-            Quickshell.clipboardText = v.path;
+        Quickshell.clipboardText = icons.percorsiSelezionati().join("\n");
     }
 
     // ── Le voci del menu «Disposizione icone» ────────────────────────────
@@ -1244,9 +1333,20 @@ Item {
         }
     }
 
-    // Il clic sul VUOTO della scrivania toglie la selezione.
-    TapHandler {
-        acceptedButtons: Qt.LeftButton
-        onTapped: icons.selezione = ""
+    Ui.DragSelection {
+        id: desktopSelection
+        objectName: "desktopRectangleSelection"
+        anchors.fill:parent; z:-1
+        selection:icons.selezionati
+        onFinished:icons.forceActiveFocus()
+        onSelectionRequested:function(keys){icons.selezionati=keys;}
+        hitTest:function(rect) {
+            var result=[];
+            for(var i=0;i<icons.entries.length;i++) {
+                var name=icons.entries[i].name,pos=icons.postoPer(name);
+                if(Selection.intersects(rect,{x:pos.x,y:pos.y,width:icons.cellaW-12,height:icons.cellaH-12})) result.push(name);
+            }
+            return result;
+        }
     }
 }

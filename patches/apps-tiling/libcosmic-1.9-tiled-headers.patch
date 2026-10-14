@@ -1,0 +1,133 @@
+diff --git a/src/app/cosmic.rs b/src/app/cosmic.rs
+index c2521b3..da24273 100644
+--- a/src/app/cosmic.rs
++++ b/src/app/cosmic.rs
+@@ -819,6 +819,21 @@ impl<T: Application> Cosmic<T> {
+ 
+             #[cfg(wayland_platform)]
+             Action::WindowState(id, state) => {
++                let tiled = state.intersects(
++                    WindowState::TILED | WindowState::TILED_RIGHT | WindowState::TILED_LEFT
++                        | WindowState::TILED_TOP | WindowState::TILED_BOTTOM,
++                );
++                let changed = if tiled {
++                    self.app.core_mut().minerva_tiled_windows.insert(id)
++                } else {
++                    self.app.core_mut().minerva_tiled_windows.remove(&id)
++                };
++                if changed && self.app.core().minerva_tiled_headers
++                    && std::env::var_os("MINERVA_TILED_HEADERS_TRACE").is_some()
++                {
++                    eprintln!("MINERVA_HEADER window={id:?} tiled={tiled}");
++                }
++
+                 if self
+                     .app
+                     .core()
+@@ -1218,6 +1233,7 @@ impl<T: Application> Cosmic<T> {
+             }
+ 
+             Action::SurfaceClosed(id) => {
++                self.app.core_mut().minerva_tiled_windows.remove(&id);
+                 if self.opened_surfaces.get_mut(&id).is_some_and(|v| {
+                     *v = v.saturating_sub(1);
+                     *v == 0
+diff --git a/src/app/mod.rs b/src/app/mod.rs
+index 84cf57f..f4493ea 100644
+--- a/src/app/mod.rs
++++ b/src/app/mod.rs
+@@ -773,7 +773,26 @@ impl<App: Application> ApplicationExt for App {
+ 
+         let view_column = crate::widget::column::with_capacity(2)
+             .push_maybe(if core.window.show_headerbar {
+-                Some({
++                if core.minerva_compact_toolbar() {
++                    let mut controls: Vec<Element<_>> = Vec::new();
++                    if self.nav_model().is_some() {
++                        controls.push(crate::widget::nav_bar_toggle()
++                            .active(core.nav_bar_active()).selected(focused)
++                            .on_toggle(if is_condensed {
++                                crate::Action::Cosmic(Action::ToggleNavBarCondensed)
++                            } else { crate::Action::Cosmic(Action::ToggleNavBar) }).into());
++                    }
++                    controls.extend(self.header_start().into_iter().map(|e| e.map(crate::Action::App)));
++                    controls.push(crate::widget::space::horizontal().into());
++                    controls.extend(self.header_center().into_iter().map(|e| e.map(crate::Action::App)));
++                    controls.extend(self.header_end().into_iter().map(|e| e.map(crate::Action::App)));
++                    // No title, drag region or window buttons. Preserve all app controls.
++                    Some::<Element<_>>(crate::widget::row::with_children(controls)
++                        .align_y(iced::Alignment::Center).spacing(4).padding([4, 8])
++                        .apply(|w| id_container(w, iced_core::id::Id::new("MINERVA_app_toolbar")))
++                        .into())
++                } else {
++                    Some({
+                     let mut header = crate::widget::header_bar()
+                         .focused(focused)
+                         .maximized(maximized)
+@@ -821,7 +840,7 @@ impl<App: Application> ApplicationExt for App {
+                     }
+ 
+                     if content_container {
+-                        header.apply(|w| id_container(w, iced_core::id::Id::new("COSMIC_header")))
++                        header.apply(|w| id_container(w, iced_core::id::Id::new("COSMIC_header"))).into()
+                     } else {
+                         // Needed to avoid header bar corner gaps for apps without a content container
+                         header
+@@ -846,8 +865,10 @@ impl<App: Application> ApplicationExt for App {
+                                 }
+                             }))
+                             .apply(|w| id_container(w, iced_core::id::Id::new("COSMIC_header")))
++                            .into()
+                     }
+                 })
++                }
+             } else {
+                 None
+             })
+diff --git a/src/core.rs b/src/core.rs
+index a3483b6..7d166f3 100644
+--- a/src/core.rs
++++ b/src/core.rs
+@@ -1,7 +1,7 @@
+ // Copyright 2023 System76 <info@system76.com>
+ // SPDX-License-Identifier: MPL-2.0
+ 
+-use std::collections::HashMap;
++use std::collections::{HashMap, HashSet};
+ 
+ use crate::widget::nav_bar;
+ use cosmic_config::CosmicConfigEntry;
+@@ -98,6 +98,10 @@ pub struct Core {
+ 
+     pub window: Window,
+ 
++    /// Opt-in Minerva integration, scoped to each Wayland window.
++    pub(crate) minerva_tiled_headers: bool,
++    pub(crate) minerva_tiled_windows: HashSet<Id>,
++
+     #[cfg(feature = "applet")]
+     pub applet: crate::applet::Context,
+ 
+@@ -145,6 +149,8 @@ impl Default for Core {
+             },
+             scale_factor: 1.0,
+             title: HashMap::new(),
++            minerva_tiled_headers: std::env::var_os("MINERVA_TILED_HEADERS").is_some_and(|v| v == "1"),
++            minerva_tiled_windows: HashSet::new(),
+             theme_sub_counter: 0,
+             system_theme: crate::theme::active(),
+             system_theme_mode: ThemeMode::config()
+@@ -195,6 +201,13 @@ impl Default for Core {
+ }
+ 
+ impl Core {
++    /// Keep application controls, but omit window chrome in a tiled main window.
++    #[must_use]
++    pub fn minerva_compact_toolbar(&self) -> bool {
++        self.minerva_tiled_headers
++            && self.main_window.is_some_and(|id| self.minerva_tiled_windows.contains(&id))
++    }
++
+     /// Whether the window is too small for the nav bar + main content.
+     #[must_use]
+     #[inline]

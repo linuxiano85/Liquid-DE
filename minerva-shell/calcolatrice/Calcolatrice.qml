@@ -34,7 +34,7 @@ FloatingWindow {
     //
     // Il 2 settembre 2026 qui c'era `color: "transparent"` più un
     // `Ui.FondoFinestra` — un rettangolo a tutta finestra col raggio — per
-    // arrotondare gli angoli, che Giacomo aveva chiesto.
+    // arrotondare gli angoli, che il manutentore aveva chiesto.
     //
     // Funzionava, e si è visto nelle fotografie. Costava però **quindici
     // megabyte per applicazione**, misurati: 55 MB senza, 69-72 con. Provato
@@ -364,7 +364,7 @@ FloatingWindow {
         // Qui c'era `calco.onClosed`, cioè LEGGERE il gestore invece di
         // chiudere: un'espressione che vale il gestore stesso, e la si butta
         // via. Non chiudeva niente, e non si vedeva perché le barre del
-        // titolo di Giacomo le disegna il compositore — questa barra qui
+        // titolo di il manutentore le disegna il compositore — questa barra qui
         // dentro non compare mai.
         onCloseRequested: calco.requestClose()
     }

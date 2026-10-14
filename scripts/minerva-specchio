@@ -218,7 +218,7 @@ if [ "$comando" = "flusso" ]; then
     # ── Tre cose che tolgono ritardo, e valgono SOLO dal vivo ────────────
     #
     # Misurate il 4 settembre 2026 su una trasmissione vera verso il
-    # televisore della cucina, dove Giacomo ha contato sette secondi di
+    # televisore della cucina, dove il manutentore ha contato sette secondi di
     # ritardo.
     #
     # `-use_wallclock_as_timestamps 1` su TUTTI E DUE gli ingressi. Senza,

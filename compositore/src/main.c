@@ -62,6 +62,9 @@
 #include <wlr/render/swapchain.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_xdg_activation_v1.h>
+#include <wlr/types/wlr_xdg_dialog_v1.h>
+#include "dialoghi.h"
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
@@ -127,6 +130,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include "aggancio.h"
+#include "colonne.h"
 #include "anello.h"
 #include "barra.h"
 #include "lente.h"
@@ -146,6 +150,17 @@
 /// un numero diverso qui vorrebbe dire una scorciatoia che esiste nel
 /// promemoria e non fa niente. Vedi `scripts/minerva-scorciatoie`.
 #define SCRIVANIE 10
+
+// ── I modi di disporre le finestre dentro una scrivania in tiling ─────────
+//
+// Fusi con le scrivanie (ottobre 2026): non esiste più il «tiling a colonne
+// scorrevoli» separato dai desktop virtuali. Ogni scrivania tila le sue
+// finestre in un modo solo, scelto qui. «Uguale» è il modo di serie: una
+// finestra riempie lo schermo, due si affiancano a metà, tre in terzi.
+#define TILING_UGUALE 0   // dividono lo spazio in parti uguali
+#define TILING_MAESTRO 1  // una grande a sinistra, le altre impilate a destra
+#define TILING_NUOVO 2    // al massimo due per scrivania, la terza ne apre una nuova
+#define TILING_GRIGLIA 3  // griglia 2×2: quattro finestre, ognuna in un angolo
 
 /// Quante scorciatoie ci stanno. Novantacinque ne ha Minerva oggi; il tetto è
 /// alto il doppio, e non è un limite ma la garanzia che una riga in più non
@@ -211,7 +226,44 @@ struct scorciatoia {
 	bool tenuto;
 };
 
+struct tiling_rule { char app[128]; bool enabled; int percent,position,workspace; };
+
+struct launch_target {
+    struct wlr_xdg_activation_token_v1 *token;
+    struct wl_listener destroy;
+    uint64_t birth;
+    int workspace;
+    char output[128];
+    bool new_window;
+};
+struct tiling_navigation_item {
+    struct finestra *window;
+    uint64_t birth;
+    struct wlr_box box;
+};
 struct minerva {
+    struct wlr_xdg_activation_v1 *activation;
+    struct launch_target launches[64];
+    uint64_t window_birth;
+	bool tiling, tiling_manual, tiling_busy;
+    bool tiling_focus_first, tiling_focus_configured, tiling_master_adaptive;
+    struct wl_event_source *tiling_focus_release;
+    uint64_t tiling_focus_serial;
+    struct finestra *tiling_focus_pending;
+    uint64_t tiling_focus_birth;
+    struct tiling_navigation_item *tiling_navigation;
+    size_t tiling_navigation_count;
+    bool tiling_navigating;
+	int tiling_scrivanie[10]; // 0 inherit, 1 classic, 2+ layout
+	/// Il fuoco segue il puntatore: passando sopra una finestra le si dà il
+	/// fuoco senza cliccare (come `focus-follows-mouse` di Niri e i3).
+	bool focus_segue_mouse;
+	int tiling_percent, tiling_gap;
+	int tiling_layout;
+	uint64_t tiling_serial;
+	struct wl_event_source *tiling_idle;
+	struct tiling_rule tiling_rules[64];
+	int tiling_rule_count;
     struct monitor_transaction *monitor_transaction;
 	struct wl_display *display;
 	struct wl_event_loop *loop;
@@ -228,6 +280,7 @@ struct minerva {
 	struct wlr_output_layout *schermi;
 
 	struct wlr_xdg_shell *xdg_shell;
+	struct wl_listener activation_request,activation_destroy;
 	struct wlr_layer_shell_v1 *layer_shell;
 
 	/// XWayland, e le finestre «override redirect» che ne escono. Sta a
@@ -596,6 +649,7 @@ struct minerva {
 	/// dividere in due il campo quando un tasto «vale per un altro»: o lo
 	/// sbagliamo noi, o lo interpreta male chi lo riceve.
 	bool traccia_pulsanti;
+	bool traccia_finestre;
 	/// `MINERVA_TRACCIA_MENU=1`: dice quando arriva un menù e se si trova
 	/// dove appenderlo. Un menù che non compare non lascia altra traccia.
 	bool traccia_menu;
@@ -613,7 +667,7 @@ struct minerva {
 	// tre ascoltatori il compositore riceveva la domanda e non rispondeva —
 	// «Ctrl+C» non dava nessun errore e non copiava nulla, in ogni programma,
 	// e `wl-paste` diceva «Nothing is copied». Trovato il 1º settembre 2026
-	// perché Giacomo non riusciva a incollare un comando nel terminale.
+	// perché il manutentore non riusciva a incollare un comando nel terminale.
 	struct wl_listener selezione_richiesta;
 	struct wl_listener selezione_primaria_richiesta;
 	struct wl_listener trascinamento_richiesto;
@@ -687,7 +741,7 @@ struct minerva {
 
 	// ── La cornice attorno alla finestra attiva ──────────────────────────
 	//
-	// Giacomo, 3 settembre 2026: «se voglio che il colore intorno diventi tipo
+	// il manutentore, 3 settembre 2026: «se voglio che il colore intorno diventi tipo
 	// rgb e cambi colore costantemente oppure che giri sempre come una
 	// striscia led?».
 	//
@@ -707,10 +761,12 @@ struct minerva {
 	enum { CORNICE_SPENTA, CORNICE_FISSA, CORNICE_GIRA,
 	       CORNICE_STRISCIA } cornice_modo;
 	float cornice_r, cornice_g, cornice_b;
+	bool focus_border, inactive_gray;
+	float focus_color[3];
 
 	// ── I colori che si alternano ───────────────────────────────────────
 	//
-	// Giacomo, 9 settembre 2026: «vorrei anche l'effetto rgb come una strip
+	// il manutentore, 9 settembre 2026: «vorrei anche l'effetto rgb come una strip
 	// led e possibilità di scegliere i colori che si alterneranno».
 	//
 	// Zero colori vuol dire lo SPETTRO intero, che è come la cornice è nata e
@@ -728,7 +784,7 @@ struct minerva {
 	/// è un effetto, è una fiera, e soprattutto la cornice serve a dire
 	/// «questa è quella attiva». Se sono accese tutte non dice più niente.
 	///
-	/// Giacomo l'ha chiesta lo stesso, e ha ragione a poterla volere: con una
+	/// il manutentore l'ha chiesta lo stesso, e ha ragione a poterla volere: con una
 	/// velatura bassa il bordo diventa il contorno di ogni finestra invece
 	/// che un cartellino, ed è un altro modo di guardare la scrivania. Sopra
 	/// 0,6 però la finestra attiva smette di distinguersi, e lì ci si ferma.
@@ -767,7 +823,7 @@ struct minerva {
 
 	// ── L'effetto sulle finestre: un corpo solo ─────────────────────────
 	//
-	// Giacomo, 2 settembre 2026: «non abbiamo il blur e ci vorrebbero delle
+	// il manutentore, 2 settembre 2026: «non abbiamo il blur e ci vorrebbero delle
 	// impostazioni per mettere nessun effetto o blur o vetro [...] e in blur
 	// o vetro dovrebbero far vedere un solo corpo trasparente o blur come un
 	// unico corpo la barra e la finestra senza stacchi».
@@ -786,6 +842,17 @@ struct minerva {
 	enum { EFFETTO_NESSUNO, EFFETTO_VETRO, EFFETTO_ACQUERELLO } effetto_modo;
 	/// Quanto è opaca una finestra col vetro acceso, da 0 a 1.
 	float effetto_alfa;
+	/// Il vetro dietro la barra del preset Windows e i suoi pannelli
+	/// (namespace `liquid-windows11`), anche con l'effetto delle finestre
+	/// spento. In Windows 11 la barra e i pannelli a comparsa sono di
+	/// Acrylic, vetro smerigliato, mentre le finestre restano piene: due
+	/// cose diverse, e una manopola sola (`effetto_modo`) non le teneva
+	/// separate. Lo accende la shell col verbo «vetrobarra».
+	bool vetro_barra;
+	/// La ricetta Acrylic di quel vetro (tinta, luminosità, rumore), o
+	/// spenta: allora è l'acquerello semplice. Vedi `struct
+	/// wlr_minerva_acrylic` e «vetrobarra si <tinta> <op> <lum> <op>».
+	struct wlr_minerva_acrylic vetro_acrylic;
 
 	// ── Il modo risparmio ────────────────────────────────────────────────
 	//
@@ -928,6 +995,10 @@ struct sovrapposta {
 };
 
 struct schermo {
+	int tiling_scroll[10], tiling_scroll_y[10], tiling_canvas_w[10], tiling_canvas_h[10];
+	uintptr_t tiling_lastfocus[10];
+    int tiling_master_width[10];
+	bool tiling_manual_scroll[10];
 	/// Il cronometro del disegno, acceso solo quando si misura (verbo
 	/// `gpu`). Si legge al fotogramma DOPO: prima la scheda video non ha
 	/// ancora finito, e wlroots lo segnala come errore.
@@ -997,7 +1068,22 @@ enum razza_finestra {
 };
 
 struct finestra {
-	enum tipo_nodo tipo;
+	enum tipo_nodo tipo; // Primo campo: contratto di nodo_proprietario.
+    uint64_t birth;
+    uint64_t tiling_focus_recency;
+    bool preview_dirty;
+    bool launch_assigned;
+	bool attention;
+	int64_t tiling_col;
+	uint64_t tiling_row;
+	struct wlr_output *tiling_output;
+	int tiling_width,tiling_height,tiling_percent;
+	int tiling_target_width,tiling_target_height;
+	int tiling_rejected_width,tiling_rejected_height;
+	int tiling_limits[4];
+	bool tiling_saved,tiling_floating,tiling_blocked,tiling_classic_max,tiling_classic_snap;
+	struct wlr_box tiling_classic;
+	struct wlr_box tiling_box, tiling_logical;
 	struct wl_list link;
 	struct minerva *m;
 	enum razza_finestra razza;
@@ -1036,12 +1122,12 @@ struct finestra {
 	/// 1. Fino al 7 settembre 2026 il colore lo portava la `maniglia`, che è
 	///    un rettangolo PIENO grande quanto la finestra. Sotto una finestra
 	///    opaca se ne vedono solo i bordi, ed era l'effetto voluto; sotto una
-	///    TRASLUCIDA traspare da tutta la superficie. L'Alacritty di Giacomo
+	///    TRASLUCIDA traspare da tutta la superficie. L'Alacritty di il manutentore
 	///    sta a `opacity = 0.85`, e a ogni cambio di fuoco la finestra si
 	///    tingeva per intero — misurato: da (54, 84, 98) a (50, 114, 131).
 	/// 2. Allora quattro strisce sottili, una per lato. Ha retto finché gli
 	///    angoli erano quadrati. Con gli angoli tondi no: la finestra si
-	///    arrotonda e le strisce restano squadrate, e si vede. Giacomo, alla
+	///    arrotonda e le strisce restano squadrate, e si vede. il manutentore, alla
 	///    prima fotografia: «la vedo arrotondata sopra ma la linea celeste
 	///    intorno no».
 	/// 3. Adesso uno solo, con dentro un buco della forma esatta della
@@ -1145,6 +1231,8 @@ struct finestra {
 	struct wl_listener smappata;
 	struct wl_listener distrutta;
 	struct wl_listener titolo_cambiato;
+	struct wl_listener genitore_cambiato;
+	struct wl_listener vincoli_cambiati;
 	struct wl_listener chiede_sposta;
 	struct wl_listener chiede_ridimensiona;
 	struct wl_listener chiede_ingrandisci;
@@ -1185,6 +1273,7 @@ struct finestra {
 	struct wl_listener x_dissocia;
 	struct wl_listener x_configura;
 	struct wl_listener x_attiva;
+	struct wl_listener x_attention;
 	/// Il contrario di `sovrapposta.cambia_forma`.
 	struct wl_listener x_cambia_forma;
 
@@ -1226,6 +1315,24 @@ struct finestra {
 // assottiglierebbe proprio sulla curva.
 #define ANGOLO_RAGGIO 10
 
+static bool tiling_su(struct minerva *m,int desk) {
+    int value=desk>=1 && desk<=10 ? m->tiling_scrivanie[desk-1]:0;
+    return value ? value>1:m->tiling;
+}
+static bool tiling_attivo(struct minerva *m) {return tiling_su(m,m->scrivania_attiva);}
+static int tiling_disposizione(struct minerva *m,int desk) {
+    int value=desk>=1 && desk<=10 ? m->tiling_scrivanie[desk-1]:0;
+    return value>1 ? value-2:m->tiling_layout;
+}
+static void anteprima_dimentica(struct finestra *);
+static void anteprima_segnala(struct finestra *);
+static void fuoco_in_direzione(struct minerva *, const char *);
+static void finestra_schermo_intero(struct finestra *,bool);
+static void tiling_queue(struct minerva *);
+static void tiling_focus_changed(struct finestra *);
+static void tiling_navigation_reset(struct minerva *);
+static void tiling_recall(struct finestra *);
+static void finestra_ingrandisci(struct finestra *,bool);
 static void fuoco_finestra(struct minerva *m, struct finestra *f);
 static void barra_aggiorna(struct finestra *f);
 /// La trasparenza del «corpo unico», su tutto l'albero della finestra.
@@ -1275,6 +1382,7 @@ static void finestra_massimo(struct finestra *f, int *w, int *h);
 static void finestra_di_schermo_intero(struct finestra *f, bool si);
 static void finestra_di_chiuditi(struct finestra *f);
 static struct finestra *finestra_attiva(struct minerva *m);
+static void decorazione_applica(struct finestra *f);
 static bool scrivania_vai_ex(struct minerva *m, int quale, bool prendi_il_fuoco);
 static void annuncia_scrivania(struct minerva *m);
 static void annuncia_schermi(struct minerva *m);
@@ -1322,6 +1430,8 @@ static void fuoco_tastiera(struct minerva *m, struct wlr_surface *s) {
 	puntatore_consenti(m->puntatore, !m->bloccato && m->presa == PRESA_NIENTE);
 	if (s == NULL) {
 		wlr_seat_keyboard_notify_clear_focus(m->seat);
+        cornici_ridipingi(m);
+        if(m->canale) canale_annuncia(m->canale,"fuoco","evento fuoco {}");
 		return;
 	}
 	if (m->seat->keyboard_state.focused_surface == s)
@@ -1336,11 +1446,28 @@ static void fuoco_tastiera(struct minerva *m, struct wlr_surface *s) {
 		// deve sapere di essere quello attivo anche se in quel momento non
 		// c'è niente da premere.
 		wlr_seat_keyboard_notify_enter(m->seat, s, NULL, 0, NULL);
+    cornici_ridipingi(m);
+    if(m->canale) canale_annuncia(m->canale,"fuoco","evento fuoco {}");
 }
 
 static void fuoco_finestra(struct minerva *m, struct finestra *f) {
 	if (f == NULL || f->albero == NULL)
 		return;
+
+    // Il clic sulla madre non deve coprire una figlia modale: il client
+    // rifiuterebbe l'input, lasciando un dialogo invisibile e la madre bloccata.
+    if (f->razza == FINESTRA_XDG) {
+        struct finestra *figlia;
+        wl_list_for_each(figlia, &m->finestre_elenco, link) {
+            if (figlia->razza == FINESTRA_XDG && figlia->mappata_ora
+                    && !figlia->ridotta && figlia->albero
+                    && figlia->scrivania == f->scrivania
+                    && minerva_dialogo_blocca_antenato(figlia->toplevel, f->toplevel)) {
+                f = figlia;
+                break;
+            }
+        }
+    }
 
 	// ── Mentre lo schermo è bloccato, nessuno prende il fuoco ────────────
 	//
@@ -1353,12 +1480,18 @@ static void fuoco_finestra(struct minerva *m, struct finestra *f) {
 	if (m->bloccato)
 		return;
 
+    if(f->attention) {
+        f->attention=false;
+        if(f->razza==FINESTRA_X11) wlr_xwayland_surface_set_demands_attention(f->xsup,false);
+        annuncia(m,"stato",f);
+    }
+
 	// ── Già sua: non si rifà niente ─────────────────────────────────────
 	//
 	// Ogni clic su una finestra passa di qui, anche quando il fuoco ce l'ha
 	// già. Rifare tutto voleva dire riattivarla, ridisegnare la barra del
 	// titolo e la cornice e riannunciare «fuoco» alla shell a OGNI clic, e
-	// Giacomo vedeva il titolo del terminale diventare grigio per un istante e
+	// il manutentore vedeva il titolo del terminale diventare grigio per un istante e
 	// la finestra «perdere luce». Misurato il 24 settembre 2026 ascoltando il
 	// canale: dieci «fuoco» in undici secondi, sempre la stessa finestra.
 	if (f->scrivania == m->scrivania_attiva
@@ -1418,6 +1551,8 @@ static void fuoco_finestra(struct minerva *m, struct finestra *f) {
 	// succederebbe niente — il timer con quel modo non gira.
 	cornici_ridipingi(m);
 	annuncia(m, "fuoco", f);
+    f->tiling_focus_recency=++m->tiling_focus_serial;
+    tiling_focus_changed(f);
 }
 
 /// A chi dare il fuoco quando quella attiva se ne va.
@@ -1797,6 +1932,8 @@ static bool schermo_configura(struct wlr_output *out,
 	wlr_output_state_set_enabled(&stato, true);
 
 	struct wlr_output_mode *modo = NULL;
+    const bool headless_custom = v && v->larghezza > 0 && v->altezza > 0
+        && wlr_output_is_headless(out) && wl_list_empty(&out->modes);
 	if (v != NULL && v->larghezza > 0 && v->altezza > 0) {
 		// Il modo chiesto, se esiste davvero. `wlr_output_preferred_mode` non
 		// serve a cercarlo: bisogna scorrere la lista, perché un modo che il
@@ -1813,15 +1950,19 @@ static bool schermo_configura(struct wlr_output *out,
 			modo = cand;
 			break;
 		}
-		if (modo == NULL)
+		if (modo == NULL && !headless_custom)
 			wlr_log(WLR_ERROR, "minerva: lo schermo %s non ha il modo "
 				"%dx%d@%d: tengo quello preferito", out->name,
 				v->larghezza, v->altezza, v->hz);
 	}
 	if (modo == NULL)
 		modo = wlr_output_preferred_mode(out);
-	if (modo != NULL)
+	if (modo != NULL) {
 		wlr_output_state_set_mode(&stato, modo);
+	} else if (headless_custom) {
+		wlr_output_state_set_custom_mode(&stato, v->larghezza, v->altezza,
+			v->millihz > 0 ? v->millihz : (v->hz > 0 ? v->hz*1000 : 60000));
+	}
 
 	// ── LA SCALA ────────────────────────────────────────────────────────
 	//
@@ -1894,10 +2035,11 @@ static void schermo_nel_disegno(struct minerva *m, struct wlr_output *out,
 	// vanno DAVVERO lo decidono le Impostazioni di Minerva, che sanno già
 	// disporre due schermi (`settings/sections/Display.qml`): qui serve solo
 	// che esistano da qualche parte.
-	struct wlr_output_layout_output *lo =
-		(v != NULL && v->posizione_detta)
-		? wlr_output_layout_add(m->schermi, out, v->x, v->y)
-		: wlr_output_layout_add_auto(m->schermi, out);
+	struct wlr_output_layout_output *lo = wlr_output_layout_get(m->schermi,out);
+	if(v != NULL && v->posizione_detta)
+		lo=wlr_output_layout_add(m->schermi,out,v->x,v->y);
+	else if(!lo)
+		lo=wlr_output_layout_add_auto(m->schermi,out);
 	if (lo == NULL)
 		return;
 
@@ -2027,6 +2169,7 @@ static void disponi(struct minerva *m, struct wlr_output *out) {
 	wl_list_for_each(sc, &m->schermi_elenco, link) {
 		if (sc->out == out) {
 			sc->utile = utile;
+			if(tiling_attivo(m)) tiling_queue(m);
 			return;
 		}
 	}
@@ -2034,7 +2177,7 @@ static void disponi(struct minerva *m, struct wlr_output *out) {
 
 // ── La tastiera ai pannelli che l'hanno chiesta ──────────────────────────
 //
-// Giacomo, 6 settembre 2026: «il nostro polkit o come si chiama, quando fa
+// il manutentore, 6 settembre 2026: «il nostro polkit o come si chiama, quando fa
 // apparire richiesta di password di root non prende il focus e quindi bisogna
 // spostare il mouse, cliccare sopra e inserire la password».
 //
@@ -2184,7 +2327,13 @@ static void appoggiata_sfocatura(struct appoggiata *a) {
 	// dietro il vetro sì.
 	const bool piano_giusto =
 		a->ls->current.layer != ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND;
-	const bool voglio = a->m->effetto_modo == EFFETTO_ACQUERELLO && piano_giusto;
+	// La barra di Windows ha il suo vetro anche con l'effetto spento (vedi
+	// `vetro_barra`). Il risparmio lo spegne come spegne tutto il resto.
+	const bool barra_windows = a->m->vetro_barra && !a->m->risparmio_attivo
+		&& a->ls->namespace != NULL
+		&& strcmp(a->ls->namespace, "liquid-windows11") == 0;
+	const bool voglio = piano_giusto
+		&& (a->m->effetto_modo == EFFETTO_ACQUERELLO || barra_windows);
 
 	if (!voglio) {
 		if (a->sfocatura != NULL)
@@ -2216,6 +2365,39 @@ static void appoggiata_sfocatura(struct appoggiata *a) {
 	wlr_scene_rect_set_size(a->sfocatura, w, h);
 	if (c.trovato != NULL)
 		wlr_minerva_blur_set_mask(a->sfocatura, c.trovato);
+
+	// ── La barra Windows: il vetro solo dove la barra c'è ───────────────
+	//
+	// La superficie della barra Windows è alta quanto lo schermo (i suoi
+	// pannelli ci si aprono dentro), quasi tutta trasparente. Il vetro era
+	// un rettangolo grande come lei, e l'acquerello rifà tutto il suo
+	// rettangolo quando un danno lo tocca: una finestra che si muove
+	// ovunque sullo schermo rifaceva il vetro intero. Misurato l'11 ottobre
+	// 2026 (GLES, una finestra animata): da 325 a 930–980 µs di GPU per
+	// fotogramma, 269 mila pixel invece di 151 mila.
+	//
+	// Si ritaglia il vetro alla zona d'ingresso della superficie: la shell
+	// la tiene uguale a quello che dipinge (`mask` in `Taskbar.qml`: la
+	// striscia, più il pannello aperto). Fuori di lì il vetro non c'è, e un
+	// danno che non lo tocca non lo rifà.
+	if (barra_windows) {
+		pixman_box32_t *e = pixman_region32_extents(&a->ls->surface->input_region);
+		int x1 = e->x1 < 0 ? 0 : e->x1;
+		int y1 = e->y1 < 0 ? 0 : e->y1;
+		int x2 = e->x2 > w ? w : e->x2;
+		int y2 = e->y2 > h ? h : e->y2;
+		if (x2 <= x1 || y2 <= y1) {
+			wlr_scene_node_set_enabled(&a->sfocatura->node, false);
+			return;
+		}
+		struct wlr_box zona = { .x = x1, .y = y1, .width = x2 - x1, .height = y2 - y1 };
+		wlr_minerva_node_set_viewport(&a->sfocatura->node, &zona);
+		// La ricetta Acrylic di Windows, se la shell l'ha data.
+		wlr_minerva_blur_set_acrylic(a->sfocatura, &a->m->vetro_acrylic);
+	} else {
+		wlr_minerva_node_set_viewport(&a->sfocatura->node, NULL);
+		wlr_minerva_blur_set_acrylic(a->sfocatura, NULL);
+	}
 	wlr_scene_node_set_enabled(&a->sfocatura->node, true);
 }
 
@@ -2225,7 +2407,7 @@ static void cursore_aggiorna(struct minerva *m, uint32_t tempo);
 //
 // Il compositore decide chi riceve il puntatore solo quando il puntatore si
 // MUOVE. Ma una superficie può comparire o sparire sotto un puntatore fermo:
-// il Centro di controllo aperto dalla barra, un menù che si chiude. Giacomo,
+// il Centro di controllo aperto dalla barra, un menù che si chiude. il manutentore,
 // 24 settembre 2026: «se clicco tenendo il mouse fermo e poi rifaccio clic
 // non succede nulla; devo muovere leggermente il mouse». Il clic andava alla
 // superficie di prima, o a nessuna. Qui si rifà la scelta come se il
@@ -2239,7 +2421,7 @@ static void puntatore_ricalcola(struct minerva *m) {
 
 // ── Chi tiene sveglio lo schermo ──────────────────────────────────────────
 //
-// Giacomo, 29 settembre 2026: «la CPU a riposo è sempre sul 4 %». Il
+// il manutentore, 29 settembre 2026: «la CPU a riposo è sempre sul 4 %». Il
 // compositore presentava 11 fotogrammi al secondo con nessuno che toccava
 // niente, e non c'era modo di sapere CHI li chiedeva: ogni fotogramma nasce
 // da una superficie che manda un aggiornamento, ma il nome di quella
@@ -2627,6 +2809,22 @@ static bool finestra_ha_genitore(struct finestra *f) {
 	return f->toplevel->parent != NULL;
 }
 
+static struct finestra *finestra_genitore(struct finestra *f) {
+    struct finestra *g;
+    wl_list_for_each(g,&f->m->finestre_elenco,link) {
+        if(g==f || g->razza!=f->razza) continue;
+        if(f->razza==FINESTRA_XDG ? f->toplevel->parent==g->toplevel:
+                f->xsup->parent==g->xsup) return g;
+    }
+    return NULL;
+}
+
+static bool finestra_discendente(struct finestra *f,struct finestra *parent) {
+    size_t limit=wl_list_length(&f->m->finestre_elenco);
+    while(limit-- && (f=finestra_genitore(f))) if(f==parent) return true;
+    return false;
+}
+
 /// La misura massima che il programma dichiara, o zero se non ne dichiara.
 static void finestra_massimo(struct finestra *f, int *w, int *h) {
 	*w = 0;
@@ -2695,7 +2893,7 @@ static void finestra_utile(struct finestra *f, struct wlr_box *fuori) {
 //
 // Sotto minerva-wayland le barre sono native (`src/barra.c`), quindi quel file
 // non è in funzione, e con lui non era in funzione l'aggancio: zero righe di
-// snap in tutto il compositore. È la seconda delle tre cose che Giacomo ha
+// snap in tutto il compositore. È la seconda delle tre cose che il manutentore ha
 // chiesto il 30 agosto 2026, e non era «rotta»: non c'era.
 //
 // Il CONTO sta in `src/aggancio.c`, che non conosce wlroots e ha le sue prove
@@ -2752,7 +2950,7 @@ static enum zona_aggancio aggancio_zona(struct minerva *m, double px, double py,
 /// Quanto è alta la nostra barra su questa finestra: zero se non le spetta o
 /// se è a schermo intero.
 static int finestra_barra_alta(const struct finestra *f) {
-	return (f->decorata && !f->schermo_intero) ? barra_alta() : 0;
+	return (f->decorata && !f->schermo_intero && !f->tiling_saved) ? barra_alta() : 0;
 }
 
 // ── A chi spetta una barra ────────────────────────────────────────────────
@@ -2782,6 +2980,12 @@ static bool le_spetta(const struct minerva *m, const char *classe) {
 		return true;
 
 	if (app_nostra(classe))
+		return false;
+
+	// Shelly usa la decorazione predefinita GTK4 e non negozia xdg-decoration.
+	// Anche dopo un passaggio Tiling -> Classico la sua barra resta del client:
+	// aggiungerne una del compositore produce due intestazioni sovrapposte.
+	if (strcmp(classe, "com.shellyorg.shelly") == 0)
 		return false;
 
 	char bassa[256];
@@ -2860,7 +3064,7 @@ static void barra_aggiorna(struct finestra *f) {
 	// Lo spessore dell'anello si sceglie; la presa no. Ma dove l'anello è più
 	// grosso della presa, la presa lo segue: un bordo che si vede e non si
 	// afferra è peggio di uno che non si vede.
-	const int spesso = f->m->cornice_spessore > 0
+	const int spesso = f->m->cornice_modo==CORNICE_SPENTA && f->m->focus_border ? 2 : f->m->cornice_spessore > 0
 		? f->m->cornice_spessore : BORDO_PRESA;
 	const int presa = spesso > BORDO_PRESA ? spesso : BORDO_PRESA;
 	if (f->maniglia != NULL) {
@@ -2895,6 +3099,16 @@ static void barra_aggiorna(struct finestra *f) {
 			.corners = wlr_minerva_radii_all(raggio),
 		};
 		wlr_minerva_rect_set_hole(f->anello, buco);
+        if(f->tiling_saved) {
+            wlr_scene_node_set_position(&f->anello->node,0,0);
+            wlr_scene_rect_set_size(f->anello,larghezza,alta);
+            wlr_minerva_rect_set_corners(f->anello,wlr_minerva_radii_all(raggio));
+            wlr_minerva_rect_set_hole(f->anello,(struct wlr_minerva_clip){
+                .area={spesso,spesso,larghezza>2*spesso ? larghezza-2*spesso:0,alta>2*spesso ? alta-2*spesso:0},
+                .corners=wlr_minerva_radii_all(raggio>spesso ? raggio-spesso:0)});
+            wlr_scene_node_raise_to_top(&f->anello->node);
+        }
+
 	}
 
 	// Il fondo sfocato: esattamente la finestra, barra compresa, con gli
@@ -2932,7 +3146,7 @@ static void barra_aggiorna(struct finestra *f) {
 	if (!f->decorata || f->barra == NULL)
 		return;
 
-	if (f->schermo_intero) {
+	if (f->schermo_intero || f->tiling_saved) {
 		wlr_scene_node_set_enabled(&f->barra->node, false);
 		return;
 	}
@@ -2967,7 +3181,7 @@ static void barra_aggiorna(struct finestra *f) {
 	// Il difetto, visto guardando: aprendo un dialogo GTK dentro il nostro
 	// compositore, la sua barra mostrava **due file di pulsanti sovrapposte**,
 	// sfalsate di un centinaio di pixel — una sbiadita e una piena. Le stesse
-	// «barre del titolo doppiate» che Giacomo ha segnalato il 30 agosto 2026.
+	// «barre del titolo doppiate» che il manutentore ha segnalato il 30 agosto 2026.
 	//
 	// Non era il disegno: `barra_disegna` parte da una superficie nuova e
 	// azzerata, e i pulsanti li mette una volta sola. Ed era davvero sullo
@@ -3029,9 +3243,15 @@ static void applica_alfa(struct wlr_scene_buffer *b, int sx, int sy, void *dati)
 	wlr_minerva_buffer_set_alpha(b, *(const float *)dati);
 }
 
+static void applica_desaturazione(struct wlr_scene_buffer *b,int x,int y,void *data) {
+    (void)x;(void)y;wlr_minerva_buffer_set_desaturation(b,*(float *)data);
+}
 static void finestra_effetto(struct finestra *f) {
 	if (f == NULL || f->cornice == NULL)
 		return;
+	float gray=f->m->inactive_gray && wlr_renderer_is_gles2(f->m->renderer) && !f->schermo_intero && finestra_attiva(f->m)!=f ? 1.0f:0.0f;
+    if(f->wobbly) wobbly_visita(f->wobbly,applica_desaturazione,&gray);
+    else wlr_scene_node_for_each_buffer(&f->cornice->node,applica_desaturazione,&gray);
 	const bool vetro = f->m->effetto_modo == EFFETTO_VETRO && !f->schermo_intero;
 	const float a = vetro ? f->m->effetto_alfa : 1.0f;
 	if (f->wobbly) wobbly_visita(f->wobbly, applica_alfa, (void *)&a);
@@ -3216,6 +3436,10 @@ static void finestra_posiziona(struct finestra *f, int x, int y, int w, int h) {
 		wlr_scene_node_set_position(&f->albero->node, 0, alta);
 	if (w > 0 && h > alta)
 		finestra_di_geometria(f, x, y + alta, w, h - alta);
+	if (f->tiling_saved && f->m->presa_di == f && f->m->presa == PRESA_RIDIMENSIONA) {
+		struct wlr_box clip={0,0,w,h};
+		wlr_minerva_node_set_viewport(&f->cornice->node,&clip);
+	}
 }
 
 /// Spostarla soltanto, senza toccarne la misura. È il trascinamento, ed è
@@ -3244,7 +3468,16 @@ static void finestra_box(struct finestra *f, struct wlr_box *fuori) {
 	fuori->height += finestra_barra_alta(f);
 }
 
+#include "tiling.inc"
+
 static void finestra_ingrandisci(struct finestra *f, bool si) {
+	if (tiling_su(f->m,f->scrivania) && tiling_eligible(f)) {
+		f->ingrandita=si;
+		finestra_di_ingrandita(f,si);
+		tiling_queue(f->m);
+		annuncia(f->m,"stato",f);
+		return;
+	}
 	if (f->ingrandita == si)
 		return;
 
@@ -3355,7 +3588,11 @@ static bool finestra_visibile(struct finestra *f) {
 }
 
 static void finestra_mostra_o_nascondi(struct finestra *f) {
-	wlr_scene_node_set_enabled(&f->cornice->node, finestra_visibile(f));
+	bool was_visible = f->cornice->node.enabled;
+	bool visible = finestra_visibile(f);
+	wlr_scene_node_set_enabled(&f->cornice->node, visible);
+	if (visible && !was_visible)
+		anteprima_segnala(f);
 	// Un film ridotto, o lasciato su un'altra scrivania, non frena più — e
 	// nemmeno il suo inibitore, se ne ha uno (`inibitori_visibili`): per
 	// questo si riguarda sempre, non solo per lo schermo intero.
@@ -3415,6 +3652,32 @@ static int scrivania_quante(struct minerva *m, int quale) {
 	return quante;
 }
 
+/// Dove nasce una finestra nuova. Nel modo «nuovo» una scrivania tiene al
+/// massimo due finestre tiling: la terza va su una scrivania libera, e il
+/// fuoco (che arriva alla mappatura) porta lì chi l'ha aperta. Si chiama alla
+/// nascita, quando la finestra non è ancora nell'elenco.
+static int scrivania_per_nuova(struct minerva *m,struct finestra *new_window, int base) {
+	if (!tiling_su(m,base) || tiling_disposizione(m,base) != TILING_NUOVO)
+		return base;
+	int piene = 0;
+	struct finestra *g;
+	wl_list_for_each(g, &m->finestre_elenco, link)
+		if (g!=new_window && g->scrivania == base && tiling_eligible(g) &&
+            (!new_window->tiling_output || g->tiling_output==new_window->tiling_output))
+			piene++;
+	if (piene < 2)
+		return base;
+	// Continue after the launch destination, wrapping only at the last room.
+	// An empty earlier room must not pull a new window backwards.
+	for (int step = 1; step < SCRIVANIE; step++) {
+		int q = (base - 1 + step) % SCRIVANIE + 1;
+		if (scrivania_quante(m, q) == 0)
+			return q;
+	}
+	// Tutte piene: si resta dove si è, meglio che perdere la finestra.
+	return base;
+}
+
 /// Passa alla scrivania `quale`. Torna false se non c'era niente da fare.
 ///
 /// `prendi_il_fuoco` è falso per una sola strada: quella che arriva da
@@ -3453,14 +3716,13 @@ static bool scrivania_vai(struct minerva *m, int quale) {
 	return scrivania_vai_ex(m, quale, true);
 }
 
-/// La scrivania vicina, saltando le vuote. È il gesto della rotellina sopra i
-/// pallini della barra, e sotto Hyprland è `workspace e+1`.
+/// La scrivania vicina, saltando le vuote e girando in tondo. È il gesto
+/// della rotellina sopra i pallini della barra: dalla decima si torna alla
+/// prima, fermarsi al bordo vorrebbe dire una rotellina che smette di
+/// funzionare e non si capisce perché.
 static void scrivania_vicina(struct minerva *m, bool avanti) {
 	for (int passo = 1; passo <= SCRIVANIE; passo++) {
 		int quale = m->scrivania_attiva + (avanti ? passo : -passo);
-		// Si gira in tondo: dalla decima si torna alla prima. Fermarsi al
-		// bordo vorrebbe dire una rotellina che smette di funzionare e non si
-		// capisce perché.
 		while (quale > SCRIVANIE)
 			quale -= SCRIVANIE;
 		while (quale < 1)
@@ -3482,6 +3744,12 @@ static void scrivania_porta(struct finestra *f, int quale, bool seguila) {
 		return;
 	if (f->scrivania != quale) {
 		f->scrivania = quale;
+        tiling_check_position(f);
+        struct finestra *child;
+        wl_list_for_each(child,&m->finestre_elenco,link) if(finestra_discendente(child,f)) {
+            child->scrivania=quale;child->tiling_output=f->tiling_output;
+            finestra_mostra_o_nascondi(child);annuncia(m,"stato",child);
+        }
 		// Stessa ragione dell'ingrandimento: una finestra che cambia
 		// scrivania non «viaggia», sparisce e ricompare. Un elastico ancora
 		// in corsa la farebbe ricomparire storta.
@@ -3492,9 +3760,8 @@ static void scrivania_porta(struct finestra *f, int quale, bool seguila) {
 		// vede lo stesso.
 		f->ridotta = false;
 		finestra_mostra_o_nascondi(f);
-		if (!finestra_visibile(f)
-				&& m->seat->keyboard_state.focused_surface
-					== finestra_superficie(f))
+		struct finestra *active=finestra_attiva(m);
+		if (active && !finestra_visibile(active))
 			fuoco_alla_prossima(m);
 		annuncia(m, "stato", f);
 	}
@@ -3574,7 +3841,7 @@ static void comando_csd(struct minerva *m, char *resto) {
 // sempre e solo in base a `f->decorata`, **ignorando del tutto quello che il
 // programma aveva chiesto**.
 //
-// Il difetto che ne veniva è quello che Giacomo ha segnalato il 30 agosto 2026:
+// Il difetto che ne veniva è quello che il manutentore ha segnalato il 30 agosto 2026:
 // «finestre con barra del titolo doppiate». Un programma che implementa il
 // protocollo per bene e chiede CLIENT_SIDE — «la disegno io» — se la vedeva
 // negare, disegnava la sua comunque, e sopra ci mettevamo la nostra. Due barre
@@ -3622,7 +3889,7 @@ static void decorazione_applica(struct finestra *f) {
 	}
 	finestra_decidi_barra(f, finestra_classe(f));
 
-	wlr_xdg_toplevel_decoration_v1_set_mode(f->decorazione, f->decorata
+	wlr_xdg_toplevel_decoration_v1_set_mode(f->decorazione, (f->decorata || (f->tiling_saved && !app_nostra(finestra_classe(f))))
 		? WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE
 		: WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
 }
@@ -3657,7 +3924,31 @@ static void finestra_commit(struct wl_listener *l, void *dati) {
 	}
 	// La barra è larga quanto la finestra: se il programma si ridimensiona da
 	// sé (e lo fanno tutti, all'avvio) la barra deve seguirlo.
+	tiling_constraints_changed(f);
+	// Reassert the assigned tile after an unsolicited client resize, once
+	// the preceding configure was acknowledged. Ignore old buffers in flight
+	// and avoid repeatedly configuring a client that refuses the same size.
+	if (f->tiling_saved && f->mappata_ora && !f->schermo_intero && !f->ridotta
+			&& f->m->presa_di != f
+			&& f->tiling_target_width > 0 && f->tiling_target_height > 0
+			&& !f->toplevel->base->configure_idle
+			&& wl_list_empty(&f->toplevel->base->configure_list)) {
+		struct wlr_box actual;
+		finestra_box(f, &actual);
+		if (actual.width != f->tiling_target_width || actual.height != f->tiling_target_height) {
+			if (actual.width != f->tiling_rejected_width || actual.height != f->tiling_rejected_height) {
+				f->tiling_rejected_width = actual.width;
+				f->tiling_rejected_height = actual.height;
+				finestra_di_geometria(f, f->posto_x, f->posto_y + finestra_barra_alta(f),
+					f->tiling_target_width, f->tiling_target_height - finestra_barra_alta(f));
+			}
+		} else if (f->tiling_rejected_width || f->tiling_rejected_height) {
+			f->tiling_rejected_width = f->tiling_rejected_height = 0;
+			annuncia(f->m, "mossa", f);
+		}
+	}
 	barra_aggiorna(f);
+    anteprima_segnala(f);
 }
 
 // ── La misura alla nascita ────────────────────────────────────────────────
@@ -3714,6 +4005,35 @@ static void finestra_appare(struct finestra *f) {
 	// Ultima occasione, e per una finestra X11 è l'unica: `WM_CLASS` X la
 	// scrive quando la finestra si prepara a comparire.
 	finestra_decidi_barra(f, finestra_classe(f));
+    if(prima_volta && f->razza==FINESTRA_X11 && f->xsup->startup_id) {
+        for(int i=0;i<64;i++) {
+            struct launch_target *target=&f->m->launches[i];
+            if(target->token && f->birth>target->birth && !strcmp(f->xsup->startup_id,wlr_xdg_activation_token_v1_get_name(target->token))) {
+                f->launch_assigned=true;f->scrivania=target->workspace;
+                struct schermo *screen;wl_list_for_each(screen,&f->m->schermi_elenco,link)
+                    if(!strcmp(screen->out->name,target->output)) f->tiling_output=screen->out;
+                break;
+            }
+        }
+    }
+    bool assigned=f->launch_assigned;
+    struct finestra *parent=finestra_genitore(f);
+    if(parent) {
+        f->scrivania=parent->scrivania;f->tiling_output=parent->tiling_output;assigned=true;
+    }
+    if(prima_volta && assigned && !parent && tiling_eligible(f))
+        f->scrivania=scrivania_per_nuova(f->m,f,f->scrivania);
+    if(prima_volta && !assigned && !finestra_ha_genitore(f)) {
+        struct wlr_output *out=wlr_output_layout_output_at(f->m->schermi,f->m->cursore->x,f->m->cursore->y);
+        f->tiling_output=out;
+        if(tiling_eligible(f)) f->scrivania=scrivania_per_nuova(f->m,f,f->m->scrivania_attiva);
+        for(int i=0;i<f->m->tiling_rule_count;i++) {
+            struct tiling_rule *r=&f->m->tiling_rules[i];
+            if(r->workspace>0 && !strcmp(r->app,finestra_classe(f))) {
+                f->scrivania=r->workspace;assigned=true;break;
+            }
+        }
+    }
 
 	struct wlr_box utile;
 	finestra_utile(f, &utile);
@@ -3780,11 +4100,12 @@ static void finestra_appare(struct finestra *f) {
 	// annuncia a sua volta, e un «fuoco» su una finestra di cui non si è mai
 	// sentito parlare obbliga chi ascolta a ricostruire l'elenco da capo.
 	annuncia(f->m, "aperta", f);
+    anteprima_segnala(f);
 
 	// Una finestra appena aperta prende il fuoco. È la regola di Minerva e
 	// non quella di tutti: le sue eccezioni (una finestra che nasce dietro)
 	// arriveranno con le regole vere, e staranno in un posto solo.
-	fuoco_finestra(f->m, f);
+	if(!assigned || f->scrivania==f->m->scrivania_attiva) fuoco_finestra(f->m, f);
 
 	// Una finestra può tornare mentre si guarda un'altra scrivania, o
 	// mentre lei stessa è ridotta: chi decide se si vede resta uno solo.
@@ -3792,7 +4113,7 @@ static void finestra_appare(struct finestra *f) {
 
 	// ── Quello che aveva già chiesto prima di comparire ──────────────────
 	//
-	// Giacomo, 5 settembre 2026: «tomb raider installato quando lo avvio non
+	// il manutentore, 5 settembre 2026: «tomb raider installato quando lo avvio non
 	// si avvia a schermo intero ma ho la dock e la barra in alto».
 	//
 	// Un programma che vuole nascere a schermo intero lo chiede **prima di
@@ -3815,7 +4136,15 @@ static void finestra_appare(struct finestra *f) {
 	// mestiere. Lo stesso vale per «ingrandita», che ha la stessa storia.
 	if (finestra_vuole_pieno(f)) {
 		finestra_schermo_intero(f, true);
-	} else if (finestra_vuole_ingrandita(f)) {
+	} else if (finestra_vuole_ingrandita(f) && !(tiling_su(f->m,f->scrivania) && tiling_eligible(f))) {
+		// ── In tiling la richiesta d'AVVIO non rende flottante ──────────
+		//
+		// Chrome (e chi ripristina il proprio stato massimizzato) chiede
+		// «ingrandita» appena nasce. `finestra_ingrandisci` in tiling la
+		// rende FLOTTANTE, cioè fuori dal tiling: restava a schermo intero
+		// mentre le altre si tilavano. La richiesta d'avvio non deve farlo:
+		// si tila come le altre. «Ingrandire rende flottante» vale solo per
+		// il clic esplicito sul pulsante, non per lo stato ripristinato.
 		finestra_ingrandisci(f, true);
 	}
 
@@ -3841,6 +4170,7 @@ static void finestra_sparisce(struct finestra *f) {
 	// Prima di tutto il resto: non è più sullo schermo. Senza questa riga
 	// una finestra che si nasconde invece di chiudersi lascia la barra.
 	f->mappata_ora = false;
+	anteprima_dimentica(f);
 	finestra_mostra_o_nascondi(f);
 
 	// Non è più qualcuno a cui tornare quando il pannello si chiude.
@@ -3922,18 +4252,21 @@ static void finestra_distrutta(struct wl_listener *l, void *dati) {
 		wl_list_remove(&f->x_dissocia.link);
 		wl_list_remove(&f->x_configura.link);
 		wl_list_remove(&f->x_attiva.link);
+		wl_list_remove(&f->x_attention.link);
 		wl_list_remove(&f->x_cambia_forma.link);
+		wl_list_remove(&f->vincoli_cambiati.link);
 		f->xsup->data = NULL;
 	} else {
 		f->toplevel->base->data = NULL;
 	}
+	wl_list_remove(&f->genitore_cambiato.link);
 	wl_list_remove(&f->link);
 	if (f->schermo_intero)
 		freno_aggiorna(f->m);
 
 	// ── La cornice va distrutta a mano, e non lo era mai stata ───────────
 	//
-	// 31 agosto 2026, Giacomo: «quando apro una finestra che non è di
+	// 31 agosto 2026, il manutentore: «quando apro una finestra che non è di
 	// Minerva rimane sempre la barra del titolo quando la chiudo».
 	//
 	// L'albero del PROGRAMMA se ne va da solo: è appeso alla superficie, e
@@ -3953,6 +4286,7 @@ static void finestra_distrutta(struct wl_listener *l, void *dati) {
 	wlr_scene_node_destroy(&f->cornice->node);
 
 	free(f->titolo_disegnato);
+	anteprima_dimentica(f);
 	free(f);
 }
 
@@ -3961,6 +4295,21 @@ static void finestra_titolo_cambiato(struct wl_listener *l, void *dati) {
 	struct finestra *f = wl_container_of(l, f, titolo_cambiato);
 	barra_aggiorna(f);
 	annuncia(f->m, "titolo", f);
+}
+
+static void finestra_genitore_cambiato(struct wl_listener *l, void *dati) {
+	(void)dati;
+	struct finestra *f=wl_container_of(l,f,genitore_cambiato);
+	struct finestra *parent=finestra_genitore(f);
+	if(parent && f->mappata_ora && f->scrivania!=parent->scrivania)
+		scrivania_porta(f,parent->scrivania,false);
+	tiling_queue(f->m);
+}
+
+static void finestra_vincoli_cambiati(struct wl_listener *l, void *dati) {
+	(void)dati;
+	struct finestra *f=wl_container_of(l,f,vincoli_cambiati);
+	tiling_constraints_changed(f);
 }
 
 // ── Quello che il programma CHIEDE ───────────────────────────────────────
@@ -4038,6 +4387,8 @@ static void presa_inizia(struct finestra *f, int come, uint32_t bordi) {
 	struct minerva *m = f->m;
 	if (f->schermo_intero)
 		return;
+    m->tiling_focus_pending=NULL;
+    tiling_navigation_reset(m);
 	molla_ferma_finestra(f);
 	f->wobbly_fallita = false;
 
@@ -4130,7 +4481,7 @@ static void chiede_ridimensiona(struct wl_listener *l, void *dati) {
 
 // ── I menù ────────────────────────────────────────────────────────────────
 //
-// Giacomo, 6 settembre 2026: «sui browser almeno, e non so se altrove, abbiamo
+// il manutentore, 6 settembre 2026: «sui browser almeno, e non so se altrove, abbiamo
 // lo stesso problema: se clicco il tasto destro vale come sinistro. Ho testato
 // su chrome e firefox e confermo».
 //
@@ -4358,7 +4709,8 @@ static void finestra_nuova(struct wl_listener *l, void *dati) {
 	// finestra.
 	f->cornice = wlr_scene_tree_create(m->finestre);
 	if (f->cornice == NULL) {
-		free(f);
+		anteprima_dimentica(f);
+	free(f);
 		return;
 	}
 	f->cornice->node.data = f;
@@ -4397,7 +4749,7 @@ static void finestra_nuova(struct wl_listener *l, void *dati) {
 	// prima di lei. «Prima di lei» però non bastava: nasceva dopo l'anello,
 	// e allora fra le cose che sfoca c'era anche **l'anello colorato**.
 	//
-	// Il sintomo, che è quello che Giacomo ha visto: con la cornice che gira,
+	// Il sintomo, che è quello che il manutentore ha visto: con la cornice che gira,
 	// a cambiare colore non era solo il bordo — la sfocatura ne pescava la
 	// tinta e la spalmava dentro la finestra, dai bordi verso il centro.
 	// Misurato nella sessione annidata, due fotografie a mezzo secondo di
@@ -4419,6 +4771,7 @@ static void finestra_nuova(struct wl_listener *l, void *dati) {
 	// Nasce dove si sta guardando. Non c'è altra risposta sensata: una
 	// finestra aperta adesso la si è chiesta adesso.
 	f->scrivania = m->scrivania_attiva;
+	f->birth=++m->window_birth;
 
 	f->albero = wlr_scene_xdg_surface_create(f->cornice, toplevel->base);
 	if (f->albero != NULL) {
@@ -4439,6 +4792,8 @@ static void finestra_nuova(struct wl_listener *l, void *dati) {
 	wl_signal_add(&toplevel->events.destroy, &f->distrutta);
 	f->titolo_cambiato.notify = finestra_titolo_cambiato;
 	wl_signal_add(&toplevel->events.set_title, &f->titolo_cambiato);
+	f->genitore_cambiato.notify=finestra_genitore_cambiato;
+	wl_signal_add(&toplevel->events.set_parent,&f->genitore_cambiato);
 	f->chiede_sposta.notify = chiede_sposta;
 	wl_signal_add(&toplevel->events.request_move, &f->chiede_sposta);
 	f->chiede_ridimensiona.notify = chiede_ridimensiona;
@@ -4557,14 +4912,16 @@ static void x11_commit(struct wl_listener *l, void *dati) {
 	// L'equivalente X11 di `finestra_commit`, meno la parte che qui non
 	// esiste: non c'è nessuna «prima configure» da mandare, perché la
 	// finestra dal lato di X è già viva e già misurata.
+	tiling_constraints_changed(f);
 	barra_aggiorna(f);
+    anteprima_segnala(f);
 }
 
 static void x11_mappata(struct wl_listener *l, void *dati) {
 	(void)dati;
 	struct finestra *f = wl_container_of(l, f, mappata);
 	struct wlr_surface *s = f->xsup->surface;
-	if (s == NULL)
+	if (s == NULL || f->mappata_ora)
 		return;
 
 	// ── Le due condizioni in più che valgono solo per X11 ────────────────
@@ -4618,10 +4975,20 @@ static void x11_associa(struct wl_listener *l, void *dati) {
 	struct wlr_surface *s = f->xsup->surface;
 	if (s == NULL)
 		return;
+	if (f->m->traccia_finestre)
+		wlr_log(WLR_INFO, "MINERVA-WINDOW associa X11 %u superficie %u buffer=%d mapped=%d seq=%u",
+			f->xsup->window_id, wl_resource_get_id(s->resource),
+			wlr_surface_has_buffer(s), s->mapped, s->current.seq);
 	f->mappata.notify = x11_mappata;
 	wl_signal_add(&s->events.map, &f->mappata);
 	f->smappata.notify = x11_smappata;
 	wl_signal_add(&s->events.unmap, &f->smappata);
+	// Pairing may arrive after the first buffered commit. No further commit
+	// is guaranteed for a static client: complete mapping from current state.
+	if (s->mapped)
+		x11_mappata(&f->mappata, NULL);
+	else if (wlr_surface_has_buffer(s))
+		wlr_surface_map(s);
 }
 
 static void x11_dissocia(struct wl_listener *l, void *dati) {
@@ -4670,7 +5037,7 @@ static void x11_configura_chiesta(struct wl_listener *l, void *dati) {
 	// Ingrandita o a schermo intero la misura è già decisa da noi: si
 	// RICONFERMA quella vera invece di accettare. Senza, un programma che
 	// insiste si ritrova convinto di una misura che non ha.
-	if (f->ingrandita || f->schermo_intero) {
+	if (f->ingrandita || f->schermo_intero || f->tiling_saved) {
 		finestra_di_geometria(f, b.x, b.y + alta, b.width, b.height - alta);
 		return;
 	}
@@ -4680,12 +5047,62 @@ static void x11_configura_chiesta(struct wl_listener *l, void *dati) {
 
 /// «Dammi il fuoco». Lo manda chi si è appena aperto in secondo piano e vuole
 /// venire davanti: un aggiornamento di Steam, un dialogo di errore.
+static void finestra_chiede_attenzione(struct finestra *f) {
+    if(!f->mappata_ora || f->m->bloccato || finestra_attiva(f->m)==f) return;
+    f->attention=true;annuncia(f->m,"stato",f);
+}
+static void x11_chiede_attenzione(struct wl_listener *l,void *data) {
+    (void)data;struct finestra *f=wl_container_of(l,f,x_attention);
+    finestra_chiede_attenzione(f);
+}
+static void launch_expired(struct wl_listener *listener,void *data) {
+    (void)data;struct launch_target *target=wl_container_of(listener,target,destroy);
+    wl_list_remove(&target->destroy.link);target->token=NULL;
+}
+static void attivazione_distrutta(struct wl_listener *l,void *data) {
+    (void)data;struct minerva *m=wl_container_of(l,m,activation_destroy);
+    wl_list_remove(&m->activation_request.link);wl_list_remove(&m->activation_destroy.link);
+}
+static void attivazione_chiesta(struct wl_listener *l,void *data) {
+    struct minerva *m=wl_container_of(l,m,activation_request);
+    struct wlr_xdg_activation_v1_request_activate_event *event=data;
+    struct finestra *f;
+    wl_list_for_each(f,&m->finestre_elenco,link)
+        if(finestra_superficie(f)==event->surface) {
+            struct launch_target *target=NULL;
+            for(int i=0;i<64;i++) if(m->launches[i].token==event->token) {target=&m->launches[i];break;}
+            if(target) {
+                if(target->new_window && f->birth<=target->birth) {
+                    finestra_chiede_attenzione(f);
+                    char message[256];snprintf(message,sizeof(message),"evento istanza-unica %d 0x%llx",f->scrivania,(unsigned long long)(uintptr_t)f);
+                    if(m->canale) canale_annuncia(m->canale,"istanza-unica",message);
+                    return;
+                }
+                if(f->birth>target->birth) {
+                    f->launch_assigned=true;f->scrivania=target->workspace;
+                    struct schermo *screen;wl_list_for_each(screen,&m->schermi_elenco,link)
+                        if(!strcmp(screen->out->name,target->output)) f->tiling_output=screen->out;
+                    if(tiling_eligible(f)) f->scrivania=scrivania_per_nuova(m,f,target->workspace);
+                    if(f->scrivania!=m->scrivania_attiva && finestra_attiva(m)==f) fuoco_tastiera(m,NULL);
+                    finestra_mostra_o_nascondi(f);tiling_queue(m);annuncia(m,"mossa",f);
+                }
+                if(f->scrivania==m->scrivania_attiva && f->mappata_ora) fuoco_finestra(m,f);
+                return;
+            }
+            if(event->token->seat==m->seat && event->token->surface &&
+                    event->token->surface==m->seat->keyboard_state.focused_surface)
+                fuoco_finestra(m,f);
+            else finestra_chiede_attenzione(f);
+            return;
+        }
+}
 static void x11_chiede_fuoco(struct wl_listener *l, void *dati) {
 	(void)dati;
 	struct finestra *f = wl_container_of(l, f, x_attiva);
 	if (f->xsup->surface == NULL || !f->xsup->surface->mapped)
 		return;
-	fuoco_finestra(f->m, f);
+	if(f->scrivania!=f->m->scrivania_attiva) finestra_chiede_attenzione(f);
+	else fuoco_finestra(f->m, f);
 }
 
 static void finestra_x11_nuova(struct minerva *m, struct wlr_xwayland_surface *x) {
@@ -4703,7 +5120,8 @@ static void finestra_x11_nuova(struct minerva *m, struct wlr_xwayland_surface *x
 
 	f->cornice = wlr_scene_tree_create(m->finestre);
 	if (f->cornice == NULL) {
-		free(f);
+		anteprima_dimentica(f);
+	free(f);
 		return;
 	}
 	f->cornice->node.data = f;
@@ -4738,7 +5156,7 @@ static void finestra_x11_nuova(struct minerva *m, struct wlr_xwayland_surface *x
 	// prima di lei. «Prima di lei» però non bastava: nasceva dopo l'anello,
 	// e allora fra le cose che sfoca c'era anche **l'anello colorato**.
 	//
-	// Il sintomo, che è quello che Giacomo ha visto: con la cornice che gira,
+	// Il sintomo, che è quello che il manutentore ha visto: con la cornice che gira,
 	// a cambiare colore non era solo il bordo — la sfocatura ne pescava la
 	// tinta e la spalmava dentro la finestra, dai bordi verso il centro.
 	// Misurato nella sessione annidata, due fotografie a mezzo secondo di
@@ -4758,6 +5176,7 @@ static void finestra_x11_nuova(struct minerva *m, struct wlr_xwayland_surface *x
 	}
 
 	f->scrivania = m->scrivania_attiva;
+	f->birth=++m->window_birth;
 
 	// Spenta finché non si mappa: la cornice esiste da adesso, il programma
 	// dentro no, e una maniglia intorno al vuoto si può afferrare. Va DOPO
@@ -4785,10 +5204,16 @@ static void finestra_x11_nuova(struct minerva *m, struct wlr_xwayland_surface *x
 	wl_signal_add(&x->events.destroy, &f->distrutta);
 	f->titolo_cambiato.notify = finestra_titolo_cambiato;
 	wl_signal_add(&x->events.set_title, &f->titolo_cambiato);
+	f->genitore_cambiato.notify = finestra_genitore_cambiato;
+	wl_signal_add(&x->events.set_parent, &f->genitore_cambiato);
+	f->vincoli_cambiati.notify = finestra_vincoli_cambiati;
+	wl_signal_add(&x->events.set_size_hints, &f->vincoli_cambiati);
 	f->x_configura.notify = x11_configura_chiesta;
 	wl_signal_add(&x->events.request_configure, &f->x_configura);
 	f->x_attiva.notify = x11_chiede_fuoco;
 	wl_signal_add(&x->events.request_activate, &f->x_attiva);
+	f->x_attention.notify=x11_chiede_attenzione;
+	wl_signal_add(&x->events.request_demands_attention,&f->x_attention);
 	f->chiede_sposta.notify = chiede_sposta;
 	wl_signal_add(&x->events.request_move, &f->chiede_sposta);
 	f->chiede_ridimensiona.notify = chiede_ridimensiona;
@@ -4808,7 +5233,7 @@ static void finestra_x11_nuova(struct minerva *m, struct wlr_xwayland_surface *x
 static void sovrapposta_mappata(struct wl_listener *l, void *dati) {
 	(void)dati;
 	struct sovrapposta *s = wl_container_of(l, s, mappata);
-	if (s->xsup->surface == NULL)
+	if (s->xsup->surface == NULL || s->albero != NULL)
 		return;
 
 	// Dentro `m->finestre` e non in un piano suo: un menù di un programma
@@ -4867,6 +5292,10 @@ static void sovrapposta_associa(struct wl_listener *l, void *dati) {
 	wl_signal_add(&s->xsup->surface->events.map, &s->mappata);
 	s->smappata.notify = sovrapposta_smappata;
 	wl_signal_add(&s->xsup->surface->events.unmap, &s->smappata);
+	if (s->xsup->surface->mapped)
+		sovrapposta_mappata(&s->mappata, NULL);
+	else if (wlr_surface_has_buffer(s->xsup->surface))
+		wlr_surface_map(s->xsup->surface);
 }
 
 static void sovrapposta_dissocia(struct wl_listener *l, void *dati) {
@@ -5045,6 +5474,8 @@ static void tastiera_modificatori(struct wl_listener *l, void *dati) {
 	// i modificatori devono venire da quella che si sta usando davvero.
 	wlr_seat_set_keyboard(t->m->seat, t->kb);
 	wlr_seat_keyboard_notify_modifiers(t->m->seat, &t->kb->modifiers);
+    if(!(wlr_keyboard_get_modifiers(t->kb) & WLR_MODIFIER_LOGO))
+        tiling_navigation_reset(t->m);
 }
 
 // ── Le scorciatoie ────────────────────────────────────────────────────────
@@ -5172,6 +5603,7 @@ static void fuoco_in_direzione(struct minerva *m, const char *dove) {
 	finestra_box(attiva, &a);
 	const double ax = a.x + a.width / 2.0;
 	const double ay = a.y + a.height / 2.0;
+    struct wlr_output *output=wlr_output_layout_output_at(m->schermi,ax,ay);
 
 	struct finestra *scelta = NULL;
 	double migliore = 0.0;
@@ -5183,6 +5615,7 @@ static void fuoco_in_direzione(struct minerva *m, const char *dove) {
 		finestra_box(f, &b);
 		const double bx = b.x + b.width / 2.0;
 		const double by = b.y + b.height / 2.0;
+        if(tiling_attivo(m) && wlr_output_layout_output_at(m->schermi,bx,by)!=output) continue;
 		const double dx = bx - ax;
 		const double dy = by - ay;
 
@@ -5224,7 +5657,7 @@ static void aggancia_attiva(struct minerva *m, const char *dove) {
 
 	// ── Dallo schermo intero, prima si esce ──────────────────────────────
 	//
-	// Giacomo, 25 settembre 2026: «quando passo una finestra a schermo
+	// il manutentore, 25 settembre 2026: «quando passo una finestra a schermo
 	// intero e premo poi Super+freccia giù la finestra perde la barra del
 	// titolo». Super+↓ la RIDUCEVA restando a schermo intero: tornava senza
 	// barra e senza un modo evidente di uscirne. Adesso Super+↓ esce dallo
@@ -5268,7 +5701,7 @@ static void aggancia_attiva(struct minerva *m, const char *dove) {
 	// aggancio da fuori e poi misurarne il risultato.
 	//
 	// Senza, lo snap era una cosa che si poteva solo fare col dito e guardare
-	// a occhio — e Giacomo il 2 settembre 2026 l'ha descritta come «funziona
+	// a occhio — e il manutentore il 2 settembre 2026 l'ha descritta come «funziona
 	// malissimo, posiziona male le finestre» senza che ci fosse un modo di
 	// dargli torto o ragione con un numero.
 	enum zona_aggancio zona;
@@ -5327,6 +5760,12 @@ static void ridimensiona_attiva(struct minerva *m, const char *arg) {
 	if (f == NULL)
 		return;
 
+    if(tiling_su(m,f->scrivania) && tiling_eligible(f)) {
+        struct wlr_box b; finestra_box(f,&b);
+        int width=b.width+dx; if(width<80) width=80;
+        int height=b.height+dy; if(height<60) height=60;
+        tiling_resize(f,dx ? width:0,dy ? height:0); return;
+    }
 	struct wlr_box b;
 	finestra_box(f, &b);
 	int w = b.width + dx;
@@ -5380,19 +5819,21 @@ static void scorciatoia_esegui(struct minerva *m, const struct scorciatoia *s) {
 		return;
 	}
 
-	if (strcmp(a, "porta-a-scrivania") == 0) {
+	if (strcmp(a, "porta-a-scrivania") == 0 || strcmp(a,"invia-a-scrivania")==0) {
 		struct finestra *f = finestra_attiva(m);
 		if (f == NULL)
 			return;
-		// «Maiuscolo vuol dire portala con te»: Super+Maiusc+Ctrl+→ è la
-		// stanza accanto, con la finestra. Oltre la prima e la decima non si
-		// va: girare in tondo porterebbe la finestra dove non la si aspetta.
+		// «Maiuscolo vuol dire portala con te»: Super+Maiusc+sinistra/destra
+		// porta la finestra alla scrivania accanto (in numero), Super+Alt+numero
+		// alla scrivania indicata.
 		int quale = atoi(arg);
 		if (strcmp(arg, "prossima") == 0)
-			quale = m->scrivania_attiva < 10 ? m->scrivania_attiva + 1 : 10;
+			quale = m->scrivania_attiva < SCRIVANIE ? m->scrivania_attiva + 1 : SCRIVANIE;
 		else if (strcmp(arg, "precedente") == 0)
 			quale = m->scrivania_attiva > 1 ? m->scrivania_attiva - 1 : 1;
-		scrivania_porta(f, quale, true);
+		if (quale < 1 || quale > SCRIVANIE)
+			return;
+		scrivania_porta(f, quale, strcmp(a,"invia-a-scrivania")!=0);
 		return;
 	}
 
@@ -5429,11 +5870,29 @@ static void scorciatoia_esegui(struct minerva *m, const struct scorciatoia *s) {
 	// ci siano due finestre, griglia o no. E «sposta la finestra a sinistra»,
 	// senza griglia, ha una lettura ovvia che Minerva ha già — **l'aggancio a
 	// metà schermo**, lo stesso di quando la trascini contro il bordo.
+	if (strcmp(a, "tiling-ingrandisci") == 0) {
+		struct finestra *f=finestra_attiva(m);
+		if(f && tiling_attivo(m)) {
+			if(f->schermo_intero && !strcmp(arg,"no")) finestra_schermo_intero(f,false);
+			else finestra_ingrandisci(f,strcmp(arg,"no")!=0);
+		}
+		return;
+	}
+	if (strcmp(a,"tiling-scorri")==0) {tiling_scroll_manual(m,arg);return;}
+	if (strcmp(a, "tiling-sposta") == 0) { tiling_direction(m,arg,true); return; }
 	if (strcmp(a, "fuoco") == 0) {
+		if(tiling_direction(m,arg,false)) return;
+		// In tiling il fuoco direzionale si ferma qui: senza una finestra in
+		// quella direzione non si fa niente — niente fallback all'aggancio, che
+		// sposterebbe la finestra fuori dal layout (il difetto della «finestra
+		// a centro schermo» con Super+freccia).
+		if(tiling_attivo(m)) return;
 		fuoco_in_direzione(m, arg);
 		return;
 	}
 	if (strcmp(a, "sposta-finestra") == 0) {
+		if(tiling_direction(m,arg,false)) return;
+		if(tiling_attivo(m)) return;
 		aggancia_attiva(m, arg);
 		return;
 	}
@@ -5552,9 +6011,30 @@ static bool scorciatoia_prova(struct minerva *m, struct wlr_keyboard *kb,
 	const xkb_keysym_t *simboli = NULL;
 	int quanti = xkb_keymap_key_get_syms_by_level(mappa, xkb, disp, 0,
 		&simboli);
+	// The overview owns navigation, including Super+arrows. Never execute a
+	// window/workspace shortcut underneath it. Follow popup parents so the
+	// same rule also holds while its layout picker is open.
+	struct wlr_surface *focused = m->seat->keyboard_state.focused_surface;
+	struct wlr_layer_surface_v1 *layer = NULL;
+	for (int depth = 0; focused && depth < 32; depth++) {
+		focused = wlr_surface_get_root_surface(focused);
+		layer = wlr_layer_surface_v1_try_from_wlr_surface(focused);
+		if (layer) break;
+		struct wlr_xdg_surface *xdg = wlr_xdg_surface_try_from_wlr_surface(focused);
+		if (!xdg || xdg->role != WLR_XDG_SURFACE_ROLE_POPUP) break;
+		focused = xdg->popup->parent;
+	}
+	const bool overview = !m->bloccato && layer && layer->namespace
+		&& (strcmp(layer->namespace, "liquid-stanze") == 0
+            || strcmp(layer->namespace, "liquid-windows11") == 0);
 
 	for (int i = 0; i < quanti; i++) {
 		xkb_keysym_t sim = xkb_keysym_to_lower(simboli[i]);
+		if (overview && (sim == XKB_KEY_Left || sim == XKB_KEY_Right
+				|| sim == XKB_KEY_Up || sim == XKB_KEY_Down
+				|| sim == XKB_KEY_Return || sim == XKB_KEY_KP_Enter
+				|| sim == XKB_KEY_Escape || (sim >= XKB_KEY_0 && sim <= XKB_KEY_9)))
+			continue;
 		for (int j = 0; j < m->quante_scorciatoie; j++) {
 			struct scorciatoia *s = &m->scorciatoie[j];
 			// Una scorciatoia del rilascio non scatta alla pressione e
@@ -5587,6 +6067,8 @@ static bool scorciatoia_prova(struct minerva *m, struct wlr_keyboard *kb,
 			// luminosità, il lettore. Tutto il resto sarebbe un modo di
 			// comandare la sessione di qualcun altro senza sbloccarla.
 			if (m->bloccato && !s->anche_bloccato)
+				continue;
+			if (!tiling_attivo(m) && !strcmp(s->azione,"tiling-ingrandisci"))
 				continue;
 			scorciatoia_esegui(m, s);
 			return true;
@@ -6042,6 +6524,18 @@ static void tastiera_tasto(struct wl_listener *l, void *dati) {
 	struct wlr_keyboard_key_event *e = dati;
 
 	attivita(m);
+    if(e->state==WL_KEYBOARD_KEY_STATE_PRESSED && m->presa_di) {
+        const xkb_keysym_t *symbols;int count=xkb_state_key_get_syms(t->kb->xkb_state,e->keycode+8,&symbols);
+        bool escape=false;for(int i=0;i<count;i++) if(symbols[i]==XKB_KEY_Escape) escape=true;
+        if(escape) {
+            struct finestra *f=m->presa_di;struct wlr_box original=m->presa_box;
+            m->presa=PRESA_NIENTE;m->presa_di=NULL;m->presa_pulsante=-1;
+            m->aggancio_ora=ZONA_NIENTE;wlr_scene_node_set_enabled(&m->aggancio_ombra->node,false);
+            finestra_posiziona(f,original.x,original.y,original.width,original.height);tiling_queue(m);
+            if(m->quanti_inghiottiti<(int)(sizeof(m->inghiottiti)/sizeof(m->inghiottiti[0]))) m->inghiottiti[m->quanti_inghiottiti++]=e->keycode;
+            return;
+        }
+    }
 	if (e->state == WL_KEYBOARD_KEY_STATE_PRESSED)
 		blocco_rilancia(m);
 
@@ -6188,7 +6682,7 @@ static void puntatore_applica(struct minerva *m, struct wlr_input_device *dev) {
 	// Lo scorrimento naturale è nelle Impostazioni sotto **Touchpad**, e
 	// deve valere solo lì. `libinput_device_config_scroll_has_natural_scroll`
 	// dice sì anche per un mouse: con la levetta accesa — che è come sta
-	// sul portatile di Giacomo — attaccando un mouse la rotellina andava al
+	// sul portatile di il manutentore — attaccando un mouse la rotellina andava al
 	// contrario, per colpa di un interruttore che dice «touchpad».
 	//
 	// Un touchpad si riconosce dal fatto che sa scorrere con DUE DITA: è
@@ -6236,7 +6730,7 @@ static void puntatore_distrutto(struct wl_listener *l, void *dati) {
 	// lista e si lasciava attaccato a quello di wlroots, che continuava a
 	// tenersene il conto.
 	//
-	// Il sintomo, visto il 4 settembre 2026 da Giacomo — «cosa sono tutti
+	// Il sintomo, visto il 4 settembre 2026 da il manutentore — «cosa sono tutti
 	// quei segni + in impostazioni?» — è una **fila di cursori rimasti
 	// impressi sullo schermo**, uno per ogni posto in cui il puntatore si
 	// era fermato, disegnati sopra le finestre e immuni a qualunque
@@ -6304,7 +6798,7 @@ static void tastiera_nuova(struct minerva *m, struct wlr_input_device *dev) {
 /// **Qui si annuncia e basta, e non è pigrizia: è la regola della casa.**
 /// Chiudere il coperchio può voler dire sospendere, e una sospensione decisa
 /// dal compositore è una macchina che sparisce senza che nessuno l'abbia
-/// chiesto. Giacomo l'ha detto una volta e vale per sempre: «altrimenti ti
+/// chiesto. il manutentore l'ha detto una volta e vale per sempre: «altrimenti ti
 /// perdo». Il compositore riferisce il fatto — il coperchio è chiuso — e chi
 /// ha la politica in mano (la shell, il pannello Energia) decide se spegnere
 /// lo schermo, bloccare, o non fare niente.
@@ -6519,7 +7013,7 @@ static void dito_su(struct minerva *m, struct finestra *f, int quale) {
 // Una finestra si sposta dove si vuole, tranne dove non si potrebbe più
 // riprendere. Sono due i modi di perderla, e Minerva li ha visti entrambi:
 //
-//  · **sopra**, sotto la barra della scrivania. È il difetto per cui Giacomo
+//  · **sopra**, sotto la barra della scrivania. È il difetto per cui il manutentore
 //    scriveva «non hanno la barra e devo chiuderle con super+C»: se la barra
 //    del titolo finisce dentro lo spazio riservato al pannello, non c'è più
 //    niente da afferrare. Il tetto è quindi lo spazio UTILE, non lo schermo;
@@ -6785,7 +7279,7 @@ static bool respiro_avvia(struct finestra *f, int tipo) {
 
 // ── Il respiro della chiusura ────────────────────────────────────────────
 //
-// Giacomo, 27 settembre 2026, vedendo il respiro: «l'animazione in apertura
+// il manutentore, 27 settembre 2026, vedendo il respiro: «l'animazione in apertura
 // nelle app, ma in chiusura? nulla». Il perché: quando un programma chiude,
 // la sua immagine se ne va con lui, e non c'è niente da animare.
 //
@@ -7053,7 +7547,7 @@ static void molla_ferma_finestra(struct finestra *f) {
 /// finestra ingrandita dal suo pulsante si trascinava grande com'era, fuori
 /// dallo schermo (27 settembre 2026).
 ///
-/// Vale anche per un'AGGANCIATA. Giacomo, 7 settembre 2026: «staccala e vedi
+/// Vale anche per un'AGGANCIATA. il manutentore, 7 settembre 2026: «staccala e vedi
 /// che si riaggancia da sola, e non riesco a ridimensionarla se non la voglio
 /// più a metà schermo». Staccata dal bordo restava larga mezzo schermo: il
 /// ritorno alla misura di prima c'era solo per le ingrandite.
@@ -7123,7 +7617,7 @@ static bool presa_avanti(struct minerva *m) {
 		//
 		// ── E lo stesso per una AGGANCIATA ───────────────────────────
 		//
-		// Giacomo, 7 settembre 2026: «staccala e vedi che si riaggancia da
+		// il manutentore, 7 settembre 2026: «staccala e vedi che si riaggancia da
 		// sola, e non riesco a ridimensionarla se non la voglio più a metà
 		// schermo: sono costretto a fare un altro snap per rimpicciolirla».
 		//
@@ -7137,11 +7631,27 @@ static bool presa_avanti(struct minerva *m) {
 	}
 
 	if (m->presa == PRESA_SPOSTA) {
-		molla_avvia(f);
+		if(!f->tiling_saved) molla_avvia(f);
 		int x = (int)(m->presa_box.x + dx);
 		int y = (int)(m->presa_box.y + dy);
 		trattieni(f, &x, &y);
 		finestra_muovi(f, x, y);
+        if(f->tiling_saved) {
+            struct wlr_output *output=wlr_output_layout_output_at(m->schermi,m->cursore->x,m->cursore->y);
+            struct finestra *target=tiling_drop_target(m,f,output);
+            wlr_scene_node_set_enabled(&m->aggancio_ombra->node,target!=NULL);
+            if(target) {
+                struct wlr_box destination=target->tiling_box;
+                int layout=tiling_disposizione(m,f->scrivania);
+                if(layout!=TILING_GRIGLIA && layout!=TILING_MAESTRO) {
+                    destination.x=m->cursore->x<destination.x+destination.width/2 ? destination.x:destination.x+destination.width;
+                    destination.x-=3;destination.width=6;
+                }
+                wlr_scene_rect_set_size(m->aggancio_ombra,destination.width,destination.height);
+                wlr_scene_node_set_position(&m->aggancio_ombra->node,destination.x,destination.y);
+            }
+            return true;
+        }
 
 		// ── E l'ombra dell'aggancio, sotto il puntatore ──────────────
 		//
@@ -7216,7 +7726,7 @@ static bool presa_avanti(struct minerva *m) {
 
 // ── La riva riservata ────────────────────────────────────────────────────
 //
-// Giacomo, 25 settembre 2026: «se ho una app a schermo intero compaiono le
+// il manutentore, 25 settembre 2026: «se ho una app a schermo intero compaiono le
 // isole passandoci sopra». Con una finestra che riempie lo schermo —
 // ingrandita o a schermo intero — la riva non si muove da sola: angoli,
 // bordi e spinte rispondono solo mentre Super è tenuto giù. È la prima
@@ -7338,7 +7848,7 @@ static void bordo_alto_guarda(struct minerva *m) {
 	// SOLO Super («la riva col consenso di Super», 24 settembre 2026), e
 	// una finestra mandata a schermo intero dal suo pulsante restava senza
 	// nessuna uscita visibile: la barra sparisce, e che servisse Super non
-	// lo diceva niente. Giacomo, 27 settembre: «la finestra diventa
+	// lo diceva niente. il manutentore, 27 settembre: «la finestra diventa
 	// ingestibile».
 	if (!m->riva_col_consenso || super_giu(m)) {
 		bordo_alto_annuncia(m, out->name);
@@ -7585,6 +8095,16 @@ static void cursore_aggiorna(struct minerva *m, uint32_t tempo) {
 	struct sotto s;
 	cosa_c_e_sotto(m, &s);
 
+	// ── Il fuoco segue il puntatore (focus-follows-mouse) ───────────────
+	//
+	// Acceso, passando sopra una finestra le si dà il fuoco senza cliccare
+	// (come `focus-follows-mouse` di Niri e i3). Solo senza presa in corso e
+	// a schermo sbloccato: `fuoco_finestra` esce da sé se è già attiva.
+	if (m->focus_segue_mouse && s.finestra != NULL && !m->bloccato
+	    && m->presa == PRESA_NIENTE) {
+		fuoco_finestra(m, s.finestra);
+	}
+
 	// ── Il pulsante che si accende al passaggio ──────────────────────────
 	if (s.finestra != NULL && s.sulla_barra) {
 		int nx = 0, ny = 0;
@@ -7625,7 +8145,7 @@ static void cursore_aggiorna(struct minerva *m, uint32_t tempo) {
 	// `set_cursor`. E finché non lo dice — o se non lo dice mai — non lo
 	// disegna nessuno.
 	//
-	// Il sintomo l'ha visto Giacomo il 26 agosto 2026, alla prima prova vera:
+	// Il sintomo l'ha visto il manutentore il 26 agosto 2026, alla prima prova vera:
 	// «non riesco a vedere il mouse oltre alla barra». Sopra la barra la
 	// shell il cursore lo imposta (ci sono i pulsanti); sopra la SCRIVANIA no
 	// — ma la scrivania è una superficie anche lei, quella dello sfondo, e il
@@ -7727,6 +8247,7 @@ static const char *nome_pulsante(uint32_t b) {
 static void cursore_rilasciato(struct minerva *m,
 		struct wlr_pointer_button_event *e) {
 	const bool era_presa = m->presa != PRESA_NIENTE;
+	const int old_grab=m->presa;
 	struct finestra *f = m->presa_di;
 	const int pulsante = m->presa_pulsante;
 	const bool trascinata = m->presa_mossa;
@@ -7747,6 +8268,26 @@ static void cursore_rilasciato(struct minerva *m,
 	const enum zona_aggancio zona = m->aggancio_ora;
 	m->aggancio_ora = ZONA_NIENTE;
 	wlr_scene_node_set_enabled(&m->aggancio_ombra->node, false);
+    if(era_presa && f && trascinata && tiling_su(m,f->scrivania) && tiling_eligible(f) && !f->schermo_intero) {
+        if(old_grab==PRESA_RIDIMENSIONA) {
+            struct wlr_box box; finestra_box(f,&box);
+            tiling_resize(f,box.width!=f->tiling_box.width ? box.width:0,
+                box.height!=f->tiling_box.height ? box.height:0);
+        } else {
+            struct wlr_output *out=wlr_output_layout_output_at(m->schermi,m->cursore->x,m->cursore->y);
+            if(out) f->tiling_output=out;
+            tiling_check_position(f);
+            struct finestra *target=tiling_drop_target(m,f,f->tiling_output);
+            int layout=tiling_disposizione(m,f->scrivania);
+            if(target && (layout==TILING_GRIGLIA || layout==TILING_MAESTRO)) {
+                tiling_swap(f,target);
+            } else if(target) {
+                f->tiling_col=tiling_insert(f,target->tiling_col,
+                    m->cursore->x<target->tiling_box.x+target->tiling_box.width/2);
+            }
+        }
+        tiling_queue(m); annuncia(m,"mossa",f); return;
+    }
 	if (era_presa && f != NULL && trascinata && zona != ZONA_NIENTE) {
 		struct wlr_box utile = {0, 0, 0, 0};
 		if (aggancio_zona(m, m->cursore->x, m->cursore->y, &utile)
@@ -7762,7 +8303,7 @@ static void cursore_rilasciato(struct minerva *m,
 			// lasciata la mano, e si spostava solo quando il programma
 			// finiva di ridisegnarsi.
 			//
-			// Giacomo, 7 settembre 2026: «lo snap non è istantaneo, la
+			// il manutentore, 7 settembre 2026: «lo snap non è istantaneo, la
 			// posizioni come vuoi e lasci e passa più di mezzo secondo e
 			// poi si posiziona come voglio».
 			//
@@ -7877,7 +8418,7 @@ static void cursore_premuto(struct wl_listener *l, void *dati) {
 		// peggio: il sedile contava il pulsante ancora premuto, e alla
 		// pressione dopo ne contava due e NON LA CONSEGNAVA (`n_pressed`, in
 		// `wlr_seat_pointer_notify_button`). Da lì nessun clic arrivava più a
-		// nessun programma, e restava solo la tastiera. Giacomo, 27 settembre
+		// nessun programma, e restava solo la tastiera. il manutentore, 27 settembre
 		// 2026: «le finestre una volta aperte non si possono spostare o
 		// chiudere e sono obbligato a chiuderle con alt+f4».
 		//
@@ -7888,6 +8429,20 @@ static void cursore_premuto(struct wl_listener *l, void *dati) {
 				nome_pulsante(e->button), e->button);
 		wlr_seat_pointer_notify_button(m->seat, e->time_msec, e->button,
 			e->state);
+        if(m->tiling_focus_pending && m->seat->pointer_state.button_count==0) {
+            struct finestra *focused=finestra_attiva(m);
+            // XWayland dispatches wl_pointer input and XWM configure requests
+            // on separate connections. Give the released click one event turn
+            // before moving its target; otherwise Qt/X11 sees release at the
+            // old root position translated into the new window coordinates.
+            if(focused && focused->razza==FINESTRA_X11) {
+                wl_display_flush_clients(m->display);
+                if(!m->tiling_focus_release)
+                    m->tiling_focus_release=wl_event_loop_add_timer(m->loop,tiling_release_ready,m);
+                if(m->tiling_focus_release) wl_event_source_timer_update(m->tiling_focus_release,25);
+            }
+            tiling_queue(m);
+        }
 		// Finita la presa implicita, il puntatore torna a chi gli sta sotto.
 		if (m->tenuta != NULL && m->seat->pointer_state.button_count == 0) {
 			m->tenuta = NULL;
@@ -8065,7 +8620,7 @@ static void cursore_premuto(struct wl_listener *l, void *dati) {
 
 // ── Super + rotellina = cambia scrivania ─────────────────────────────────
 //
-// Il gesto che Giacomo ha chiesto il 30 agosto 2026: «se clicco il tasto super
+// Il gesto che il manutentore ha chiesto il 30 agosto 2026: «se clicco il tasto super
 // e tenendo premuto giro la rotellina vorrei cambiare desktop».
 //
 // **Non può essere una scorciatoia**, e il motivo è netto: le scorciatoie si
@@ -8185,7 +8740,7 @@ static void cursore_richiesto(struct wl_listener *l, void *dati) {
 //
 // ── Il sintomo, che sembrava tutt'altro ──────────────────────────────────
 //
-// Giacomo, 5 settembre 2026: «il puntatore quando sono su youtube non posso
+// il manutentore, 5 settembre 2026: «il puntatore quando sono su youtube non posso
 // vederlo se passo su un video, e anche su altre finestre come questo
 // terminale».
 //
@@ -8399,6 +8954,11 @@ static struct finestra *finestra_attiva(struct minerva *m) {
 	struct wlr_surface *s = m->seat->keyboard_state.focused_surface;
 	if (s == NULL)
 		return NULL;
+	s=wlr_surface_get_root_surface(s);
+    struct wlr_xdg_surface *xdg=wlr_xdg_surface_try_from_wlr_surface(s);
+    for(int i=0;xdg && xdg->role==WLR_XDG_SURFACE_ROLE_POPUP && xdg->popup->parent && i<32;i++) {
+        s=wlr_surface_get_root_surface(xdg->popup->parent);xdg=wlr_xdg_surface_try_from_wlr_surface(s);
+    }
 	struct finestra *f;
 	wl_list_for_each(f, &m->finestre_elenco, link) {
 		if (finestra_superficie(f) == s)
@@ -8547,18 +9107,33 @@ static int finestra_json(struct finestra *f, int posto, char *fuori, size_t n) {
 	char classe[256];
 	json_stringa(titolo, sizeof(titolo), finestra_titolo(f));
 	json_stringa(classe, sizeof(classe), finestra_classe(f));
+	int minw,minh,maxw,maxh;
+	tiling_limits(f,&minw,&minh,&maxw,&maxh);
+	const char *reason=tiling_exclusion(f);
+	if (!tiling_su(f->m,f->scrivania)) reason="classico";
 
 	return snprintf(fuori, n,
-		"{\"id\":\"0x%llx\",\"pid\":%d,\"titolo\":\"%s\",\"classe\":\"%s\","
+		"{\"id\":\"0x%llx\",\"pid\":%d,\"surfaceId\":%u,\"birth\":%llu,\"titolo\":\"%s\",\"classe\":\"%s\","
 		"\"x\":%d,\"y\":%d,\"larghezza\":%d,\"altezza\":%d,"
 		"\"ingrandita\":%s,\"ridotta\":%s,\"schermoIntero\":%s,"
-		"\"scrivania\":%d,\"posto\":%d,\"decorata\":%s}",
-		(unsigned long long)(uintptr_t)f, (int)finestra_pid(f), titolo, classe,
+		"\"scrivania\":%d,\"posto\":%d,\"decorata\":%s,\"tiling\":%s,\"colonna\":%lld,\"attenzione\":%s,"
+		"\"tilingMotivo\":\"%s\",\"limiti\":[%d,%d,%d,%d],\"focused\":%s,\"dragging\":%s,\"output\":\"%s\",\"logical\":[%d,%d,%d,%d],\"viewport\":[%d,%d,%d,%d]}",
+		(unsigned long long)(uintptr_t)f, (int)finestra_pid(f),
+        finestra_superficie(f) && finestra_superficie(f)->resource ? wl_resource_get_id(finestra_superficie(f)->resource):0,
+        (unsigned long long)f->birth, titolo, classe,
 		b.x, b.y, b.width, b.height,
 		f->ingrandita ? "true" : "false",
 		f->ridotta ? "true" : "false",
 		f->schermo_intero ? "true" : "false",
-		f->scrivania, posto, f->decorata ? "true" : "false");
+		f->scrivania, posto, f->decorata ? "true" : "false",
+		f->tiling_saved ? "true":"false",(long long)f->tiling_col,f->attention ? "true":"false",
+		reason ? reason:"affiancata",minw,minh,maxw,maxh,
+        finestra_attiva(f->m)==f ? "true":"false",f->m->presa_di==f ? "true":"false",
+        f->tiling_output ? f->tiling_output->name:"",f->tiling_logical.x,f->tiling_logical.y,f->tiling_logical.width,f->tiling_logical.height,
+        f->tiling_output && tiling_screen(f->m,f->tiling_output) ? tiling_screen(f->m,f->tiling_output)->tiling_scroll[f->scrivania-1]:0,
+        f->tiling_output && tiling_screen(f->m,f->tiling_output) ? tiling_screen(f->m,f->tiling_output)->tiling_scroll_y[f->scrivania-1]:0,
+        f->tiling_output && tiling_screen(f->m,f->tiling_output) ? tiling_screen(f->m,f->tiling_output)->tiling_canvas_w[f->scrivania-1]:0,
+        f->tiling_output && tiling_screen(f->m,f->tiling_output) ? tiling_screen(f->m,f->tiling_output)->tiling_canvas_h[f->scrivania-1]:0);
 }
 
 static void comando_finestre(struct minerva *m, char *risposta, size_t n) {
@@ -8590,10 +9165,8 @@ static void comando_finestre(struct minerva *m, char *risposta, size_t n) {
 			// Non ci sta: si chiude l'elenco a quello che c'è invece di
 			// consegnare un JSON troncato, che chi legge non può distinguere
 			// da uno completo. La virgola appena messa se ne va con lui.
-			risposta[o] = '\0';
-			if (o > 0 && risposta[o - 1] == ',')
-				risposta[--o] = '\0';
-			break;
+            snprintf(risposta,n,"no elenco finestre troppo grande");
+            return;
 		}
 		o += (size_t)scritti;
 		posto++;
@@ -8621,6 +9194,7 @@ static void comando_finestre(struct minerva *m, char *risposta, size_t n) {
 // Un oggetto JSON non ha questo problema, e ha il vantaggio che conta: è LO
 // STESSO oggetto che torna l'elenco, quindi chi legge scrive una lettura sola.
 static void annuncia(struct minerva *m, const char *che, struct finestra *f) {
+	if(m->presa==PRESA_NIENTE) tiling_queue(m);
 	if (m->canale == NULL)
 		return;
 	// Di una finestra che non è mai comparsa non si annuncia niente — nemmeno
@@ -8629,7 +9203,7 @@ static void annuncia(struct minerva *m, const char *che, struct finestra *f) {
 	if (!f->comparsa)
 		return;
 
-	char riga[1200];
+	char riga[4096];
 	int testa = snprintf(riga, sizeof(riga), "evento %s ", che);
 	if (testa < 0 || (size_t)testa >= sizeof(riga))
 		return;
@@ -8648,6 +9222,7 @@ static void annuncia(struct minerva *m, const char *che, struct finestra *f) {
 	int coda = finestra_json(f, posto, riga + testa, sizeof(riga) - (size_t)testa);
 	if (coda < 0 || (size_t)coda >= sizeof(riga) - (size_t)testa)
 		return;
+	if(m->traccia_finestre) wlr_log(WLR_INFO,"MINERVA-WINDOW %s",riga);
 	canale_annuncia(m->canale, che, riga);
 }
 
@@ -8655,6 +9230,7 @@ static void annuncia(struct minerva *m, const char *che, struct finestra *f) {
 /// diversa. Non porta un carico — chi ascolta richiede `schermi`, che è una
 /// domanda che si fa una volta ogni tanto e non sessanta volte al secondo.
 static void annuncia_schermi(struct minerva *m) {
+	if(tiling_attivo(m)) tiling_queue(m);
 	if (m->canale == NULL)
 		return;
 	canale_annuncia(m->canale, "schermi", "evento schermi {}");
@@ -9105,11 +9681,12 @@ static void monitor_layout_refresh(struct minerva *m) {
             continue;
         }
         if (!fallback) fallback = s->out;
-        struct wlr_box position;
-        wlr_output_layout_get_box(m->schermi, s->out, &position);
-        struct schermo_voluto v = {.acceso = true, .posizione_detta = true,
-            .x = position.x, .y = position.y};
-        schermo_nel_disegno(m, s->out, &v);
+        // Keep automatic outputs automatic. Converting them one at a time
+        // to manual coordinates displaces the remaining automatic outputs.
+        schermo_nel_disegno(m, s->out, NULL);
+    }
+    wl_list_for_each(s, &m->schermi_elenco, link) {
+        if(!s->out->enabled) continue;
         wlr_output_layout_get_box(m->schermi, s->out, &s->utile);
         disponi(m, s->out);
     }
@@ -9167,6 +9744,7 @@ static int monitor_transaction_restore(void *data) {
 }
 
 static void monitor_transaction_removed(struct minerva *m, struct wlr_output *out) {
+	struct finestra *tf; wl_list_for_each(tf,&m->finestre_elenco,link) if(tf->tiling_output==out) tf->tiling_output=NULL;
     struct monitor_transaction *t = m->monitor_transaction;
     if (!t) return;
     for (size_t i = 0; i < t->count; i++) {
@@ -9198,7 +9776,7 @@ static void monitor_transaction_removed(struct minerva *m, struct wlr_output *ou
 //                 piccolo, se ce l'ha; altrimenti tiene il suo e il più
 //                 grande mostra un bordo vuoto a destra e in basso.
 //
-// Giacomo, 22 settembre 2026: «sotto i monitor le opzioni duplica, solo
+// il manutentore, 22 settembre 2026: «sotto i monitor le opzioni duplica, solo
 // monitor 1 o 2 o solo pc e estendi». Codex aveva lasciato fuori la
 // duplicazione apposta; entra qui con la stessa transazione degli altri due.
 
@@ -9865,7 +10443,7 @@ static struct anello_stato cornice_stato(const struct minerva *m,
 /// Quattro immagini nuove a ogni battito, e non è uno spreco: sono
 /// centosessanta kilobyte in tutto (vedi il conto in cima ad `anello.c`), e
 /// l'alternativa — dei rettangoli di colore pieno — è quella che ha lasciato
-/// «le linee» che Giacomo ha visto subito.
+/// «le linee» che il manutentore ha visto subito.
 static void finestra_striscia(struct minerva *m, struct finestra *f,
 		bool accendi, double alfa) {
 	if (f->led[0] == NULL)
@@ -9927,8 +10505,9 @@ static void cornici_ridipingi(struct minerva *m) {
 	wl_list_for_each(f, &m->finestre_elenco, link) {
 		const bool viva = f == attiva;
 		const double alfa = viva ? 1.0 : m->cornice_spente;
-		const bool accendi = (m->cornice_modo != CORNICE_SPENTA)
-			&& (viva || m->cornice_spente > 0.0);
+		const bool accendi = !f->schermo_intero && ((m->cornice_modo != CORNICE_SPENTA && (viva || m->cornice_spente > 0.0)) || (m->focus_border && viva));
+        if(m->cornice_modo==CORNICE_SPENTA) for(int c=0;c<3;c++) acceso[c]=m->focus_color[c];
+        finestra_effetto(f);
 		acceso[3] = (float)alfa;
 		// Si colora l'ANELLO, non la maniglia: la maniglia è un rettangolo
 		// pieno sotto tutta la finestra, e una finestra traslucida ne
@@ -10682,6 +11261,8 @@ static void comando_colore(struct minerva *m, char *resto,
 	snprintf(risposta, n, "ok");
 }
 
+#include "anteprime.inc"
+
 void minerva_comando(struct minerva *m, const char *riga,
                      char *risposta, size_t n) {
 	char copia[4096];
@@ -10693,6 +11274,127 @@ void minerva_comando(struct minerva *m, const char *riga,
 		snprintf(risposta, n, "no riga vuota");
 		return;
 	}
+    if (!strcmp(verbo,"anteprime")) {
+        char *v=parola(&resto);
+        if(v) {anteprime_enable(m,parola_vera(v));snprintf(risposta,n,"ok");}
+        else {int count=0;for(int i=0;i<ANTEPRIME_MAX;i++)if(anteprime[i].path[0])count++;
+            snprintf(risposta,n,"ok {\"enabled\":%s,\"cached\":%d,\"captures\":%llu,\"maxCaptureUs\":%llu,\"encodingThread\":true,\"warmTicks\":%llu,\"warmTimerArmed\":%s}",
+                anteprime_enabled ? "true":"false",count,(unsigned long long)anteprime_capture_count,(unsigned long long)anteprime_capture_max_us,(unsigned long long)anteprime_warm_ticks,anteprime_timer_armed ? "true":"false");}
+        return;
+    }
+	if (!strcmp(verbo,"anteprima")) { comando_anteprima(m,parola(&resto),risposta,n); return; }
+	if (strcmp(verbo,"tiling")==0) {
+        char *what=parola(&resto);
+        if(what && m->bloccato) { snprintf(risposta,n,"no schermo bloccato"); return; }
+        if(what && (!strcmp(what,"classico") || !strcmp(what,"colonne"))) {
+            m->tiling=!strcmp(what,"colonne");
+            tiling_focus_changed(finestra_attiva(m));tiling_queue(m);
+        } else if(what && (!strcmp(what,"focus-prima") || !strcmp(what,"maestro-adattivo"))) {
+            char value[8],tail;
+            if(sscanf(resto,"%7s %c",value,&tail)!=1 || (strcmp(value,"si") && strcmp(value,"no"))) {
+                snprintf(risposta,n,"no tiling %s si|no",what);return;
+            }
+            bool enabled=!strcmp(value,"si");
+            tiling_navigation_reset(m);
+            if(!strcmp(what,"focus-prima")) {
+                m->tiling_focus_configured=true;m->tiling_focus_first=enabled;
+                m->tiling_focus_pending=NULL;
+                tiling_focus_changed(finestra_attiva(m));
+            } else {
+                if(enabled && !m->tiling_master_adaptive) {
+                    tiling_master_reset(m);
+                }
+                m->tiling_master_adaptive=enabled;
+            }
+            tiling_queue(m);
+        } else if(what && !strcmp(what,"scrivania")) {
+            int desk; char mode[20],tail;
+            const char *modes[]={"eredita","classico","uguale","maestro","nuovo","griglia"};
+            if(sscanf(resto,"%d %19s %c",&desk,mode,&tail)!=2 || desk<1 || desk>10) {
+                snprintf(risposta,n,"no tiling scrivania 1..10 disposizione"); return;
+            }
+            int value=-1;
+            for(int i=0;i<6;i++) if(!strcmp(mode,modes[i])) value=i;
+            if(value<0) {snprintf(risposta,n,"no disposizione"); return;}
+            m->tiling_scrivanie[desk-1]=value; tiling_queue(m);
+        } else if(what && !strcmp(what,"config")) {
+            char policy[24],tail; int width,gap;
+            if(sscanf(resto,"%23s %d %d %c",policy,&width,&gap,&tail)!=3 ||
+                (strcmp(policy,"recenti") && strcmp(policy,"manuale")) || width<20 || width>100 || gap<0 || gap>40) {
+                snprintf(risposta,n,"no tiling config recenti|manuale larghezza(20..100) margine(0..40)"); return;
+            }
+            // Choosing a new percentage supersedes an old mouse width.
+            if(width!=m->tiling_percent) tiling_master_reset(m);
+            m->tiling_manual=!strcmp(policy,"manuale"); m->tiling_percent=width; m->tiling_gap=gap; tiling_queue(m);
+            tiling_focus_changed(finestra_attiva(m));
+        } else if(what && !strcmp(what,"layout")) {
+            char modo[16],tail;
+            if(sscanf(resto,"%15s %c",modo,&tail)!=1 ||
+                (strcmp(modo,"uguale") && strcmp(modo,"maestro") && strcmp(modo,"nuovo") && strcmp(modo,"griglia"))) {
+                snprintf(risposta,n,"no tiling layout uguale|maestro|nuovo|griglia"); return;
+            }
+            m->tiling_layout = !strcmp(modo,"maestro") ? TILING_MAESTRO :
+                               !strcmp(modo,"nuovo") ? TILING_NUOVO :
+                               !strcmp(modo,"griglia") ? TILING_GRIGLIA : TILING_UGUALE;
+            tiling_queue(m);
+        } else if(what && !strcmp(what,"regole-reset")) {
+            m->tiling_rule_count=0; tiling_queue(m);
+        } else if(what && !strcmp(what,"regola")) {
+            char app[128],enabled[8],tail; int width,pos,workspace=0;
+            int fields=sscanf(resto,"%127s %7s %d %d %d %c",app,enabled,&width,&pos,&workspace,&tail);
+            if((fields!=4 && fields!=5) || workspace<0 || workspace>10 ||
+                (strcmp(enabled,"si") && strcmp(enabled,"no")) || width<20 || width>100 || pos< -1 || pos>63 || m->tiling_rule_count>=64) {
+                snprintf(risposta,n,"no tiling regola app si|no larghezza(20..100) posizione(-1..63)"); return;
+            }
+            struct tiling_rule *r=&m->tiling_rules[m->tiling_rule_count++];
+            snprintf(r->app,sizeof(r->app),"%s",app); r->enabled=!strcmp(enabled,"si"); r->percent=width; r->position=pos; r->workspace=workspace; tiling_queue(m);
+        } else if(what && (!strcmp(what,"vai") || !strcmp(what,"sposta"))) {
+            char *dir=parola(&resto);
+            if(!dir || strlen(dir)!=1 || !strchr("lrud",dir[0])) { snprintf(risposta,n,"no direzione l|r|u|d"); return; }
+            tiling_direction(m,dir,!strcmp(what,"sposta"));
+        } else if(what && !strcmp(what,"scorri")) {
+            tiling_scroll_manual(m,parola(&resto));
+        } else if(what && !strcmp(what,"libera")) {
+            struct finestra *f=finestra_attiva(m);
+            if(f) { f->tiling_floating=!f->tiling_floating; tiling_queue(m); }
+        } else if(what) { snprintf(risposta,n,"no comando tiling sconosciuto"); return; }
+        snprintf(risposta,n,"ok {\"modalita\":\"%s\",\"ordine\":\"%s\",\"larghezza\":%d,\"margine\":%d,\"layout\":\"%s\",\"focusPrima\":%s,\"maestroAdattivo\":%s}",
+            tiling_attivo(m) ? "colonne":"classico",m->tiling_manual ? "manuale":"recenti",m->tiling_percent,m->tiling_gap,
+            tiling_disposizione(m,m->scrivania_attiva)==TILING_MAESTRO ? "maestro" : tiling_disposizione(m,m->scrivania_attiva)==TILING_NUOVO ? "nuovo" : tiling_disposizione(m,m->scrivania_attiva)==TILING_GRIGLIA ? "griglia" : "uguale",
+            m->tiling_focus_first ? "true":"false",m->tiling_master_adaptive ? "true":"false");
+        if(what && m->canale) {
+            char event[256]; snprintf(event,sizeof(event),"evento tiling %s",risposta+3);
+            canale_annuncia(m->canale,"tiling",event);
+        }
+        return;
+    }
+    if(!strcmp(verbo,"lancio")) {
+        int desk,fresh;char tail;
+        if(m->bloccato || !m->activation || sscanf(resto,"%d %d %c",&desk,&fresh,&tail)!=2 || desk<1 || desk>10 || fresh<0 || fresh>1) {
+            snprintf(risposta,n,"no lancio scrivania(1..10) nuova(0|1)");return;
+        }
+        struct launch_target *target=NULL;
+        for(int i=0;i<64;i++) if(!m->launches[i].token) {target=&m->launches[i];break;}
+        if(!target) {snprintf(risposta,n,"no troppi avvii in corso");return;}
+        target->token=wlr_xdg_activation_token_v1_create(m->activation);
+        if(!target->token) {snprintf(risposta,n,"no token");return;}
+        target->birth=m->window_birth;target->workspace=desk;target->new_window=fresh;
+        struct wlr_output *output=wlr_output_layout_output_at(m->schermi,m->cursore->x,m->cursore->y);
+        snprintf(target->output,sizeof(target->output),"%s",output ? output->name:"");
+        target->destroy.notify=launch_expired;wl_signal_add(&target->token->events.destroy,&target->destroy);
+        snprintf(risposta,n,"ok %s",wlr_xdg_activation_token_v1_get_name(target->token));return;
+    }
+    if(!strcmp(verbo,"focus-style")) {
+        if(!resto || !*resto) {snprintf(risposta,n,"ok {\"desaturation\":%s}",wlr_renderer_is_gles2(m->renderer) ? "true":"false");return;}
+        int enabled,gray;unsigned int color;char tail;
+        if(sscanf(resto,"%d %x %d %c",&enabled,&color,&gray,&tail)!=3 || enabled<0 || enabled>1 || gray<0 || gray>1 || color>0xffffff) {
+            snprintf(risposta,n,"no focus-style 0|1 RRGGBB 0|1");return;
+        }
+        m->focus_border=enabled;m->inactive_gray=gray;
+        m->focus_color[0]=((color>>16)&255)/255.0f;m->focus_color[1]=((color>>8)&255)/255.0f;m->focus_color[2]=(color&255)/255.0f;
+        struct finestra *f;wl_list_for_each(f,&m->finestre_elenco,link) barra_aggiorna(f);
+        cornici_ridipingi(m);snprintf(risposta,n,"ok");return;
+    }
 	if (strcmp(verbo, "sospendi") == 0) {
 		if (getenv("MINERVA_PROVA") || !sonno_pronto(m->sonno)) {
 			snprintf(risposta, n, "no sospensione non disponibile in prova o senza logind protetto");
@@ -10994,6 +11696,21 @@ void minerva_comando(struct minerva *m, const char *riga,
 		snprintf(risposta, n, "ok %d", m->quanti_csd);
 		return;
 	}
+	// ── «focussegue»: il fuoco segue il puntatore ───────────────────────
+	if (strcmp(verbo, "focussegue") == 0) {
+		char *dove = parola(&resto);
+		if (dove != NULL && !strcmp(dove, "si"))
+			m->focus_segue_mouse = true;
+		else if (dove != NULL && !strcmp(dove, "no"))
+			m->focus_segue_mouse = false;
+		else {
+			snprintf(risposta, n, "no focussegue si|no");
+			return;
+		}
+		snprintf(risposta, n, "ok %s",
+			m->focus_segue_mouse ? "si" : "no");
+		return;
+	}
 	if (strcmp(verbo, "aspetto") == 0) {
 		comando_aspetto(m, resto, risposta, n);
 		return;
@@ -11056,6 +11773,82 @@ void minerva_comando(struct minerva *m, const char *riga,
 	}
 	if (strcmp(verbo, "effetto") == 0) {
 		comando_effetto(m, resto, risposta, n);
+		return;
+	}
+	// «vetrobarra si|no»: il vetro dietro la barra del preset Windows.
+	if (strcmp(verbo, "vetrobarra") == 0) {
+		char *si = parola(&resto);
+		if (si == NULL || (strcmp(si, "si") != 0 && strcmp(si, "no") != 0)) {
+			snprintf(risposta, n, "no vetrobarra vuole «si» o «no»");
+			return;
+		}
+		// «vetrobarra si RRGGBB <opacità> RRGGBB <opacità>»: la ricetta
+		// Acrylic di Windows (tinta e opacità della tinta, colore e opacità
+		// della luminosità). Senza, è l'acquerello semplice di prima: una
+		// shell vecchia continua a funzionare com'era.
+		struct wlr_minerva_acrylic ricetta = {0};
+		char *tinta = parola(&resto);
+		if (tinta != NULL) {
+			char *op_tinta = parola(&resto);
+			char *lum = parola(&resto);
+			char *op_lum = parola(&resto);
+			double r, g, b, lr, lg, lb;
+			char *fine1 = NULL, *fine2 = NULL;
+			const double ot = op_tinta ? strtod(op_tinta, &fine1) : -1;
+			const double ol = op_lum ? strtod(op_lum, &fine2) : -1;
+			if (!colore_da_esadecimale(tinta, &r, &g, &b)
+			    || lum == NULL || !colore_da_esadecimale(lum, &lr, &lg, &lb)
+			    || fine1 == op_tinta || fine2 == op_lum
+			    || !(ot >= 0.0 && ot <= 1.0) || !(ol >= 0.0 && ol <= 1.0)) {
+				snprintf(risposta, n, "no la ricetta è «RRGGBB opacità RRGGBB "
+					"opacità», con le opacità fra 0 e 1");
+				return;
+			}
+			ricetta.attivo = true;
+			ricetta.tinta[0] = (float)r;
+			ricetta.tinta[1] = (float)g;
+			ricetta.tinta[2] = (float)b;
+			ricetta.tinta[3] = (float)ot;
+			ricetta.luminosita[0] = (float)lr;
+			ricetta.luminosita[1] = (float)lg;
+			ricetta.luminosita[2] = (float)lb;
+			ricetta.luminosita[3] = (float)ol;
+			// Il 2 % di WinUI (AcrylicBrush.h, `sc_noiseOpacity`).
+			ricetta.rumore = 0.02f;
+		}
+		m->vetro_barra = strcmp(si, "si") == 0;
+		m->vetro_acrylic = ricetta;
+		// Subito, non alla prossima commit della barra: vedi lo stesso giro
+		// in `effetto_imposta`.
+		struct appoggiata *a;
+		wl_list_for_each(a, &m->appoggiate, link)
+			appoggiata_sfocatura(a);
+		snprintf(risposta, n, "ok %s%s", m->vetro_barra ? "si" : "no",
+			m->vetro_barra && ricetta.attivo ? " acrylic" : "");
+		return;
+	}
+	// «stilebarra liquid|windows»: i pulsanti delle barre del titolo. Un
+	// verbo a parte e non un campo in più di «aspetto»: un compositore che
+	// non lo conosce risponde «sconosciuto» e il resto va avanti, mentre un
+	// «aspetto» più lungo lo rifiuterebbe intero (vedi `barra.h`).
+	if (strcmp(verbo, "stilebarra") == 0) {
+		char *quale = parola(&resto);
+		enum barra_stile s;
+		if (quale != NULL && strcmp(quale, "liquid") == 0) {
+			s = BARRA_STILE_LIQUID;
+		} else if (quale != NULL && strcmp(quale, "windows") == 0) {
+			s = BARRA_STILE_WINDOWS;
+		} else {
+			snprintf(risposta, n, "no stilebarra vuole «liquid» o «windows»");
+			return;
+		}
+		barra_stile_imposta(s);
+		// Subito su tutte le finestre aperte, come dopo «aspetto»: la misura
+		// della barra non cambia, quindi basta ridisegnarla.
+		struct finestra *f;
+		wl_list_for_each(f, &m->finestre_elenco, link)
+			barra_aggiorna(f);
+		snprintf(risposta, n, "ok %s", quale);
 		return;
 	}
 	if (strcmp(verbo, "risparmio") == 0) {
@@ -11245,8 +12038,11 @@ void minerva_comando(struct minerva *m, const char *riga,
 	if (strcmp(verbo, "traccia") == 0) {
 		char *che = parola(&resto);
 		char *v = parola(&resto);
+		if(che && !strcmp(che,"finestre") && v) {
+			m->traccia_finestre=parola_vera(v);snprintf(risposta,n,"ok");return;
+		}
 		if (che == NULL || strcmp(che, "commit") != 0 || v == NULL) {
-			snprintf(risposta, n, "no traccia vuole «commit si|no»");
+			snprintf(risposta, n, "no traccia vuole «commit|finestre si|no»");
 			return;
 		}
 		commit_traccia = parola_vera(v);
@@ -11275,7 +12071,7 @@ void minerva_comando(struct minerva *m, const char *riga,
 				.pointer = NULL,
 				.time_msec = tempo,
 				.button = (quale != NULL && strcmp(quale, "destro") == 0)
-					? BTN_RIGHT : BTN_LEFT,
+					? BTN_RIGHT : (quale != NULL && strcmp(quale, "centrale") == 0) ? BTN_MIDDLE : BTN_LEFT,
 				.state = strcmp(a, "premi") == 0
 					? WL_POINTER_BUTTON_STATE_PRESSED
 					: WL_POINTER_BUTTON_STATE_RELEASED,
@@ -11514,7 +12310,7 @@ void minerva_comando(struct minerva *m, const char *riga,
 	// «quella attiva» — che è la convenzione già usata da
 	// `core/Compositore.qml`, dove `_bersaglio("")` non aggiunge niente.
 	static const char *sulle_finestre[] = {
-		"fuoco", "davanti", "chiudi", "sposta", "ridimensiona",
+		"richiama", "fuoco", "davanti", "chiudi", "sposta", "ridimensiona",
 		"ingrandisci", "schermointero", "riduci", "portaascrivania", NULL
 	};
 	bool e_sulle_finestre = false;
@@ -11558,7 +12354,9 @@ void minerva_comando(struct minerva *m, const char *riga,
 		return;
 	}
 
-	if (strcmp(verbo, "fuoco") == 0) {
+	if (strcmp(verbo, "richiama") == 0) {
+		finestra_riduci(f,false); tiling_recall(f); fuoco_finestra(m,f);
+	} else if (strcmp(verbo, "fuoco") == 0) {
 		fuoco_finestra(m, f);
 	} else if (strcmp(verbo, "davanti") == 0) {
 		wlr_scene_node_raise_to_top(&f->cornice->node);
@@ -11588,7 +12386,7 @@ void minerva_comando(struct minerva *m, const char *riga,
 		//
 		// e il secondo cancellava il primo. Risultato: «ingrandisci»
 		// spostava la finestra nell'angolo in alto a sinistra e la
-		// lasciava della misura di prima. Giacomo, 5 settembre 2026:
+		// lasciava della misura di prima. il manutentore, 5 settembre 2026:
 		// «poi impostazioni non si può massimizzare la finestra».
 		//
 		// `finestra_muovi` esiste apposta — «spostarla soltanto, senza
@@ -11600,7 +12398,14 @@ void minerva_comando(struct minerva *m, const char *riga,
 				"lo sono", sx, sy);
 			return;
 		}
+		if(tiling_su(m,f->scrivania) && tiling_eligible(f)) {
+			struct wlr_output *out=wlr_output_layout_output_at(m->schermi,mx,my);
+			if(out) f->tiling_output=out;
+			tiling_check_position(f);
+		}
 		finestra_muovi(f, mx, my);
+		if (tiling_su(m, f->scrivania) && tiling_eligible(f))
+			tiling_queue(m);
 	} else if (strcmp(verbo, "ridimensiona") == 0) {
 		char *sw = parola(&resto);
 		char *sh = parola(&resto);
@@ -11618,6 +12423,11 @@ void minerva_comando(struct minerva *m, const char *riga,
 		}
 		struct wlr_box b;
 		finestra_box(f, &b);
+		if (tiling_su(m, f->scrivania) && tiling_eligible(f)) {
+			tiling_resize(f, w, h);
+			snprintf(risposta, n, "ok");
+			return;
+		}
 		finestra_posiziona(f, b.x, b.y, w, h);
 	} else if (strcmp(verbo, "ingrandisci") == 0) {
 		char *v = parola(&resto);
@@ -11733,6 +12543,7 @@ static void proteggi_sonno(void *data) {
 	struct minerva *m = data;
 	if (!m->bloccato) {
 		m->bloccato = true;
+	anteprime_pulisci();
 		blocco_ridimensiona_tenda(m);
 		blocco_mostra_tenda(m, true);
 		fuoco_tastiera(m, NULL);
@@ -11930,6 +12741,7 @@ static void serratura_nuova(struct wl_listener *l, void *dati) {
 
 	m->serratura = serratura;
 	m->bloccato = true;
+	anteprime_pulisci();
 	m->locked_inviato = false;
 	blocco_ridimensiona_tenda(m);
 	blocco_mostra_tenda(m, true);
@@ -11990,7 +12802,7 @@ static int esci_pulito(int segnale, void *dati) {
 
 /// ── Le pagine enormi, spente per tutta la sessione ────────────────────────
 ///
-/// Giacomo, 28 settembre 2026: «esiste un modo per comprimere quei 69 MB
+/// il manutentore, 28 settembre 2026: «esiste un modo per comprimere quei 69 MB
 /// fissi ad app? […] andiamo alla radice del problema». La radice non era
 /// Quickshell né Qt: era il kernel. Su CachyOS le pagine enormi trasparenti
 /// stanno su `always`, e allora ogni area di memoria di ogni thread — il
@@ -12251,6 +13063,7 @@ int main(int argc, char *argv[]) {
 	// finora: chi non la chiede non deve accorgersi che esiste, e soprattutto
 	// non deve pagarne il battito. Anche questo timer nasce fermo.
 	m.cornice_modo = CORNICE_SPENTA;
+	m.focus_border=true; m.focus_color[0]=0.3f; m.focus_color[1]=0.65f; m.focus_color[2]=1.0f;
 	// Sei come la presa: è la misura con cui la cornice è nata, e cambiarla
 	// di nascosto vorrebbe dire una scrivania diversa senza che nessuno
 	// l'abbia chiesto.
@@ -12334,6 +13147,7 @@ int main(int argc, char *argv[]) {
 	wlr_viewporter_create(m.display);
 	wlr_fractional_scale_manager_v1_create(m.display, 1);
 
+	m.tiling_percent=50; m.tiling_gap=8; m.tiling_layout=TILING_UGUALE;
 	m.schermi = wlr_output_layout_create(m.display);
 	m.scena = wlr_scene_create();
 	m.scena_schermi = wlr_scene_attach_output_layout(m.scena, m.schermi);
@@ -12380,7 +13194,7 @@ int main(int argc, char *argv[]) {
 	//
 	// ── Il colore va PREMOLTIPLICATO ─────────────────────────────────────
 	//
-	// Giacomo, 7 settembre 2026: «quel blu che compare come dimostrazione è
+	// il manutentore, 7 settembre 2026: «quel blu che compare come dimostrazione è
 	// troppo forte e lo vorrei un pochino più trasparente e meno forte come
 	// intensità».
 	//
@@ -12481,6 +13295,15 @@ int main(int argc, char *argv[]) {
 	// ridimensionamento: chiederne una più alta di quella che wlroots
 	// implementa fa fallire la creazione, non degradare.
 	m.xdg_shell = wlr_xdg_shell_create(m.display, 6);
+    wlr_xdg_wm_dialog_v1_create(m.display, 1);
+    struct wlr_xdg_activation_v1 *activation=wlr_xdg_activation_v1_create(m.display);
+    m.activation=activation;
+    if(activation) {
+        m.activation_request.notify=attivazione_chiesta;
+        wl_signal_add(&activation->events.request_activate,&m.activation_request);
+        m.activation_destroy.notify=attivazione_distrutta;
+        wl_signal_add(&activation->events.destroy,&m.activation_destroy);
+    }
 	m.finestra_nuova.notify = finestra_nuova;
 	wl_signal_add(&m.xdg_shell->events.new_toplevel, &m.finestra_nuova);
 	// I menù. Senza questa riga il tasto destro non apre niente: vedi
@@ -12664,7 +13487,7 @@ int main(int argc, char *argv[]) {
 	// ── Il blocco prima del sonno ───────────────────────────────────────
 	//
 	// Solo su una sessione vera: le prove annidate non parlano con logind, e
-	// non devono — una prova che prende un inibitore sul portatile di Giacomo
+	// non devono — una prova che prende un inibitore sul portatile di il manutentore
 	// è una prova che gli impedisce di chiudere il coperchio.
 	//
 	// Se logind non c'è si avvisa e basta. La prima versione qui bloccava lo
@@ -12812,6 +13635,8 @@ int main(int argc, char *argv[]) {
 		wlr_xwayland_destroy(m.xwayland);
 		m.xwayland = NULL;
 	}
+    anteprime_arresta();
+	anteprime_pulisci();
 	wl_display_destroy_clients(m.display);
 	puntatore_distruggi(m.puntatore);
 	m.puntatore = NULL;

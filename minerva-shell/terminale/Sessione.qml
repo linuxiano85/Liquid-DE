@@ -44,7 +44,7 @@ Item {
     readonly property bool campanelloAcceso: Core.Ipc.get("terminale.campanello", true)
     // ── Il carattere, e i glifi dei prompt ──────────────────────────────
     //
-    // Il prompt di Giacomo (starship) è pieno di simboli nell'area d'uso
+    // Il prompt di il manutentore (starship) è pieno di simboli nell'area d'uso
     // privato di Unicode — il ramo di git, la cartella, l'orologio — che
     // stanno solo nei «Nerd Font». Alacritty li trova da solo perché chiede
     // a fontconfig «chi ha questo glifo»; Qt non lo fa per quell'area, e

@@ -10,7 +10,7 @@ import 'webdav.dart' show SpazioDav;
 ///
 /// ── Cosa vede chi lo usa ───────────────────────────────────────────────────
 ///
-/// Giacomo, 25 agosto 2026: «google invece chiede le classiche cose». Ed è
+/// il manutentore, 25 agosto 2026: «google invece chiede le classiche cose». Ed è
 /// giusto così: si preme un pulsante, si apre il browser sulla pagina di
 /// Google — quella vera, con l'email, la password e il secondo passaggio — e
 /// alla fine Google chiede se Minerva può accedere. Poi la pagina dice di

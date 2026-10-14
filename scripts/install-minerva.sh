@@ -38,20 +38,22 @@ fi
 # ── 1. Pacchetti dai repository ufficiali ─────────────────────────────────
 PKGS=(
     # Toolchain e dipendenze del fork privato: niente wlroots/SceneFX esterni.
-    base-devel meson ninja pkgconf
+    base-devel meson ninja cmake pkgconf
     wayland wayland-protocols libdrm libinput libxkbcommon pixman
     mesa libglvnd seatd libdisplay-info libliftoff hwdata
     # vulkan-headers e glslang servivano solo al renderer Vulkan, che non si
     # compila più di serie (vedi compositore/costruisci.sh).
     vulkan-icd-loader
     libxcb xcb-util-wm xcb-util-errors xcb-util-renderutil xorg-xwayland
-    cairo pango systemd glib2 pam
+    cairo pango systemd glib2 gtk4 pam
     desktop-file-utils libpulse qt6-5compat
     # Custodia, dispositivi e strumenti invocati dai servizi/applicazioni.
     git rsync libsecret udisks2 upower python
     # `minerva-filemanager1` («Mostra nella cartella» dei browser) parla
     # D-Bus con Gio, dal Python di sistema.
     python-gobject
+    # MTP/PTP sono funzioni del gestore file: GVfs da solo non vede i telefoni.
+    gvfs gvfs-mtp gvfs-gphoto2
     # ── I portali, e perché ce ne vogliono due ─────────────────────────
     #
     # `-wlr` è quello che serve DAVVERO sotto minerva-wayland: parla i
@@ -178,6 +180,14 @@ c_head "Compositore Minerva e prove automatiche"
 # La rinomina permette l'aggiornamento anche con una verifica ancora in corso.
 sudo install -Dm755 "$CARTELLA_BIN/minerva-pam" /usr/local/bin/minerva-pam.new
 sudo mv -f /usr/local/bin/minerva-pam.new /usr/local/bin/minerva-pam
+bash "$MINERVA_DIR/scripts/costruisci-window-identity.sh" || {
+    c_err "Build del modulo identità finestre fallita."
+    exit 1
+}
+bash "$MINERVA_DIR/scripts/costruisci-tiled-headers.sh" || {
+    c_err "Build delle intestazioni adattive GTK fallita."
+    exit 1
+}
 c_head "Dipendenze del backend"
 (cd "$MINERVA_DIR/minervad" && dart pub get) || exit 1
 
@@ -444,7 +454,7 @@ mkdir -p "$CARTELLA_BIN" "$APPLICAZIONI"
 
 # ── Le app che nessuno apre, nascoste ─────────────────────────────────────
 #
-# Giacomo, 28 settembre 2026: le app di Avahi «non servono e non le ho mai
+# il manutentore, 28 settembre 2026: le app di Avahi «non servono e non le ho mai
 # aperte». Non si possono disinstallare: stanno nel pacchetto del servizio
 # Avahi, che serve a stampa, audio, posizione e al nostro demone per trovare
 # televisori e schermi. Si NASCONDONO con la regola freedesktop: un .desktop
@@ -474,7 +484,7 @@ mkdir -p "$ICONE"
 # menu non esiste, e infatti l'MP3 continuava ad aprirlo un'altra cosa.
 for app in minerva-files minerva-settings minerva-monitor minerva-viewer \
            minerva-editor minerva-calcolatrice minerva-media minerva-custodia \
-           minerva-manutenzione minerva-terminale minerva-fucina; do
+           minerva-manutenzione minerva-terminale minerva-fucina minerva-fucina2; do
     # Un collegamento alla RADICE INSTALLATA, non ai sorgenti: fino al 4
     # ottobre 2026 puntava al progetto, e spostando il progetto tutti questi
     # comandi sono diventati collegamenti rotti in un colpo solo.
@@ -568,7 +578,7 @@ gtk-update-icon-cache -f -t "$PREFISSO/share/icons/hicolor" >/dev/null 2>&1 || t
 # Si toccano solo i formati che sappiamo davvero disegnare, e nessun formato
 # vettoriale o di macchina fotografica: quelli restano a chi li faceva.
 # Anche i video: dal 6 ottobre 2026 si guardano in Anteprima, scorrendo
-# insieme alle fotografie della stessa cartella (deciso con Giacomo: «ognuno
+# insieme alle fotografie della stessa cartella (deciso con il manutentore: «ognuno
 # il suo mestiere»). Media resta il lettore della musica; per un video lo si
 # sceglie con «Apri con» quando servono playlist, taglio o sottotitoli.
 for tipo in image/png image/jpeg image/gif image/bmp image/webp image/tiff \
@@ -735,7 +745,7 @@ done
 # `/usr/local/bin/minerva-greetd` (di root, non scrivibile da te: `pkexec`
 # non deve mai eseguire uno script della cartella di casa). Quella copia la fa
 # `minerva-greetd installa`, e qui non lo faceva nessuno: il pulsante «Cambia»
-# restava senza effetto (Giacomo, 6 ottobre 2026). `installa` copia e scrive
+# restava senza effetto (il manutentore, 6 ottobre 2026). `installa` copia e scrive
 # la configurazione e basta — chi ti fa entrare resta quello di adesso.
 if command -v greetd >/dev/null 2>&1; then
     if sudo "$CARTELLA_RADICE/scripts/minerva-greetd" installa; then

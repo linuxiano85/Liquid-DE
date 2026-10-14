@@ -14,6 +14,17 @@ abstract final class LinuxFiles {
       void Function(Pointer<Void>)>('free');
   static final _errno = _libc.lookupFunction<Pointer<Int32> Function(),
       Pointer<Int32> Function()>('__errno_location');
+  static final _kill = _libc.lookupFunction<Int32 Function(Int32, Int32),
+      int Function(int, int)>('kill');
+
+  /// Segnale zero: controlla l'esistenza del gruppo senza inviare segnali.
+  /// Solo ESRCH prova l'assenza; permessi insufficienti restano un'incertezza.
+  static bool? gruppoProcessiEsiste(int gruppo) {
+    if (gruppo <= 1 || gruppo > 0x7fffffff) return null;
+    final errore = _errno();
+    if (_kill(-gruppo, 0) == 0) return true;
+    return errore.value == 3 ? false : null; // ESRCH su Linux
+  }
   static final _rename = _libc.lookupFunction<
       Int32 Function(Int32, Pointer<Uint8>, Int32, Pointer<Uint8>, Uint32),
       int Function(int, Pointer<Uint8>, int, Pointer<Uint8>, int)>('renameat2');

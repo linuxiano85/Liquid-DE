@@ -7,7 +7,7 @@ import '../../core/minerva_paths.dart';
 ///
 /// ── Perché tenerne il conto ────────────────────────────────────────────────
 ///
-/// Giacomo, 9 settembre 2026: «possiamo mettere un riepilogo di tutto lo spazio
+/// il manutentore, 9 settembre 2026: «possiamo mettere un riepilogo di tutto lo spazio
 /// che è stato recuperato con la app? Giga totali ad esempio? Una cosa tipo
 /// CleanMyMac».
 ///

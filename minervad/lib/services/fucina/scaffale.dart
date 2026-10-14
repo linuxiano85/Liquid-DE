@@ -22,7 +22,8 @@ class Scaffale {
   String _p(String rel) => '$radice$rel';
 
   static final RegExp _nostro = RegExp(
-      r'^[1-9][0-9]?\.[0-9]{1,3}(\.[0-9]{1,4})?-fucina-[a-z0-9]([a-z0-9-]{0,22}[a-z0-9])?$');
+    r'^[1-9][0-9]?\.[0-9]{1,3}(\.[0-9]{1,4})?-fucina-[a-z0-9]([a-z0-9-]{0,22}[a-z0-9])?$',
+  );
 
   /// Il nome è di un kernel della Fucina? Lo stesso controllo che fa
   /// l'aiutante di root, carattere per carattere.
@@ -30,8 +31,9 @@ class Scaffale {
 
   Future<String> inUso() async {
     try {
-      return (await File(_p('proc/sys/kernel/osrelease')).readAsString())
-          .trim();
+      return (await File(
+        _p('proc/sys/kernel/osrelease'),
+      ).readAsString()).trim();
     } catch (_) {
       return '';
     }
@@ -44,15 +46,16 @@ class Scaffale {
     final voci = <String, Map<String, dynamic>>{};
 
     Map<String, dynamic> voce(String rel) => voci.putIfAbsent(
-        rel,
-        () => {
-              'rilascio': rel,
-              'pronto': false,
-              'installato': false,
-              'inUso': rel == uso,
-              'immagine': false,
-              'quando': '',
-            });
+      rel,
+      () => {
+        'rilascio': rel,
+        'pronto': false,
+        'installato': false,
+        'inUso': rel == uso,
+        'immagine': false,
+        'quando': '',
+      },
+    );
 
     // Pronti: `…/uscita/<rilascio>/fucina.json`.
     try {
@@ -62,14 +65,85 @@ class Scaffale {
         if (!nostro(rel)) continue;
         final info = File('${d.path}/fucina.json');
         if (!await info.exists()) continue;
-        final v = voce(rel)..['pronto'] = true;
+        final v = voce(rel);
+        final blocchi = <String>[];
+        final avvisi = <String>[];
         try {
+          if (await FileSystemEntity.type(info.path, followLinks: false) !=
+                  FileSystemEntityType.file ||
+              await info.length() > 2 * 1024 * 1024) {
+            throw const FormatException(
+              'Manifest non regolare o troppo grande',
+            );
+          }
           final j = jsonDecode(await info.readAsString()) as Map;
+          if (j['rilascio'] != rel) {
+            blocchi.add(
+              'Il manifest non corrisponde al rilascio. Ricompila questo kernel.',
+            );
+          }
           v['quando'] = '${j['quando'] ?? ''}';
           v['moduli'] = j['moduli'];
+          final secondi = j['secondiPreparazione'];
+          if (secondi is int && secondi >= 0) {
+            v['secondiPreparazione'] = secondi;
+          }
           v['scelte'] = j['scelte'];
           v['provaAvvio'] = j['provaAvvio'];
-        } catch (_) {}
+          v['log'] = j['log'];
+          final prova = j['provaAvvio'];
+          if (prova is Map && prova['ok'] == false) {
+            blocchi.add(
+              'La prova QEMU non è riuscita. Consulta il log e ripeti la prova prima di installare.',
+            );
+          } else if (prova is! Map || prova['ok'] != true) {
+            avvisi.add(
+              'Prova QEMU non superata o non registrata: l’avvio non è stato verificato.',
+            );
+          }
+        } catch (_) {
+          blocchi.add(
+            'Manifest illeggibile o non valido. Ricompila questo kernel; i file esistenti sono conservati.',
+          );
+        }
+        for (final parte in [
+          'boot',
+          'lib',
+          'lib/modules',
+          'lib/modules/$rel',
+        ]) {
+          if (await FileSystemEntity.type(
+                '${d.path}/$parte',
+                followLinks: false,
+              ) !=
+              FileSystemEntityType.directory) {
+            blocchi.add(
+              'Cartella $parte mancante o non regolare. Ricompila questo kernel.',
+            );
+          }
+        }
+        for (final parte in ['boot/vmlinuz-$rel', 'boot/config-$rel']) {
+          final f = File('${d.path}/$parte');
+          try {
+            if (await FileSystemEntity.type(f.path, followLinks: false) !=
+                    FileSystemEntityType.file ||
+                await f.length() == 0) {
+              blocchi.add(
+                '$parte mancante, vuoto o non regolare. Ricompila questo kernel.',
+              );
+            }
+          } catch (_) {
+            blocchi.add(
+              'Non riesco a verificare $parte. Controlla i permessi della cache.',
+            );
+          }
+        }
+        v['pronto'] = blocchi.isEmpty;
+        v['preparazione'] = {
+          'ok': blocchi.isEmpty,
+          'blocchi': blocchi,
+          'avvisi': avvisi,
+        };
       }
     } catch (_) {}
 
@@ -81,8 +155,7 @@ class Scaffale {
           final rel = d.path.split('/').last;
           if (!nostro(rel)) continue;
           final v = voce(rel)..['installato'] = true;
-          v['immagine'] =
-              await File(_p('boot/vmlinuz-$rel')).exists();
+          v['immagine'] = await File(_p('boot/vmlinuz-$rel')).exists();
         }
         break;
       } catch (_) {
@@ -125,37 +198,107 @@ class Scaffale {
         'ok': true,
         'applicabile': false,
         'inUso': uso,
-        'spiega': 'Stai usando «$uso», che non è un kernel della Fucina. La '
+        'spiega':
+            'Stai usando «$uso», che non è un kernel della Fucina. La '
             'verifica ha senso al primo avvio di un kernel nostro.',
       };
     }
     final List<dynamic> attesi;
     try {
-      attesi = jsonDecode(
-          await File('$statoDir/attesi-$uso.json').readAsString()) as List;
+      attesi =
+          jsonDecode(await File('$statoDir/attesi-$uso.json').readAsString())
+              as List;
     } catch (_) {
       return {
         'ok': true,
         'applicabile': false,
         'inUso': uso,
-        'spiega': 'Non trovo l\'elenco dei dispositivi di quando «$uso» è '
+        'spiega':
+            'Non trovo l\'elenco dei dispositivi di quando «$uso» è '
             'stato compilato: forse è stato compilato su un altro computer.',
       };
     }
 
     final orfani = <Map<String, dynamic>>[];
     final assenti = <Map<String, dynamic>>[];
+    final ricollocati = <Map<String, dynamic>>[];
+    final ambigui = <Map<String, dynamic>>[];
+    final usati = <String>{};
+    final mancanti = <Map<String, dynamic>>[];
     var aPosto = 0;
     for (final a in attesi) {
-      if (a is! Map) continue;
-      final cartella = _p('sys/devices${a['percorso']}');
-      if (!await Directory(cartella).exists()) {
-        assenti.add(a.cast<String, dynamic>());
+      if (a is! Map || a['percorso'] is! String) continue;
+      final percorso = a['percorso'] as String;
+      if (!percorso.startsWith('/') ||
+          percorso.contains(RegExp(r'[\x00-\x1f]')) ||
+          percorso.split('/').any((s) => s == '..' || s == '.')) {
         continue;
       }
+      final voce = Map<String, dynamic>.from(a);
+      final cartella = _p('sys/devices$percorso');
+      String? alias;
+      try {
+        alias = (await File('$cartella/modalias').readAsString()).trim();
+      } catch (_) {}
+      if (!await Directory(cartella).exists() ||
+          (alias != null && alias != a['modalias'])) {
+        mancanti.add(voce);
+        continue;
+      }
+      if (!usati.add(cartella)) continue;
       final driver = await _driver(cartella);
       if (driver == null) {
         orfani.add({...a.cast<String, dynamic>(), 'adesso': null});
+      } else {
+        aPosto++;
+      }
+    }
+    // Un dispositivo corrente non può coprire due attesi. Per alias
+    // duplicati non inventiamo identità individuali.
+    final perAlias = <String, List<String>>{};
+    if (mancanti.isNotEmpty) {
+      try {
+        await for (final f in Directory(
+          _p('sys/devices'),
+        ).list(recursive: true, followLinks: false)) {
+          if (f is! File || !f.path.endsWith('/modalias')) continue;
+          final cartella = f.parent.path;
+          if (usati.contains(cartella)) continue;
+          try {
+            final alias = (await f.readAsString()).trim();
+            perAlias.putIfAbsent(alias, () => []).add(cartella);
+          } catch (_) {}
+        }
+      } catch (_) {}
+    }
+    for (final a in mancanti) {
+      final alias = a['modalias'];
+      final candidati = alias is String && alias.isNotEmpty
+          ? perAlias[alias] ?? <String>[]
+          : <String>[];
+      final quantiAttesi = mancanti.where((v) => v['modalias'] == alias).length;
+      if (candidati.length != 1 || quantiAttesi != 1) {
+        assenti.add(a);
+        if (candidati.isNotEmpty) {
+          ambigui.add({...a, 'candidati': candidati.length});
+        }
+        continue;
+      }
+      final cartella = candidati.single;
+      if (!usati.add(cartella)) {
+        assenti.add(a);
+        continue;
+      }
+      final driver = await _driver(cartella);
+      final voce = {
+        ...a,
+        'percorsoAttuale': cartella.substring(_p('sys/devices').length),
+        'driverAttuale': driver,
+        'metodo': 'modalias-univoco',
+      };
+      ricollocati.add(voce);
+      if (driver == null) {
+        orfani.add({...voce, 'adesso': null});
       } else {
         aPosto++;
       }
@@ -167,6 +310,10 @@ class Scaffale {
       'aPosto': aPosto,
       'orfani': orfani,
       'assenti': assenti,
+      'ricollocati': ricollocati,
+      'ambigui': ambigui,
+      'limiteIdentita':
+          'Il modalias identifica il modello, non il seriale della singola periferica.',
     };
   }
 

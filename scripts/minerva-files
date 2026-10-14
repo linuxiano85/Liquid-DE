@@ -21,6 +21,7 @@ set -e
 SELF=$(readlink -f "$0")
 ROOT=$(dirname "$(dirname "$SELF")")
 CONFIG="$ROOT/minerva-shell/filemanager.qml"
+LAUNCH_TOKEN="${XDG_ACTIVATION_TOKEN:-${MINERVA_FILES_ACTIVATION_TOKEN:-}}"
 
 if [ ! -f "$CONFIG" ]; then
     echo "minerva-files: non trovo $CONFIG" >&2
@@ -80,12 +81,22 @@ ipc_files() {
     # Some Quickshell versions return success even for "Target not found".
     # Require an acknowledgement from our handler, not just an exit status.
     case "$1:$RISPOSTA" in
-        ping:ok|open:ok|avvia:ok|mostra:ok|finestra:"finestre in più: "*) return 0 ;;
+        ping:ok|open:ok|avvia:ok|mostra:ok|conToken:ok|finestra:"finestre in più: "*) return 0 ;;
         *) return 1 ;;
     esac
 }
 apri_files() {
     [ "$SOLO_PREPARA" = si ] && return 0
+    if [ -n "$LAUNCH_TOKEN" ]; then
+        MODALITA=open
+        PERCORSO="$TARGET"
+        if [ -n "$SELEZIONA" ]; then MODALITA=mostra;PERCORSO="$SELEZIONA"
+        elif [ "${1:-}" = avviato ]; then MODALITA=avvia
+        elif [ -n "$NUOVA" ]; then MODALITA=finestra; fi
+        if ipc_files conToken "$PERCORSO" "$LAUNCH_TOKEN" "$MODALITA" >/dev/null 2>&1; then return 0; fi
+        # An already running instance may still use the previous protocol
+        # until the next login. Keep its existing open operation available.
+    fi
     # Con un file da scegliere: appena avviati lo sceglie già la prima scheda
     # (`MINERVA_FILES_SELEZIONA`, qui sotto), e `avvia` riaprendo la cartella
     # lo perderebbe; con la finestra già accesa lo si chiede a lei.
@@ -104,7 +115,11 @@ fi
 
 MINERVA_FILES_PATH="$TARGET"
 MINERVA_FILES_SELEZIONA="$SELEZIONA"
-export MINERVA_FILES_PATH MINERVA_FILES_SELEZIONA
+MINERVA_FILES_ACTIVATION_TOKEN="$LAUNCH_TOKEN"
+export MINERVA_FILES_PATH MINERVA_FILES_SELEZIONA MINERVA_FILES_ACTIVATION_TOKEN
+# The per-window bridge owns activation; Qt must not consume it globally
+# on a different surface before the new window has finished initialization.
+unset XDG_ACTIVATION_TOKEN DESKTOP_STARTUP_ID
 . "$ROOT/scripts/minerva-ambiente-app"
 # A stale user systemd connection must not make the app impossible to launch.
 if ! timeout -k 1 10 sh -c ' . "$1"; shift; minerva_avvia_app "$@" ' sh \

@@ -24,7 +24,7 @@ import 'package:minervad/core/minerva_core.dart';
 /// le stava scrivendo addosso, e l'EPIPE non tornava a chi aveva scritto —
 /// Dart lo consegna alla ZONA. Un errore non raccolto nella zona di radice
 /// uccide il processo. Il guardiano lo rimetteva in piedi, ma la shell non lo
-/// ritrovava più: Giacomo si è ritrovato senza dock e senza menù delle
+/// ritrovava più: il manutentore si è ritrovato senza dock e senza menù delle
 /// applicazioni, in tutte e due le sessioni.
 ///
 /// La causa è riparata dov'era (`WebSocketClientConnection`), e questa è la

@@ -26,7 +26,7 @@ import "../../ui" as Ui
 // ── E PERCHÉ I GRUPPI STANNO IN FAMIGLIE ─────────────────────────────────
 //
 // Perché da nove sono diventati sedici, e sedici righe in fila sono un elenco
-// da scorrere. Giacomo, 17 agosto 2026: «riorganizza questa sezione per tipi
+// da scorrere. il manutentore, 17 agosto 2026: «riorganizza questa sezione per tipi
 // affini, mettiamo delle tendine espandibili dove poi aprire e scegliere i
 // programmi… così la sezione sarà più compatta e semplice sapendo che tipo di
 // app cerchi».
@@ -45,7 +45,7 @@ import "../../ui" as Ui
 // Non è un tipo di file e non passa da `mimeapps.list`: nessuno «apre» un
 // terminale, lo si chiama. Ma è la stessa domanda — chi fa questa cosa — e per
 // un po' è stato in una carta tutta sua in fondo alla pagina. Parole di
-// Giacomo: «il terminale non lo tenere da parte, hai fatto una sezione
+// il manutentore: «il terminale non lo tenere da parte, hai fatto una sezione
 // staccata». Adesso è una riga dentro «Sistema», accanto a Cartelle e Archivi,
 // e l'unica differenza è dove va a finire la scelta.
 Page {

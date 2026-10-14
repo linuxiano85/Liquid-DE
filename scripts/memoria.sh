@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # memoria.sh — Quanto pesa DAVVERO questa sessione grafica.
 #
-# Nasce l'11 agosto 2026 da una domanda di Giacomo: «KDE arriva a 1,5 GB e noi
+# Nasce l'11 agosto 2026 da una domanda di il manutentore: «KDE arriva a 1,5 GB e noi
 # siamo lì, è deludente». Il numero che si legge in un monitor di sistema
 # comprende tutto ciò che gira sulla macchina — il browser, Docker, un
 # assistente di programmazione da mezzo gigabyte — e non dice niente su quanto

@@ -8,7 +8,7 @@ import "../ui" as Ui
 //
 // ── Da dove nasce ──────────────────────────────────────────────────────────
 //
-// Giacomo, 9 settembre 2026: «la nostra fa pulizia? ma solo pulizia ma anche
+// il manutentore, 9 settembre 2026: «la nostra fa pulizia? ma solo pulizia ma anche
 // riordino della cartella utente che è sempre una pulizia, file doppi, file
 // sparsi, riordino per data e anno, rinomina nel riordino».
 //
@@ -45,7 +45,7 @@ Item {
 
     /// ── La cartella di riferimento ───────────────────────────────────────
     ///
-    /// Giacomo, 9 settembre 2026: «metti caso che metto un nuovo backup nel
+    /// il manutentore, 9 settembre 2026: «metti caso che metto un nuovo backup nel
     /// PC e quelli che già avevo sono sparpagliati: seleziono la cartella
     /// come riferimento e tutto il resto viene considerato doppione».
     ///

@@ -11,7 +11,7 @@ import "../theme" as Theme
 // se quei quattro giga si possono buttare. Quindi ogni riga porta:
 //
 //   · **dove sta**, per esteso — `cache` non vuol dire niente,
-//     `/home/giacomo/.cache/Shelly` sì, e chi vuole andare a guardare può;
+//     `/home/utente/.cache/Shelly` sì, e chi vuole andare a guardare può;
 //   · **se torna da sola** — è la differenza fra una cosa che si rifà
 //     navigando e una che, tolta, è tolta;
 //   · **se serve la password** — perché sta fuori dalla tua cartella, e

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../providers/compositor_provider.dart';
+import '../providers/minerva/minerva_provider.dart';
 
 /// Chi sa dove sono le finestre, e lo dice a tutti.
 ///
@@ -71,7 +72,7 @@ class FinestreService {
   //
   // VELOCE (60 ms): un fotogramma e mezzo a sessanta hertz. È il passo mentre
   // qualcosa si muove. Più lento si vede la barra inseguire la finestra a
-  // scatti — parole di Giacomo: «le barre del titolo non seguono bene la
+  // scatti — parole di il manutentore: «le barre del titolo non seguono bene la
   // finestra se le sposti velocemente».
   //
   // RIPOSO (150 ms): la rete di sicurezza, ed è la sola cosa qui dentro che si
@@ -224,7 +225,10 @@ class FinestreService {
     _inLettura = true;
     String json;
     try {
-      json = await _compositore.getClientsRaw();
+      final provider = _compositore;
+      json = provider is MinervaProvider
+          ? (await provider.finestreSeRisponde() ?? '')
+          : await provider.getClientsRaw();
     } finally {
       _inLettura = false;
     }

@@ -44,7 +44,7 @@
 #define RIGA_MAX 4096
 // La risposta può essere l'elenco delle finestre: sta più larga.
 #define RISPOSTA_MAX 65536
-#define CLIENTI_MAX 16
+#define CLIENTI_MAX 64
 
 /// Quanti nomi di annuncio può chiedere un collegamento.
 ///
@@ -54,7 +54,7 @@
 /// schermi attaccati a caldo, per settimane (trovato il 23 settembre 2026,
 /// cercando perché non arrivasse l'ottavo, `bordoalto`). Adesso sedici, e chi
 /// ne chiede di più riceve un «no» invece di un'iscrizione tagliata.
-#define FILTRI_MAX 16
+#define FILTRI_MAX 32
 
 struct cliente {
 	struct canale *c;
@@ -205,7 +205,7 @@ static void esegui_riga(struct cliente *cl, char *riga) {
 				break;
 			}
 			if (quanti == FILTRI_MAX) {
-				rifiuto = "no troppi nomi di annuncio (al massimo 16)\n";
+				rifiuto = "no troppi nomi di annuncio (al massimo 32)\n";
 				break;
 			}
 			memcpy(nomi[quanti], p, n);

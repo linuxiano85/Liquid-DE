@@ -95,7 +95,7 @@ class ArchiveService {
   /// Tutti gli elementi devono stare nella stessa cartella: è sempre vero
   /// quando la selezione arriva da una finestra del gestore file, e permette
   /// di scrivere nell'archivio i nomi SEMPLICI invece dei percorsi completi.
-  /// Un archivio che dentro contiene `home/giacomo/Documenti/…` è un archivio
+  /// Un archivio che dentro contiene `home/utente/Documenti/…` è un archivio
   /// che, aperto da qualcun altro, crea tre cartelle inutili.
   Future<Map<String, dynamic>> comprimi(
     List<String> percorsi, {

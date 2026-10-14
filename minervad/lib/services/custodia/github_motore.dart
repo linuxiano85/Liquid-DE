@@ -63,7 +63,7 @@ class GitHubMotore {
   /// Sta qui, sostituibile, e non piantato dentro `salvaGettone`, per una
   /// ragione che è costata due prove rosse il 26 agosto 2026: finché era una
   /// `Process.start` dentro il metodo, ogni prova sul gettone **scriveva
-  /// davvero nel portachiavi di Giacomo** — passando accanto al finto che la
+  /// davvero nel portachiavi di il manutentore** — passando accanto al finto che la
   /// prova aveva messo — e restava appesa trenta secondi ad aspettare un
   /// portachiavi che non rispondeva.
   ///
@@ -187,7 +187,7 @@ class GitHubMotore {
 
   // ── Entrare senza incollare niente: il «device flow» ───────────────────
   //
-  // Giacomo, 8 settembre 2026: «invece di aprire il browser e incollare… lo
+  // il manutentore, 8 settembre 2026: «invece di aprire il browser e incollare… lo
   // fa Antigravity, VS Code e tanti altri. Perché non noi? Siamo di serie B?».
   //
   // Aveva ragione, e il gesto che criticava è finito male dieci minuti dopo:
@@ -225,7 +225,7 @@ class GitHubMotore {
   /// «Enable Device Flow» acceso) e da lì in poi vale per chiunque usi
   /// Minerva, non per un utente solo.
   ///
-  /// Registrata da Giacomo l'8 settembre 2026, con «Enable Device Flow»
+  /// Registrata da il manutentore l'8 settembre 2026, con «Enable Device Flow»
   /// acceso e «Expire user access tokens» SPENTO — quest'ultimo perché un
   /// permesso che scade va rinnovato con un `refresh_token`, e quel rinnovo
   /// qui non c'è ancora: con la scadenza accesa la Custodia smetterebbe di

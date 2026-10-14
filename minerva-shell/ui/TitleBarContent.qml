@@ -17,6 +17,10 @@ Item {
 
     /// Il titolo, al centro.
     property string label: ""
+    property color foreground: Theme.Colors.text
+    property color mutedForeground: Theme.Colors.textMuted
+    property color faintForeground: Theme.Colors.textFaint
+    property string fontFamily: Theme.Typography.fontDisplay
     /// Percorso dell'icona del programma, o vuoto.
     property string iconPath: ""
     /// Vero per la finestra con cui si sta lavorando.
@@ -27,6 +31,11 @@ Item {
     property bool maximized: false
     /// Vero quando è a schermo intero.
     property bool fullscreen: false
+    /// Pulsanti come Windows 11: tre rettangoli da 46 pixel attaccati
+    /// all'angolo destro, «chiudi» rosso sotto il puntatore, niente schermo
+    /// intero (resta Super+F). Gli stessi della barra del compositore
+    /// (`compositore/src/barra.h`, «Lo stile dei pulsanti»).
+    property bool stileWindows: false
 
     signal minimizeRequested()
     signal maximizeRequested()
@@ -70,7 +79,17 @@ Item {
         }
     }
 
-    readonly property bool buttonsLeft: content.side === "sinistra"
+    /// I pulsanti che si vedono: in stile Windows senza lo schermo intero.
+    readonly property var visibleButtons: content.stileWindows
+        ? content.buttons.filter(function(b) { return b.id !== "fullscreen"; })
+        : content.buttons
+
+    /// In stile Windows i pulsanti stanno sempre a destra; il lato scelto
+    /// resta salvato per gli altri preset.
+    readonly property bool buttonsLeft: content.side === "sinistra" && !content.stileWindows
+
+    /// Larghezza di un pulsante in stile Windows.
+    readonly property int windowsButtonWidth: 46
 
     // ── PERCHÉ `x` E NON DUE ANCORE A TURNO ──────────────────────────────
     //
@@ -84,7 +103,7 @@ Item {
     // messa prima resta attaccata. Passando «a sinistra» e poi di nuovo «a
     // destra», i pulsanti restavano incollati a sinistra per sempre.
     //
-    // Segnalato da Giacomo il 18 agosto 2026: «se imposti i pulsanti a
+    // Segnalato da il manutentore il 18 agosto 2026: «se imposti i pulsanti a
     // sinistra compaiono parecchi bug e anche se li rimetti a posto non si
     // tolgono, devi riavviare la sessione». Riprodotto in tre clic e
     // fotografato: i pulsanti tornavano nell'ordine di destra ma restavano
@@ -102,34 +121,106 @@ Item {
 
     Row {
         id: controls
-        x: content.buttonsLeft
-           ? content.side_
-           : Math.max(0, content.width - width - content.side_)
+        // In stile Windows attaccati all'angolo, senza margine.
+        x: content.stileWindows
+           ? Math.max(0, content.width - width)
+           : content.buttonsLeft
+             ? content.side_
+             : Math.max(0, content.width - width - content.side_)
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 2
+        spacing: content.stileWindows ? 0 : 2
 
         Repeater {
             // A sinistra l'ordine si specchia: il pulsante che chiude resta
             // quello all'estremità, come su qualunque finestra di macOS.
             model: content.buttonsLeft
-                   ? content.buttons.slice().reverse()
-                   : content.buttons
+                   ? content.visibleButtons.slice().reverse()
+                   : content.visibleButtons
 
             delegate: Rectangle {
                 id: ctl
                 required property var modelData
 
-                width: content.height - 10
-                height: content.height - 10
-                radius: Theme.Effects.radiusXS
-                color: ctlMouse.containsMouse
-                       ? (ctl.modelData.danger
-                          ? Qt.alpha(Theme.Colors.danger, 0.30)
-                          : Theme.Colors.hover)
-                       : "transparent"
+                objectName: "titleButton-" + ctl.modelData.id
+                width: content.stileWindows ? content.windowsButtonWidth : content.height - 10
+                height: content.stileWindows ? content.height : content.height - 10
+                radius: content.stileWindows ? 0 : Theme.Effects.radiusXS
+                color: content.stileWindows ? ctl.coloreWindows
+                       : ctlMouse.containsMouse
+                         ? (ctl.modelData.danger
+                            ? Qt.alpha(Theme.Colors.danger, 0.30)
+                            : Theme.Colors.hover)
+                         : "transparent"
                 Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
 
+                // Windows: il fondo pieno al passaggio e alla pressione. Per
+                // «chiudi» il rosso #C42B1C (premuto, appena più trasparente);
+                // per gli altri il colore del testo appena accennato, come il
+                // «SubtleFill» di Windows, che vale in chiaro e in scuro.
+                readonly property color coloreWindows: {
+                    if (!ctlMouse.containsMouse && !ctlMouse.pressed)
+                        return "transparent";
+                    if (ctl.modelData.danger)
+                        return ctlMouse.pressed ? Qt.rgba(0.769, 0.169, 0.110, 0.9)
+                                                : Qt.rgba(0.769, 0.169, 0.110, 1);
+                    return Qt.alpha(content.foreground, ctlMouse.pressed ? 0.05 : 0.08);
+                }
+                // Il segno: bianco sul rosso, altrimenti il testo della barra,
+                // velato quando la finestra non è attiva.
+                readonly property color segnoWindows: ctl.modelData.danger
+                                                      && (ctlMouse.containsMouse || ctlMouse.pressed)
+                    ? "white"
+                    : (content.active ? content.foreground : content.faintForeground)
+
+                Canvas {
+                    id: segno
+                    objectName: "titleGlyph-" + ctl.modelData.id
+                    visible: content.stileWindows
+                    anchors.centerIn: parent
+                    width: 12
+                    height: 12
+                    readonly property color tinta: ctl.segnoWindows
+                    readonly property string forma: ctl.modelData.icon
+                    onTintaChanged: requestPaint()
+                    onFormaChanged: requestPaint()
+                    onVisibleChanged: requestPaint()
+
+                    // Le stesse forme di `segno_windows` nel compositore: un
+                    // quadrato di dieci pixel, tratto di uno, sulla griglia.
+                    onPaint: {
+                        var g = getContext("2d");
+                        g.reset();
+                        g.strokeStyle = segno.tinta;
+                        g.lineWidth = 1;
+                        var x = 1.5;
+                        var y = 1.5;
+                        var S = 10;
+                        g.beginPath();
+                        if (segno.forma === "minimize") {
+                            g.moveTo(x, y + S / 2);
+                            g.lineTo(x + S - 1, y + S / 2);
+                        } else if (segno.forma === "maximize") {
+                            g.roundedRect(x, y, S - 1, S - 1, 1, 1);
+                        } else if (segno.forma === "restore") {
+                            var D = 2;
+                            g.rect(x, y + D, S - 1 - D, S - 1 - D);
+                            g.moveTo(x + D, y + D);
+                            g.lineTo(x + D, y);
+                            g.lineTo(x + S - 1, y);
+                            g.lineTo(x + S - 1, y + S - 1 - D);
+                            g.lineTo(x + S - 1 - D, y + S - 1 - D);
+                        } else if (segno.forma === "close") {
+                            g.moveTo(x - 0.5, y - 0.5);
+                            g.lineTo(x + S - 0.5, y + S - 0.5);
+                            g.moveTo(x + S - 0.5, y - 0.5);
+                            g.lineTo(x - 0.5, y + S - 0.5);
+                        }
+                        g.stroke();
+                    }
+                }
+
                 Icon {
+                    visible: !content.stileWindows
                     anchors.centerIn: parent
                     width: 13; height: 13
                     name: ctl.modelData.icon
@@ -141,9 +232,9 @@ Item {
                     alwaysDrawn: true
                     color: ctlMouse.containsMouse
                            ? (ctl.modelData.danger ? Theme.Colors.danger
-                                                   : Theme.Colors.text)
-                           : (content.active ? Theme.Colors.textMuted
-                                             : Theme.Colors.textFaint)
+                                                   : content.foreground)
+                           : (content.active ? content.mutedForeground
+                                             : content.faintForeground)
                     Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
                 }
 
@@ -151,7 +242,8 @@ Item {
                     id: ctlMouse
                     anchors.fill: parent
                     hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
+                    // In Windows i pulsanti della barra hanno la freccia.
+                    cursorShape: content.stileWindows ? Qt.ArrowCursor : Qt.PointingHandCursor
                     // I pulsanti non devono far partire un trascinamento:
                     // premendo «chiudi» e muovendo di due pixel la finestra
                     // partiva dietro al puntatore.
@@ -233,8 +325,8 @@ Item {
         horizontalAlignment: Text.AlignHCenter
         elide: Text.ElideRight
         text: content.label
-        color: content.active ? Theme.Colors.text : Theme.Colors.textMuted
-        font.family: Theme.Typography.fontDisplay
+        color: content.active ? content.foreground : content.mutedForeground
+        font.family: content.fontFamily
         font.pixelSize: Theme.Typography.sizeSM
         font.weight: content.active ? Theme.Typography.weightMedium : Font.Normal
     }

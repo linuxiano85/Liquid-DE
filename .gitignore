@@ -11,6 +11,13 @@
 minervad/build/
 minervad/.dart_tool/
 tests/fucina_suite/.dart_tool/
+tests/fucina_suite/build/
+tests/controller_suite/.dart_tool/
+posta/daemon/.dart_tool/
+posta/daemon/build/
+posta/daemon/.strumenti/
+posta/**/__pycache__/
+posta/daemon/test/fixtures/mime/
 
 # ── Le preferenze non stanno qui, e non devono tornarci ────────────────
 #
@@ -57,10 +64,36 @@ __pycache__/
 .vscode/
 .idea/
 
-# ── Le prove stanno in un altro repository ─────────────────────────────
+# ── Le prove: cosa sta qui e cosa sta in Liquid_test ────────────────────
 #
-# In Liquid_test, accanto a questa cartella: il progetto contiene solo
-# quello che serve a costruirlo e installarlo. `collega.sh` di Liquid_test
+# Qui le prove ESEGUIBILI (`tests/`): servono a chi modifica il codice, e
+# devono viaggiare col codice che provano. In Liquid_test, accanto a questa
+# cartella, gli artefatti e i rapporti delle prove (`rapporti/`): sono la
+# memoria di com'è andata, non servono a costruire né a installare. Deciso
+# con il manutentore l'11 ottobre 2026, dopo che 26 MB di artefatti erano finiti
+# qui (vedi audit/README.md). `artifacts/` resta esclusa per sicurezza. `collega.sh` di Liquid_test
 # crea qui il collegamento da cui `compositore/meson.build` costruisce le
 # prove in C; non deve mai finire nella storia.
 compositore/prove
+
+# Rebuilt against the Qt version installed on the target system.
+native/window-identity/build/
+minerva-shell/native/**/*.so
+native/tiled-headers/build/
+lib/minerva/*.so
+libexec/tiling/
+
+# ── Gli sfondi Bloom di Windows 11 ──────────────────────────────────────
+#
+# Sono opere di Microsoft senza una licenza che ne permetta la
+# ridistribuzione: possono stare sul disco di chi li ha, non nel repository.
+# Senza di loro il preset Windows usa uno sfondo nostro (core/Wallpaper.qml).
+minerva-shell/windows11/wallpapers/*.jpg
+
+# Gli artefatti delle prove vanno in Liquid_test (vedi sopra).
+artifacts/
+
+# Binari del compositore e cache delle prove non sono sorgenti.
+compositore/build-native/
+compositore/build/
+**/__pycache__/

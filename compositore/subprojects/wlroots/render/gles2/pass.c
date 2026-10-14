@@ -166,6 +166,7 @@ static void setup_blending(enum wlr_render_blend_mode mode) {
 
 static void minerva_uniforms(GLuint p, struct wlr_box box, struct wlr_minerva_style style) {
  struct wlr_minerva_radii r=style.corners, h=style.hole.corners;
+ glUniform1f(glGetUniformLocation(p,"minerva_desaturation"),style.desaturation);
  struct wlr_box b=style.hole.area;
  glUniform2f(glGetUniformLocation(p,"minerva_size"),box.width,box.height);
  glUniform4f(glGetUniformLocation(p,"minerva_radii"),r.top_left,r.top_right,r.bottom_right,r.bottom_left);
@@ -182,6 +183,16 @@ static void minerva_uniforms(GLuint p, struct wlr_box box, struct wlr_minerva_st
   glUniform1f(n,(float)m->quante);
   glUniform4fv(glGetUniformLocation(p,"mer_f"),WLR_MINERVA_MERCURIO_MAX,f);
   glUniform2f(glGetUniformLocation(p,"mer_kr"),m->k>0?m->k:1,m->raggio);
+ }
+ /* L'Acrylic sull'acquerello (solo il programma del filtro ha queste
+  * uniform: negli altri la posizione è -1 e non si scrive niente). */
+ GLint ac=glGetUniformLocation(p,"ac_attivo");
+ if (ac>=0) {
+  const struct wlr_minerva_acrylic *a=&style.acrylic;
+  glUniform1f(ac,a->attivo?1.0f:0.0f);
+  glUniform4f(glGetUniformLocation(p,"ac_tinta"),a->tinta[0],a->tinta[1],a->tinta[2],a->tinta[3]);
+  glUniform4f(glGetUniformLocation(p,"ac_luminosita"),a->luminosita[0],a->luminosita[1],a->luminosita[2],a->luminosita[3]);
+  glUniform1f(glGetUniformLocation(p,"ac_rumore"),a->rumore);
  }
 }
 
@@ -351,7 +362,8 @@ static int64_t acq_su(int64_t v) { return -acq_giu(-v); }
 
 static bool minerva_acquerello_pezzo(struct wlr_gles2_render_pass *pass,
   struct wlr_gles2_renderer *r, const struct wlr_render_rect_options *options,
-  struct wlr_texture *mask, int fw, int fh) {
+  const struct wlr_render_texture_options *mask_options, int fw, int fh) {
+ struct wlr_texture *mask=mask_options ? mask_options->texture : NULL;
  struct wlr_box box=options->box;
  if (box.width<=0 || box.height<=0) return true;
  /* L'area visibile del rettangolo: da qui si legge, qui si ripete il bordo. */
@@ -433,6 +445,11 @@ static bool minerva_acquerello_pezzo(struct wlr_gles2_render_pass *pass,
   glUniform4f(glGetUniformLocation(p,"a_piccola"),(float)cx0,(float)cy0,nx,ny);
   glUniform1f(glGetUniformLocation(p,"has_mask"),0);
   if(mask && wlr_texture_is_gles2(mask)) {
+   struct wlr_fbox uv=mask_options->src_box;
+   if (wlr_fbox_empty(&uv)) uv=(struct wlr_fbox){0,0,mask->width,mask->height};
+   uv.x/=mask->width; uv.y/=mask->height;
+   uv.width/=mask->width; uv.height/=mask->height;
+   set_tex_matrix(glGetUniformLocation(p,"tex_proj"),mask_options->transform,&uv);
    struct wlr_gles2_texture *m=gles2_get_texture(mask);
    if(m->target==GL_TEXTURE_2D) {
     glActiveTexture(GL_TEXTURE1);glBindTexture(GL_TEXTURE_2D,m->tex);
@@ -480,9 +497,9 @@ static bool minerva_blur_pezzo(struct wlr_render_pass *base,
  int fw=pass->buffer->buffer->width, fh=pass->buffer->buffer->height;
  /* Dal 28 settembre 2026 il filtro è uno solo: l'acquerello. Il blur
   * gaussiano (due passaggi a mezza risoluzione, le coppie di parità, il
-  * raggio) se n'è andato — Giacomo, visto l'acquerello: «a questo punto il
+  * raggio) se n'è andato — il manutentore, visto l'acquerello: «a questo punto il
   * blur lo eliminerei». */
- return minerva_acquerello_pezzo(pass,r,options,mask,fw,fh);
+ return minerva_acquerello_pezzo(pass,r,options,mask_options,fw,fh);
 }
 
 

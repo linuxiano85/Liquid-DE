@@ -145,6 +145,45 @@ ShellRoot {
             return "ok";
         }
 
+        /// Per le prove: lo stato di galleria e visualizzatore, in JSON.
+        function stato(): string {
+            var g = finestra.galleria();
+            return JSON.stringify({
+                "inGalleria": finestra.inGalleria,
+                "daGalleria": finestra.daGalleria,
+                "percorso": finestra.percorso,
+                "galleriaCostruita": g !== null,
+                "scorrimento": g ? Math.round(g.scorrimento) : -1
+            });
+        }
+
+        /// Per le prove: il pulsante «Galleria».
+        function galleria(): string {
+            finestra.tornaAllaGalleria();
+            app.raise();
+            return "ok";
+        }
+
+        /// Per le prove: come un doppio clic su una foto della galleria.
+        function apriDallaGalleria(path: string): string {
+            finestra.show(path, true);
+            return "ok";
+        }
+
+        /// Per le prove: Esc.
+        function indietro(): string {
+            finestra.indietro();
+            return "ok";
+        }
+
+        /// Per le prove: scorre la galleria fino a `y`.
+        function scorri(y: string): string {
+            var g = finestra.galleria();
+            if (g)
+                g.scorri(Number(y));
+            return "ok";
+        }
+
         /// Serve a chi ci lancia per sapere che siamo vivi senza aprire niente.
         function ping(): string {
             return "ok";

@@ -3,11 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'albero.dart';
+import 'blocco_lavoro.dart';
+import 'diario_compilazione.dart';
 import 'patch.dart';
 import 'prova_avvio.dart';
 import 'ricetta.dart';
 import 'rilievo.dart';
 import 'sorgenti.dart';
+import 'sicurezza_kernel.dart';
 
 /// L'officina: esegue una ricetta, passo dopo passo, e racconta.
 ///
@@ -53,13 +56,21 @@ class Officina {
   final int spazioMinimo;
 
   /// Lancia un processo. Si sostituisce nelle prove.
-  final Future<Process> Function(String eseguibile, List<String> argomenti,
-      {String? workingDirectory}) lancia;
+  final Future<Process> Function(
+    String eseguibile,
+    List<String> argomenti, {
+    String? workingDirectory,
+  })
+  lancia;
 
   /// Scarica un file. Si sostituisce nelle prove.
-  final Future<String?> Function(Uri, File,
-      {void Function(int, int)? progresso,
-      bool Function()? annullato}) scarica;
+  final Future<String?> Function(
+    Uri,
+    File, {
+    void Function(int, int)? progresso,
+    bool Function()? annullato,
+  })
+  scarica;
 
   /// Verifica la firma dello sviluppatore su un archivio. Restituisce `null`
   /// se la firma è buona e di uno dei firmatari noti, o la frase da dire. Si
@@ -76,19 +87,27 @@ class Officina {
     this.spazioMinimo = 6000000000,
     Sorgenti? sorgenti,
     Future<Process> Function(String, List<String>, {String? workingDirectory})?
-        lancia,
-    Future<String?> Function(Uri, File,
-            {void Function(int, int)? progresso, bool Function()? annullato})?
-        scarica,
+    lancia,
+    Future<String?> Function(
+      Uri,
+      File, {
+      void Function(int, int)? progresso,
+      bool Function()? annullato,
+    })?
+    scarica,
     this.verificaFirma,
     this.conKvm,
-  })  : sorgenti = sorgenti ?? Sorgenti(),
-        lancia = lancia ?? _lanciaVero,
-        scarica = scarica ?? scaricaFile;
+  }) : sorgenti = sorgenti ?? Sorgenti(),
+       lancia = lancia ?? _lanciaVero,
+       scarica = scarica ?? scaricaFile {
+    _ripristinaUltima();
+  }
 
-  static Future<Process> _lanciaVero(String e, List<String> a,
-          {String? workingDirectory}) =>
-      Process.start(e, a, workingDirectory: workingDirectory);
+  static Future<Process> _lanciaVero(
+    String e,
+    List<String> a, {
+    String? workingDirectory,
+  }) => Process.start(e, a, workingDirectory: workingDirectory);
 
   /// Le cartelle di una scelta. Una funzione sola, usata anche dal servizio
   /// per calcolare la ricetta da mostrare: il piano che si vede e quello che
@@ -99,7 +118,9 @@ class Officina {
       albero: '$base/linux-${s.versione}',
       uscita: '$lavoro/uscita/${s.rilascio}',
       lsmod: '$lavoro/lsmod-${s.nome}.txt',
-      profilo: s.profilo.isEmpty ? '' : '${profiliDi(lavoro, s.profilo)}/autofdo.prof',
+      profilo: s.profilo.isEmpty
+          ? ''
+          : '${profiliDi(lavoro, s.profilo)}/autofdo.prof',
     );
   }
 
@@ -119,6 +140,11 @@ class Officina {
   String _passo = '';
   DateTime? _inizio;
   Map<String, dynamic>? _ultimoEsito;
+  Map<String, dynamic>? _ricettaEseguita;
+  DiarioCompilazione? _diario;
+  String _logPercorso = '';
+  String _erroreLog = '';
+  BloccoLavoro? _bloccoLavoro;
 
   /// Le ultime righe, per chi arriva a metà. Quattrocento bastano a capire
   /// un errore di compilazione, che si legge dal fondo.
@@ -130,11 +156,12 @@ class Officina {
   /// del bus stanno tutti in `websocket_server.dart`, dove le prove li
   /// contano contro `EVENTS.md`.
   final Map<Object, void Function(String tipo, Map<String, dynamic> dati)>
-      _ascoltatori = {};
+  _ascoltatori = {};
 
-  void ascolta(Object chi,
-          void Function(String tipo, Map<String, dynamic> dati) manda) =>
-      _ascoltatori[chi] = manda;
+  void ascolta(
+    Object chi,
+    void Function(String tipo, Map<String, dynamic> dati) manda,
+  ) => _ascoltatori[chi] = manda;
 
   void smetti(Object chi) => _ascoltatori.remove(chi);
 
@@ -146,22 +173,30 @@ class Officina {
   Map<String, dynamic> _avanzamento = const {};
 
   Map<String, dynamic> stato() => {
-        'inCorso': _inCorso,
-        'rilascio': _rilascio,
-        'passo': _titoloPasso,
-        'passi': Map<String, String>.from(_statiPassi),
-        'avanzamento': _avanzamento,
-        'secondi': _inizio == null
-            ? 0
-            : DateTime.now().difference(_inizio!).inSeconds,
-        'righe': List<String>.from(_coda),
-        'esito': _ultimoEsito,
-      };
+    'inCorso': _inCorso,
+    'rilascio': _rilascio,
+    'passo': _titoloPasso,
+    'passi': Map<String, String>.from(_statiPassi),
+    'avanzamento': _avanzamento,
+    'secondi': !_inCorso
+        ? (_ultimoEsito?['secondi'] ?? 0)
+        : _inizio == null
+        ? 0
+        : DateTime.now().difference(_inizio!).inSeconds,
+    'righe': List<String>.from(_coda),
+    'log': _logPercorso,
+    'cartellaLog': '$statoDir/log-compilazioni',
+    'erroreLog': _erroreLog,
+    'esito': _ultimoEsito,
+    'ricetta': _ricettaEseguita,
+  };
 
   /// Un messaggio a tutti quelli che ascoltano. Si cammina su una copia: un
   /// ascoltatore che si toglie mentre si manda cambierebbe l'elenco sotto i
   /// piedi.
   void _manda(String tipo, Map<String, dynamic> dati) {
+    if (tipo == 'passo') _diario?.evento(tipo, dati);
+    dati = {...dati, if (_logPercorso.isNotEmpty) 'log': _logPercorso};
     if (tipo == 'passo') {
       _statiPassi['${dati['id']}'] = '${dati['stato']}';
       if (dati['stato'] == 'via') _titoloPasso = '${dati['titolo']}';
@@ -183,7 +218,8 @@ class Officina {
   int _attesi = 0;
   static final RegExp _oggetto = RegExp(r'^  (CC|CC \[M\]|AS|AS \[M\]) ');
 
-  void _riga(String r) {
+  void _riga(String r, {bool stderr = false}) {
+    _diario?.riga(r, stderr: stderr);
     if (_oggetto.hasMatch(r)) _oggetti++;
     _coda.add(r);
     if (_coda.length > _codaMax) _coda.removeRange(0, _coda.length - _codaMax);
@@ -205,8 +241,11 @@ class Officina {
     }
     _manda('righe', {'righe': righe});
     if (_passo == 'compila') {
-      _manda('avanzamento',
-          {'fase': 'compila', 'fatti': _oggetti, 'attesi': _attesi});
+      _manda('avanzamento', {
+        'fase': 'compila',
+        'fatti': _oggetti,
+        'attesi': _attesi,
+      });
     }
   }
 
@@ -229,10 +268,14 @@ class Officina {
     _inCorso = true;
     _annullato = false;
     _rilascio = r.rilascio;
+    _ricettaEseguita = r.toJson();
     _inizio = DateTime.now();
     _coda.clear();
     _oggetti = 0;
     _ultimoEsito = null;
+    _diario = null;
+    _logPercorso = '';
+    _erroreLog = '';
     _statiPassi.clear();
     _titoloPasso = '';
     _avanzamento = const {};
@@ -244,23 +287,22 @@ class Officina {
     // ripartire il demone. Ogni passo ha già il suo `try`; questo prende
     // quello che sta fra un passo e l'altro (il segno di «pronto», le
     // misure) e rimette l'officina in piedi.
-    unawaited(_esegui(r, rilievo).catchError((Object e) {
-      _inCorso = false;
-      _processo = null;
-      _passo = '';
-      final esito = {
-        'ok': false,
-        'annullato': _annullato,
-        'errore': 'Errore inatteso: $e',
-        'rilascio': r.rilascio,
-        'uscita': '',
-        'secondi': DateTime.now().difference(_inizio!).inSeconds,
-        'avvisi': <String>[],
-      };
-      _ultimoEsito = esito;
-      _manda('fatto', esito);
-    }));
-    return {'ok': true, 'rilascio': r.rilascio};
+    unawaited(
+      _esegui(r, rilievo).catchError((Object e, StackTrace trace) async {
+        _diario?.evento('errore-inatteso', {'errore': '$e', 'stack': '$trace'});
+        final esito = {
+          'ok': false,
+          'annullato': _annullato,
+          'errore': 'Errore inatteso: $e',
+          'rilascio': r.rilascio,
+          'uscita': '',
+          'secondi': DateTime.now().difference(_inizio!).inSeconds,
+          'avvisi': <String>[],
+        };
+        await _concludi(esito);
+      }),
+    );
+    return {'ok': true, 'rilascio': r.rilascio, 'ricetta': _ricettaEseguita};
   }
 
   /// Ferma la compilazione. Il gruppo di processi intero: `make -j12` ha
@@ -272,8 +314,10 @@ class Officina {
     if (p == null) return;
     await _segnale(p.pid, 'TERM');
     // Cinque secondi per chiudere da sé, poi si stacca la spina.
-    final uscito = await p.exitCode
-        .timeout(const Duration(seconds: 5), onTimeout: () => -999);
+    final uscito = await p.exitCode.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => -999,
+    );
     if (uscito == -999) await _segnale(p.pid, 'KILL');
   }
 
@@ -284,18 +328,48 @@ class Officina {
       if (_conSetsid) {
         await Process.run('kill', ['-$quale', '--', '-$pid']);
       } else {
-        Process.killPid(pid,
-            quale == 'KILL' ? ProcessSignal.sigkill : ProcessSignal.sigterm);
+        Process.killPid(
+          pid,
+          quale == 'KILL' ? ProcessSignal.sigkill : ProcessSignal.sigterm,
+        );
       }
     } catch (_) {}
   }
 
-  static final bool _conSetsid = File('/usr/bin/setsid').existsSync() ||
-      File('/bin/setsid').existsSync();
+  static final bool _conSetsid =
+      File('/usr/bin/setsid').existsSync() || File('/bin/setsid').existsSync();
 
   // ── L'esecuzione ─────────────────────────────────────────────────────
 
   Future<void> _esegui(Ricetta r, Rilievo rilievo) async {
+    // Il diario nasce prima di scaricare o lanciare comandi. Se non si può
+    // crearlo si segnala l'errore, senza iniziare una build senza traccia.
+    try {
+      _diario = await DiarioCompilazione.apri(statoDir, r.rilascio);
+    } catch (e) {
+      throw FileSystemException('Non riesco a creare il log: $e', statoDir);
+    }
+    _logPercorso = _diario!.percorso;
+    _diario!.evento('ricetta', r.toJson());
+    _diario!.evento('rilievo-moduli', {
+      'kernelInUso': rilievo.rilascio,
+      'modprobed': {
+        'percorso': rilievo.modprobed.percorso,
+        'moduli': rilievo.modprobed.moduli.toList()..sort(),
+      },
+      'fonti': {
+        for (final v in rilievo.moduli.values) v.nome: v.fonti.toList()..sort(),
+      },
+    });
+    await _diario!.flush();
+    if (_diario!.errore.isNotEmpty) {
+      throw FileSystemException('Non riesco a scrivere il log', _logPercorso);
+    }
+    _bloccoLavoro = await BloccoLavoro.prendi(
+      lavoro,
+      tipo: 'compilazione',
+      dettagli: {'rilascio': r.rilascio, 'log': _logPercorso},
+    );
     final c = cartellePer(r.scelte, lavoro);
     final base = c.albero.substring(0, c.albero.lastIndexOf('/'));
     final segno = File('$base/.fucina-pronto');
@@ -305,15 +379,15 @@ class Officina {
     _attesi = (misure[r.rilascio]?['oggetti'] as int?) ?? 0;
     String? errore;
 
-    final ultimoPrimaVolta =
-        r.passi.lastIndexWhere((p) => p.soloLaPrimaVolta);
+    final ultimoPrimaVolta = r.passi.lastIndexWhere((p) => p.soloLaPrimaVolta);
     _mappa = null;
     _completati = const [];
 
     // Il secondo tempo di AutoFDO senza il profilo è un kernel compilato
     // «col profilo» che di profilo non ne ha: lo si dice prima di scaricare.
     if (c.profilo.isNotEmpty && !await File(c.profilo).exists()) {
-      errore = 'Non trovo il profilo di ${r.scelte.profilo} (${c.profilo}): '
+      errore =
+          'Non trovo il profilo di ${r.scelte.profilo} (${c.profilo}): '
           'registralo prima dalla pagina Kernel, avviato su quel kernel.';
     }
 
@@ -325,7 +399,8 @@ class Officina {
     // il modo peggiore: lo si dice prima di scaricare.
     final libero = errore == null ? await _spazioLibero() : null;
     if (libero != null && libero < spazioMinimo) {
-      errore = 'Servono almeno ${spazioMinimo ~/ 1000000000} GB liberi dove '
+      errore =
+          'Servono almeno ${spazioMinimo ~/ 1000000000} GB liberi dove '
           'la Fucina lavora ($lavoro): ce ne sono '
           '${(libero / 1e9).toStringAsFixed(1)}.';
     }
@@ -345,26 +420,35 @@ class Officina {
       _spedisci();
       if (p.soloLaPrimaVolta && pronto) {
         _manda('passo', {
-          'id': p.id, 'titolo': p.titolo, 'indice': i,
-          'quanti': r.passi.length, 'stato': 'saltato',
+          'id': p.id,
+          'titolo': p.titolo,
+          'indice': i,
+          'quanti': r.passi.length,
+          'stato': 'saltato',
         });
         continue;
       }
       _manda('passo', {
-        'id': p.id, 'titolo': p.titolo, 'indice': i,
-        'quanti': r.passi.length, 'stato': 'via',
+        'id': p.id,
+        'titolo': p.titolo,
+        'indice': i,
+        'quanti': r.passi.length,
+        'stato': 'via',
       });
       _riga('── ${p.titolo}');
 
       try {
         errore = await _passoUno(p, r, rilievo, c, base, avvisi);
-      } catch (e) {
+      } catch (e, trace) {
+        _diario?.evento('errore-inatteso', {'errore': '$e', 'stack': '$trace'});
         errore = 'Errore inatteso in «${p.titolo}»: $e';
       }
       if (errore == null && _annullato) errore = 'Fermata.';
 
       _manda('passo', {
-        'id': p.id, 'titolo': p.titolo, 'indice': i,
+        'id': p.id,
+        'titolo': p.titolo,
+        'indice': i,
         'quanti': r.passi.length,
         'stato': errore == null ? 'fatto' : 'fallito',
         'secondi': DateTime.now().difference(t0).inSeconds,
@@ -396,24 +480,98 @@ class Officina {
       'secondi': DateTime.now().difference(_inizio!).inSeconds,
       'avvisi': avvisi,
     };
+    await _concludi(esito);
+  }
+
+  /// Il risultato parte solo quando il log completo è stato scaricato su
+  /// disco. Si ricorda anche l'ultimo tentativo concluso dopo un riavvio del
+  /// demone, senza dedurre l'esito di una build da un file di stato vecchio.
+  Future<void> _concludi(Map<String, dynamic> risultato) async {
+    _spedizione?.cancel();
+    _spedisci();
+    final esito = <String, dynamic>{
+      ...risultato,
+      'log': _logPercorso,
+      'ricetta': _ricettaEseguita,
+    };
+    _diario?.evento('esito', esito);
+    await _diario?.chiudi();
+    _erroreLog = _diario?.errore ?? '';
+    if (_erroreLog.isNotEmpty) {
+      esito['erroreLog'] = _erroreLog;
+      esito['avvisi'] = [
+        ...?esito['avvisi'] as List?,
+        'Il log potrebbe essere incompleto: $_erroreLog',
+      ];
+    }
     _ultimoEsito = esito;
+    // La scrittura atomica evita di perdere il risultato precedente se il
+    // demone termina mentre salva. Solo esiti conclusi entrano nel file.
+    try {
+      await Directory(statoDir).create(recursive: true);
+      final f = File(
+        '$statoDir/.ultima-compilazione-$pid-${DateTime.now().microsecondsSinceEpoch}.json',
+      );
+      await f.writeAsString(
+        jsonEncode({...stato(), 'inCorso': false, 'secondi': esito['secondi']}),
+        flush: true,
+      );
+      await f.rename('$statoDir/ultima-compilazione.json');
+    } catch (e) {
+      esito['avvisi'] = [
+        ...?esito['avvisi'] as List?,
+        'Non riesco a ricordare l’esito per il prossimo avvio: $e',
+      ];
+    }
+    await _bloccoLavoro?.chiudi();
+    _bloccoLavoro = null;
     _inCorso = false;
     _processo = null;
     _passo = '';
     _manda('fatto', esito);
   }
 
+  void _ripristinaUltima() {
+    try {
+      final f = File('$statoDir/ultima-compilazione.json');
+      if (!f.existsSync() || f.lengthSync() > 2 * 1024 * 1024) return;
+      final j = jsonDecode(f.readAsStringSync());
+      if (j is! Map || j['inCorso'] != false || j['esito'] is! Map) return;
+      _ultimoEsito = (j['esito'] as Map).cast<String, dynamic>();
+      if (j['ricetta'] is Map) {
+        _ricettaEseguita = (j['ricetta'] as Map).cast<String, dynamic>();
+      }
+      _rilascio = '${_ultimoEsito!['rilascio'] ?? ''}';
+      _logPercorso = '${j['log'] ?? ''}';
+      _erroreLog = '${j['erroreLog'] ?? ''}';
+      _coda.addAll((j['righe'] as List).cast<String>().take(_codaMax));
+      _statiPassi.addAll((j['passi'] as Map).cast<String, String>());
+    } catch (_) {
+      // Un vecchio file o un file danneggiato non impedisce di ripartire.
+    }
+  }
+
   /// Un passo. Restituisce `null` se è andato, o la frase da dire.
-  Future<String?> _passoUno(Passo p, Ricetta r, Rilievo rilievo, Cartelle c,
-      String base, List<String> avvisi) async {
+  Future<String?> _passoUno(
+    Passo p,
+    Ricetta r,
+    Rilievo rilievo,
+    Cartelle c,
+    String base,
+    List<String> avvisi,
+  ) async {
     switch (p.id) {
       case 'scarica':
         return r.scelte.sorgente == TipoSorgente.cachyos
             ? _scaricaCachyos(r.scelte.versione)
             : _scarica(r.scelte.versione);
       case 'estrai':
-        return _estrai(r.scelte.versione, base, c.albero,
-            cachyos: r.scelte.sorgente == TipoSorgente.cachyos);
+        return _estrai(
+          r.scelte.versione,
+          base,
+          c.albero,
+          cachyos: r.scelte.sorgente == TipoSorgente.cachyos,
+        );
       case 'patch':
         return _patch(r.scelte.versione, c.albero);
       case 'base':
@@ -434,20 +592,86 @@ class Officina {
         return _lancia(p.comando, c.albero, invii: true);
       case 'controlla':
         final config = await File('${c.albero}/.config').readAsString();
+        final valoriSicurezza = leggiConfig(config);
+        final configOriginale = File('${c.albero}/.fucina-partenza.config');
+        final perse = <String>{
+          if (await configOriginale.exists())
+            ...protezioniPerse(
+              leggiConfig(await configOriginale.readAsString()),
+              valoriSicurezza,
+            ),
+          for (final i in r.impostazioni)
+            if ((protezioneKernel(i.simbolo) ||
+                    i.simbolo.startsWith('SECURITY_') ||
+                    i.simbolo == 'BPF_LSM') &&
+                i.valore == 'y' &&
+                valoriSicurezza[i.simbolo] != 'y')
+              i.simbolo,
+        };
+        if (perse.isNotEmpty) {
+          final errore =
+              'La configurazione perderebbe protezioni del kernel: ${perse.join(', ')}. '
+              'Compilazione bloccata: risolvi le dipendenze o scegli una versione che supporti queste protezioni.';
+          _riga('✗ $errore');
+          return errore;
+        }
         for (final a in controllaConfig(config, r.impostazioni)) {
           _riga('⚠ $a');
           avvisi.add(a);
+        }
+        if (r.scelte.nativo && leggiConfig(config)['X86_NATIVE_CPU'] != 'y') {
+          const a =
+              'Kconfig non ha attivato l’ottimizzazione nativa richiesta. '
+              'La compilazione si ferma qui: scegli il target generico oppure '
+              'usa un compilatore supportato da questa versione del kernel.';
+          _riga('✗ $a');
+          return a;
         }
         // I moduli che «completa» ha acceso: Kconfig può averne rimesso a
         // «n» qualcuno, se dipende da qualcosa che in questa configurazione
         // non c'è. Si dice per nome di modulo, che è quello che chi guarda
         // ha scelto, e non per simbolo.
         final m = _mappa;
+        if (m != null) {
+          final esclusi = <String>{...r.tolti.keys, ...r.scelte.tolti}
+            ..removeAll(rilievo.avvio.moduli);
+          final valori = leggiConfig(config);
+          final attivi = <String>[];
+          final nonPresenti = <String>[];
+          for (final nome in esclusi) {
+            final simboli = m.simboli[nome];
+            if (simboli == null) {
+              nonPresenti.add(nome);
+            } else if (simboli.any(
+              (s) => valori[s] == 'y' || valori[s] == 'm',
+            )) {
+              attivi.add(nome);
+            }
+          }
+          if (attivi.isNotEmpty) {
+            final a =
+                'Kconfig ha mantenuto attivi alcuni moduli esclusi, '
+                'per dipendenze o opzioni condivise: ${attivi.toSet().join(', ')}.';
+            _riga('⚠ $a');
+            avvisi.add(a);
+          }
+          if (nonPresenti.isNotEmpty) {
+            final a =
+                'Questi moduli esclusi non compaiono nei sorgenti di '
+                'questa versione o hanno cambiato nome: ${nonPresenti.join(', ')}.';
+            _riga('⚠ $a');
+            avvisi.add(a);
+          }
+        }
         if (m != null && _completati.isNotEmpty) {
-          final ancora =
-              confronta(leggiConfig(config), m, _completati).mancanti;
+          final ancora = confronta(
+            leggiConfig(config),
+            m,
+            _completati,
+          ).mancanti;
           if (ancora.isNotEmpty) {
-            final a = 'Non sono entrati, anche se li avevi chiesti (scorte, '
+            final a =
+                'Non sono entrati, anche se li avevi chiesti (scorte, '
                 'essenziali o aggiunti): ${ancora.join(', ')}. Kconfig li ha '
                 'lasciati fuori perché dipendono da qualcosa che questa '
                 'configurazione non ha.';
@@ -514,10 +738,16 @@ class Officina {
     }
 
     _riga('Scarico $nome.');
-    final e = await scarica(Sorgenti.archivio(versione), file,
-        progresso: (fatti, attesi) => _manda('avanzamento',
-            {'fase': 'scarica', 'fatti': fatti, 'attesi': attesi}),
-        annullato: () => _annullato);
+    final e = await scarica(
+      Sorgenti.archivio(versione),
+      file,
+      progresso: (fatti, attesi) => _manda('avanzamento', {
+        'fase': 'scarica',
+        'fatti': fatti,
+        'attesi': attesi,
+      }),
+      annullato: () => _annullato,
+    );
     if (e != null) return e;
 
     final vista = await _somma(file.path);
@@ -552,8 +782,9 @@ class Officina {
   Future<String?> _scaricaCachyos(String versione) async {
     _riga('Chiedo a CachyOS se ha l\'archivio del $versione.');
     final refs = await sorgenti.testo(Sorgenti.refsLinuxCachyos);
-    final etichetta =
-        refs == null ? null : Sorgenti.etichettaCachyos(refs, versione);
+    final etichetta = refs == null
+        ? null
+        : Sorgenti.etichettaCachyos(refs, versione);
     final segno = _fileEtichetta(versione);
     await segno.parent.create(recursive: true);
     if (etichetta == null) {
@@ -561,8 +792,10 @@ class Officina {
         return 'Non riesco a chiedere a CachyOS quali archivi ha. Sei in rete?';
       }
       if (await segno.exists()) await segno.delete();
-      _riga('CachyOS non ha un archivio suo per il $versione: prendo quello '
-          'di kernel.org e ci metto sopra le loro patch.');
+      _riga(
+        'CachyOS non ha un archivio suo per il $versione: prendo quello '
+        'di kernel.org e ci metto sopra le loro patch.',
+      );
       return _scarica(versione);
     }
     await segno.writeAsString('$etichetta\n');
@@ -581,10 +814,16 @@ class Officina {
       } catch (_) {}
     } else {
       _riga('Scarico $nome da CachyOS.');
-      final e = await scarica(Sorgenti.archivioCachyos(etichetta), file,
-          progresso: (fatti, attesi) => _manda('avanzamento',
-              {'fase': 'scarica', 'fatti': fatti, 'attesi': attesi}),
-          annullato: () => _annullato);
+      final e = await scarica(
+        Sorgenti.archivioCachyos(etichetta),
+        file,
+        progresso: (fatti, attesi) => _manda('avanzamento', {
+          'fase': 'scarica',
+          'fatti': fatti,
+          'attesi': attesi,
+        }),
+        annullato: () => _annullato,
+      );
       if (e != null) return e;
     }
     _riga('Verifico la firma degli sviluppatori di CachyOS (gpg).');
@@ -614,7 +853,11 @@ class Officina {
   /// torna butta via l'archivio: non si compila un kernel che nessuno dei
   /// firmatari di kernel.org ha firmato.
   Future<String?> _firma(
-      String versione, File archivio, File verificato, String somma) async {
+    String versione,
+    File archivio,
+    File verificato,
+    String somma,
+  ) async {
     try {
       if (await verificato.exists() &&
           (await verificato.readAsString()).trim() == somma) {
@@ -656,8 +899,12 @@ class Officina {
     }
   }
 
-  Future<String?> _estrai(String versione, String base, String albero,
-      {bool cachyos = false}) async {
+  Future<String?> _estrai(
+    String versione,
+    String base,
+    String albero, {
+    bool cachyos = false,
+  }) async {
     final d = Directory(base);
     // Un albero senza il segno di «pronto» è un'estrazione o una patch
     // rimasta a metà: si butta e si rifà. Solo dentro la nostra cartella —
@@ -678,13 +925,21 @@ class Officina {
       // mette dove la Fucina si aspetta l'albero, `linux-<versione>/`.
       await Directory(albero).create(recursive: true);
       e = await _lancia([
-        'tar', '-xzf', '$lavoro/archivi/$etichetta.tar.gz',
-        '-C', albero, '--strip-components=1',
+        'tar',
+        '-xzf',
+        '$lavoro/archivi/$etichetta.tar.gz',
+        '-C',
+        albero,
+        '--strip-components=1',
       ], base);
     } else {
-      e = await _lancia(
-          ['tar', '-xf', '$lavoro/archivi/linux-$versione.tar.xz', '-C', base],
-          base);
+      e = await _lancia([
+        'tar',
+        '-xf',
+        '$lavoro/archivi/linux-$versione.tar.xz',
+        '-C',
+        base,
+      ], base);
     }
     if (e != null) return e;
     if (!await File('$albero/Makefile').exists()) {
@@ -697,12 +952,14 @@ class Officina {
     final serie = serieDi(versione);
     final etichetta = await _etichettaScelta(versione);
     if (etichetta != null) {
-      // L'albero È già il kernel di CachyOS: le loro patch e BORE ci sono.
-      // Riapplicarle è quello che falliva (4 ottobre 2026).
-      _riga('Sorgenti di CachyOS ($etichetta): le loro patch e lo scheduler '
-          'BORE ci sono già, non applico niente.');
-      final somma =
-          await _somma('$lavoro/archivi/$etichetta.tar.gz') ?? '?';
+      // Si usa l'albero CachyOS così com'è e non si riapplicano patch. La
+      // firma autentica l'archivio; le opzioni dichiarate dalla ricetta,
+      // incluso BORE, vengono controllate sul .config nel passo «controlla».
+      _riga(
+        'Archivio CachyOS firmato ($etichetta): non applico patch aggiuntive; '
+        'nel controllo Kconfig verifico quali opzioni sono davvero presenti.',
+      );
+      final somma = await _somma('$lavoro/archivi/$etichetta.tar.gz') ?? '?';
       await _segnaPatch(albero, '$etichetta.tar.gz', somma, etichetta);
       return null;
     }
@@ -744,14 +1001,18 @@ class Officina {
         return 'CachyOS non ha (o non ha ancora) ${u.pathSegments.last} per '
             'la serie $serie: $e';
       }
-      final prova = await applicaPatch(file: f.path,
-          esegui: (comando) => _lancia(comando, albero));
+      final prova = await applicaPatch(
+        file: f.path,
+        esegui: (comando) => _lancia(comando, albero),
+      );
       if (!prova.ok) {
         return '${u.pathSegments.last} non si applica interamente a linux-$versione '
             'e non risulta già presente. Nessuna patch incompatibile viene ignorata. '
             'La volta successiva i sorgenti saranno estratti di nuovo.';
       }
-      if (prova.giaPresente) _riga('${u.pathSegments.last}: modifiche già presenti, non riapplico.');
+      if (prova.giaPresente) {
+        _riga('${u.pathSegments.last}: modifiche già presenti, non riapplico.');
+      }
       // Le patch di CachyOS non sono firmate: se ne scrive la somma, che
       // resta nel kernel pronto (`fucina.json`) e dice ESATTAMENTE che cosa
       // c'è dentro.
@@ -763,7 +1024,11 @@ class Officina {
   }
 
   Future<void> _segnaPatch(
-      String albero, String nome, String somma, String commit) async {
+    String albero,
+    String nome,
+    String somma,
+    String commit,
+  ) async {
     final f = File('$albero/.fucina-patch.json');
     var elenco = <dynamic>[];
     try {
@@ -795,12 +1060,52 @@ class Officina {
   /// moduli che `completa` ha acceso: servono ancora a `controlla`.
   MappaModuli? _mappa;
   List<String> _completati = const [];
+  List<String> _esclusiCondivisi = const [];
 
   Future<String?> _completa(Ricetta r, Rilievo rilievo, Cartelle c) async {
     _riga('Leggo nei Makefile quale simbolo costruisce ogni modulo.');
     final mappa = await MappaModuli.leggi(c.albero);
     _mappa = mappa;
-    final config = await File('${c.albero}/.config').readAsString();
+    var config = await File('${c.albero}/.config').readAsString();
+    final valoriIniziali = leggiConfig(config);
+    final esclusi = <String>{...r.tolti.keys, ...r.scelte.tolti}
+      ..removeAll(rilievo.avvio.moduli);
+    final richiesti = r.moduli.toSet();
+    final reverse = <String, Set<String>>{};
+    for (final e in mappa.simboli.entries) {
+      for (final simbolo in e.value) {
+        reverse.putIfAbsent(simbolo, () => {}).add(e.key);
+      }
+    }
+    final disattivabili = <String>{};
+    final condivisi = <String>{};
+    for (final nome in esclusi) {
+      for (final simbolo in mappa.simboli[nome] ?? const <String>{}) {
+        if (valoriIniziali[simbolo] != 'y' && valoriIniziali[simbolo] != 'm') {
+          continue;
+        }
+        if (reverse[simbolo]!.any(richiesti.contains)) {
+          condivisi.add(nome);
+        } else {
+          disattivabili.add(simbolo);
+        }
+      }
+    }
+    _esclusiCondivisi = condivisi.toList()..sort();
+    if (disattivabili.isNotEmpty) {
+      final simboli = disattivabili.toList()..sort();
+      _riga(
+        'Disattivo in Kconfig ${simboli.length} opzioni dei moduli esclusi.',
+      );
+      final errore = await _lancia([
+        'scripts/config',
+        '--file',
+        '.config',
+        for (final simbolo in simboli) ...['--disable', simbolo],
+      ], c.albero);
+      if (errore != null) return errore;
+      config = await File('${c.albero}/.config').readAsString();
+    }
     final voluti = daCompletare(r, rilievo);
     final esito = confronta(leggiConfig(config), mappa, voluti);
     // Gli sconosciuti si dicono solo fra quelli scelti da chi guarda: gli
@@ -809,20 +1114,32 @@ class Officina {
     final scelti = {...voluti}..removeAll(rilievo.avvio.moduli);
     final ignoti = esito.sconosciuti.where(scelti.contains).toList();
     if (ignoti.isNotEmpty) {
-      _riga('⚠ Non trovo nei sorgenti di questa versione: ${ignoti.join(', ')} '
-          '(nome cambiato, o un modulo che viene da fuori).');
+      _riga(
+        '⚠ Non trovo nei sorgenti di questa versione: ${ignoti.join(', ')} '
+        '(nome cambiato, o un modulo che viene da fuori).',
+      );
+    }
+    if (_esclusiCondivisi.isNotEmpty) {
+      _riga(
+        'Non posso spegnere da soli questi moduli: condividono un’opzione '
+        'Kconfig con componenti richiesti: ${_esclusiCondivisi.join(', ')}.',
+      );
     }
     if (esito.mancanti.isEmpty) {
-      _riga('Niente da aggiungere: la configurazione accende già tutti i '
-          '${voluti.length} moduli promessi.');
+      _riga(
+        'Niente da aggiungere: la configurazione accende già tutti i '
+        '${voluti.length} moduli promessi.',
+      );
       _completati = const [];
       return null;
     }
     _completati = esito.mancanti;
     final moduli = leggiConfig(config)['MODULES'] == 'y';
-    _riga('Da accendere (${esito.mancanti.length}): ${esito.mancanti.join(', ')}'
-        '${moduli ? '' : ' — la configurazione non ha moduli: entrano nel '
-            'kernel (=y)'}.');
+    _riga(
+      'Da accendere (${esito.mancanti.length}): ${esito.mancanti.join(', ')}'
+      '${moduli ? '' : ' — la configurazione non ha moduli: entrano nel '
+                'kernel (=y)'}.',
+    );
     return _lancia([
       'scripts/config',
       '--file',
@@ -866,8 +1183,11 @@ class Officina {
       final dove = Directory(profiliDi(lavoro, rel));
       await dove.create(recursive: true);
       final e = await _lancia([
-        'cp', '--reflink=auto', '--',
-        '${c.albero}/vmlinux', '${dove.path}/vmlinux',
+        'cp',
+        '--reflink=auto',
+        '--',
+        '${c.albero}/vmlinux',
+        '${dove.path}/vmlinux',
       ], c.albero);
       if (e != null) return 'Non riesco a mettere da parte il vmlinux: $e';
       await File('${c.albero}/.config').copy('${dove.path}/config');
@@ -876,22 +1196,30 @@ class Officina {
 
     List<dynamic> patch = const [];
     try {
-      patch = jsonDecode(
-          await File('${c.albero}/.fucina-patch.json').readAsString()) as List;
+      patch =
+          jsonDecode(
+                await File('${c.albero}/.fucina-patch.json').readAsString(),
+              )
+              as List;
     } catch (_) {}
     await File('${c.uscita}/fucina.json').writeAsString(
-        const JsonEncoder.withIndent('  ').convert({
-      'rilascio': rel,
-      'scelte': r.scelte.toJson(),
-      'moduli': r.moduli.length,
-      'patch': patch,
-      if (r.scelte.profilo.isNotEmpty)
-        'profilo': {
-          'da': r.scelte.profilo,
-          'sha256': await _somma(c.profilo) ?? '?',
-        },
-      'quando': DateTime.now().toIso8601String(),
-    }));
+      const JsonEncoder.withIndent('  ').convert({
+        'rilascio': rel,
+        'scelte': r.scelte.toJson(),
+        'moduli': r.moduli.length,
+        'patch': patch,
+        'log': _logPercorso,
+        // Tempo realmente misurato dalla partenza fino al kernel pronto;
+        // esclude l'eventuale prova QEMU eseguita dopo il confezionamento.
+        'secondiPreparazione': DateTime.now().difference(_inizio!).inSeconds,
+        if (r.scelte.profilo.isNotEmpty)
+          'profilo': {
+            'da': r.scelte.profilo,
+            'sha256': await _somma(c.profilo) ?? '?',
+          },
+        'quando': DateTime.now().toIso8601String(),
+      }),
+    );
 
     // ── Quello che deve esserci al primo avvio ─────────────────────────
     //
@@ -899,16 +1227,18 @@ class Officina {
     // nuovo la verifica rilegge `/sys` e dice quali sono rimasti senza: è la
     // rete sotto una scrematura aggressiva.
     await Directory(statoDir).create(recursive: true);
-    await File('$statoDir/attesi-$rel.json').writeAsString(jsonEncode([
-      for (final d in rilievo.dispositivi)
-        if (d.driver != null)
-          {
-            'percorso': d.percorso,
-            'modalias': d.modalias,
-            'driver': d.driver,
-            'modulo': d.modulo,
-          },
-    ]));
+    await File('$statoDir/attesi-$rel.json').writeAsString(
+      jsonEncode([
+        for (final d in rilievo.dispositivi)
+          if (d.driver != null)
+            {
+              'percorso': d.percorso,
+              'modalias': d.modalias,
+              'driver': d.driver,
+              'modulo': d.modulo,
+            },
+      ]),
+    );
     _riga('Pronto da installare: ${c.uscita}');
     return null;
   }
@@ -916,10 +1246,16 @@ class Officina {
   // ── La prova d'avvio ─────────────────────────────────────────────────
 
   /// Se c'è KVM per chi compila. Si sostituisce nelle prove (vedi il
-  /// costruttore): la macchina di chi le lancia non è quella di Giacomo.
+  /// costruttore): la macchina di chi le lancia non è quella di il manutentore.
   Future<bool> _conKvm() async {
     try {
-      final r = await Process.run('test', ['-r', '/dev/kvm', '-a', '-w', '/dev/kvm']);
+      final r = await Process.run('test', [
+        '-r',
+        '/dev/kvm',
+        '-a',
+        '-w',
+        '/dev/kvm',
+      ]);
       return r.exitCode == 0;
     } catch (_) {
       return false;
@@ -935,24 +1271,33 @@ class Officina {
   /// per QUESTO processore e non c'è KVM per dargli il processore vero —
   /// l'emulazione può non avere le sue istruzioni, e un fallimento lì non
   /// direbbe niente del kernel.
-  Future<String?> _provaAvvio(Ricetta r, Cartelle c, List<String> avvisi) async {
+  Future<String?> _provaAvvio(
+    Ricetta r,
+    Cartelle c,
+    List<String> avvisi,
+  ) async {
     final rel = r.rilascio;
     final initramfs = File('$lavoro/prova-avvio.cpio');
     await initramfs.writeAsBytes(initramfsMinimo());
     final kvm = await (conKvm ?? _conKvm)();
     final t0 = DateTime.now();
     final righe = <String>[];
-    _riga(kvm ? 'Con KVM: il processore vero (-cpu host).'
-        : 'Senza KVM: emulazione (-cpu max), più lenta.');
+    _riga(
+      kvm
+          ? 'Con KVM: il processore vero (-cpu host).'
+          : 'Senza KVM: emulazione (-cpu max), più lenta.',
+    );
     final limite = Duration(seconds: kvm ? 120 : 600);
     final esito = await _lanciaConCodice(
-        comandoQemu(
-            kernel: '${c.uscita}/boot/vmlinuz-$rel',
-            initramfs: initramfs.path,
-            kvm: kvm),
-        lavoro,
-        raccogli: righe,
-        limite: limite);
+      comandoQemu(
+        kernel: '${c.uscita}/boot/vmlinuz-$rel',
+        initramfs: initramfs.path,
+        kvm: kvm,
+      ),
+      lavoro,
+      raccogli: righe,
+      limite: limite,
+    );
     final secondi = DateTime.now().difference(t0).inSeconds;
     bool? ok;
     var perche = '';
@@ -974,16 +1319,20 @@ class Officina {
     } else {
       ok = false;
       // L'ultima riga che dice qualcosa: di solito il panico.
-      perche = righe.lastWhere(
-          (l) => l.contains('panic') || l.contains('Panic'),
-          orElse: () => righe.isEmpty
-              ? 'nessuna riga sulla console (codice ${esito.codice})'
-              : righe.last).trim();
+      perche = righe
+          .lastWhere(
+            (l) => l.contains('panic') || l.contains('Panic'),
+            orElse: () => righe.isEmpty
+                ? 'nessuna riga sulla console (codice ${esito.codice})'
+                : righe.last,
+          )
+          .trim();
     }
     if (ok == false) {
       if (r.scelte.nativo && !kvm) {
         ok = null;
-        perche = 'kernel per questo processore senza KVM: l\'emulazione può non '
+        perche =
+            'kernel per questo processore senza KVM: l\'emulazione può non '
             'avere le sue istruzioni ($perche)';
       }
     }
@@ -1010,7 +1359,8 @@ class Officina {
   Future<void> _segnaProvaAvvio(Cartelle c, Map<String, dynamic> prova) async {
     final f = File('${c.uscita}/fucina.json');
     try {
-      final j = (jsonDecode(await f.readAsString()) as Map).cast<String, dynamic>();
+      final j = (jsonDecode(await f.readAsString()) as Map)
+          .cast<String, dynamic>();
       j['provaAvvio'] = prova;
       await f.writeAsString(const JsonEncoder.withIndent('  ').convert(j));
     } catch (_) {}
@@ -1022,20 +1372,29 @@ class Officina {
   /// processo non è partito, è stato fermato o è scaduto: allora `errore`
   /// dice perché.
   Future<({int? codice, String? errore})> _lanciaConCodice(
-      List<String> comando, String cartella,
-      {List<String>? raccogli, required Duration limite}) async {
+    List<String> comando,
+    String cartella, {
+    List<String>? raccogli,
+    required Duration limite,
+  }) async {
     var codice = -1;
     var scaduto = false;
-    final e = await _lancia(comando, cartella,
-        raccogli: raccogli,
-        limite: limite,
-        quandoScade: () => scaduto = true,
-        codiceVisto: (c) => codice = c,
-        tuttiBuoni: true);
+    final e = await _lancia(
+      comando,
+      cartella,
+      raccogli: raccogli,
+      limite: limite,
+      quandoScade: () => scaduto = true,
+      codiceVisto: (c) => codice = c,
+      tuttiBuoni: true,
+    );
     if (scaduto) {
-      return (codice: null,
-          errore: 'tempo scaduto (${limite.inSeconds} s) senza arrivare allo '
-              'spazio utente');
+      return (
+        codice: null,
+        errore:
+            'tempo scaduto (${limite.inSeconds} s) senza arrivare allo '
+            'spazio utente',
+      );
     }
     if (e != null) return (codice: null, errore: e);
     return (codice: codice, errore: null);
@@ -1049,28 +1408,47 @@ class Officina {
   /// Kconfig ne possa fare, meno di quanto stia nel tubo senza bloccarsi.
   ///
   /// `raccogli`: le righe dell'uscita normale finiscono anche qui.
-  Future<String?> _lancia(List<String> comando, String cartella,
-      {bool invii = false,
-      List<String>? raccogli,
-      Duration? limite,
-      void Function()? quandoScade,
-      void Function(int)? codiceVisto,
-      bool tuttiBuoni = false}) async {
+  Future<String?> _lancia(
+    List<String> comando,
+    String cartella, {
+    bool invii = false,
+    List<String>? raccogli,
+    Duration? limite,
+    void Function()? quandoScade,
+    void Function(int)? codiceVisto,
+    bool tuttiBuoni = false,
+  }) async {
     if (_annullato) return 'Fermata.';
+    _diario?.evento('comando', {
+      'argomenti': comando,
+      'cartella': cartella,
+      'rispostePredefinite': invii,
+    });
     var eseguibile = comando.first;
     if (eseguibile.startsWith('scripts/')) eseguibile = '$cartella/$eseguibile';
     final argomenti = comando.sublist(1);
     final Process p;
+    await _bloccoLavoro?.preparaProcesso();
     try {
       p = _conSetsid
-          ? await lancia('setsid', [eseguibile, ...argomenti],
-              workingDirectory: cartella)
+          ? await lancia('setsid', [
+              eseguibile,
+              ...argomenti,
+            ], workingDirectory: cartella)
           : await lancia(eseguibile, argomenti, workingDirectory: cartella);
     } on ProcessException catch (e) {
       return 'Non riesco ad avviare «${comando.first}»: ${e.message}. È '
           'installato?';
     }
     _processo = p;
+    String? erroreRegistro;
+    try {
+      await _bloccoLavoro?.registraProcesso(p.pid, conSetsid: _conSetsid);
+    } catch (e) {
+      _bloccoLavoro?.conservaPerRecupero();
+      erroreRegistro = 'Non posso registrare il processo per il recupero: $e';
+      await _segnale(p.pid, 'KILL');
+    }
     // «Ferma» può arrivare mentre il processo sta ancora nascendo: `ferma()`
     // non trova niente da fermare, e un `make` che parte dopo lavorerebbe per
     // un'ora con la compilazione già «fermata». Trovato da una prova che
@@ -1078,7 +1456,7 @@ class Officina {
     if (_annullato) unawaited(_segnale(p.pid, 'TERM'));
     final ultime = <String>[];
     void ascolta(String r, bool err) {
-      _riga(r);
+      _riga(r, stderr: err);
       if (!err) raccogli?.add(r);
       if (err || r.contains('rror')) {
         ultime.add(r);
@@ -1114,17 +1492,25 @@ class Officina {
     sveglia?.cancel();
     await a;
     await b;
+    try {
+      await _bloccoLavoro?.completaProcesso(p.pid);
+    } catch (e) {
+      _bloccoLavoro?.conservaPerRecupero();
+      erroreRegistro ??= 'Non posso chiudere il registro del processo: $e';
+    }
+    _diario?.evento('uscita-comando', {'argomenti': comando, 'codice': codice});
     _processo = null;
+    if (erroreRegistro != null) return erroreRegistro;
     if (_annullato) return 'Fermata.';
     codiceVisto?.call(codice);
     if (codice == 0 || tuttiBuoni) return null;
     final errore = ultime.lastWhere(
-        (r) => r.contains('rror') || r.contains('rrore'),
-        orElse: () => ultime.isEmpty ? '' : ultime.last);
+      (r) => r.contains('rror') || r.contains('rrore'),
+      orElse: () => ultime.isEmpty ? '' : ultime.last,
+    );
     return '«${comando.first}» è uscito con $codice'
         '${errore.isEmpty ? '' : ': $errore'}';
   }
-
 
   /// I byte liberi nel filesystem della cartella di lavoro, da `df`. `null`
   /// se non si riesce a saperlo: in quel caso si parte lo stesso, perché un

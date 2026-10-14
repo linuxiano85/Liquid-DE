@@ -8,7 +8,7 @@ import "../ui" as Ui
 //
 // ── Perché esiste ──────────────────────────────────────────────────────────
 //
-// Giacomo, 6 ottobre 2026: «se sono in galleria e clicco su un video si apre
+// il manutentore, 6 ottobre 2026: «se sono in galleria e clicco su un video si apre
 // Minerva Media… è disorganizzato». Deciso con lui: ognuno il suo mestiere.
 // Le fotografie e i video della propria vita si guardano dove stanno — in
 // Anteprima, scorrendo foto e filmati insieme — e Minerva Media resta il

@@ -7,7 +7,7 @@ import '../foto/indice.dart';
 ///
 /// ── Perché in Manutenzione e non nella Galleria ────────────────────────────
 ///
-/// Giacomo, 9 settembre 2026: «la nostra fa pulizia? ma solo pulizia ma anche
+/// il manutentore, 9 settembre 2026: «la nostra fa pulizia? ma solo pulizia ma anche
 /// riordino della cartella utente che è sempre una pulizia, file doppi, file
 /// sparsi [...] ne parlammo per la galleria ma io la farei qui».
 ///
@@ -45,7 +45,7 @@ class Setaccio {
 
   /// ── Le cartelle che non si guardano, scelte da chi usa il computer ───
   ///
-  /// Giacomo, 9 settembre 2026: «mettiamo esclusione di alcuni percorsi, ho
+  /// il manutentore, 9 settembre 2026: «mettiamo esclusione di alcuni percorsi, ho
   /// ad esempio i sorgenti di android nella cartella android/sdk, il mio
   /// progetto di droidian».
   ///
@@ -66,7 +66,7 @@ class Setaccio {
   ///
   /// `Progetti` è il caso di questa macchina e sta scritto qui, ma la regola
   /// che vale è quella sotto: si salta ciò che è **generato**, non ciò che è
-  /// di Giacomo.
+  /// di il manutentore.
   static const Set<String> _daNonGuardare = {
     'Progetti',
     'node_modules',
@@ -83,7 +83,7 @@ class Setaccio {
     // `~/Android` sono 3,1 GB e 45.403 file, `~/flutter` 1,6 GB e 17.427:
     // dentro una SDK i doppioni sono normali quanto dentro `node_modules` —
     // le stesse librerie in più versioni della piattaforma — e non si toccano
-    // mai. Misurate sulla macchina di Giacomo il 9 settembre 2026, mentre il
+    // mai. Misurate sulla macchina di il manutentore il 9 settembre 2026, mentre il
     // setaccio ci passava dentro.
     'Android',
     'flutter',
@@ -183,7 +183,7 @@ class Setaccio {
 
   /// ── Le cartelle che si possono prendere come RIFERIMENTO ─────────────
   ///
-  /// Giacomo, 9 settembre 2026: «metti caso che metto un nuovo backup nel PC
+  /// il manutentore, 9 settembre 2026: «metti caso che metto un nuovo backup nel PC
   /// e quelli che già avevo sono sparpagliati: seleziono la cartella come
   /// riferimento e tutto il resto viene considerato doppione».
   ///
@@ -278,7 +278,7 @@ class Setaccio {
 
   /// ── Le copie arrivate da WhatsApp valgono meno ───────────────────────
   ///
-  /// Giacomo: «i file whatsapp duplicati devono avere meno priorità a pari
+  /// il manutentore: «i file whatsapp duplicati devono avere meno priorità a pari
   /// file».
   ///
   /// Ha ragione, e la ragione non è il peso — qui i file sono identici byte
@@ -364,7 +364,7 @@ class Setaccio {
 
   /// ── Byte per byte, e solo su quello che stai per buttare ─────────────
   ///
-  /// Giacomo, 9 settembre 2026: «in che modo confronta per sapere esattamente
+  /// il manutentore, 9 settembre 2026: «in che modo confronta per sapere esattamente
   /// se sono uguali?».
   ///
   /// La scansione confronta a tre livelli — dimensione, le due estremità, poi
@@ -374,7 +374,7 @@ class Setaccio {
   /// miliardi. Per **mostrare** un elenco è più che abbastanza.
   ///
   /// Per **cancellare** no. «Quasi certo» moltiplicato per un file di
-  /// Giacomo fa una risposta sbagliata, e quel file non torna. Quindi prima
+  /// il manutentore fa una risposta sbagliata, e quel file non torna. Quindi prima
   /// di mettere qualcosa nel cestino si leggono i due file e si confrontano
   /// **i byte**, con la copia che resta.
   ///

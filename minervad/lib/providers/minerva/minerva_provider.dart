@@ -250,7 +250,11 @@ class MinervaProvider implements CompositorProvider {
     final r = await _chiedi('finestre');
     if (!r.startsWith('ok')) return null;
     final carico = caricoOk(r);
-    return _sembraJson(carico) ? carico : null;
+    try {
+      return jsonDecode(carico) is List ? carico : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// L'identificativo della scrivania attiva, o `null` se non si sa.

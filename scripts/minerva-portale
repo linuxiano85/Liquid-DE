@@ -3,7 +3,7 @@
 
 ── Perché esiste ──────────────────────────────────────────────────────────────
 
-Giacomo, 6 ottobre 2026: «quando ho qualche file sconosciuto e provo ad aprirlo
+il manutentore, 6 ottobre 2026: «quando ho qualche file sconosciuto e provo ad aprirlo
 si apre una schermata, penso di GNOME, che dice di cercare in GNOME Software».
 
 Chrome e quasi tutti gli altri, per aprire un file, non lanciano `xdg-open`:

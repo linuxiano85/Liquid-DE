@@ -30,7 +30,7 @@ import "blocco" as Schermo
 //  3. **La prova ha un'uscita.** Con `MINERVA_BLOCCO_PROVA=<secondi>` si
 //     sblocca da solo dopo quel tempo. È il modo in cui si prova il blocco
 //     VERO senza rischiare di restare fuori — e il modo in cui l'ho provato
-//     io sulla macchina di Giacomo, che è l'unica che c'è.
+//     io sulla macchina di il manutentore, che è l'unica che c'è.
 ShellRoot {
     id: radice
 

@@ -5,7 +5,7 @@ import "../theme" as Theme
 //
 // ── Perché questo file esiste ────────────────────────────────────────────
 //
-// Giacomo, 4 settembre 2026: «nel file manager manca la barretta laterale che
+// il manutentore, 4 settembre 2026: «nel file manager manca la barretta laterale che
 // posso trascinare con il mouse per spostare la discesa e slitta più
 // velocemente». Contate quel giorno: in tutta la shell c'erano **tre** barre
 // di scorrimento, ed erano quelle di serie di Qt, senza niente del nostro
@@ -55,6 +55,13 @@ Item {
 
     /// Orizzontale invece che verticale.
     property bool orizzontale: false
+    property color tinta: Theme.Colors.textMuted
+
+    /// Mantiene visibile il binario quando il contenuto richiede scorrimento.
+    /// Utile nelle pagine dense in cui la barra deve suggerire che c'è altro.
+    // Una maniglia visibile e larga anche a riposo permette di raggiungere
+    // subito il fondo con il mouse, senza cercare un filo di pochi pixel.
+    property bool sempreVisibile: true
 
     /// Quanto è lunga la corsa, cioè quanto contenuto c'è oltre la finestra.
     /// Zero o meno vuol dire che ci sta tutto: allora la barra non serve e
@@ -99,10 +106,10 @@ Item {
         // cambiando set di icone, per esempio — e quello che si vede è una
         // scaletta di trattini a mezz'aria.
         //
-        // Segnalata da Giacomo il 4 e il 5 settembre 2026 come «tutti quei
+        // Segnalata da il manutentore il 4 e il 5 settembre 2026 come «tutti quei
         // segni + sovrapposti». Non erano segni: erano i resti del pollice.
         return Math.round(
-            Math.max(32, Math.min(dentro, dentro * (finestra / tutto))));
+            Math.min(dentro, Math.max(32, dentro * (finestra / tutto))));
     }
 
     readonly property bool _serve: barra._corsa > 0
@@ -117,8 +124,8 @@ Item {
     // per una verticale, a sinistra e a destra per una orizzontale); il lato
     // corto viene da qui. Non si assegna `width: undefined` per l'altro verso:
     // in QML non è «lascia stare», è un valore, e spegne il legame.
-    implicitWidth: Theme.Effects.space3
-    implicitHeight: Theme.Effects.space3
+    implicitWidth: 18
+    implicitHeight: 18
 
     visible: barra._serve
     // Non riserva spazio quando non serve: le superfici che la useranno sono
@@ -139,8 +146,8 @@ Item {
         anchors.fill: parent
         // Metà del lato corto, non `radiusFull`: vedi il perché sul pollice.
         radius: Math.min(width, height) / 2
-        color: Theme.Colors.sunken
-        opacity: barra._inUso ? 1 : 0
+        color: Qt.alpha(barra.tinta, 0.12)
+        opacity: barra._inUso || barra.sempreVisibile ? 1 : 0
         Behavior on opacity {
             NumberAnimation { duration: Theme.Motion.instant }
         }
@@ -159,7 +166,7 @@ Item {
         // disegnato, e quello che esce è una **scaletta di piccole croci**
         // lungo tutta la barra.
         //
-        // Giacomo, 4 settembre 2026, un'ora dopo che avevo messo le barre
+        // il manutentore, 4 settembre 2026, un'ora dopo che avevo messo le barre
         // dappertutto: «cosa sono tutti quei segno + in impostazioni?». Erano
         // i pollici delle barre nuove.
         //
@@ -168,8 +175,7 @@ Item {
         radius: Math.min(width, height) / 2
 
         // A riposo è un filo, sotto il dito diventa una maniglia.
-        readonly property int spessore: barra._inUso ? Theme.Effects.space2
-                                                     : Theme.Effects.space2 - 2
+        readonly property int spessore: barra._inUso ? 10 : 8
 
         width: barra.orizzontale ? barra._lungo : spessore
         height: barra.orizzontale ? spessore : barra._lungo
@@ -183,8 +189,8 @@ Item {
         // `velo()` e non un bianco scritto a mano: su un tema chiaro un velo
         // bianco non si vede, e la barra sparirebbe proprio dove serve di più.
         color: presa.pressed ? Theme.Colors.accent
-             : presa.containsMouse ? Theme.Colors.velo(0.34)
-                                   : Theme.Colors.velo(0.22)
+             : presa.containsMouse ? barra.tinta
+                                   : Qt.alpha(barra.tinta, 0.75)
 
         // Il colore si anima, la MISURA no. Animare la lunghezza del pollice
         // vuol dire ridisegnarlo a decine di misure intermedie, ognuna con il

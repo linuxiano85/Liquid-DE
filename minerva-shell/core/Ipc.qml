@@ -93,7 +93,7 @@ QtObject {
     /// `height 34` (il ripiego) mentre l'altezza vera era 38. Hyprland
     /// riservava 38, la barra ne disegnava 34, e restavano quattro pixel di
     /// scarto — «la barra è staccata dalla finestra e la linea rosa è un
-    /// pochino storta», parole di Giacomo mentre guardava.
+    /// pochino storta», parole di il manutentore mentre guardava.
     readonly property bool impostazioniArrivate: ipc._settingsNote
 
     property bool _settingsNote: false
@@ -134,6 +134,7 @@ QtObject {
     property var keybindings: []
 
     /// Elenco completo delle applicazioni installate
+    property var liquidUpdateState: ({})
     property var allApps: []
 
     /// Le icone di Minerva tradotte nel tema installato sul computer, per chi
@@ -327,8 +328,9 @@ QtObject {
     function _eDomanda(azione) {
         var a = String(azione || "");
         return /^get_/.test(a) || /_(state|stato|list|zones|info|elenco|panoramica|inventario)$/.test(a)
-            || a === "scorciatoie_compositore" || a === "fs_places" || a === "fs_volumes"
-            || a === "fs_jobs" || a === "fs_formats" || a === "mime_categories";
+            || a === "scorciatoie_compositore" || a === "fs_places" || a === "fs_volumes" || a === "fs_remoti"
+            || a === "fs_jobs" || a === "fs_formats" || a === "mime_categories"
+            || a === "radio_cerca" || a === "notizie" || a === "notizie_fonti";
     }
 
     /// Svuota la coda. Da chiamare quando la connessione si apre.
@@ -362,6 +364,10 @@ QtObject {
     }
 
     function setSetting(path, value) {
+        // A profile switch changes the whole desktop. Wait for the complete
+        // daemon snapshot rather than exposing the new name with old values.
+        if (path === "stile.attuale" || path === "stile")
+            return send({ "action": "set_setting", "path": path, "value": value });
         // Uguale a quello che c'è già: la copia locale non si tocca. Ogni
         // `Core.Ipc.get(...)` di ogni finestra dipende da TUTTO `settings`, e
         // riassegnarlo rifà circa quattrocento associazioni — per niente,
@@ -415,6 +421,12 @@ QtObject {
     /// Le impostazioni arrivate dal demone, con sopra le scritture nostre
     /// che il demone non ha ancora fatto proprie.
     function _conScrittureInVolo(arrivate) {
+        var precedente = ipc.settings && ipc.settings.stile ? ipc.settings.stile.attuale : "";
+        var successivo = arrivate && arrivate.stile ? arrivate.stile.attuale : "";
+        // Earlier writes have already been applied by the daemon before its
+        // switch event. They must not overlay preferences of the next profile.
+        if (precedente !== successivo)
+            ipc._inVolo = {};
         var adesso = Date.now();
         var sopra = {};
         var quante = 0;
@@ -473,6 +485,8 @@ QtObject {
     function setSettings(mappa) {
         if (!mappa || typeof mappa !== "object")
             return false;
+        if (mappa["stile.attuale"] !== undefined || mappa["stile"] !== undefined)
+            return send({ "action": "set_settings", "values": mappa });
 
         // Stessa copia ottimista di `setSetting`, fatta una volta per tutte le
         // chiavi: se si aggiornasse la copia una chiave per volta, ogni
@@ -585,8 +599,26 @@ QtObject {
         return send({ "action": "kill_process", "pid": pid, "force": forza === true });
     }
 
-    function launchApp(execCmd, appId) {
-        return send({ "action": "launch_app", "exec": execCmd, "id": appId || "" });
+    property var _launchQueue:[]
+    function launchApp(execCmd, appId, intent) {
+        var payload={action:"launch_app",exec:execCmd,id:appId || "",intent:intent || "new-window",workspace:Compositore.scrivaniaAttiva};
+        if(!Compositore.canaleAperto || payload.workspace<1) return send(payload);
+        var queue=_launchQueue.slice();queue.push(payload);_launchQueue=queue;
+        Compositore._nostro("lancio",[String(payload.workspace),payload.intent==="new-window" ? "1":"0"]);
+    }
+    property Connections _launchTokens:Connections {
+        target:Compositore
+        function onRisposta(what,text) {
+            if(what!=="lancio" || ipc._launchQueue.length===0) return;
+            var queue=ipc._launchQueue.slice(),payload=queue.shift();ipc._launchQueue=queue;
+            if(text.indexOf("ok ")===0) payload.activationToken=text.substring(3);
+            ipc.send(payload);
+        }
+        function onCanaleApertoChanged() {
+            if(Compositore.canaleAperto) return;
+            var queue=ipc._launchQueue;ipc._launchQueue=[];
+            queue.forEach(function(payload){ipc.send(payload);});
+        }
     }
 
     /// Lancia un file .desktop da un percorso qualsiasi: i launcher messi a
@@ -923,13 +955,18 @@ QtObject {
         return send({ "action": "fs_unwatch", "pane": pane });
     }
 
-    function fsList(path, showHidden, pane) {
-        return send({
+    function fsList(path, showHidden, pane, watch) {
+        var richiesta = {
             "action": "fs_list",
             "path": path,
             "showHidden": showHidden === true,
             "pane": pane || ""
-        });
+        };
+        // Un selettore modale legge su richiesta: non deve tenere osservatori
+        // quando il suo componente viene distrutto cambiando pagina.
+        if (watch === false)
+            richiesta.watch = false;
+        return send(richiesta);
     }
 
     /// I nomi che in `destination` esistono già. La risposta arriva su
@@ -1058,6 +1095,30 @@ QtObject {
     // demone a garantirlo, e questa firma lo rende difficile da sbagliare.
 
     signal weatherPlaces(var luoghi)
+
+    /// Le stazioni trovate da `radioCerca`: `{stazioni, error, testo, paese}`.
+    /// `testo` e `paese` dicono a quale ricerca si risponde.
+    signal radioStazioni(var payload)
+
+    /// Le notizie della bacheca Widget: `{articoli, error, fonti}`. Ogni
+    /// articolo è `{titolo, fonte, link, data, interesse, immagine}`, con
+    /// `immagine` un file locale (la scarica il demone).
+    signal notizieRicevute(var payload)
+    /// Solo l'elenco delle fonti, per le Impostazioni: `{fonti}`.
+    signal fontiNotizieRicevute(var payload)
+
+    function notizie(lingua, interessi, spente) {
+        return send({ "action": "notizie", "lingua": lingua, "interessi": interessi, "spente": spente });
+    }
+    function fontiNotizie(lingua, spente) {
+        return send({ "action": "notizie_fonti", "lingua": lingua, "spente": spente });
+    }
+
+    /// Cerca radio (radio-browser.info, dal demone). Senza testo, le più
+    /// ascoltate del paese; `paese` vuoto vuol dire tutto il mondo.
+    function radioCerca(testo, paese) {
+        return send({ "action": "radio_cerca", "testo": testo || "", "paese": paese || "" });
+    }
     signal weatherReceived(var meteo)
 
     function weatherSearch(query) {
@@ -1186,8 +1247,17 @@ QtObject {
     // ── Proprietà, dischi, e chi apre che cosa ───────────────────────────
 
     signal fileInfoReceived(var info)
+    /// Risposta a `fs_anteprima` per il riquadro dei dettagli del gestore
+    /// file: `{ok, path, isDir, size, modified, imageWidth, imageHeight,
+    /// testo, troncato, binario, richiesta}`. Vedi `FileService.anteprima`.
+    signal anteprimaReceived(var anteprima)
     signal fileMeasureReceived(var measure)
     signal volumesReceived(var volumes)
+    /// Cartelle di rete e telefoni: `{luoghi, mancano, protocolli, error}`.
+    signal remotiReceived(var payload)
+    /// Risposta a `fsConnetti`: `{ok, uri, percorso, error, serveAccesso,
+    /// sbagliate, dominio, domanda, manca, richiesta}`.
+    signal connessoReceived(var result)
     signal placesReceived(var places)
     signal mimeDescribed(var described)
     /// I gruppi, e le FAMIGLIE in cui la pagina li raccoglie. La divisione
@@ -1237,6 +1307,16 @@ QtObject {
     function fsVolumes()        { return send({ "action": "fs_volumes" }); }
     function fsMount(device)    { return send({ "action": "fs_mount",   "device": device }); }
     function fsUnmount(device)  { return send({ "action": "fs_unmount", "device": device }); }
+    function fsRemoti()         { return send({ "action": "fs_remoti" }); }
+    /// La password va al demone, che la scrive sullo stdin di `gio`: non
+    /// finisce né negli argomenti di un processo né nei registri.
+    function fsConnetti(indirizzo, utente, dominio, password, fidati, richiesta) {
+        return send({ "action": "fs_connetti", "indirizzo": indirizzo,
+                      "utente": utente || "", "dominio": dominio || "",
+                      "password": password || "", "fidati": fidati === true,
+                      "richiesta": richiesta || "" });
+    }
+    function fsScollega(uri)    { return send({ "action": "fs_scollega", "uri": uri }); }
 
     // ── La schermata di accesso ──────────────────────────────────────────
     //
@@ -1357,6 +1437,13 @@ QtObject {
     /// Che cosa c'è nel computer: dispositivi, moduli con le loro fonti,
     /// famiglie, scorte, preset, macchina, avvisi. Vedi `fucina/rilievo.dart`.
     signal fucinaRilievo(var info)
+    signal fucinaStorico(var info)
+    signal fucinaReportEsportato(var info)
+    signal fucinaProfili(var info)
+    signal fucinaProfiloSalvato(var info)
+    signal fucinaProfiloCaricato(var info)
+    signal fucinaProfiloEliminato(var info)
+    signal fucinaRegolaModulo(var info)
     /// Le versioni del kernel da kernel.org, e se CachyOS ha le patch.
     signal fucinaVersioni(var info)
     /// Il piano per le scelte fatte: moduli, valori, passi, avvisi.
@@ -1373,6 +1460,7 @@ QtObject {
     /// passo, secondi, righe, esito}`.
     signal fucinaStato(var info)
     signal fucinaKernel(var info)
+    signal fucinaCacheRecuperata(var info)
     signal fucinaInstallato(var info)
     signal fucinaTolto(var info)
     signal fucinaVerifica(var info)
@@ -1401,12 +1489,36 @@ QtObject {
     function fucinaRileva() {
         return send({ "action": "fucina_rileva" });
     }
+    function fucinaDimenticaDispositivi() {
+        return send({ "action": "fucina_dimentica_dispositivi" });
+    }
+    function fucinaEsportaRilievo() {
+        return send({ "action": "fucina_esporta_rilievo" });
+    }
+    function fucinaElencaProfili() {
+        return send({ "action": "fucina_profili" });
+    }
+    function fucinaSalvaProfilo(nome, scelte) {
+        return send({ "action": "fucina_profilo_salva", "nome": nome, "scelte": scelte });
+    }
+    function fucinaCaricaProfilo(id) {
+        return send({ "action": "fucina_profilo_carica", "id": id });
+    }
+    function fucinaEliminaProfilo(id) {
+        return send({ "action": "fucina_profilo_elimina", "id": id });
+    }
+    function fucinaImpostaRegolaModulo(modulo, scelta) {
+        return send({ "action": "fucina_regola_modulo", "modulo": modulo, "scelta": scelta });
+    }
     function fucinaChiediVersioni() {
         return send({ "action": "fucina_versioni" });
     }
     /// Si mandano SCELTE, mai comandi: la ricetta la calcola il demone.
-    function fucinaCalcola(scelte) {
-        return send({ "action": "fucina_ricetta", "scelte": scelte });
+    function fucinaCalcola(scelte, richiesta) {
+        var messaggio = { "action": "fucina_ricetta", "scelte": scelte };
+        if (richiesta !== undefined && richiesta !== null)
+            messaggio.richiesta = String(richiesta);
+        return send(messaggio);
     }
     function fucinaAvvia(scelte) {
         return send({ "action": "fucina_avvia", "scelte": scelte });
@@ -1419,6 +1531,9 @@ QtObject {
     }
     function fucinaChiediKernel() {
         return send({ "action": "fucina_kernel" });
+    }
+    function fucinaRecuperaCache(token) {
+        return send({ "action": "fucina_cache_recupera", "token": String(token || "") });
     }
     /// Un NOME di kernel, mai un percorso: la cartella la ricava il demone e
     /// l'aiutante di root la ricontrolla.
@@ -2330,6 +2445,9 @@ QtObject {
                 ipc.keybindings = msg.payload;
                 ipc.keybindingsReceived(ipc.keybindings);
                 break;
+            case "liquid_update":
+                ipc.liquidUpdateState = msg.payload || {};
+                break;
             case "all_apps":
                 ipc.allApps = msg.payload;
                 ipc.allAppsReceived(ipc.allApps);
@@ -2466,8 +2584,17 @@ QtObject {
             case "fs_info":
                 ipc.fileInfoReceived(msg.payload);
                 break;
+            case "fs_anteprima":
+                ipc.anteprimaReceived(msg.payload);
+                break;
             case "fs_measure":
                 ipc.fileMeasureReceived(msg.payload);
+                break;
+            case "fs_remoti":
+                ipc.remotiReceived(msg.payload || ({}));
+                break;
+            case "fs_connesso":
+                ipc.connessoReceived(msg.payload || ({}));
                 break;
             case "fs_volumes":
                 ipc.volumesReceived(msg.payload);
@@ -2520,6 +2647,27 @@ QtObject {
             case "fucina_rilievo":
                 ipc.fucinaRilievo(msg.payload);
                 break;
+            case "fucina_storico":
+                ipc.fucinaStorico(msg.payload);
+                break;
+            case "fucina_report_esportato":
+                ipc.fucinaReportEsportato(msg.payload);
+                break;
+            case "fucina_profili":
+                ipc.fucinaProfili(msg.payload);
+                break;
+            case "fucina_profilo_salvato":
+                ipc.fucinaProfiloSalvato(msg.payload);
+                break;
+            case "fucina_profilo_caricato":
+                ipc.fucinaProfiloCaricato(msg.payload);
+                break;
+            case "fucina_profilo_eliminato":
+                ipc.fucinaProfiloEliminato(msg.payload);
+                break;
+            case "fucina_regola_modulo":
+                ipc.fucinaRegolaModulo(msg.payload);
+                break;
             case "fucina_versioni":
                 ipc.fucinaVersioni(msg.payload);
                 break;
@@ -2549,6 +2697,9 @@ QtObject {
                 break;
             case "fucina_kernel":
                 ipc.fucinaKernel(msg.payload);
+                break;
+            case "fucina_cache_recuperata":
+                ipc.fucinaCacheRecuperata(msg.payload);
                 break;
             case "fucina_installato":
                 ipc.fucinaInstallato(msg.payload);
@@ -2607,6 +2758,15 @@ QtObject {
             case "locale_state":
                 ipc.localeStateReceived(msg.payload);
                 break;
+            case "notizie":
+                ipc.notizieRicevute(msg.payload || ({}));
+                break;
+            case "notizie_fonti":
+                ipc.fontiNotizieRicevute(msg.payload || ({}));
+                break;
+            case "radio_stazioni":
+                ipc.radioStazioni(msg.payload || ({}));
+                break;
             case "weather_places":
                 ipc.weatherPlaces(msg.payload.luoghi || []);
                 break;
@@ -2646,7 +2806,7 @@ QtObject {
     //
     // Dove si vedeva peggio: nella schermata di accesso. Il nome dell'utente
     // arrivava dopo circa tre secondi, su una schermata che era già tutta
-    // disegnata — Giacomo: «prima di uscire il nome utente passano intorno ai
+    // disegnata — il manutentore: «prima di uscire il nome utente passano intorno ai
     // 3 secondi».
     //
     // Adesso si comincia a 120 ms e si raddoppia fino a 2 secondi: chi parte
@@ -2667,7 +2827,7 @@ QtObject {
     /// prossima volta che ci prova è a cinque e sette. Misurato sul registro
     /// della sessione del 31 agosto 2026: la dock compariva a **4,666
     /// secondi**, e quasi due erano soltanto attesa fra un tentativo e
-    /// l'altro. È la metà buona dei «dieci secondi per avviarsi» di Giacomo;
+    /// l'altro. È la metà buona dei «dieci secondi per avviarsi» di il manutentore;
     /// l'altra metà era `dart run` (1965 ms contro 162, misurati).
     ///
     /// Quindi: finché non ci si è **mai** agganciati, e solo per i primi
@@ -2720,7 +2880,7 @@ QtObject {
             // ── CI SI FERMA QUANDO IL DEMONE HA RISPOSTO ─────────────────
             //
             // Qui c'era `if (!socket.connected) … else stop()`, e quel `stop()`
-            // è costato a Giacomo una scrivania senza dock e senza menù per
+            // è costato a il manutentore una scrivania senza dock e senza menù per
             // tutta la mattina del 31 agosto 2026.
             //
             // `socket.connected` dice che una connessione è stata CHIESTA, non

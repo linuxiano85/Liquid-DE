@@ -6,7 +6,7 @@ import 'dart:typed_data';
 ///
 /// Non lo scegliamo noi: lo sceglie chi ha scritto il protocollo. La nube di
 /// Midea — quella dietro l'applicazione **NetHome Plus**, che è quella che usa
-/// Giacomo — deriva la chiave con cui cifra il gettone di accesso da un MD5
+/// il manutentore — deriva la chiave con cui cifra il gettone di accesso da un MD5
 /// della chiave dell'applicazione, e la scoperta locale dei condizionatori
 /// cifra la risposta in AES con una chiave che è a sua volta un MD5.
 ///

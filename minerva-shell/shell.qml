@@ -26,6 +26,7 @@ import "widget" as Widget
 import "spine"
 import "menu"
 import "dock"
+import "windows11" as Windows11
 
 ShellRoot {
     id: root
@@ -131,7 +132,7 @@ ShellRoot {
 
     // ── Le animazioni della SHELL, che l'interruttore non toccava ────────
     //
-    // Giacomo, 19 agosto 2026: spegnere le animazioni «non porta a nessun
+    // il manutentore, 19 agosto 2026: spegnere le animazioni «non porta a nessun
     // cambiamento». Era vero: `Compositore.animazioni()` spegne quelle del
     // COMPOSITORE — finestre che si aprono, cambio scrivania — mentre i
     // pannelli, la dock e i menu li anima la shell con le durate di
@@ -242,6 +243,22 @@ ShellRoot {
             return "ok";
         }
 
+        /// Il selettore dei preset, per le prove: senza argomento lo apre (o
+        /// passa al successivo, come Super+P); con un nome lo applica.
+        /// Risponde col preset in uso.
+        function preset(nome: string): string {
+            if (nome === "")
+                selettorePreset.commuta();
+            else if (nome === "chiudi")
+                selettorePreset.chiudi();
+            else if (nome === "conferma")
+                selettorePreset.conferma();
+            else
+                selettorePreset.scegli(Core.DesktopStyle.elenco.map(function (v) { return v.id; }).indexOf(nome));
+            return Core.DesktopStyle.attuale + (selettorePreset.aperto
+                ? " | aperto su " + Core.DesktopStyle.elenco[selettorePreset.indice].id : "");
+        }
+
         /// «Con che cosa lo apro?» per conto del portale: la chiama
         /// `scripts/minerva-portale`, che aspetta la risposta su D-Bus.
         /// `scelte` è `{"scelte": [{id, name, iconPath}…]}` in JSON, usato solo
@@ -258,6 +275,32 @@ ShellRoot {
                 elenco = [];
             sovrapposizioneScrivania.apriConPerConto(handle, percorso, tipo, elenco);
             return "ok";
+        }
+
+        /// Com'è la finestrella «Con che cosa lo apro?», per le prove:
+        /// visibile, per conto di chi, il tipo, e dove sta «Lascia perdere».
+        function apriConStato(): string {
+            var b = null;
+            function cerca(it) {
+                if (it.objectName === "apriConLasciaPerdere")
+                    return it;
+                for (var c of (it.children || [])) {
+                    var r = cerca(c);
+                    if (r)
+                        return r;
+                }
+                return null;
+            }
+            b = cerca(apriConScrivania);
+            var p = b && b.visible ? b.mapToItem(null, b.width / 2, b.height / 2) : null;
+            return JSON.stringify({
+                "visibile": apriConScrivania.visible,
+                "perConto": apriConScrivania.perConto,
+                "tipo": apriConScrivania.tipo,
+                "schema": apriConScrivania.schema,
+                "portale": sovrapposizioneScrivania.portale,
+                "lasciaPerdere": p ? { "x": Math.round(p.x), "y": Math.round(p.y) } : null
+            });
         }
 
         /// Il programma che aveva chiesto ha rinunciato: si chiude.
@@ -434,6 +477,9 @@ ShellRoot {
                  + " dock=" + (root.dock ? root.dock.items.length : 0)
                  + " schermi=" + Object.keys(root.scrivanie).length
                  + " finestre=" + Core.Windows.all.length
+                 + " tiling=" + (Core.Tiling.active ? "si" : "no")
+                 + " guida=" + (root.tastiAperti ? "aperta" : "chiusa")
+                 + " riva-consenso=" + (root.consenso ? "si" : "no")
                  // Qual è la finestra attiva SECONDO LA SHELL. Non è la stessa
                  // domanda che si fa al compositore: da questa dipende quale
                  // barra del titolo si accende, e le due possono divergere in
@@ -508,7 +554,21 @@ ShellRoot {
     readonly property bool barraInBasso: Core.Posizioni.barraInBasso
     /// La barra della Riva: l'Isola che galleggia in mezzo
     /// (`menu/IsolaBarra.qml`). Con «classica» torna la barra di Minerva.
-    readonly property bool barraIsola: Core.Ipc.get("bar.stile", "isola") !== "classica"
+    readonly property bool barraWindows: Core.Ipc.get("bar.stile", "isola") === "windows11"
+    // Cambiando barra si chiudono i pannelli di Liquid su ogni schermo: uno
+    // rimasto aperto resterebbe sopra la barra nuova, senza modo di toglierlo.
+    onBarraWindowsChanged: Qt.callLater(function() {
+        root.chiudiPannelli();
+        for (var name in root.scrivanie) {
+            var s = root.scrivanie[name];
+            var pannelli = [s.sottomarino, s.centro, s.cassetto, s.isola, s.stanze, s.attivita];
+            for (var i = 0; i < pannelli.length; i++) {
+                if (pannelli[i] && pannelli[i].aperto)
+                    pannelli[i].chiudi();
+            }
+        }
+    })
+    readonly property bool barraIsola: Core.Ipc.get("bar.stile", "isola") === "isola"
     /// Da che parte esce il Cassetto; le Stanze dall'altra. Si scambiano
     /// trascinandone uno verso l'altro bordo (`riva.cassetto`).
     readonly property bool cassettoASinistra: Core.Riva.cassettoASinistra
@@ -546,15 +606,19 @@ ShellRoot {
         Core.Ipc.get("windows.titleHeight", 34),
         Core.Ipc.get("windows.buttonsSide", "destra")])
     readonly property string _firmaCsd: JSON.stringify(Core.Ipc.get("windows.csdApps", []))
+    readonly property string _firmaFocusSegue: JSON.stringify(Core.Ipc.get("windows.focusSegueMouse", false))
     on_FirmaBarraChanged: if (Core.Ipc.impostazioniArrivate)
         Core.Compositore.aspettoBarra(Core.Ipc.get("windows.titleHeight", 34),
                                       Core.Ipc.get("windows.buttonsSide", "destra"),
                                       undefined, undefined)
     on_FirmaCsdChanged: if (Core.Ipc.impostazioniArrivate)
         Core.Compositore.appConBarraPropria(Core.Ipc.get("windows.csdApps", []))
+    on_FirmaFocusSegueChanged: if (Core.Ipc.impostazioniArrivate)
+        Core.Compositore.focusSegue(Core.Ipc.get("windows.focusSegueMouse", false))
 
     Core.WindowRules {
         id: windowRules
+        readonly property bool tilingActive: Core.Tiling.active
         effetto:        Core.Ipc.get("windows.effetto", "nessuno")
         effettoOpacita: Core.Ipc.get("windows.effettoOpacita", 0.88)
         rigidita: Core.Ipc.get("windows.rigidita", 1)
@@ -588,15 +652,29 @@ ShellRoot {
     // parlerebbero a una barra che non esiste più.
 
     property var scrivanie: ({})
+    readonly property var outputNames: Quickshell.screens.map(function(screen) {
+        return screen.name;
+    })
+    // Uno schermo staccato esce dalla mappa anche se la sua copia non ha
+    // ancora fatto in tempo a cancellarsi da sé.
+    onOutputNamesChanged: {
+        var restano = {};
+        for (var name in root.scrivanie) {
+            if (root.outputNames.indexOf(name) >= 0)
+                restano[name] = root.scrivanie[name];
+        }
+        root.scrivanie = restano;
+        root.scrivanieCambiate();
+    }
 
     function iscriviScrivania(nome, barra, dock, sottomarino, centro, cassetto, isola, isolaBarra, stanze,
-                              attivita) {
-        if (!nome)
+                              attivita, windowsBar) {
+        if (!nome || root.outputNames.indexOf(nome)<0)
             return;
         var m = root.scrivanie;
         m[nome] = { "barra": barra, "dock": dock, "sottomarino": sottomarino,
                     "centro": centro, "cassetto": cassetto, "isola": isola,
-                    "isolaBarra": isolaBarra, "stanze": stanze, "attivita": attivita };
+                    "isolaBarra": isolaBarra, "stanze": stanze, "attivita": attivita, "windows": windowsBar };
         root.scrivanie = m;
         root.scrivanieCambiate();
     }
@@ -665,8 +743,8 @@ ShellRoot {
     /// Il menù delle app dello schermo attivo.
     function apriSottomarino() {
         var s = root.scrivaniaAttiva();
-        if (s && s.sottomarino)
-            s.sottomarino.commuta();
+        if (root.barraWindows && s && s.windows) s.windows.toggle("start");
+        else if (s && s.sottomarino) s.sottomarino.commuta();
     }
 
     /// Stamp: con l'Isola la scelta della schermata è una faccia della sua
@@ -698,7 +776,7 @@ ShellRoot {
 
     // ── La riva riservata ────────────────────────────────────────────────
     //
-    // Giacomo, 25 settembre 2026: «se ho una app a schermo intero compaiono
+    // il manutentore, 25 settembre 2026: «se ho una app a schermo intero compaiono
     // le isole passandoci sopra [...] per abilitarli magari possiamo usare
     // un tasto per dargli il consenso a comparire tenendo premuto». Con una
     // finestra che riempie lo schermo (ingrandita o a schermo intero, nella
@@ -722,6 +800,16 @@ ShellRoot {
     }
     property bool consenso: false
 
+    Connections {
+        target: Core.Riva
+        function onAttivaChanged() {
+            if (!Core.Riva.attiva) {
+                root.tastiAperti = false;
+                root.consenso = false;
+            }
+        }
+    }
+
     // Il compositore deve sapere se chiedere Super: lo si dice all'avvio e a
     // ogni cambio. Un attimo di ritardo all'avvio perché il canale ci sia.
     readonly property bool _rivaConConsenso: Core.Riva.conConsenso
@@ -733,19 +821,33 @@ ShellRoot {
     }
 
     function mostraTasti(si) {
+        if (!Core.Riva.attiva) {
+            root.tastiAperti = false;
+            root.consenso = false;
+            return;
+        }
+        var desktop = root.scrivaniaAttiva();
+        if (si && desktop && desktop.stanze && desktop.stanze.aperto) {
+            root.tastiAperti = false;
+            return;
+        }
         if (si && root.rivaRiservata) {
             root.consenso = true;
             return;
         }
         if (!si)
             root.consenso = false;
-        root.tastiAperti = si;
+        root.tastiAperti = si && !Core.Tiling.active;
     }
 
     /// Ctrl+Maiusc+Esc: Attività nella shell, sullo schermo attivo. Senza
     /// uno schermo registrato (fra lo stacco di un monitor e l'altro) si
     /// apre la finestra: il gestore dei processi non deve mai mancare.
     function apriAttivita() {
+        if (!Core.Riva.attiva) {
+            root.openMonitor();
+            return;
+        }
         var s = root.scrivaniaAttiva();
         if (s && s.attivita)
             s.attivita.commuta();
@@ -782,8 +884,16 @@ ShellRoot {
     /// Il Centro di controllo dello schermo attivo.
     function apriCentro() {
         var s = root.scrivaniaAttiva();
-        if (s && s.centro)
-            s.centro.commuta();
+        if (root.barraWindows && s && s.windows) s.windows.toggle("control");
+        else if (s && s.centro) s.centro.commuta();
+    }
+
+    function apriMixerAudio() {
+        var s = root.scrivaniaAttiva();
+        if (root.barraWindows && s && s.windows)
+            s.windows.openAudio();
+        else
+            root.openSettings("audio");
     }
 
     /// I pulsanti dell'energia del Centro. Esci, Riavvia e Spegni arrivano
@@ -798,6 +908,7 @@ ShellRoot {
         case "terminale":    root.run([Core.Ipc.get("launcher.defaultTerminal", "minerva-terminale")]); return;
         case "attivita":     root.apriAttivita(); return;
         case "scorciatoie":  root.toggleCheatsheet(); return;
+        case "preset":       selettorePreset.apri(); return;
         }
         console.log("[LIQUID][CENTRO] azione: " + id);
         // In prova non si spegne, non si sospende e non si esce davvero: la
@@ -817,21 +928,22 @@ ShellRoot {
 
     function pannello(nome) {
         var s = root.scrivaniaAttiva();
-        if (s && s.barra)
-            s.barra.toggle(nome);
+        if (root.barraWindows && s && s.windows) s.windows.toggle(nome);
+        else if (s && s.barra) s.barra.toggle(nome);
     }
 
     function chiudiPannelli() {
-        for (var k in root.scrivanie)
-            if (root.scrivanie[k].barra)
-                root.scrivanie[k].barra.close();
+        for (var k in root.scrivanie) {
+            if (root.scrivanie[k].barra) root.scrivanie[k].barra.close();
+            if (root.scrivanie[k].windows) root.scrivanie[k].windows.close();
+        }
     }
 
     /// Comodità: `root.spine.toggle(...)` continua a leggersi come prima.
     readonly property var spine: {
         root.scrivanieCambiate;
         var s = root.scrivaniaAttiva();
-        return s ? s.barra : null;
+        return s ? (root.barraWindows && s.windows ? s.windows:s.barra):null;
     }
 
     readonly property var dock: {
@@ -858,6 +970,8 @@ ShellRoot {
         Scope {
             id: scrivania
             required property var modelData
+            property string registeredName:""
+            property bool leaving:false
 
             Dock {
                 id: dock
@@ -938,7 +1052,7 @@ ShellRoot {
                 // Con l'Isola la barra di Minerva non c'è. Torna solo se si
                 // apre uno dei pannelli che vivono ancora dentro di lei (la
                 // schermata di Stamp, per esempio), e se ne va con lui.
-                visible: !root.barraIsola || spine.activePanel !== ""
+                visible: Core.Riva.attiva && ((!root.barraIsola && !root.barraWindows) || spine.activePanel !== "")
 
                 // Il raccoglitore di clic della Spine sta sopra tutto: gli si
                 // dice dove NON stendersi, altrimenti con un pannello aperto
@@ -953,6 +1067,7 @@ ShellRoot {
 
                 onCheatsheetRequested: root.toggleCheatsheet()
                 onSettingsRequested: root.openSettings()
+                onWindowSettingsRequested: root.openSettings("finestre")
                 onMenuAppChiesto: sottomarino.commuta()
                 onCentroChiesto: centroControllo.commuta()
                 onCassettoChiesto: cassettoAppunti.commuta()
@@ -976,6 +1091,25 @@ ShellRoot {
                 }
             }
 
+            LazyLoader {
+                id: windowsBar
+                active: root.barraWindows
+                onItemChanged: scrivania.registra()
+                Windows11.Taskbar {
+                    screen: scrivania.modelData
+                    onLiquidMenuRequested: function(centro) { sottomarino.commutaSopra(centro); }
+                    onOverviewRequested: windowsBar.item.toggle("overview")
+                    onSettingsRequested: function(section) {root.openSettings(section);}
+                    onCommandRequested:function(command){
+                        if(command==="monitor")root.openMonitor();
+                        else if(command==="terminal")root.run([Core.Ipc.get("launcher.defaultTerminal","minerva-terminale")]);
+                        else if(command==="windows-desktop")Core.Windows.mostraScrivania();
+                        else root.runCommand(command);
+                    }
+                    onActionRequested: function(action) {root.azioneDalCentro(action);}
+                    onScreenshotRequested: root.scattaSchermata("schermo",0)
+                }
+            }
             // ── Il menù delle app: emerge dall'angolo in basso a sinistra ──
             Sottomarino {
                 id: sottomarino
@@ -984,9 +1118,22 @@ ShellRoot {
                 // dire nasconderle le app sotto il menù che le cerca.
                 margineBasso: dock.screenRect.height > 0 && !root.dockInAlto && scrivania.modelData
                               ? Math.max(0, scrivania.modelData.height - dock.screenRect.y) + Theme.Effects.space2
-                              : 0
+                              : (root.barraWindows ? 60:0)
                 margineAlto: root.barraInBasso ? 0 : Theme.Effects.barHeight
                 onAzione: function(id) { root.azioneDalMenu(id); }
+                // Dentro il preset Windows: i colori della barra Windows
+                // (solo se chiaro e scuro coincidono con quelli di Liquid,
+                // altrimenti il testo di Liquid non si leggerebbe sul fondo
+                // di Windows) e i pulsanti di alimentazione, che eseguono
+                // subito come dallo Start di Windows.
+                readonly property bool comeWindows: root.barraWindows
+                                                    && Windows11.Style.dark === Theme.Colors.scura
+                fondo: comeWindows ? Windows11.Style.pannello
+                                   : Qt.rgba(Theme.Colors.panel.r, Theme.Colors.panel.g, Theme.Colors.panel.b,
+                                             Math.max(Theme.Colors.panel.a, 0.98))
+                bordo: comeWindows ? Windows11.Style.edge : Theme.Colors.edge
+                conAlimentazione: root.barraWindows
+                onAlimentazione: function(id) { root.azioneDalCentro(id); }
             }
             // ── Il Centro di controllo: scende dall'angolo in alto a destra ─
             Centro {
@@ -1011,7 +1158,7 @@ ShellRoot {
             IsolaBarra {
                 id: isolaBarra
                 screen: scrivania.modelData
-                visible: root.barraIsola
+                visible: root.barraIsola && Core.Riva.attiva
                 inBasso: root.barraInBasso
                 modo: root.modoIsola
                 riservata: root.rivaRiservata
@@ -1034,6 +1181,7 @@ ShellRoot {
                     else isolaGiorno.apriNotifiche(dove);
                 }
                 onCentroChiesto: centroControllo.commuta()
+                onWindowSettingsRequested: root.openSettings("finestre")
                 // Trascinata dall'altra parte: la barra va di là, e la dock —
                 // che non può stare dallo stesso bordo — passa dall'altra.
                 onSpostaChiesto: function(inBasso) {
@@ -1094,7 +1242,7 @@ ShellRoot {
 
             // ── Attività: i processi, dentro la shell ────────────────────
             //
-            // Ctrl+Maiusc+Esc. Pannello e non finestra: scelta di Giacomo
+            // Ctrl+Maiusc+Esc. Pannello e non finestra: scelta di il manutentore
             // del 28 settembre 2026 — il perché sta in `menu/Attivita.qml`.
             Attivita {
                 id: attivitaPannello
@@ -1114,6 +1262,15 @@ ShellRoot {
             // l'altro, visto il 24 settembre 2026 provando i tasti.
             /// Un'azione della riva (un angolo), su questo schermo.
             function fai(azione) {
+                if(root.barraWindows && windowsBar.item) {
+                    if(azione==="menu")windowsBar.item.toggle("start");
+                    else if(azione==="centro")windowsBar.item.toggle("control");
+                    else if(azione==="isola")windowsBar.item.toggle("weather");
+                    else if(azione==="stanze")windowsBar.item.toggle("overview");
+                    else if(azione==="scrivania")Core.Windows.mostraScrivania();
+                    else if(azione==="appunti")cassettoAppunti.apri();
+                    return;
+                }
                 switch (azione) {
                 case "menu":      sottomarino.apri(""); break;
                 case "centro":    centroControllo.apri(); break;
@@ -1130,8 +1287,8 @@ ShellRoot {
                 for (var i = 0; i < tutti.length; i++)
                     if (tutti[i] !== chi && tutti[i].aperto)
                         tutti[i].chiudi();
-                if (spine.activePanel !== "")
-                    spine.close();
+                if (spine.activePanel !== "") spine.close();
+                if (windowsBar.item && windowsBar.item.activePanel!=="") windowsBar.item.close();
             }
             Connections {
                 target: sottomarino
@@ -1173,8 +1330,26 @@ ShellRoot {
             }
 
             Connections {
+                target: windowsBar.item
+                function onActivePanelChanged() {
+                    if (!windowsBar.item || windowsBar.item.activePanel === "")
+                        return;
+                    // Un pannello Windows aperto chiude quelli di Liquid su
+                    // questo schermo: due pannelli insieme si sovrapporrebbero.
+                    var pannelli = [sottomarino, centroControllo, cassettoAppunti,
+                                    isolaGiorno, stanzeLato, attivitaPannello];
+                    for (var i = 0; i < pannelli.length; i++) {
+                        if (pannelli[i].aperto)
+                            pannelli[i].chiudi();
+                    }
+                    spine.close();
+                }
+            }
+            Connections {
                 target: Core.Compositore
                 function onBordo(quale, schermo) {
+                    if (!Core.Riva.attiva)
+                        return;
                     if (!scrivania.modelData || schermo !== scrivania.modelData.name)
                         return;
                     // Il bordo alto (o basso, con la barra in basso): torna
@@ -1200,6 +1375,8 @@ ShellRoot {
                         stanzeLato.apri();
                 }
                 function onAngolo(quale, schermo) {
+                    if (!Core.Riva.attiva)
+                        return;
                     if (!scrivania.modelData || schermo !== scrivania.modelData.name)
                         return;
                     // Che cosa fa ogni angolo lo decide Impostazioni › La Riva
@@ -1213,12 +1390,20 @@ ShellRoot {
                 }
             }
 
-            Component.onCompleted: root.iscriviScrivania(
-                scrivania.modelData ? scrivania.modelData.name : "", spine, dock, sottomarino,
-                centroControllo, cassettoAppunti, isolaGiorno, isolaBarra, stanzeLato,
-                attivitaPannello)
-            Component.onDestruction: root.cancellaScrivania(
-                scrivania.modelData ? scrivania.modelData.name : "", spine)
+            function registra() {
+                if (scrivania.leaving || !scrivania.modelData)
+                    return;
+                scrivania.registeredName = scrivania.modelData.name;
+                root.iscriviScrivania(scrivania.registeredName, spine, dock, sottomarino,
+                                      centroControllo, cassettoAppunti, isolaGiorno,
+                                      isolaBarra, stanzeLato, attivitaPannello,
+                                      windowsBar.item);
+            }
+            Component.onCompleted: registra()
+            Component.onDestruction: {
+                scrivania.leaving = true;
+                root.cancellaScrivania(scrivania.registeredName, spine);
+            }
         }
     }
 
@@ -1245,6 +1430,25 @@ ShellRoot {
         id: selettore
     }
 
+    // ── Il selettore dei preset (Super+P) ─────────────────────────────────
+    //
+    // Uno per tutta la sessione, sullo schermo attivo, come quello di
+    // Alt+Tab: si sceglie un preset, non un preset per monitor. Fuori dalle
+    // scrivanie di proposito, perché cambiando preset la barra si rifà da capo
+    // e lui deve restare in piedi mentre succede.
+    SelettorePreset {
+        id: selettorePreset
+        screen: root.schermoAttivo
+        onScelto: function (nome, etichetta) {
+            osd.say((Core.Strings.lang === "it" ? "Preset: " : "Preset: ") + etichetta, "window");
+        }
+    }
+
+    Core.Scorciatoia {
+        name: "preset"
+        onPressed: selettorePreset.commuta()
+    }
+
     // ── I due singleton che devono esistere anche se nessuno li guarda ───
     //
     // Un singleton QML nasce alla PRIMA volta che qualcuno lo nomina. La
@@ -1267,7 +1471,7 @@ ShellRoot {
     // e così NESSUNO in tutta la sessione toccava la luce notturna: la levetta
     // scattava, l'impostazione si salvava, e non succedeva niente.
     //
-    // Segnalato da Giacomo il 17 agosto 2026 — «se clicco su luce notturna non
+    // Segnalato da il manutentore il 17 agosto 2026 — «se clicco su luce notturna non
     // succede» — e trovato solo perché `prove-luce.qml` faceva la stessa cosa
     // e falliva allo stesso modo.
     //
@@ -1433,16 +1637,17 @@ ShellRoot {
             { "label": Core.Windows.activeMaximized
                        ? (it ? "Ripristina" : "Restore")
                        : (it ? "Ingrandisci" : "Maximise"), "icon": "maximize", "action": "maximize" },
-            // Qui c'era «Affianca (tiling) / Rendi libera», con la scorciatoia
-            // Super+T. Il tiling non esiste più (`core/WindowRules.qml`) e la
-            // scorciatoia nemmeno: era una voce che affiancava una finestra in
-            // un ambiente che non sa più come rimetterla a posto.
             { "label": it ? "Schermo intero" : "Full screen",
               "icon": "expand", "action": "fullscreen", "shortcut": "Super+F" },
             { "separator": true },
             { "label": it ? "Chiudi la finestra" : "Close the window",
               "icon": "close", "action": "close", "shortcut": "Super+Q", "danger": true }
         ];
+        if(Core.Tiling.active) voci.splice(2,0,{
+            label: Core.Windows.active && Core.Windows.active.tiling
+                ? (it ? "Rendi libera":"Float window"):(it ? "Inserisci nel tiling":"Tile window"),
+            icon:"grid",action:"tiling-floating"
+        });
         // L'opzione che spegne il nome sta dove il nome è: chi lo trova
         // d'intralcio ci arriva senza cercarlo nelle impostazioni.
         if (dallaBarra === true)
@@ -1461,6 +1666,7 @@ ShellRoot {
             switch (action) {
             case "minimize": Core.Windows.minimize(); break;
             case "maximize":   Core.Windows.toggleMaximize(); break;
+            case "tiling-floating": Core.Compositore._nostro("tiling",["libera"]); break;
             case "fullscreen": Core.Compositore.commutaSchermoIntero(""); break;
             case "close":      Core.Windows.close(); break;
             case "hideControls": Core.Ipc.setSetting("windowControls.enabled", false); break;
@@ -1472,7 +1678,13 @@ ShellRoot {
 
     // Con l'Isola gli avvisi li racconta lei, allargandosi: due avvisi per la
     // stessa notifica sarebbero la stessa cosa detta due volte.
-    Toasts { inBasso: root.barraInBasso; spenti: root.barraIsola; screen: root.schermoAttivo }
+    LazyLoader {
+        active: root.barraWindows
+        Windows11.Toasts {
+            screen: root.schermoAttivo
+        }
+    }
+    Toasts { inBasso: root.barraInBasso; spenti: root.barraIsola || root.barraWindows; screen: root.schermoAttivo }
 
     // Avviso a schermo di volume e luminosità: senza, premere i tasti
     // funzione non produce nessun segno e non si sa se hanno funzionato.
@@ -1515,6 +1727,7 @@ ShellRoot {
             required property var modelData
             screen: modelData
             cartella: root.desktopPath
+            hintVisible:!root.barraWindows && Core.Ipc.get("general.beginnerMode",true)
             onRightClicked: function(x, y) {
                 // Il punto si ricorda: «Disposizione icone…» apre un secondo
                 // menu, e deve nascere dove è nato il primo.
@@ -1573,7 +1786,7 @@ ShellRoot {
     // Fino al 13 settembre 2026 questo blocco stava PRIMA di `DesktopLayer`:
     // i widget si vedevano — le icone hanno il fondo trasparente — ma stavano
     // SOTTO, e ogni clic, tasto destro e trascinamento se lo prendeva la
-    // superficie delle icone. Giacomo: «non posso fare tasto destro per
+    // superficie delle icone. il manutentore: «non posso fare tasto destro per
     // opzioni […] non sono ridimensionabili». Non era il blocco, non erano
     // le maniglie: era l'ordine di due blocchi in questo file.
     //
@@ -1588,6 +1801,7 @@ ShellRoot {
 
             Widget.Widgets {
                 anchors.fill: parent
+                visible:!root.barraWindows
                 bloccati: Core.Ipc.get("desktop.widgetBloccati", true)
             }
         }
@@ -1746,18 +1960,24 @@ ShellRoot {
 
     function menuIconaScrivania(nome, dove) {
         var it = Core.Strings.lang === "it";
-        var voci = [
-            { "label": it ? "Apri" : "Open", "icon": "chevron", "action": "apri" }
-        ];
+        // Apri, Rinomina e Sfondo valgono per un'icona sola; copia, taglia e
+        // cestino anche per una selezione di più icone.
+        var single = root.icone && root.icone.selezionati.length === 1;
+        var voci = [];
+        if (single)
+            voci.push({ "label": it ? "Apri" : "Open", "icon": "chevron", "action": "apri" });
+        voci.push({ "label": it ? "Copia" : "Copy", "icon": "copy", "action": "copia" });
+        voci.push({ "label": it ? "Taglia" : "Cut", "icon": "cut", "action": "taglia" });
         // Su una fotografia posata sulla scrivania, la voce più corta che
         // esista per cambiare lo sfondo: è già lì, si vede, e si sceglie con
         // un clic invece che copiando un percorso dentro le Impostazioni.
-        if (root.icone && root.icone.eImmagine(nome))
+        if (single && root.icone.eImmagine(nome))
             voci.push({ "label": it ? "Imposta come sfondo" : "Set as wallpaper",
                         "icon": "image", "action": "sfondo" });
         voci.push({ "separator": true });
-        voci.push({ "label": it ? "Rinomina" : "Rename", "icon": "document",
-                    "action": "rinomina", "shortcut": "F2" });
+        if (single)
+            voci.push({ "label": it ? "Rinomina" : "Rename", "icon": "document",
+                        "action": "rinomina", "shortcut": "F2" });
         voci.push({ "label": it ? "Condividi…" : "Share…", "icon": "split",
                     "action": "condividi" });
         voci.push({ "label": it ? "Copia il percorso" : "Copy the path",
@@ -1788,12 +2008,12 @@ ShellRoot {
                     Core.Wallpaper.scegli(f.path);
                 break;
             }
+            case "copia": ic.copiaFile(false); break;
+            case "taglia": ic.copiaFile(true); break;
             case "rinomina": ic.iniziaRinomina(); break;
             case "percorso": ic.copiaPercorso(); break;
             case "condividi": {
-                var v = ic.voceSelezionata();
-                if (v)
-                    sovrapposizioneScrivania.condividi([v.path]);
+                sovrapposizioneScrivania.condividi(ic.percorsiSelezionati());
                 break;
             }
             case "cestino":  ic.cestina(); break;
@@ -1824,7 +2044,12 @@ ShellRoot {
         anchors { top: true; bottom: true; left: true; right: true }
         WlrLayershell.namespace: "quickshell"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+        // La tastiera tutta per sé finché è aperta. Era «a richiesta», cioè
+        // solo dopo un clic sopra: aperta dal portale (Chrome che chiede un
+        // link) la tastiera restava a Chrome, ed Esc non la chiudeva — la
+        // prova l'ha visto l'11 ottobre 2026.
+        WlrLayershell.keyboardFocus: sovrapposizioneScrivania.visible ? WlrKeyboardFocus.Exclusive
+                                                                      : WlrKeyboardFocus.None
         // Come in `ContextMenu`: senza, il livello viene spinto sotto la zona
         // esclusiva della barra e le coordinate del mouse risultano sfalsate
         // di tutta la sua altezza.
@@ -1848,14 +2073,32 @@ ShellRoot {
         // Lo chiede `scripts/minerva-portale` quando Chrome (o chiunque passi
         // dal portale) apre un file di un tipo senza programma predefinito.
         // Prima rispondeva la finestra di GTK, col pulsante per GNOME
-        // Software (Giacomo, 6 ottobre 2026).
+        // Software (il manutentore, 6 ottobre 2026).
         //
         // `portale` è la domanda in sospeso: la risposta torna con lo stesso
         // nome, e una domanda nuova chiude quella vecchia senza scelta —
         // altrimenti il programma di prima resterebbe ad aspettare.
         property string portale: ""
 
+        // ── «Lascia perdere» vale per un po' ─────────────────────────────
+        //
+        // il manutentore, 11 ottobre 2026: dalla pagina di Minecraft, Chrome chiede
+        // di aprire un link `minecraft:`; nessuno lo sa aprire, «Lascia
+        // perdere» chiude, e Chrome lo richiede subito: la finestrella
+        // sembrava non chiudersi, e per toglierla bisognava chiudere Chrome.
+        // Annullata da chi guarda, la stessa domanda senza file (un link)
+        // per 30 secondi si annulla da sola, senza riaprire niente.
+        property var annullati: ({})
+        readonly property int _pausaAnnullati: 30000
+
         function apriConPerConto(handle, percorso, tipo, scelte) {
+            var quando = sovrapposizioneScrivania.annullati[tipo];
+            if (percorso === "" && quando !== undefined
+                    && Date.now() - quando < sovrapposizioneScrivania._pausaAnnullati) {
+                console.log("[MINERVA][APRICON] " + tipo + " lasciato perdere da poco: annullato senza chiedere");
+                sovrapposizioneScrivania._rispondiA(handle, "");
+                return;
+            }
             sovrapposizioneScrivania._lasciaPortale();
             sovrapposizioneScrivania.portale = handle;
             sovrapposizioneScrivania.visible = true;
@@ -1874,6 +2117,10 @@ ShellRoot {
             if (h === "")
                 return;
             sovrapposizioneScrivania.portale = "";
+            sovrapposizioneScrivania._rispondiA(h, scelta);
+        }
+
+        function _rispondiA(h, scelta) {
             Quickshell.execDetached(["gdbus", "call", "--session",
                 "--dest", "org.freedesktop.impl.portal.desktop.liquidde",
                 "--object-path", "/org/freedesktop/portal/desktop",
@@ -1912,6 +2159,16 @@ ShellRoot {
             }
             onSceltoPerConto: function (appId) {
                 sovrapposizioneScrivania._rispondiPortale(appId);
+            }
+            onLasciatoPerdere: function (tipo) {
+                // Solo le domande per conto di un programma senza file in
+                // mano: un file che nessuno sa aprire si richiede col doppio
+                // clic, e lì la finestrella deve tornare ogni volta.
+                if (!apriConScrivania.perConto || apriConScrivania.percorso !== "" || tipo === "")
+                    return;
+                var a = JSON.parse(JSON.stringify(sovrapposizioneScrivania.annullati));
+                a[tipo] = Date.now();
+                sovrapposizioneScrivania.annullati = a;
             }
             onMostraRichiesto: function (percorso) {
                 root.run([root.minervaRoot + "/scripts/minerva-files",
@@ -1971,6 +2228,43 @@ ShellRoot {
     function desktopMenuItems() {
         var S = Core.Strings;
         var it = Core.Strings.lang === "it";
+        // Col preset Windows, il menu della scrivania di Windows 11: le voci
+        // «win:…» le esegue `desktopMenu.onTriggered`.
+        if (root.barraWindows) {
+            function action(label, id, icon) {
+                return { "label": label, "action": id, "icon": icon || "" };
+            }
+            var conIcone = Core.Ipc.get("desktop.icons", true);
+            return [
+                { "label": it ? "Visualizza" : "View", "icon": "grid", "children": [
+                    action(it ? "Icone grandi" : "Large icons", "win:lato:64"),
+                    action(it ? "Icone medie" : "Medium icons", "win:lato:46"),
+                    action(it ? "Icone piccole" : "Small icons", "win:lato:34"),
+                    { "separator": true },
+                    action(it ? "Disponi icone automaticamente" : "Auto arrange icons", "win:auto"),
+                    action(it ? "Allinea icone alla griglia" : "Align icons to grid", "win:allinea"),
+                    { "separator": true },
+                    action(it ? "Mostra icone del desktop" : "Show desktop icons", "win:icons",
+                           conIcone ? "check" : "")
+                ] },
+                { "label": it ? "Ordina per" : "Sort by", "children": [
+                    action(it ? "Nome" : "Name", "win:ord:name"),
+                    action(it ? "Dimensione" : "Size", "win:ord:size"),
+                    action(it ? "Tipo di elemento" : "Item type", "win:ord:type"),
+                    action(it ? "Ultima modifica" : "Date modified", "win:ord:modified")
+                ] },
+                action(it ? "Aggiorna" : "Refresh", "win:refresh", "refresh"),
+                { "separator": true },
+                { "label": it ? "Nuovo" : "New", "icon": "plus", "children": [
+                    action(it ? "Cartella" : "Folder", "win:new-folder", "folder")
+                ] },
+                { "separator": true },
+                action(it ? "Impostazioni schermo" : "Display settings", "win:display", "screen"),
+                action(it ? "Personalizza" : "Personalise", "wallpaper", "image"),
+                { "separator": true },
+                action(it ? "Mostra altre opzioni" : "Show more options", "win:more")
+            ];
+        }
         var items = [
             { "label": S.t("apps"),        "icon": "apps",      "action": "apps",     "shortcut": "Super" },
             { "label": S.t("newTerminal"), "icon": "terminal",  "action": "terminal", "shortcut": "Super+↵" },
@@ -2006,7 +2300,7 @@ ShellRoot {
         // perché il gesto che serve dopo è chiuderla — un interruttore che si
         // apre e non si chiude si dimentica aperto.
         //
-        // Sta anche nel tasto destro sulla BARRA, che è dove Giacomo l'ha
+        // Sta anche nel tasto destro sulla BARRA, che è dove il manutentore l'ha
         // chiesta: «tranne il caso in cui io decida di sbloccarli via tasto
         // destro sulla barra e cliccare personalizza desktop».
         items.push({ "separator": true });
@@ -2020,8 +2314,37 @@ ShellRoot {
     ContextMenu {
         screen: root.schermoAttivo
         id: desktopMenu
+        windowsAppearance: root.barraWindows
 
         onTriggered: function(action) {
+            // Le voci del menu Windows (`desktopMenuItems`).
+            if (action.indexOf("win:") === 0) {
+                var id = action.substring(4);
+                if (id === "display") {
+                    root.openSettings("display");
+                } else if (id === "icons") {
+                    Core.Ipc.setSetting("desktop.icons", !Core.Ipc.get("desktop.icons", true));
+                } else if (id === "refresh" && root.icone) {
+                    root.icone.ricarica();
+                } else if (id === "new-folder" && root.icone && root.icone.cartella !== "") {
+                    // «Nuova cartella», poi «Nuova cartella (2)» e così via,
+                    // come Windows: mai sopra una cartella che c'è già.
+                    var base = Core.Strings.lang === "it" ? "Nuova cartella" : "New folder";
+                    var name = base;
+                    var n = 2;
+                    var names = root.icone.entries.map(function(e) {
+                        return e.name;
+                    });
+                    while (names.indexOf(name) >= 0)
+                        name = base + " (" + (n++) + ")";
+                    Core.Ipc.fsMakeDirectory(root.icone.cartella + "/" + name);
+                } else if (id === "more") {
+                    desktopMenu.openAt(root.puntoMenu.x, root.puntoMenu.y, root.barraMenuItems());
+                } else if (root.icone) {
+                    root.icone.eseguiDisposizione(id);
+                }
+                return;
+            }
             switch (action) {
             case "apps":       root.apriSottomarino(); break;
             case "terminal":   root.run([Core.Ipc.get("launcher.defaultTerminal", "minerva-terminale")]); break;
@@ -2043,7 +2366,9 @@ ShellRoot {
                 // prima si sta ancora smontando la fa nascere senza fuoco.
                 apriDisposizione.restart();
                 break;
-            case "wallpaper":     root.openSettings("appearance"); break;
+            // Lo sfondo sta nella pagina Scrivania dal 28 settembre 2026:
+            // aprire Aspetto mandava nel posto sbagliato.
+            case "wallpaper":     root.openSettings("scrivania"); break;
             case "wallpaperNext": Core.Wallpaper.next(1); break;
             case "lock":       root.run([root.minervaRoot + "/scripts/minerva-blocca"]); break;
             case "power":      root.pannello("power"); break;
@@ -2142,6 +2467,11 @@ ShellRoot {
     }
 
     function openPalette() {
+        // Col preset Windows la tavolozza è la Ricerca della barra.
+        if (root.barraWindows) {
+            root.pannello("search");
+            return;
+        }
         Core.Overlays.claim("palette");
         paletteLoader.active = true;
     }
@@ -2229,10 +2559,11 @@ ShellRoot {
     function runCommand(id) {
         switch (id) {
         case "settings":   root.openSettings(); break;
-        case "wallpaper":  root.openSettings("appearance"); break;
+        case "wallpaper":  root.openSettings("scrivania"); break;
         case "display":    root.openSettings("display"); break;
         case "power":      root.openSettings("power"); break;
         case "audio":      root.openSettings("audio"); break;
+        case "audio-mixer": root.apriMixerAudio(); break;
         case "network":    root.openSettings("network"); break;
         case "bluetooth":  root.openSettings("bluetooth"); break;
         case "defaults":   root.openSettings("defaults"); break;
@@ -2687,8 +3018,8 @@ ShellRoot {
         name: "stanze"
         onPressed: {
             var s = root.scrivaniaAttiva();
-            if (s && s.stanze)
-                s.stanze.commuta();
+            if(root.barraWindows && s && s.windows)s.windows.toggle("overview");
+            else if (s && s.stanze) s.stanze.commuta();
         }
     }
 
@@ -2696,7 +3027,8 @@ ShellRoot {
         name: "isola"
         onPressed: {
             var s = root.scrivaniaAttiva();
-            if (s && s.isola)
+            if(root.barraWindows && s && s.windows)s.windows.toggle("weather");
+            else if (s && s.isola)
                 s.isola.commuta();
         }
     }
@@ -2709,6 +3041,22 @@ ShellRoot {
     Core.Scorciatoia {
         name: "control"
         onPressed: root.apriCentro()
+    }
+
+    Core.Scorciatoia {
+        name: "audio-mixer"
+        onPressed: root.apriMixerAudio()
+    }
+
+    // I tasti diretti delle levette del Centro. In prova non toccano il
+    // sistema VERO (il Wi-Fi di chi sta lavorando non si spegne): la stessa
+    // guardia del riquadro nel Centro.
+    Core.Scorciatoia {
+        name: "wifi"
+        onPressed: {
+            if (!Quickshell.env("MINERVA_PROVA"))
+                Core.SystemState.setWifi(!Core.SystemState.wifiOn);
+        }
     }
 
     // Stamp non scatta: CHIEDE. Prima faceva una cosa sola e la faceva subito
@@ -2967,7 +3315,7 @@ ShellRoot {
         // va verificato su disco prima di usarlo.
         //
         // `sh` e non `fireSh`, che lancia e basta: `onDone` non arriverebbe
-        // mai, e qui il risultato del comando È la risposta. Giacomo, 7
+        // mai, e qui il risultato del comando È la risposta. il manutentore, 7
         // settembre 2026: «nemmeno ingrandire il puntatore» — il comando
         // trovava il tema e la risposta la buttava via.
         scriviCursore.sh(
@@ -2998,7 +3346,7 @@ ShellRoot {
     // funzionava, ed è per questo che sembrava a intermittenza: funziona
     // finché non esci.
     //
-    // Giacomo, 7 settembre 2026: «ho disconnesso la sessione e al nuovo
+    // il manutentore, 7 settembre 2026: «ho disconnesso la sessione e al nuovo
     // accesso non lo fa ancora, nemmeno ingrandire il puntatore». Misurato:
     // `cursorSize` 32 nelle impostazioni, 22 pixel chiari di puntatore sullo
     // schermo — cioè il 24 di ripiego.

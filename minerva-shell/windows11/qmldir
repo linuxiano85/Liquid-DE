@@ -1,0 +1,31 @@
+module windows11
+singleton Style 1.0 Style.qml
+Taskbar 1.0 Taskbar.qml
+TaskModel 1.0 TaskModel.qml
+StartMenu 1.0 StartMenu.qml
+QuickSettings 1.0 QuickSettings.qml
+Calendar 1.0 Calendar.qml
+Button 1.0 Button.qml
+AppIcon 1.0 AppIcon.qml
+LiquidMark 1.0 LiquidMark.qml
+Glyph 1.0 Glyph.qml
+Tray 1.0 Tray.qml
+Widgets 1.0 Widgets.qml
+TaskView 1.0 TaskView.qml
+Toasts 1.0 Toasts.qml
+Shadow 1.0 Shadow.qml
+Flyout 1.0 Flyout.qml
+ViewMotion 1.0 ViewMotion.qml
+Notizie 1.0 Notizie.qml
+BatteryIcon 1.0 BatteryIcon.qml
+SystemStatus 1.0 SystemStatus.qml
+ClockButton 1.0 ClockButton.qml
+WeatherIcon 1.0 WeatherIcon.qml
+TaskGlyph 1.0 TaskGlyph.qml
+WindowModel 1.0 WindowModel.qml
+SearchPanel 1.0 SearchPanel.qml
+AudioDevices 1.0 AudioDevices.qml
+AudioMixer 1.0 AudioMixer.qml
+VolumeSlider 1.0 VolumeSlider.qml
+BluetoothDevices 1.0 BluetoothDevices.qml
+WifiNetworks 1.0 WifiNetworks.qml

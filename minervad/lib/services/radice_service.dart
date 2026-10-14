@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'fucina/requisiti_amministrazione.dart';
 
 /// RadiceService — Le operazioni che il gestore file fa da amministratore.
 ///
@@ -31,7 +32,7 @@ class RadiceService {
   /// Dove sta l'aiutante. Fisso, perché la regola di polkit lo nomina
   /// carattere per carattere — e perché è di root: root non deve eseguire un
   /// file che l'utente può riscrivere.
-  static const String percorso = '/usr/local/bin/liquid-de-radice';
+  static const String percorso = RequisitiAmministrazione.percorso;
 
   /// Le operazioni che si possono chiedere. Chiuso di proposito.
   static const Set<String> operazioni = {
@@ -125,6 +126,9 @@ class RadiceService {
     }
   }
 
+  Future<Map<String, dynamic>> statoFucina() =>
+      const RequisitiAmministrazione().leggi();
+
   /// Chiede all'aiutante di fare una cosa.
   ///
   /// `dentro` è quello che finisce sullo standard input — serve solo a
@@ -149,8 +153,18 @@ class RadiceService {
       return _no('Non c\'è niente da scrivere: il contenuto manca.');
     }
     if (!await disponibile()) {
-      return _no('La modalità amministratore non è installata su questo '
-          'computer. Serve «$percorso»: lo mette scripts/install-minerva.sh.');
+      return _no(
+        'La modalità amministratore non è installata su questo '
+        'computer. Serve «$percorso»: lo mette scripts/install-minerva.sh.',
+      );
+    }
+    if (operazione == 'fucina-installa' || operazione == 'fucina-togli') {
+      // App e aiutante hanno cicli di aggiornamento diversi. Non inviare
+      // mutazioni a una copia precedente priva di rollback sulle interruzioni.
+      final aiutante = await const RequisitiAmministrazione().verificaAiutante();
+      if (aiutante['compatibile'] != true) {
+        return _no(aiutante['messaggio'] as String);
+      }
     }
 
     // Ogni argomento resta un ARGOMENTO. Niente `sh -c`, niente riga da
@@ -196,40 +210,66 @@ class RadiceService {
       var troppo = false;
       final letto = Completer<void>();
       late final StreamSubscription<List<int>> sub;
-      sub = p.stdout.listen((pezzo) {
-        if (troppo) return;
-        if (uscita.length + pezzo.length > uscitaMassima) {
-          troppo = true;
-          uscita.clear();
-          sub.cancel();
+      sub = p.stdout.listen(
+        (pezzo) {
+          if (troppo) return;
+          if (uscita.length + pezzo.length > uscitaMassima) {
+            troppo = true;
+            uscita.clear();
+            sub.cancel();
+            if (!letto.isCompleted) letto.complete();
+            return;
+          }
+          uscita.addAll(pezzo);
+        },
+        onDone: () {
           if (!letto.isCompleted) letto.complete();
-          return;
-        }
-        uscita.addAll(pezzo);
-      }, onDone: () {
-        if (!letto.isCompleted) letto.complete();
-      }, onError: (Object e) {
-        if (!letto.isCompleted) letto.complete();
-      });
+        },
+        onError: (Object e) {
+          if (!letto.isCompleted) letto.complete();
+        },
+      );
       final a = letto.future;
       final b = p.stderr
-          .transform(utf8.decoder)
-          .listen(errori.write)
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .listen((testo) {
+            // Drenare sempre stderr: chiudere il canale o far crescere il
+            // buffer senza limite può interrompere un'installazione valida.
+            // Tenere la coda include l'errore conclusivo di mkinitcpio.
+            const limiteErrori = 64 * 1024;
+            if (testo.length >= limiteErrori) {
+              errori.clear();
+              errori.write(testo.substring(testo.length - limiteErrori));
+            } else {
+              if (errori.length + testo.length > limiteErrori) {
+                final coda = errori.toString();
+                errori.clear();
+                errori.write(
+                  coda.substring(coda.length + testo.length - limiteErrori),
+                );
+              }
+              errori.write(testo);
+            }
+          })
           .asFuture<void>();
       final codice = await p.exitCode;
       await a;
       await b;
 
       if (troppo) {
-        return _no('La risposta dell\'aiutante è troppo grande (oltre '
-            '${uscitaMassima ~/ (1024 * 1024)} MB): non la tengo.');
+        return _no(
+          'La risposta dell\'aiutante è troppo grande (oltre '
+          '${uscitaMassima ~/ (1024 * 1024)} MB): non la tengo.',
+        );
       }
       if (codice == annullato) {
         return {'ok': false, 'annullato': true, 'error': 'Annullato.'};
       }
       if (codice == nonAutorizzato) {
-        return _no('Non sono riuscito a chiedere la password di '
-            'amministratore.');
+        return _no(
+          'Non sono riuscito a chiedere la password di '
+          'amministratore.',
+        );
       }
       if (codice != 0) {
         final m = errori.toString().trim();
@@ -246,9 +286,11 @@ class RadiceService {
         // Un errore che non nomina la propria cura costringe a una caccia che
         // dura più dell'errore.
         if (m.contains('sconosciuta')) {
-          return _no('L\'aiutante di amministratore installato è più vecchio '
-              'di Minerva e non conosce «$operazione». Si rimette a posto con: '
-              'scripts/install-minerva.sh');
+          return _no(
+            'L\'aiutante di amministratore installato è più vecchio '
+            'di Minerva e non conosce «$operazione». Si rimette a posto con: '
+            'scripts/install-minerva.sh',
+          );
         }
         return _no(m.isEmpty ? 'Operazione fallita.' : _senzaPrefisso(m));
       }
@@ -271,8 +313,7 @@ class RadiceService {
     if (r['ok'] != true) return r;
 
     final voci = <Map<String, dynamic>>[];
-    final testo =
-        utf8.decode(r['uscita'] as List<int>, allowMalformed: true);
+    final testo = utf8.decode(r['uscita'] as List<int>, allowMalformed: true);
     // `\u0000` per esteso, non un byte zero vero dentro le virgolette: uno
     // letterale non si vede leggendo, rende il file binario per `grep` e
     // sparisce al primo copia-incolla.
@@ -298,9 +339,9 @@ class RadiceService {
     voci.sort((a, b) {
       final da = a['isDir'] == true, db = b['isDir'] == true;
       if (da != db) return da ? -1 : 1;
-      return (a['name'] as String)
-          .toLowerCase()
-          .compareTo((b['name'] as String).toLowerCase());
+      return (a['name'] as String).toLowerCase().compareTo(
+        (b['name'] as String).toLowerCase(),
+      );
     });
     return {'ok': true, 'path': cartella, 'entries': voci};
   }
@@ -323,12 +364,17 @@ class RadiceService {
     return {'ok': true, 'path': file};
   }
 
-  Map<String, dynamic> _no(String motivo) =>
-      {'ok': false, 'error': motivo, 'annullato': false};
+  Map<String, dynamic> _no(String motivo) => {
+    'ok': false,
+    'error': motivo,
+    'annullato': false,
+  };
 
   /// L'aiutante fa precedere i propri errori dal proprio nome. Toglierlo
   /// lascia la frase che serve a chi legge, che non deve sapere che esiste un
   /// programma chiamato `minerva-radice`.
-  String _senzaPrefisso(String m) =>
-      m.split('\n').map((r) => r.replaceFirst('minerva-radice: ', '')).join('\n');
+  String _senzaPrefisso(String m) => m
+      .split('\n')
+      .map((r) => r.replaceFirst('minerva-radice: ', ''))
+      .join('\n');
 }

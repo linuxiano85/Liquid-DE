@@ -194,7 +194,7 @@ Page {
             controlWidth: 340
 
             // Qui c'era una casella e basta: chi non sa già dove sta un
-            // programma non aveva nessun modo di trovarlo. Giacomo, 5
+            // programma non aveva nessun modo di trovarlo. il manutentore, 5
             // settembre 2026: «voglio semplicità».
             //
             // Scegliendo un file si sostituisce il comando intero, non si

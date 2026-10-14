@@ -6,7 +6,7 @@ import '../../core/minerva_paths.dart';
 ///
 /// ── Perché un registro, e non «apri una cartella» ──────────────────────────
 ///
-/// Perché Giacomo ha **quattordici** cartelle in `~/Documenti/Progetti`, e di
+/// Perché il manutentore ha **quattordici** cartelle in `~/Documenti/Progetti`, e di
 /// quelle tre sole sono in git. Un programma che si apre su un progetto per
 /// volta gli farebbe fare quattordici volte la stessa fatica, e soprattutto non
 /// gli direbbe mai la cosa che vuole sapere davvero: *quali dei miei progetti
@@ -328,7 +328,7 @@ class Progetto {
   String motore;
 
   /// Dove va al sicuro. Plurale, e scelto al momento dell'invio: sono parole
-  /// di Giacomo — «vorrei poter scegliere in fase di caricamento quale opzione
+  /// di il manutentore — «vorrei poter scegliere in fase di caricamento quale opzione
   /// voglio».
   final List<Destinazione> destinazioni;
 

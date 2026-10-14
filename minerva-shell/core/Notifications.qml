@@ -134,7 +134,7 @@ QtObject {
 
         // Nessuna «default» ma qualche azione: si prende la prima. È la
         // convenzione di tutti i centri notifiche, e l'alternativa — non fare
-        // niente avendo un'azione in mano — è la cosa che Giacomo ha
+        // niente avendo un'azione in mano — è la cosa che il manutentore ha
         // segnalato.
         if (az.length > 0) {
             az[0].invoke();
@@ -234,7 +234,7 @@ QtObject {
 
     // ── Le notifiche per la schermata di blocco ──────────────────────────
     //
-    // Giacomo, 23 settembre 2026: «poter nascondere per privacy parte della
+    // il manutentore, 23 settembre 2026: «poter nascondere per privacy parte della
     // notifica, se mi arrivano mail mi dice solo che ci sono ad esempio 3
     // email, tipo come gli smartphone».
     //
@@ -332,7 +332,7 @@ QtObject {
             // Cliccando una notifica non succedeva niente, perché non c'era
             // più niente da invocare.
             //
-            // Giacomo: «le notifiche quando compaiono devono essere
+            // il manutentore: «le notifiche quando compaiono devono essere
             // interagibili, ad esempio se scatto uno screenshot e compare la
             // notifica e ci clicco devo poter vedere l'immagine».
             //

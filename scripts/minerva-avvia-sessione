@@ -8,13 +8,13 @@
 #
 # ── Il difetto che chiude ──────────────────────────────────────────────────
 #
-# Giacomo, 23 agosto 2026: «kde appena clicco per entrare mi riporta al login
+# il manutentore, 23 agosto 2026: «kde appena clicco per entrare mi riporta al login
 # anche dopo molti tentativi consecutivi».
 #
 # Nel journal si vede esattamente questo (boot del 20 agosto, 17:26):
 #
-#     17:26:06  session opened for giacomo
-#     17:26:06  session closed for giacomo      ← meno di un secondo
+#     17:26:06  session opened for utente
+#     17:26:06  session closed for utente      ← meno di un secondo
 #     17:26:07  la schermata di accesso ritorna
 #     17:26:15  session opened … 17:26:16 closed
 #

@@ -12,3 +12,6 @@ RitaglioRitratto  1.0 RitaglioRitratto.qml
 WobblyControls  1.0 WobblyControls.qml
 System          1.0 System.qml
 Tendina         1.0 Tendina.qml
+NavigazioneWindows 1.0 NavigazioneWindows.qml
+TitoloWindows 1.0 TitoloWindows.qml
+CategoriaWindows 1.0 CategoriaWindows.qml

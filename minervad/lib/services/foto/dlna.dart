@@ -8,7 +8,7 @@ import 'genere.dart';
 ///
 /// ── Perché esiste, accanto a `castv2.dart` ─────────────────────────────────
 ///
-/// Giacomo, 3 settembre 2026: «la cucina ha tizen os ed è samsung».
+/// il manutentore, 3 settembre 2026: «la cucina ha tizen os ed è samsung».
 ///
 /// Il 3 settembre la scoperta di rete diceva questo:
 ///

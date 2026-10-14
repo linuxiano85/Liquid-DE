@@ -80,6 +80,7 @@ PanelWindow {
     // vogliono aprire lo chiedono da qui.
     signal cheatsheetRequested()
     signal settingsRequested()
+    signal windowSettingsRequested()
     /// Il pulsante del menù delle app: il menù è il Sottomarino, che non
     /// vive nella barra (`menu/Sottomarino.qml`).
     signal menuAppChiesto()
@@ -244,7 +245,7 @@ PanelWindow {
         // una fila di tre pulsanti (Impostazioni, Scorciatoie, Sistema)
         // **tagliata a metà**, visibile per pochi pixel.
         //
-        // Giacomo: «non si adatta al contenuto la sezione del desktop dedicata
+        // il manutentore: «non si adatta al contenuto la sezione del desktop dedicata
         // alla connessione trasmetti eccetera perché i 3 tasti sotto sono a
         // malapena visibili». Nessun errore da nessuna parte: un numero scritto
         // a mano che il contenuto ha superato, e che nessuno aggiorna perché
@@ -430,7 +431,7 @@ PanelWindow {
         // `close()` azzera l'altezza e lascia dov'erano la posizione e la
         // larghezza. Riaprendo un ALTRO pannello, quei due valori partivano
         // quindi da quelli del pannello di prima: la lingua nasceva sotto il
-        // pulsante sbagliato e ci scivolava sopra mentre cresceva. Giacomo:
+        // pulsante sbagliato e ci scivolava sopra mentre cresceva. il manutentore:
         // «l'animazione parte dalla penultima voce per poi ingrandirsi mano
         // mano verso quello che clicco, il che è strano».
         //
@@ -473,7 +474,7 @@ PanelWindow {
         // barra stessa. Il risultato però era che la barra restava l'unico
         // posto dove cliccare non chiudeva niente: aperto il calendario, si
         // cliccava accanto all'orologio e non succedeva nulla. Segnalato da
-        // Giacomo: «se clicco su calendario e poi su una parte vuota della
+        // il manutentore: «se clicco su calendario e poi su una parte vuota della
         // barra dovrebbe chiudersi».
         //
         // Dichiarata PRIMA di `BarContent`, quindi sotto: i pulsanti si
@@ -488,7 +489,7 @@ PanelWindow {
 
         // ── Il tasto destro sulla barra ──────────────────────────────────
         //
-        // Giacomo, 9 settembre 2026: «tranne il caso in cui io decida di
+        // il manutentore, 9 settembre 2026: «tranne il caso in cui io decida di
         // sbloccarli via tasto destro sulla barra e cliccare personalizza
         // desktop».
         //

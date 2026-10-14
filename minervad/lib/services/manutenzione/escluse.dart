@@ -8,7 +8,7 @@ import '../../core/minerva_paths.dart';
 ///
 /// ── Perché non basta l'elenco scritto da noi ───────────────────────────────
 ///
-/// Giacomo, 9 settembre 2026: «mettiamo esclusione di alcuni percorsi, ho ad
+/// il manutentore, 9 settembre 2026: «mettiamo esclusione di alcuni percorsi, ho ad
 /// esempio i sorgenti di android nella cartella android/sdk, il mio progetto
 /// di droidian».
 ///

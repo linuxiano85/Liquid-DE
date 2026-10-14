@@ -5,7 +5,7 @@
 #
 # Fino a oggi la sessione girava DALLA cartella dei sorgenti: il lanciatore
 # della sessione, i comandi delle app e lo sfondo salvato puntavano tutti a
-# `~/Scaricati/Liquid-DE-principale`. Giacomo ha spostato la cartella in
+# `~/Scaricati/Liquid-DE-principale`. il manutentore ha spostato la cartella in
 # `~/Documenti/Progetti` e da quel momento nessuna app di Minerva si apriva
 # più — Impostazioni, File, il cambio dello sfondo — mentre quelle degli altri
 # ambienti sì. Al riavvio non sarebbe partita nemmeno la sessione.
@@ -55,6 +55,12 @@ for compilato in minervad/build/minervad minervad/build/minerva-terminale-motore
     fi
 done
 
+if [ ! -f "$SORGENTI/minerva-shell/native/Minerva/WindowIdentity/libminervawindowidentity.so" ]; then
+    echo "minerva-installa-radice: manca il modulo nativo delle finestre." >&2
+    echo "  Compilalo prima: $SORGENTI/scripts/costruisci-window-identity.sh" >&2
+    exit 1
+fi
+
 command -v rsync >/dev/null 2>&1 || {
     echo "minerva-installa-radice: serve rsync (pacman -S rsync)." >&2
     exit 1
@@ -69,9 +75,15 @@ mkdir -p "$RADICE"
 rsync -a --delete --delete-excluded --delay-updates \
     --include='/scripts/***' \
     --include='/minerva-shell/***' \
+    --include='/fucina2/***' \
     --include='/assets/***' \
     --include='/config/***' \
     --include='/desktop/***' \
+    --include='/lib/' \
+    --include='/lib/minerva/' \
+    --include='/lib/minerva/libminervatiledheaders.so' \
+    --include='/libexec/' \
+    --include='/libexec/tiling/***' \
     --include='/minervad/' \
     --include='/minervad/build/' \
     --include='/minervad/build/minervad' \
@@ -82,6 +94,10 @@ rsync -a --delete --delete-excluded --delay-updates \
     --include='/LICENSE' \
     --exclude='*' \
     "$SORGENTI/" "$RADICE/"
+
+# Liquid Update confronta revisioni reali, non il numero fisso VERSION.
+# Si scrive dopo la copia riuscita; una build locale modificata è dichiarata.
+python3 "$SORGENTI/scripts/liquid-update-version.py" "$SORGENTI" "$RADICE/liquid-build.json"
 
 # ── I percorsi vecchi nelle impostazioni ───────────────────────────────────
 #

@@ -17,7 +17,7 @@ import QtQuick
 //
 // ── Perché questo file è stato rifatto ────────────────────────────────────
 //
-// Giacomo: «questo scuro un po' mi sta stancando. ad esempio avere il bianco
+// il manutentore: «questo scuro un po' mi sta stancando. ad esempio avere il bianco
 // con vetro sfocato e unificato, rosa, verde, sempre effetto blur gaussiano,
 // nessuno lo fa».
 //
@@ -78,7 +78,7 @@ QtObject {
 
     // ── Il settimo tema è tuo ────────────────────────────────────────────
     //
-    // Giacomo, 3 settembre 2026: «se voglio il colore delle finestre rosa i
+    // il manutentore, 3 settembre 2026: «se voglio il colore delle finestre rosa i
     // caratteri viola e altre cose stravaganti?».
     //
     // I sei qui sopra sono scelte fatte da noi: una tinta e un verso che si
@@ -102,8 +102,8 @@ QtObject {
 
     /// Vero quando il vetro è scuro. Da qui dipende il VERSO di tutto il
     /// resto: quale direzione prendono le velature e da che parte va il testo.
-    readonly property bool scura: palette.personale ? palette.versoPersonale
-                                                    : palette._s.scura
+    readonly property bool scura: palette._pr("scura", palette.personale ? palette.versoPersonale
+                                                                          : palette._s.scura)
 
     // ── Gli scavalcamenti ────────────────────────────────────────────────
     //
@@ -139,6 +139,25 @@ QtObject {
         return Qt.rgba(parseInt(t.substr(1, 2), 16) / 255,
                        parseInt(t.substr(3, 2), 16) / 255,
                        parseInt(t.substr(5, 2), 16) / 255, 1);
+    }
+
+    // ── Una presentazione presa in prestito (12 ottobre 2026) ────────────
+    //
+    // Le Impostazioni nel preset Windows si vestono da Impostazioni di
+    // Windows 11: fondo #F3F3F3, schede bianche, testo e accento dei gettoni
+    // di Windows (`windows11/Style.qml`). Le pagine sono ventiquattro e usano
+    // questi nomi in più di seicento punti: invece di toccarle una per una,
+    // la finestra che le ospita mette qui i colori di Windows e le pagine li
+    // seguono da sole.
+    //
+    // Vale solo nel processo che la imposta — ogni applicazione ha la sua
+    // copia di questa tavolozza — e solo per i nomi che contiene. `null`, di
+    // serie, lascia intatta la derivazione di Liquid.
+    property var presentazione: null
+
+    function _pr(nome, valore) {
+        var p = palette.presentazione;
+        return p && p[nome] !== undefined ? p[nome] : valore;
     }
 
     /// Il valore scavalcato, se c'è; altrimenti quello che la derivazione
@@ -193,9 +212,9 @@ QtObject {
     // integra. Lo stesso ragionamento vale al contrario sui temi chiari, dove
     // il bianco puro accanto a un accento saturo sembra spento: «Giorno» è un
     // bianco appena azzurrato, «Rosa» un bianco appena rosato.
-    readonly property color base:
+    readonly property color base: palette._pr("base",
         palette._ov("base", palette.personale ? palette.tintaPersonale
-                                              : palette._s.base)
+                                              : palette._s.base))
 
     // ── Superfici ────────────────────────────────────────────────────────
     //
@@ -247,9 +266,9 @@ QtObject {
     /// scuro perdona molto di più dello stesso valore al contrario.
     readonly property real windowOpacityMin: palette.scura ? 0.78 : 0.93
 
-    readonly property color window:
+    readonly property color window: palette._pr("window",
         Qt.rgba(palette.base.r, palette.base.g, palette.base.b,
-                Math.max(palette.windowOpacityMin, palette.windowOpacity))
+                Math.max(palette.windowOpacityMin, palette.windowOpacity)))
 
     /// Lo scurimento dietro ai pannelli è sempre NERO, anche sui temi chiari:
     /// serve a spingere indietro ciò che copre, e solo il buio lo fa. Su
@@ -261,23 +280,27 @@ QtObject {
     // manopola a sé, e chi sceglie un colore per la barra non sta chiedendo
     // anche di renderla opaca.
     readonly property color membrane: {
+        if (palette.presentazione && palette.presentazione.membrane !== undefined)
+            return palette.presentazione.membrane;
         var c = palette._ov("membrana", palette.alza(palette.scura ? 0.02 : 0.30));
         return Qt.rgba(c.r, c.g, c.b, palette.membraneOpacity);
     }
 
     readonly property color panel: {
+        if (palette.presentazione && palette.presentazione.panel !== undefined)
+            return palette.presentazione.panel;
         var c = palette._ov("membrana", palette.alza(palette.scura ? 0.045 : 0.55));
         return Qt.rgba(c.r, c.g, c.b,
                        Math.min(1, palette.membraneOpacity + 0.03));
     }
 
-    readonly property color raised:     palette.velo(0.055)
-    readonly property color raisedHigh: palette.velo(0.09)
+    readonly property color raised:     palette._pr("raised", palette.velo(0.055))
+    readonly property color raisedHigh: palette._pr("raisedHigh", palette.velo(0.09))
 
     /// L'incavo è sempre più SCURO di ciò che lo contiene, in tutti e due i
     /// versi: un campo di testo è un buco, e un buco non si illumina.
-    readonly property color sunken:
-        Qt.rgba(0, 0, 0, palette.scura ? 0.28 : 0.055)
+    readonly property color sunken: palette._pr("sunken",
+        Qt.rgba(0, 0, 0, palette.scura ? 0.28 : 0.055))
 
     // ── La superficie su cui si LEGGE ────────────────────────────────────
     //
@@ -297,23 +320,25 @@ QtObject {
     // dei posti — e il vetro si vede ancora, dove serve a far vedere che
     // c'è una scrivania dietro.
     readonly property color lettura: {
+        if (palette.presentazione && palette.presentazione.lettura !== undefined)
+            return palette.presentazione.lettura;
         var c = palette.alza(palette.scura ? 0.005 : 0.35);
         return Qt.rgba(c.r, c.g, c.b, 0.985);
     }
 
     // ── Interazione ──────────────────────────────────────────────────────
-    readonly property color hover:    palette.velo(0.075)
-    readonly property color pressed:  palette.velo(0.12)
+    readonly property color hover:    palette._pr("hover", palette.velo(0.075))
+    readonly property color pressed:  palette._pr("pressed", palette.velo(0.12))
 
     /// La selezione prende il colore dell'accento, non un ciano fisso. Prima
     /// era scritto a mano: cambiando accento la selezione restava ciano, ed
     /// era l'unica cosa in tutta la shell a non seguire.
-    readonly property color selected: Qt.alpha(palette.accent, 0.15)
+    readonly property color selected: palette._pr("selected", Qt.alpha(palette.accent, 0.15))
 
     // ── Contorni ─────────────────────────────────────────────────────────
     // Il bordo non serve a delimitare: serve a far cogliere la curvatura.
-    readonly property color edge:       palette._ov("bordo", palette.velo(0.11))
-    readonly property color edgeBright: palette.velo(0.20)
+    readonly property color edge:       palette._pr("edge", palette._ov("bordo", palette.velo(0.11)))
+    readonly property color edgeBright: palette._pr("edgeBright", palette.velo(0.20))
     readonly property color edgeAccent: Qt.alpha(palette.accent, 0.42)
 
     // ── Accenti ──────────────────────────────────────────────────────────
@@ -321,7 +346,12 @@ QtObject {
     /// impostazioni. Il valore qui sotto è quello suggerito dal tema, ed è
     /// anche quello che si rimette scegliendo un tema nuovo — un ciano acceso
     /// su un fondo rosa chiaro non è una scelta, è una dimenticanza.
-    property color accent: palette._s.accento
+    ///
+    /// Le impostazioni lo legano a `accentoScelto` (`LegaTema.qml`); `accent`
+    /// è quello che si dipinge, e una presentazione presa in prestito lo
+    /// sostituisce senza toccare la scelta.
+    property color accentoScelto: palette._s.accento
+    readonly property color accent: palette._pr("accent", palette.accentoScelto)
 
     readonly property color accentAlt:     palette._s.alt
     readonly property color accentWarm:    "#F0ABFC"
@@ -332,9 +362,9 @@ QtObject {
     // Non bianco e non nero: la tinta del tema portata quasi fino in fondo.
     // Un grigio neutro su un fondo rosa si legge come una macchia sporca; lo
     // stesso grigio con dentro un soffio di rosa appartiene alla superficie.
-    readonly property color text: palette._ov("testo", palette.scura
+    readonly property color text: palette._pr("text", palette._ov("testo", palette.scura
         ? palette.mix(palette.base, palette._bianco, 0.97)
-        : palette.mix(palette.base, palette._nero, 0.93))
+        : palette.mix(palette.base, palette._nero, 0.93)))
 
     /// I due gradi di «meno importante». Le trasparenze NON sono le stesse
     /// nei due versi, e non è una svista: un testo chiaro su fondo scuro
@@ -343,7 +373,7 @@ QtObject {
     /// numeri del tema scuro, sul tema chiaro le icone della barra degli
     /// strumenti sbiadivano fino a sembrare tutte disattivate.
     //
-    // Alzate il 2 agosto 2026 su segnalazione di Giacomo («colori più visibili
+    // Alzate il 2 agosto 2026 su segnalazione di il manutentore («colori più visibili
     // nella modalità chiara o scura, sono poco leggibili»). La più colpevole
     // era `textFaint` al 34%: le descrizioni sotto ogni impostazione, le unità
     // di misura e le etichette delle icone finivano sotto la soglia in cui si
@@ -359,10 +389,10 @@ QtObject {
     // questo conta, questo è di contorno, questo è un dettaglio — ma tutti e
     // tre stanno adesso sopra la soglia. La gerarchia si fa con la distanza
     // fra i gradini, non spingendo l'ultimo fuori dal leggibile.
-    readonly property color textMuted: Qt.alpha(palette.text,
-                                                palette.scura ? 0.85 : 0.88)
-    readonly property color textFaint: Qt.alpha(palette.text,
-                                                palette.scura ? 0.66 : 0.72)
+    readonly property color textMuted: palette._pr("textMuted", Qt.alpha(palette.text,
+                                                palette.scura ? 0.85 : 0.88))
+    readonly property color textFaint: palette._pr("textFaint", Qt.alpha(palette.text,
+                                                palette.scura ? 0.66 : 0.72))
 
     /// Il testo SOPRA l'accento. Non si può fissare: un accento chiaro vuole
     /// scritte scure e uno scuro le vuole chiare, e l'accento lo sceglie chi
@@ -370,6 +400,8 @@ QtObject {
     /// luminanza percepita, dove il verde pesa più del rosso e il blu quasi
     /// niente — e si prende il contrario.
     readonly property color textOnAccent: {
+        if (palette.presentazione && palette.presentazione.textOnAccent !== undefined)
+            return palette.presentazione.textOnAccent;
         var l = 0.2126 * palette.accent.r + 0.7152 * palette.accent.g
               + 0.0722 * palette.accent.b;
         return l > 0.55 ? Qt.rgba(0.02, 0.07, 0.10, 1)
@@ -380,12 +412,12 @@ QtObject {
     //
     // Sui temi chiari vanno scuriti: un verde menta che si legge benissimo su
     // nero, su bianco è una scritta che sbiadisce.
-    readonly property color positive:
-        palette._ov("positivo", palette.scura ? "#34D399" : "#047857")
-    readonly property color warning:
-        palette._ov("avviso",   palette.scura ? "#FBBF24" : "#B45309")
-    readonly property color danger:
-        palette._ov("pericolo", palette.scura ? "#FB7185" : "#BE123C")
+    readonly property color positive: palette._pr("positive",
+        palette._ov("positivo", palette.scura ? "#34D399" : "#047857"))
+    readonly property color warning: palette._pr("warning",
+        palette._ov("avviso",   palette.scura ? "#FBBF24" : "#B45309"))
+    readonly property color danger: palette._pr("danger",
+        palette._ov("pericolo", palette.scura ? "#FB7185" : "#BE123C"))
 
     // ── Il conto del contrasto ───────────────────────────────────────────
     //

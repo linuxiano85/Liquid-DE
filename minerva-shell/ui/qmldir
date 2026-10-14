@@ -17,3 +17,8 @@ Campo       1.0 Campo.qml
 StatoSchermata 1.0 StatoSchermata.qml
 Goccia 1.0 Goccia.qml
 Pronto 1.0 Pronto.qml
+
+DragSelection 1.0 DragSelection.qml
+
+WindowPreview 1.0 WindowPreview.qml
+SchemaPreset 1.0 SchemaPreset.qml

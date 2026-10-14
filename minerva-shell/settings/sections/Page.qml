@@ -1,6 +1,7 @@
 import QtQuick
 import "../../theme" as Theme
 import "../../ui" as Ui
+import "../../core" as Core
 
 // Page — L'impalcatura comune a ogni sezione delle impostazioni.
 //
@@ -20,6 +21,40 @@ Item {
 
     property string title: ""
     property string subtitle: ""
+
+    // ── Nel preset Windows ───────────────────────────────────────────────
+    //
+    // Il titolo è quello di Impostazioni di Windows 11: 28 px, seminero, e
+    // davanti la categoria da cui si è arrivati («Sistema › Schermo»), che
+    // si clicca per tornarci. Il sottotitolo non c'è: Windows non lo ha, e
+    // quello che dice sta già nelle schede. La briciola la mette
+    // `System.qml`; vuota, si vede solo il titolo.
+    readonly property bool stileWindows: Core.DesktopStyle.attuale === "windows"
+    property string briciola: ""
+    signal briciolaCliccata()
+
+    /// L'id della sezione (`System.qml` lo mette dopo il caricamento): con
+    /// la posizione, fa la chiave con cui ogni scheda ricorda se è aperta.
+    property string sezione: ""
+    property alias posizioneScorrimento: rotolo.contentY
+
+    // Ogni scheda sa in che pagina sta e in che posizione: la prima di serie
+    // è aperta, le altre chiuse. Si contano solo i figli diretti della
+    // colonna, che sono le schede vere della pagina, e solo quelle che si
+    // chiudono: una scheda fissa in cima (un avviso, la scelta del preset)
+    // non deve far partire chiusa la prima scheda vera.
+    Component.onCompleted: {
+        var n = 0;
+        var figli = stack.children;
+        for (var i = 0; i < figli.length; i++) {
+            if (figli[i].chiudibile === undefined)
+                continue;
+            figli[i].pagina = page;
+            if (!figli[i].chiudibile)
+                continue;
+            figli[i].indice = n++;
+        }
+    }
     function revealSetting(query) {
         var q = String(query || "").trim().toLowerCase();
         if (!q) return;
@@ -39,8 +74,18 @@ Item {
         var row = walk(stack);
         if (row) {
             row.searchHighlighted = true;
+            // La riga può stare in una scheda chiusa: la si apre, e la
+            // posizione si legge dopo che si è aperta.
+            for (var p = row.parent; p && p !== stack; p = p.parent) {
+                if (p.chiudibile !== undefined && p.imposta) {
+                    p.imposta(true);
+                    break;
+                }
+            }
             var y = row.mapToItem(stack, 0, 0).y;
-            stack.parent.contentY = Math.max(0, Math.min(y, stack.parent.contentHeight - stack.parent.height));
+            // Flickable reparents visual children into its contentItem. The
+            // parent of stack is not the scroll view: address it explicitly.
+            rotolo.contentY = Math.max(0, Math.min(y, rotolo.contentHeight - rotolo.height));
         }
     }
 
@@ -60,18 +105,58 @@ Item {
         anchors.leftMargin: Theme.Effects.space6
         anchors.rightMargin: Theme.Effects.space6
         anchors.topMargin: Theme.Effects.space6
-        height: page.subtitle !== "" ? 52 : 36
+        height: page.subtitle !== "" && !page.stileWindows ? 52 : 40
+
+        Text {
+            id: briciolaText
+            objectName: "briciolaCategoria"
+            anchors.verticalCenter: titleText.verticalCenter
+            anchors.left: parent.left
+            visible: page.briciola !== ""
+            width: visible ? implicitWidth : 0
+            text: page.briciola
+            textFormat: Text.PlainText
+            color: presaBriciola.containsMouse ? Theme.Colors.text : Theme.Colors.textMuted
+            font.family: Theme.Typography.fontDisplay
+            font.pixelSize: 28
+            font.weight: Theme.Typography.weightSemiBold
+            Accessible.role: Accessible.Link
+            Accessible.name: page.briciola
+
+            MouseArea {
+                id: presaBriciola
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: page.briciolaCliccata()
+            }
+        }
+
+        Ui.Icon {
+            id: separatore
+            anchors.left: briciolaText.right
+            anchors.leftMargin: visible ? 12 : 0
+            anchors.verticalCenter: titleText.verticalCenter
+            visible: page.briciola !== ""
+            width: visible ? 14 : 0
+            height: 14
+            name: "chevron"
+            rotation: -90
+            color: Theme.Colors.textMuted
+        }
 
         Text {
             textFormat: Text.PlainText
             id: titleText
+            objectName: "paginaTitolo"
             anchors.top: parent.top
-            anchors.left: parent.left
+            anchors.left: separatore.right
+            anchors.leftMargin: page.briciola !== "" ? 12 : 0
             text: page.title
             color: Theme.Colors.text
             font.family: Theme.Typography.fontDisplay
-            font.pixelSize: Theme.Typography.sizeXL
-            font.weight: Theme.Typography.weightBold
+            font.pixelSize: page.stileWindows ? 28 : Theme.Typography.sizeXL
+            font.weight: page.stileWindows ? Theme.Typography.weightSemiBold : Theme.Typography.weightBold
         }
 
         Text {
@@ -80,7 +165,7 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             elide: Text.ElideRight
-            visible: page.subtitle !== ""
+            visible: page.subtitle !== "" && !page.stileWindows
             text: page.subtitle
             color: Theme.Colors.textFaint
             font.family: Theme.Typography.fontDisplay
@@ -105,7 +190,7 @@ Item {
 
         // ── Le scie verticali ────────────────────────────────────────────
         //
-        // Giacomo, 5 settembre 2026: «l'errore si trova sempre in verticale e
+        // il manutentore, 5 settembre 2026: «l'errore si trova sempre in verticale e
         // se noti bene e' sempre sulla parte dove c'e' l'effetto glass».
         // Aveva ragione su tutto: e' una SCIA, e va per il verso in cui si
         // scorre.

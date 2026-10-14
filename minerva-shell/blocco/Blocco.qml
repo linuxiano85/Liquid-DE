@@ -284,7 +284,7 @@ Item {
 
         // Lo scatto orizzontale quando la password è sbagliata: è l'unico
         // messaggio che si capisce senza leggere. Tre scatti e basta — nella
-        // schermata di accesso era senza fine, e Giacomo l'ha descritta come
+        // schermata di accesso era senza fine, e il manutentore l'ha descritta come
         // «dolori di pancia».
         property real scarto: 0
         transform: Translate { x: colonna.scarto }

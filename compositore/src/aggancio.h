@@ -49,7 +49,7 @@ enum zona_aggancio {
 ///
 /// ── Perché non basta la fascia ────────────────────────────────────────────
 ///
-/// Giacomo, 7 settembre 2026: «il posizionamento non è preciso e molte volte
+/// il manutentore, 7 settembre 2026: «il posizionamento non è preciso e molte volte
 /// le finestre non vengono messe come dovrebbero».
 ///
 /// Con la sola fascia, un angolo è il quadratino dove le due fasce si

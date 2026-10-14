@@ -9,7 +9,7 @@ import "../menu" as Menu
 //
 // ── Perché esiste ────────────────────────────────────────────────────────
 //
-// Giacomo, 12 agosto 2026: «una volta che premi sulla finestra per chiuderla
+// il manutentore, 12 agosto 2026: «una volta che premi sulla finestra per chiuderla
 // dovrebbe rimanere in tray, cosa che non abbiamo».
 //
 // Non era una mancanza estetica. Antigravity, alla chiusura della finestra,
@@ -26,7 +26,7 @@ import "../menu" as Menu
 // consegna `SystemTray.items`; qui c'è solo il disegno e i tre gesti.
 //
 //   clic          `activate()` — per quasi tutti vuol dire «rimettimi la
-//                 finestra davanti», che è il gesto che serviva a Giacomo.
+//                 finestra davanti», che è il gesto che serviva a il manutentore.
 //                 Quelli che dichiarano `onlyMenu` non hanno un'azione: per
 //                 loro il clic apre il menù, altrimenti non farebbe niente e
 //                 sembrerebbe rotto.

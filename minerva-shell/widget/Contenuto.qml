@@ -101,7 +101,7 @@ Item {
 
     /// Il simbolo, per dove il nome non ci sta: la barra.
     ///
-    /// Giacomo, 14 settembre 2026: «quelli sulla barra sono confusionari
+    /// il manutentore, 14 settembre 2026: «quelli sulla barra sono confusionari
     /// perché non hanno un simbolo per capire che valori monitorano». Sta
     /// qui e non in `WidgetBarra`, accanto al nome: sono la stessa tabella,
     /// e un tipo nuovo che ha un nome e non un simbolo si vedrebbe subito.
@@ -338,7 +338,7 @@ Item {
             //
             // Una traccia scura larga quanto il widget, sopra una fotografia,
             // si legge come una riga tirata sopra il numero — visto in una
-            // schermata, e Giacomo l'avrebbe visto un secondo dopo. Resta la
+            // schermata, e il manutentore l'avrebbe visto un secondo dopo. Resta la
             // parte PIENA, che è quella che dice qualcosa: la scala la dà già
             // il numero lì accanto.
             color: contenuto.nudo ? "transparent" : Theme.Colors.raisedHigh

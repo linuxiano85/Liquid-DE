@@ -276,7 +276,7 @@ Page {
 
         // ── Quanto è grande ──────────────────────────────────────────────
         //
-        // Giacomo, 5 settembre 2026: «voglio anche un'impostazione per
+        // il manutentore, 5 settembre 2026: «voglio anche un'impostazione per
         // selezionare la grandezza del puntatore». C'era già, in
         // «Accessibilità», e nessuno la cerca lì: chi vuole un puntatore più
         // grande apre la pagina del mouse. Adesso sta in tutte e due, ed è lo

@@ -7,7 +7,7 @@ import QtQuick
 // visibile nasce larga e alta zero, e solo un attimo dopo il compositore le
 // dà la misura dello schermo: una posizione calcolata da quella misura
 // («in fondo meno l'altezza») con la molla già accesa partiva da zero e
-// volava fino al posto giusto. Giacomo, 25 settembre 2026: «il menù app la
+// volava fino al posto giusto. il manutentore, 25 settembre 2026: «il menù app la
 // prima volta che lo apri si apre quasi a metà fuori schermo nella parte
 // bassa a sinistra e dopo un poco si posiziona giusto». Le molle vanno
 // accese solo quando `visto` è vero.

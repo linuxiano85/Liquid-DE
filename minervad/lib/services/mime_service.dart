@@ -254,7 +254,7 @@ class MimeService {
   ///
   ///  · a ogni anello si provano tutti i NOMI di quel tipo, canonico e alias.
   ///    I `mimeapps.list` che stanno già sul disco sono scritti con gli alias
-  ///    — quello di Giacomo dice `application/x-shellscript` — e cercare solo
+  ///    — quello di il manutentore dice `application/x-shellscript` — e cercare solo
   ///    il nome canonico non li trovava;
   ///  · si risale ai tipi GENITORI. Uno script è testo semplice con qualcosa
   ///    in più: se nessuno ha scelto un programma per gli script, quello del
@@ -487,7 +487,7 @@ class MimeService {
   /// vita a nessuno e allunga il file di tutti gli altri ambienti.
   /// Le FAMIGLIE, cioè come i gruppi si presentano in Impostazioni.
   ///
-  /// Giacomo, 17 agosto 2026: «riorganizza questa sezione per tipi affini,
+  /// il manutentore, 17 agosto 2026: «riorganizza questa sezione per tipi affini,
   /// mettiamo delle tendine espandibili dove poi aprire e scegliere i
   /// programmi… così la sezione sarà più compatta e semplice sapendo che tipo
   /// di app cerchi».
@@ -877,7 +877,7 @@ class MimeService {
           // se non dichiarano il tipo nel proprio `.desktop`; riscriverla con
           // un valore solo cancellava le aggiunte di prima. È anche il motivo
           // per cui `application/x-shellscript` compariva DUE volte nel file
-          // di Giacomo.
+          // di il manutentore.
           final gia = righe
               .where((v) => v.trim().isNotEmpty && v.trim() != appId)
               .toList();

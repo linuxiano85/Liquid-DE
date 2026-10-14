@@ -142,7 +142,7 @@ class Pulitore {
   /// sempre roba DENTRO un posto permesso. Nessuna provava a togliere un
   /// contenitore intero, che è invece il caso di due voci su otto.
   ///
-  /// Giacomo l'ha trovato usandolo: il cestino restava pieno. Nel registro
+  /// il manutentore l'ha trovato usandolo: il cestino restava pieno. Nel registro
   /// c'era scritto perché — «Non è in un posto da cui Minerva tolga
   /// qualcosa» — ma una riga giusta su un rifiuto sbagliato resta un rifiuto
   /// sbagliato.

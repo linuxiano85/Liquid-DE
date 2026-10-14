@@ -221,7 +221,7 @@ class Datatore {
   // ── Gli schemi dei nomi ────────────────────────────────────────────────
   //
   // Non sono inventati: sono stati contati sulla libreria vera, il 26 agosto
-  // 2026. A destra quanti file di Giacomo cadono in ognuno.
+  // 2026. A destra quanti file di il manutentore cadono in ognuno.
 
   /// `IMG_20260317_112727.jpg`, `VID_20260222_211501.mp4` — 471 file.
   /// Vale anche per PXL (Pixel), MVIMG, PANO, BURST.

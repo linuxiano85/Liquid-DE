@@ -6,7 +6,7 @@ import 'account/webdav.dart';
 
 /// AccountService — gli account online di Minerva.
 ///
-/// Richiesta di Giacomo, 24 agosto 2026: «perché in impostazioni non inseriamo
+/// Richiesta di il manutentore, 24 agosto 2026: «perché in impostazioni non inseriamo
 /// una sezione account online come fa gnome e altri desktop dove poter accedere
 /// a vari servizi e vedere ad esempio spazio usato e rimanente, se il servizio
 /// di sincronizzazione per quel servizio è attivo e altre informazioni?»
@@ -63,7 +63,7 @@ class AccountService {
   /// Sta qui, e non dentro `_mettiViaPassword`, per una ragione che è saltata
   /// fuori scrivendo le prove: finché la scrittura nel portachiavi era una
   /// `Process.start` piantata dentro il metodo, ogni prova che collegava un
-  /// account **scriveva davvero nel portachiavi di Giacomo** — e la riga che
+  /// account **scriveva davvero nel portachiavi di il manutentore** — e la riga che
   /// controllava che una password sbagliata non ci finisse non guardava
   /// niente, perché quel comando non passava dalla lista che la prova
   /// osservava. Una prova che non può fallire non è una prova.
@@ -162,7 +162,7 @@ class AccountService {
       case 'kdrive':
         // ── Il numero non si chiede ──────────────────────────────────────
         //
-        // Giacomo, 25 agosto 2026: «il mio account chiede solo email e
+        // il manutentore, 25 agosto 2026: «il mio account chiede solo email e
         // password e non un codice». Aveva ragione, e il modulo aveva torto:
         // il server WebDAV di Infomaniak risponde sulla radice, senza numero,
         // e i kDrive dell'account li elenca da sé. Il numero resta accettato

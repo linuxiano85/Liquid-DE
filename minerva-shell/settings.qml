@@ -35,6 +35,7 @@ import "settings"
 
 ShellRoot {
     id: app
+    property string richiestaAvvio: Quickshell.env("MINERVA_SETTINGS_SECTION") || ""
 
     Component.onCompleted: {
         Quickshell.watchFiles = false;
@@ -137,13 +138,27 @@ ShellRoot {
         /// finestra non è ancora dipinta (`prontoADipingere`), quindi il salto
         /// alla sezione vera non si vede.
         section: {
-            var wanted = Quickshell.env("MINERVA_SETTINGS_SECTION");
-            if (wanted && wanted !== "")
+            var wanted = app.richiestaAvvio;
+            if (wanted && wanted !== "" && wanted.indexOf("w-") !== 0)
                 return app.sezioneNuova(wanted);
-            return app.sezioneNuova(Core.Ipc.get("settings.lastSection", "appearance"));
+            var precedente = app.sezioneNuova(Core.Ipc.get("settings.lastSection", "appearance"));
+            return precedente.indexOf("w-") === 0 ? "appearance" : precedente;
         }
 
         onSectionChanged: app.ricordaSezione()
+        // Gli ingressi esterni portano l'id della pagina, non una sezione
+        // Liquid: dopo l'arrivo del preset possiamo risolverlo senza perdere
+        // la destinazione quando il demone carica le impostazioni.
+        property bool avvioGestito: false
+        function apriRichiestaWindows() {
+            if (!Core.Ipc.impostazioniArrivate || avvioGestito)
+                return;
+            avvioGestito = true;
+            if (stileWindows)
+                avvioWindows(app.sezioneNuova(app.richiestaAvvio || "w-home"));
+        }
+        onStileWindowsChanged: Qt.callLater(apriRichiestaWindows)
+        Component.onCompleted: Qt.callLater(apriRichiestaWindows)
 
         onRequestClose: pronta.chiudi()
     }
@@ -155,7 +170,12 @@ ShellRoot {
     /// invece che su Aspetto.
     function sezioneNuova(id) {
         switch (String(id)) {
-        case "stile":      return "appearance";
+        // Lo stile ha una pagina sua dall'11 ottobre 2026; «minerva» è
+        // diventata «Informazioni» ma tiene l'id `shell`.
+        case "stile":      return "preset";
+        case "windows11":  return "preset";
+        case "minerva":    return "shell";
+        case "sfondo":     return "scrivania";
         case "animazioni": return "finestre";
         case "riva":       return "dock";
         case "lingua":     return "dataora";
@@ -174,13 +194,16 @@ ShellRoot {
     /// c'è più niente da segnare. Provato: si riapriva su Aspetto lo stesso.
     /// Quindi ci si segna anche nel momento in cui il demone risponde.
     function ricordaSezione() {
-        if (panel.section !== "" && Core.Ipc.impostazioniArrivate)
+        if (panel.section !== "" && panel.section.indexOf("w-") !== 0 && Core.Ipc.impostazioniArrivate)
             Core.Ipc.setSetting("settings.lastSection", panel.section);
     }
 
     Connections {
         target: Core.Ipc
-        function onImpostazioniArrivateChanged() { app.ricordaSezione(); }
+        function onImpostazioniArrivateChanged() {
+            app.ricordaSezione();
+            Qt.callLater(panel.apriRichiestaWindows);
+        }
     }
 
     /// Porta la finestra davanti e sulla scrivania di chi guarda: vedi
@@ -199,8 +222,11 @@ ShellRoot {
         /// scrivania funziona anche con le Impostazioni già aperte su un'altra
         /// pagina.
         function open(section: string): string {
-            if (section && section !== "")
-                panel.section = app.sezioneNuova(section);
+            if (section && section !== "") {
+                if (!panel.avvioGestito)
+                    app.richiestaAvvio = section;
+                panel.apriWindows(app.sezioneNuova(section));
+            }
             app.raise();
             return "ok";
         }

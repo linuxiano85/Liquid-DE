@@ -40,6 +40,7 @@ import Quickshell.Io
 import "theme" as Theme
 import "core" as Core
 import "files"
+import "windows11" as Windows11
 
 ShellRoot {
     id: app
@@ -84,6 +85,14 @@ ShellRoot {
     // posto solo per tutti e sei i punti d'ingresso. Vedi `theme/LegaTema.qml`.
     Theme.LegaTema { }
 
+    // Il gestore file è un'app: nel preset Windows segue la modalità delle
+    // app («Personalizzata» in Impostazioni › Colori), non quella di Windows.
+    Binding {
+        target: Windows11.Style
+        property: "perApp"
+        value: true
+    }
+
 
 
 
@@ -96,7 +105,7 @@ ShellRoot {
     // Il gestore file è arrivato per primo, il 16 agosto, con questo
     // meccanismo scritto a mano qui dentro. Adesso è un componente che usano
     // tutte e sei le app — ma le sue due chiavi restano quelle di allora:
-    // `files.tieniAcceso` è già nelle Impostazioni di Giacomo e
+    // `files.tieniAcceso` è già nelle Impostazioni di il manutentore e
     // `MINERVA_FILES_DORMIENTE` è già nell'avvio automatico. Rinominarle per
     // simmetria avrebbe spento in silenzio una scelta già fatta.
     //
@@ -119,6 +128,7 @@ ShellRoot {
 
     FileManager {
         id: manager
+        activationToken: Quickshell.env("MINERVA_FILES_ACTIVATION_TOKEN") || ""
 
         /// La cartella su cui aprirsi, passata nell'ambiente da chi ci lancia.
         ///
@@ -167,7 +177,7 @@ ShellRoot {
     // ── Una finestra IN PIÙ, nello stesso processo ──────────────────────
     //
     // «Apri una nuova finestra» dalla dock riportava davanti quella che
-    // c'era (Giacomo, 29 settembre 2026): questo processo apre schede, non
+    // c'era (il manutentore, 29 settembre 2026): questo processo apre schede, non
     // finestre. Ne nasce una qui dentro e non un secondo processo: le
     // strutture di Qt, il tema e il canale col demone ci sono già, e una
     // finestra in più costa pochi megabyte invece di un'app intera.
@@ -184,15 +194,16 @@ ShellRoot {
     /// Quante finestre in più sono aperte adesso: per le prove.
     property int altre: 0
 
-    function nuovaFinestra(path) {
+    function nuovaFinestra(path, activationToken) {
         // La prima dorme (tenuta pronta): per chi guarda non c'è nessuna
         // finestra, quindi la «nuova» è lei.
         if (manager.dormiente || !manager.visible) {
+            manager.activationToken=activationToken || "";
             manager.risveglia(path || "");
-            pronta.risveglia();
+            pronta.risveglia(activationToken);
             return;
         }
-        var w = altraFinestra.createObject(app, { "initialPath": path || "" });
+        var w = altraFinestra.createObject(app, { "initialPath": path || "", "activationToken":activationToken || "" });
         if (!w)
             return;
         app.altre++;
@@ -212,6 +223,20 @@ ShellRoot {
     // programma sono venti schede in una finestra, non venti finestre.
     IpcHandler {
         target: "files"
+
+        // Preserve the launch destination when this process is already alive.
+        // Existing one-argument handlers remain available to older launchers.
+        function conToken(path:string, token:string, mode:string):string {
+            if(mode==="finestra") app.nuovaFinestra(path,token);
+            else {
+                manager.activationToken=token;
+                if(mode==="mostra") manager.mostraFile(path);
+                else if(mode==="avvia" || manager.dormiente) manager.risveglia(path);
+                else if(path) manager.addTab(path);
+                pronta.risveglia(token);
+            }
+            return "ok";
+        }
 
         // Completion of a cold start, including a race won by preload.
         // Reuse the initial tab instead of adding a duplicate of initialPath.

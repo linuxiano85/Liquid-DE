@@ -37,7 +37,7 @@ Item {
     // Fino al 2 settembre 2026 ogni riga aveva il suo `awaitingConfirm` e
     // nessuno azzerava quello delle altre: si cliccava «Riavvia», compariva
     // «Tocca di nuovo per confermare», poi si cliccava «Spegni» e le righe che
-    // chiedevano conferma diventavano DUE. Giacomo l'ha descritto esattamente
+    // chiedevano conferma diventavano DUE. il manutentore l'ha descritto esattamente
     // così: «rimangono 2 voci con la conferma quando invece dovrebbe
     // scomparire da riavvia e stare solo su spegni».
     //

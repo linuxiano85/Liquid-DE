@@ -15,7 +15,7 @@
 ///
 /// che è precisa, lunga tre volte la finestra, e non risponde alla domanda che
 /// si ha in testa aprendo un gestore attività — «questa roba che cos'è, e la
-/// posso chiudere?». Giacomo: «anche il task manager è da rendere più
+/// posso chiudere?». il manutentore: «anche il task manager è da rendere più
 /// intelligente come gestione e semplice».
 library;
 

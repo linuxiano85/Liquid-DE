@@ -81,7 +81,7 @@ class IconResolver {
   //
   // Finché l'elenco delle Impostazioni mostrava i nomi delle cartelle, si
   // poteva scegliere quella sbagliata senza saperlo, e non c'era nessun modo
-  // di accorgersene prima: Giacomo aveva scelto «Colloid-Light», e nel
+  // di accorgersene prima: il manutentore aveva scelto «Colloid-Light», e nel
   // pannello di controllo l'ingranaggio di «Animazioni» era un grigio scuro
   // su fondo scuro — c'era e non si vedeva.
   //
@@ -213,7 +213,7 @@ class IconResolver {
   ///
   /// ── Perché esiste ──────────────────────────────────────────────────────
   ///
-  /// Giacomo, 6 settembre 2026: «in .local/share/icons ho messo vari temi
+  /// il manutentore, 6 settembre 2026: «in .local/share/icons ho messo vari temi
   /// icone ma non compaiono nei set icone in impostazioni».
   ///
   /// Tre su cinque non comparivano, e non era un difetto della ricerca: erano
@@ -502,9 +502,48 @@ class IconResolver {
     final cached = _cache[key];
     if (cached != null) return cached;
 
-    final resolved = _search(name, size, generic);
+    final resolved = _nelTemaScelto(name, size) ?? _search(name, size, generic);
     _cache[key] = resolved;
     return resolved;
+  }
+
+  // ── Le nostre app seguono il tema ──────────────────────────────────────
+  //
+  // il manutentore, 11 ottobre 2026: cambiando il tema delle icone, le nostre app
+  // restavano con le loro. Si chiamano `minerva-files`, `minerva-media`…, e
+  // nessun tema ha quei nomi: si trovavano sempre in hicolor, dove le mette
+  // l'installatore. Ora per ognuna si chiede prima al tema scelto (e ai temi
+  // che eredita, MAI a hicolor) un nome standard della stessa funzione: se
+  // il tema ce l'ha si usa quello, altrimenti resta la nostra. Fucina e
+  // Manutenzione non hanno un equivalente onesto in nessun tema: restano le
+  // nostre.
+
+  /// Per ogni nostra app, i nomi da cercare nel tema: prima l'icona di
+  /// un'applicazione che fa la stessa cosa, poi quella generica.
+  static const Map<String, List<String>> nomiStandard = {
+    'minerva-files': ['system-file-manager', 'org.gnome.Nautilus', 'file-manager'],
+    'minerva-media': ['org.gnome.Totem', 'multimedia-video-player', 'multimedia-player'],
+    'minerva-settings': ['org.gnome.Settings', 'gnome-settings', 'systemsettings', 'preferences-system'],
+    'minerva-terminale': ['utilities-terminal', 'org.gnome.Terminal'],
+    'minerva-editor': ['accessories-text-editor', 'org.gnome.TextEditor', 'text-editor'],
+    'minerva-calcolatrice': ['accessories-calculator', 'org.gnome.Calculator'],
+    'minerva-monitor': ['utilities-system-monitor', 'org.gnome.SystemMonitor', 'gnome-system-monitor'],
+    'minerva-viewer': ['image-viewer', 'org.gnome.Loupe', 'eog'],
+    'minerva-custodia': ['password-manager', 'org.gnome.seahorse.Application', 'seahorse', 'dialog-password'],
+  };
+
+  String? _nelTemaScelto(String name, int size) {
+    final nomi = nomiStandard[name];
+    if (nomi == null) return null;
+    final temi = _themeChain().where((t) => t != 'hicolor').toList();
+    if (temi.isEmpty) return null;
+    for (final themeName in temi) {
+      for (final nome in nomi) {
+        final trovato = _cercaNelTema(themeName, nome, size);
+        if (trovato != null) return trovato;
+      }
+    }
+    return null;
   }
 
   /// I file già giudicati: leggere e misurare un SVG costa, e le stesse icone
@@ -524,7 +563,7 @@ class IconResolver {
   ///
   /// Non è un difetto di Colloid: è che un tema di icone non promette di
   /// funzionare su tutti e due i fondi. Ed è esattamente lo scenario che
-  /// conta — Giacomo, 11 agosto 2026: «se un utente installa una app non
+  /// conta — il manutentore, 11 agosto 2026: «se un utente installa una app non
   /// minerva avrà sempre problemi, quindi devi puntare alla perfezione».
   ///
   /// Quindi non ci si fida del nome del tema: si GUARDA il file. Se tutti i
@@ -573,30 +612,37 @@ class IconResolver {
     return esito;
   }
 
+  /// Un'icona in UN tema, alla dimensione più vicina; null se non c'è.
+  String? _cercaNelTema(String themeName, String name, int size) {
+    final theme = _loadTheme(themeName);
+    if (theme == null) return null;
+
+    // Le cartelle più vicine alla dimensione voluta si provano per prime
+    final dirs = theme.dirs.toList()
+      ..sort((a, b) => a.distanceTo(size).compareTo(b.distanceTo(size)));
+
+    for (final dir in dirs) {
+      for (final root in theme.roots) {
+        for (final ext in ['.png', '.svg', '.xpm']) {
+          final file = File('$root/${dir.path}/$name$ext');
+          if (!file.existsSync()) continue;
+          // Un'icona che sul nostro fondo non si vedrebbe non è un'icona:
+          // vedi `siVedrebbe`. Si continua a cercare — in un'altra cartella
+          // o in un altro tema — e se non si trova niente si torna a mani
+          // vuote, così la shell disegna la sua.
+          if (!siVedrebbe(file)) continue;
+          return file.path;
+        }
+      }
+    }
+    return null;
+  }
+
   String _search(String name, int size, bool generic) {
     // 1. Nei temi, dal più specifico al più generico
     for (final themeName in _themeChain()) {
-      final theme = _loadTheme(themeName);
-      if (theme == null) continue;
-
-      // Le cartelle più vicine alla dimensione voluta si provano per prime
-      final dirs = theme.dirs.toList()
-        ..sort((a, b) => a.distanceTo(size).compareTo(b.distanceTo(size)));
-
-      for (final dir in dirs) {
-        for (final root in theme.roots) {
-          for (final ext in ['.png', '.svg', '.xpm']) {
-            final file = File('$root/${dir.path}/$name$ext');
-            if (!file.existsSync()) continue;
-            // Un'icona che sul nostro fondo non si vedrebbe non è un'icona:
-            // vedi `siVedrebbe`. Si continua a cercare — in un'altra cartella
-            // o in un altro tema — e se non si trova niente si torna a mani
-            // vuote, così la shell disegna la sua.
-            if (!siVedrebbe(file)) continue;
-            return file.path;
-          }
-        }
-      }
+      final trovato = _cercaNelTema(themeName, name, size);
+      if (trovato != null) return trovato;
     }
 
     // 2. Cartelle legacy, fuori da qualunque tema

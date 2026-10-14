@@ -39,7 +39,7 @@ Page {
     // di anteprime. Serve alla sola modalità «immagine»: con gli sfondi di
     // Minerva o con la cartella che gira da sé quella griglia è invisibile,
     // e fino all'11 agosto 2026 veniva costruita e DECODIFICATA lo stesso.
-    // Nella cartella di Giacomo (311 fotografie di telefono) erano
+    // Nella cartella di il manutentore (311 fotografie di telefono) erano
     // ventiquattro immagini decodificate a 420×260 che nessuno vedeva.
     //
     // La regola, che vale per tutto Qt: `visible: false` NASCONDE, NON
@@ -572,7 +572,7 @@ Page {
 
         // ── Una sola immagine, presa dove sta ────────────────────────────
         //
-        // Giacomo, 18 agosto 2026: «per impostare lo sfondo devo copiare il
+        // il manutentore, 18 agosto 2026: «per impostare lo sfondo devo copiare il
         // percorso dal file manager e incollarlo in impostazioni».
         //
         // Il selettore per farlo esisteva da giorni — `SelettoreImmagine`,
@@ -1165,7 +1165,7 @@ Page {
         // dentro il menù della scrivania e in nessun altro posto. Un'opzione
         // che si trova solo se sai già dove cliccare è un'opzione che per
         // molti non esiste — è la stessa cosa che è successa alla dock, che
-        // aveva sette voci e Giacomo scriveva «non ci sono impostazioni per
+        // aveva sette voci e il manutentore scriveva «non ci sono impostazioni per
         // essa».
         //
         // Restano anche nel menù: là si aggiustano mentre si guardano le
@@ -1357,7 +1357,7 @@ Page {
                         // si rincorrono, e la pagina resta VUOTA — titolo,
                         // sottotitolo, e sotto niente, con «possible
                         // QQuickItem::polish() loop» nel registro a ripetizione.
-                        // Giacomo, 13 settembre 2026: «la sezione desktop è
+                        // il manutentore, 13 settembre 2026: «la sezione desktop è
                         // vuota e non posso aggiungere o rimuovere widget».
                         S.ChoicePicker {
                             width: 200
@@ -1433,7 +1433,7 @@ Page {
 
                 // ── Le righe del riassunto ───────────────────────────────
                 //
-                // Giacomo: «magari poter avere una singola casella di
+                // il manutentore: «magari poter avere una singola casella di
                 // queste». Una casella sola che le tiene tutte è utile solo
                 // se si può dire QUALI: quattro righe fisse sono un widget
                 // in più, non una casella su misura.

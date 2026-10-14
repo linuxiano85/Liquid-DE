@@ -13,12 +13,28 @@ class KeybindEntry {
   final String category;
   final String description;
   final List<KeyCombo> combos = [];
+  final String action;
+  final bool heldGuide;
+  List<String> get modes => action.startsWith('tiling-') ? ['tiling'] : heldGuide ? ['classico'] : ['classico','tiling'];
+  String descriptionFor(String mode) {
+    if(action.startsWith('sposta-finestra:')) {
+      final dir=action.split(':').last.trim();
+      if (dir.isEmpty) return mode=='tiling' ? 'Riordina la finestra nel layout' : 'Sposta liberamente la finestra';
+      if(mode=='tiling') return {'l':'Seleziona la finestra a sinistra','r':'Seleziona la finestra a destra','u':'Seleziona la finestra sopra','d':'Seleziona la finestra sotto'}[dir] ?? description;
+      return {'l':'Aggancia a metà schermo a sinistra','r':'Aggancia a metà schermo a destra','u':'Ingrandisci la finestra','d':'Ripristina; se già normale, riduci a icona'}[dir] ?? description;
+    }
+    if(action.contains('minerva-blocca')) return 'Blocca lo schermo';
+    return description;
+  }
 
-  KeybindEntry(this.category, this.description);
+  KeybindEntry(this.category, this.description, {this.action="",this.heldGuide=false});
 
   Map<String, dynamic> toJson() => {
         'category': category,
         'description': description,
+        'modes': modes,
+        'classicDescription':descriptionFor('classico'),
+        'tilingDescription':descriptionFor('tiling'),
         'combos': combos.map((c) => c.toJson()).toList(),
       };
 }
@@ -29,12 +45,16 @@ class KeybindEntry {
 class KeyCombo {
   final List<String> mods;
   final String key;
+  /// La combinazione come scritta nella sorgente (`$mod W`): è l'identificatore
+  /// che le Impostazioni usano per spegnere UNA scorciatoia.
+  final String tasti;
 
-  const KeyCombo(this.mods, this.key);
+  const KeyCombo(this.mods, this.key, {this.tasti = ''});
 
   String get signature => '${mods.join('+')}|$key';
 
-  Map<String, dynamic> toJson() => {'mods': mods, 'key': key};
+  Map<String, dynamic> toJson() =>
+      {'mods': mods, 'key': key, if (tasti.isNotEmpty) 'tasti': tasti};
 }
 
 /// Legge `config/scorciatoie.minerva` e ne ricava l'elenco delle scorciatoie
@@ -65,6 +85,12 @@ class KeybindService {
   List<KeybindEntry> _entries = [];
   StreamSubscription? _watcher;
 
+  /// I `tasti` (come scritti nella sorgente) spenti nelle Impostazioni. Li
+  /// imposta il core leggendo `shortcuts.disabled`, e `perMinervaWayland` li
+  /// salta: il tasto resta libero invece di essere mangiato da una scorciatoia
+  /// che non fa niente.
+  Set<String> disattivate = {};
+
   /// Notifica ricaricamenti del file, così il core può ritrasmettere l'elenco.
   final _changes = StreamController<List<KeybindEntry>>.broadcast();
   Stream<List<KeybindEntry>> get changes => _changes.stream;
@@ -93,6 +119,7 @@ class KeybindService {
       return Scorciatoie.daFile(_configPath).perMinervaWayland(
         // La sorgente non la dichiara: è la cartella installata.
         anche: {'minerva': MinervaPaths.installRoot},
+        disattivate: disattivate,
       );
     } catch (e) {
       // Una scorciatoia scritta male non deve poter spegnere il servizio: il
@@ -169,7 +196,7 @@ class KeybindService {
       final chiave = '${s.categoria} ${s.descrizione}';
       final voce = ordinati.putIfAbsent(chiave, () {
         ordine.add(chiave);
-        return KeybindEntry(s.categoria!, s.descrizione!);
+        return KeybindEntry(s.categoria!, s.descrizione!,action:s.azione,heldGuide:s.flag.contains("tieni"));
       });
       if (!voce.combos.any((c) => c.signature == combo.signature)) {
         voce.combos.add(combo);
@@ -191,7 +218,7 @@ class KeybindService {
         .where((m) => m != null)
         .cast<String>()
         .toList();
-    return KeyCombo(mods, key);
+    return KeyCombo(mods, key, tasti: s.tasti);
   }
 
   /// Sostituisce le variabili `$nome` con il loro valore.

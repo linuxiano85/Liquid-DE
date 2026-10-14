@@ -7,7 +7,7 @@ import "../ui" as Ui
 // `ChoicePicker` mostra tutte le voci insieme, e per tre o quattro è la cosa
 // giusta: si vede cosa c'è senza aprire niente. Con venti risoluzioni no:
 // venti pulsanti per schermo, moltiplicati per due schermi, e la pagina
-// Schermi diventava lunga quanto la stanza. Giacomo, 22 settembre 2026:
+// Schermi diventava lunga quanto la stanza. il manutentore, 22 settembre 2026:
 // «delle tendine per le risoluzioni e altre multi scelte».
 //
 // ── Com'è fatta ────────────────────────────────────────────────────────────

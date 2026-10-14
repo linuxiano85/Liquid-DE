@@ -183,7 +183,7 @@ PanelWindow {
     // che copre è il bordo alto, che in un filmato è nero e in un gioco è
     // l'ultima cosa che si guarda.
     //
-    // Chiesta da Giacomo l'11 agosto: «quella piccola barra del titolo che
+    // Chiesta da il manutentore l'11 agosto: «quella piccola barra del titolo che
     // compare la vorrei per tutta la larghezza, non per un pezzettino».
     Rectangle {
         id: pill
@@ -277,7 +277,7 @@ PanelWindow {
 
             // ── «Esci dallo schermo intero», scritto per esteso ──────────
             //
-            // Era un'icona fra tre, senza nome: Giacomo, 25 settembre 2026,
+            // Era un'icona fra tre, senza nome: il manutentore, 25 settembre 2026,
             // «vedo scritto qualcosa che spiega come portarlo allo stato
             // normale ma non capisco come». La cosa che si cerca quassù è
             // proprio questa, e si scrive con le parole.

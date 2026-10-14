@@ -10,7 +10,7 @@ import "../ui" as Ui
 //
 // ── Da dove nasce ──────────────────────────────────────────────────────────
 //
-// Giacomo, 8 settembre 2026: «vorrei un nostro software che pulisca per bene
+// il manutentore, 8 settembre 2026: «vorrei un nostro software che pulisca per bene
 // il pc e controlli dipendenze non necessarie, lingue non necessarie, con la
 // nostra interfaccia», e come modello Stacer, che è abbandonato da anni.
 //
@@ -72,7 +72,7 @@ FloatingWindow {
 
     // ── Le scie, e il pennello che le cancella ───────────────────────────
     //
-    // Giacomo, 9 settembre 2026: «electron builder e pip e pacchetti già
+    // il manutentore, 9 settembre 2026: «electron builder e pip e pacchetti già
     // installati una volta cliccato lasciano residui di spunte sul grafico
     // [...] lo abbiamo già affrontato in impostazioni questo problema dei
     // residui».
@@ -91,7 +91,7 @@ FloatingWindow {
     // depositano. Sono tre, e ognuno ha alle spalle il suo difetto:
     //
     //   · quando si SPUNTA — le spunte fantasma sul grafico, che è quello che
-    //     Giacomo ha visto;
+    //     il manutentore ha visto;
     //   · quando si APRE o CHIUDE una sezione — l'elenco si ridispone tutto,
     //     e le frecce girano;
     //   · mentre si SCORRE — la scia verticale, quella riconosciuta il 5
@@ -236,7 +236,7 @@ FloatingWindow {
 
     // ── Una mappa NUOVA ogni volta, e non è pignoleria ───────────────────
     //
-    // Giacomo, 9 settembre 2026: «non riesco a selezionare una singola voce
+    // il manutentore, 9 settembre 2026: «non riesco a selezionare una singola voce
     // ad esempio se non voglio cancellare tutto».
     //
     // Era questo. Il codice prendeva `finestra.scelte`, ci scriveva dentro e
@@ -573,7 +573,7 @@ FloatingWindow {
 
         // ── Quanto hai recuperato da sempre ─────────────────────────────
         //
-        // Giacomo: «possiamo mettere un riepilogo di tutto lo spazio che è
+        // il manutentore: «possiamo mettere un riepilogo di tutto lo spazio che è
         // stato recuperato con la app? Giga totali ad esempio?».
         //
         // È il numero che dà senso a tutto il resto. Una singola pulizia si
@@ -633,7 +633,7 @@ FloatingWindow {
         // ── «Rileggi», scritto ──────────────────────────────────────────
         //
         // Era un quadratino da 36 pixel con dentro una freccia circolare:
-        // Giacomo, «quel tasto per aggiornare è minuscolo». Un'icona da sola
+        // il manutentore, «quel tasto per aggiornare è minuscolo». Un'icona da sola
         // costringe a indovinare o a scoprirlo passandoci sopra, e in una
         // finestra che si apre due volte al mese non lo impara nessuno.
         Pulsante {
@@ -650,7 +650,7 @@ FloatingWindow {
 
     // ── Il quadro in cima STA FERMO, e non è una scelta di gusto ─────────
     //
-    // Giacomo, 9 settembre 2026: «il grafico a torta scendendo nella pagina
+    // il manutentore, 9 settembre 2026: «il grafico a torta scendendo nella pagina
     // rimane impresso a schermo un residuo e fa schifo».
     //
     // È il difetto di famiglia del disegno col processore, quello scritto in
@@ -670,7 +670,7 @@ FloatingWindow {
         visible: finestra.pagina === "spazio"
         // ── E le spunte che passavano DENTRO l'anello ────────────────────
         //
-        // Giacomo, 9 settembre 2026: «miniature e cache addirittura risultano
+        // il manutentore, 9 settembre 2026: «miniature e cache addirittura risultano
         // passare attraverso il grafico, facendo scroll su e giù si muovono
         // su e giù dentro al grafico».
         //
@@ -849,7 +849,7 @@ FloatingWindow {
 
             // ── Quando non c'è niente ───────────────────────────────────
             //
-            // Giacomo, 9 settembre 2026, dopo aver pulito quasi tutto:
+            // il manutentore, 9 settembre 2026, dopo aver pulito quasi tutto:
             // «quando non c'è niente da pulire deve uscire scritto solamente
             // "Niente da pulire" invece delle selezioni».
             //
@@ -917,7 +917,7 @@ FloatingWindow {
                     // da sé.
                     // ── L'intestazione si apre e si chiude ─────────────
                     //
-                    // Giacomo: «metterei delle liste richiudibili per
+                    // il manutentore: «metterei delle liste richiudibili per
                     // comprimere o allargare la singola sezione per non
                     // vedere tutta la lista delle cache». Sono ventidue voci
                     // solo di cache, e quasi sempre non si vuole guardarle:
@@ -1406,7 +1406,7 @@ FloatingWindow {
     //
     // Lo stesso di `permessi.qml`, e per la stessa ragione: `ui/SpineButton`
     // è il pulsante della barra — sobrio apposta — e qui serve una cosa che
-    // si veda. Giacomo, guardando la prima versione: «vedo adesso il grafico
+    // si veda. il manutentore, guardando la prima versione: «vedo adesso il grafico
     // e poi no vedo dove cliccare per procedere».
     component Pulsante: Rectangle {
         id: pulsante

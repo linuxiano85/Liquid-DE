@@ -4,16 +4,20 @@ import 'dart:io';
 
 import '../core/minerva_paths.dart';
 import 'fucina/officina.dart';
+import 'fucina/blocco_lavoro.dart';
+import 'fucina/profili_kernel.dart';
 import 'fucina/ricetta.dart';
 import 'fucina/rilievo.dart';
+import 'fucina/regole_moduli.dart';
 import 'fucina/scaffale.dart';
+import 'fucina/storico_dispositivi.dart';
 import 'fucina/sorgenti.dart';
 
 /// Minerva Fucina — kernel su misura per questo computer.
 ///
 /// ── Da dove nasce ──────────────────────────────────────────────────────────
 ///
-/// Giacomo, 30 settembre 2026: «vorrei inserire una utility per creare
+/// il manutentore, 30 settembre 2026: «vorrei inserire una utility per creare
 /// kernel [...] ultra snelli e ottimizzati per il computer, con i moduli
 /// necessari per leggere tutto l'hardware e solamente i moduli per leggere
 /// tutti i vari file system, controller di gioco [...] in modo per avere un
@@ -50,15 +54,24 @@ class FucinaService {
   final Officina officina;
   final Scaffale scaffale;
   final Sorgenti sorgenti;
+  final StoricoDispositivi storicoDispositivi;
+  final ProfiliKernel profiliKernel;
+  final RegoleModuli regoleModuli;
 
   /// L'aiutante di root: `RadiceService.chiedi`. Una funzione, non il
   /// servizio: questo file non sa nemmeno che cosa sia `pkexec`.
   final Future<Map<String, dynamic>> Function(String, List<String>) radice;
+  final Future<Map<String, dynamic>> Function()? statoAmministrazione;
+  final Future<List<Map<String, dynamic>>> Function(Map<String, dynamic>)?
+  targetCompilatori;
+  final Future<Map<String, dynamic>> Function()? risorseCompilazione;
 
   /// Come si costruisce un rilevatore. Si sostituisce nelle prove.
   final Rilevatore Function(
-          void Function(String, String, int, int)? racconta)
-      nuovoRilevatore;
+    void Function(String, String, int, int)? racconta,
+    List<String> modaliasStorici,
+  )
+  nuovoRilevatore;
 
   /// Lancia un programma e ne aspetta la fine (llvm-profgen,
   /// llvm-profdata). Si sostituisce nelle prove.
@@ -66,31 +79,56 @@ class FucinaService {
 
   FucinaService({
     required this.radice,
+    this.statoAmministrazione,
+    this.targetCompilatori,
+    this.risorseCompilazione,
     String? lavoro,
     String? statoDir,
     Officina? officina,
     Scaffale? scaffale,
     Sorgenti? sorgenti,
-    Rilevatore Function(void Function(String, String, int, int)?)?
-        nuovoRilevatore,
+    StoricoDispositivi? storicoDispositivi,
+    ProfiliKernel? profiliKernel,
+    RegoleModuli? regoleModuli,
+    Rilevatore Function(
+      void Function(String, String, int, int)? racconta,
+      List<String> modaliasStorici,
+    )?
+    nuovoRilevatore,
     Future<ProcessResult> Function(String, List<String>)? esegui,
-  })  : lavoro = lavoro ?? '${MinervaPaths.cache()}/fucina',
-        esegui = esegui ?? ((e, a) => Process.run(e, a)),
-        statoDir = statoDir ?? '${MinervaPaths.stato()}/fucina',
-        sorgenti = sorgenti ?? Sorgenti(),
-        nuovoRilevatore =
-            nuovoRilevatore ?? ((r) => Rilevatore(racconta: r)),
-        officina = officina ??
-            Officina(
-              lavoro: lavoro ?? '${MinervaPaths.cache()}/fucina',
-              statoDir: statoDir ?? '${MinervaPaths.stato()}/fucina',
-              sorgenti: sorgenti,
-            ),
-        scaffale = scaffale ??
-            Scaffale(
-              lavoro: lavoro ?? '${MinervaPaths.cache()}/fucina',
-              statoDir: statoDir ?? '${MinervaPaths.stato()}/fucina',
-            );
+  }) : lavoro = lavoro ?? '${MinervaPaths.cache()}/fucina',
+       esegui = esegui ?? ((e, a) => Process.run(e, a)),
+       statoDir = statoDir ?? '${MinervaPaths.stato()}/fucina',
+       sorgenti = sorgenti ?? Sorgenti(),
+       storicoDispositivi =
+           storicoDispositivi ??
+           StoricoDispositivi(
+             statoDir: statoDir ?? '${MinervaPaths.stato()}/fucina',
+           ),
+       profiliKernel =
+           profiliKernel ??
+           ProfiliKernel(
+             statoDir: statoDir ?? '${MinervaPaths.stato()}/fucina',
+           ),
+       regoleModuli =
+           regoleModuli ??
+           RegoleModuli(statoDir: statoDir ?? '${MinervaPaths.stato()}/fucina'),
+       nuovoRilevatore =
+           nuovoRilevatore ??
+           ((r, alias) => Rilevatore(racconta: r, modaliasStorici: alias)),
+       officina =
+           officina ??
+           Officina(
+             lavoro: lavoro ?? '${MinervaPaths.cache()}/fucina',
+             statoDir: statoDir ?? '${MinervaPaths.stato()}/fucina',
+             sorgenti: sorgenti,
+           ),
+       scaffale =
+           scaffale ??
+           Scaffale(
+             lavoro: lavoro ?? '${MinervaPaths.cache()}/fucina',
+             statoDir: statoDir ?? '${MinervaPaths.stato()}/fucina',
+           );
 
   // ── Il rilievo, ricordato per un po' ─────────────────────────────────
   //
@@ -104,9 +142,10 @@ class FucinaService {
   DateTime? _quando;
   static const Duration _vale = Duration(minutes: 10);
 
-  Future<Rilievo> _rilievoFresco(
-      {void Function(String, String, int, int)? racconta,
-      bool forza = false}) async {
+  Future<Rilievo> _rilievoFresco({
+    void Function(String, String, int, int)? racconta,
+    bool forza = false,
+  }) async {
     final r = _rilievo;
     final q = _quando;
     if (!forza &&
@@ -115,7 +154,18 @@ class FucinaService {
         DateTime.now().difference(q) < _vale) {
       return r;
     }
-    final nuovo = await nuovoRilevatore(racconta).rileva();
+    final aliasStorici = await storicoDispositivi.leggi();
+    final nuovo = await nuovoRilevatore(racconta, aliasStorici).rileva();
+    try {
+      await storicoDispositivi.aggiorna(
+        nuovo.dispositivi.map((d) => d.modalias),
+      );
+    } catch (_) {
+      nuovo.avvisi.add(
+        'Non sono riuscito ad aggiornare lo storico locale delle '
+        'periferiche; il rilievo corrente resta valido.',
+      );
+    }
     _rilievo = nuovo;
     _quando = DateTime.now();
     _dimentica();
@@ -139,9 +189,239 @@ class FucinaService {
   }
 
   Future<Map<String, dynamic>> rileva(
-      void Function(String, String, int, int)? racconta) async {
+    void Function(String, String, int, int)? racconta,
+  ) async {
     final r = await _rilievoFresco(racconta: racconta, forza: true);
-    return {'ok': true, ...r.toJson()};
+    return {
+      'ok': true,
+      ...r.toJson(),
+      'targetCompilatori': targetCompilatori == null
+          ? <Map<String, dynamic>>[]
+          : await targetCompilatori!(r.macchina),
+      'regoleModuli': await regoleModuli.elenco(),
+    };
+  }
+
+  Future<Map<String, dynamic>> impostaRegolaModulo(
+    Object? nome,
+    Object? scelta,
+  ) async {
+    try {
+      if (scelta == 'escludi' && nome is String) {
+        final rilievo = await _rilievoFresco();
+        if (rilievo.avvio.moduli.contains(nome.replaceAll('-', '_'))) {
+          return {
+            'ok': false,
+            'errore':
+                'Questo modulo è necessario per avviare il sistema e non può essere escluso.',
+          };
+        }
+      }
+      return await regoleModuli.imposta(nome, scelta);
+    } on FileSystemException catch (e) {
+      return {'ok': false, 'errore': e.message};
+    } catch (_) {
+      return {
+        'ok': false,
+        'errore': 'Non riesco a salvare la regola del modulo.',
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> regoleModuliCorrenti() async => {
+    'ok': true,
+    'regole': await regoleModuli.elenco(),
+  };
+
+  /// Salva su richiesta un report diagnostico locale. I report sono JSON,
+  /// non includono percorsi personali o seriali e sono limitati agli ultimi
+  /// dieci rilievi.
+  Future<Map<String, dynamic>> esportaRilievo() async {
+    try {
+      final rilievo = await _rilievoFresco();
+      final ora = DateTime.now().toUtc();
+      final id = ora
+          .toIso8601String()
+          .replaceAll(RegExp(r'[-:.]'), '')
+          .replaceAll('T', '-')
+          .replaceAll('Z', '');
+      final cartella = Directory('$statoDir/rapporti');
+      await cartella.create(recursive: true);
+      final file = File('${cartella.path}/rilievo-$id.json');
+      final temporaneo = File('${file.path}.tmp-$pid');
+      await temporaneo.writeAsString(
+        const JsonEncoder.withIndent(
+          '  ',
+        ).convert(rilievo.rapportoJson(generato: ora)),
+        flush: true,
+      );
+      await temporaneo.rename(file.path);
+
+      final rapporti = <File>[];
+      await for (final voce in cartella.list(followLinks: false)) {
+        if (voce is File &&
+            voce.uri.pathSegments.last.startsWith('rilievo-') &&
+            voce.path.endsWith('.json')) {
+          rapporti.add(voce);
+        }
+      }
+      rapporti.sort((a, b) => b.path.compareTo(a.path));
+      for (final vecchio in rapporti.skip(10)) {
+        await vecchio.delete();
+      }
+      return {
+        'ok': true,
+        'percorso': file.path,
+        'dispositivi': rilievo.dispositivi.length,
+        'moduli': rilievo.moduli.length,
+      };
+    } on Object {
+      return {
+        'ok': false,
+        'errore': 'Non riesco a salvare il report locale del rilievo.',
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> dimenticaDispositivi() async {
+    try {
+      await storicoDispositivi.dimentica();
+      return {'ok': true};
+    } catch (_) {
+      return {
+        'ok': false,
+        'errore': 'Non riesco a cancellare lo storico locale.',
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> profili() async => {
+    'ok': true,
+    'profili': await profiliKernel.elenco(),
+  };
+
+  Future<Map<String, dynamic>> salvaProfilo(Object? nome, Object? raw) async {
+    try {
+      if (nome is! String) {
+        return {'ok': false, 'errore': 'Inserisci un nome per il profilo.'};
+      }
+      if (raw is! Map) {
+        return {'ok': false, 'errore': 'Scelte del profilo non valide.'};
+      }
+      final r = await _rilievoFresco();
+      final richieste = Map<String, dynamic>.from(raw);
+      // Un profilo conserva le preferenze, non la versione o il nome del
+      // prossimo kernel. I segnaposto servono solo alla validazione comune.
+      richieste['versione'] = '6.0';
+      richieste['nome'] = 'profilo';
+      richieste['profilo'] = '';
+      richieste['provaVeloce'] = false;
+      richieste['misura'] = true;
+      final scelte = Scelte.daJson(richieste).toJson()
+        ..remove('versione')
+        ..remove('nome')
+        ..remove('profilo')
+        ..remove('provaVeloce');
+      final live = r.configKernel['statoLive'];
+      final filesystem = live is Map && live['filesystemMontati'] is List
+          ? List<String>.from(live['filesystemMontati'] as List)
+          : <String>[];
+      final lsm = live is Map && live['lsmAttivi'] is List
+          ? List<String>.from(live['lsmAttivi'] as List)
+          : <String>[];
+      final macchina = r.macchina;
+      final salvato = await profiliKernel.salva(
+        nome: nome,
+        scelte: scelte,
+        hardware: {
+          'cpu': macchina['cpu'],
+          'fornitore': macchina['fornitore'],
+          'livelloX86': macchina['livelloX86'],
+        },
+        evidenze: {
+          'dispositivi': r.dispositivi.length,
+          'moduli': r.moduli.length,
+          'dispositiviStorici': r.dispositiviStorici,
+          'filesystemMontati': filesystem,
+          'lsmAttivi': lsm,
+        },
+      );
+      return {
+        'ok': true,
+        'profilo': salvato,
+        'profili': await profiliKernel.elenco(),
+      };
+    } on SceltaNonValida catch (e) {
+      return {'ok': false, 'errore': e.messaggio};
+    } on FormatException catch (e) {
+      return {'ok': false, 'errore': e.message};
+    } on FileSystemException catch (e) {
+      return {'ok': false, 'errore': e.message};
+    } catch (_) {
+      return {'ok': false, 'errore': 'Non riesco a salvare il profilo locale.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> caricaProfilo(Object? id) async {
+    try {
+      final profilo = await profiliKernel.carica(id);
+      if (profilo == null) {
+        return {'ok': false, 'errore': 'Profilo non trovato.'};
+      }
+      final scelte = profilo['scelte'];
+      if (scelte is! Map) {
+        return {'ok': false, 'errore': 'Il profilo è danneggiato.'};
+      }
+      final r = await _rilievoFresco();
+      final hardware = profilo['hardware'] is Map
+          ? Map<String, dynamic>.from(profilo['hardware'] as Map)
+          : <String, dynamic>{};
+      final vecchiaCpu = hardware['cpu'];
+      final cpuCorrente = r.macchina['cpu'];
+      final fornitoreSalvato = hardware['fornitore'];
+      final fornitoreCorrente = r.macchina['fornitore'];
+      final livelloSalvato = hardware['livelloX86'];
+      final livelloCorrente = r.macchina['livelloX86'];
+      final stessaCpu =
+          r.macchina['flagsCpuUniformi'] != false &&
+          r.macchina['flagsCpuCompleti'] != false &&
+          vecchiaCpu is String &&
+          vecchiaCpu.isNotEmpty &&
+          cpuCorrente is String &&
+          cpuCorrente.isNotEmpty &&
+          vecchiaCpu == cpuCorrente &&
+          fornitoreSalvato is String &&
+          fornitoreSalvato.isNotEmpty &&
+          fornitoreSalvato == fornitoreCorrente &&
+          livelloSalvato is String &&
+          livelloSalvato.isNotEmpty &&
+          livelloSalvato == livelloCorrente;
+      return {
+        'ok': true,
+        'profilo': profilo,
+        'scelte': Map<String, dynamic>.from(scelte),
+        'nativoCompatibile': stessaCpu,
+        'avvisoHardware': stessaCpu
+            ? ''
+            : 'CPU non verificata come compatibile: disattivo '
+                  'l’ottimizzazione nativa.',
+      };
+    } catch (_) {
+      return {'ok': false, 'errore': 'Non riesco a leggere il profilo locale.'};
+    }
+  }
+
+  Future<Map<String, dynamic>> eliminaProfilo(Object? id) async {
+    try {
+      final eliminato = await profiliKernel.elimina(id);
+      return {
+        'ok': eliminato,
+        'profili': await profiliKernel.elenco(),
+        if (!eliminato) 'errore': 'Profilo non trovato.',
+      };
+    } on FileSystemException catch (e) {
+      return {'ok': false, 'errore': e.message};
+    }
   }
 
   Map<String, dynamic>? _versioni;
@@ -165,21 +445,60 @@ class FucinaService {
   // ── La ricetta ───────────────────────────────────────────────────────
 
   Future<({Ricetta? ricetta, Rilievo? rilievo, String? errore})> _calcola(
-      Object? scelte) async {
+    Object? scelte,
+  ) async {
     if (scelte is! Map) {
       return (ricetta: null, rilievo: null, errore: 'Mancano le scelte.');
     }
+    final scelteRaw = Map<String, dynamic>.from(scelte);
+    final regole = await regoleModuli.elenco();
+    final mantieni = Set<String>.from(regole['mantieni'] ?? const <String>[]);
+    final escludi = Set<String>.from(regole['escludi'] ?? const <String>[]);
+    final aggiunti = {
+      if (scelteRaw['aggiunti'] is List)
+        ...(scelteRaw['aggiunti'] as List).whereType<String>(),
+    };
+    final tolti = {
+      if (scelteRaw['tolti'] is List)
+        ...(scelteRaw['tolti'] as List).whereType<String>(),
+    };
+    tolti.removeAll(mantieni);
+    tolti.addAll(escludi);
+    aggiunti.removeAll(escludi);
+    aggiunti.addAll(mantieni);
+    scelteRaw['aggiunti'] = aggiunti.toList();
+    scelteRaw['tolti'] = tolti.toList();
+
     final Scelte s;
     try {
-      s = Scelte.daJson(scelte.cast<String, dynamic>());
+      s = Scelte.daJson(scelteRaw);
     } on SceltaNonValida catch (e) {
       return (ricetta: null, rilievo: null, errore: e.messaggio);
     }
     final r = await _rilievoFresco();
+    if (s.nativo &&
+        (r.macchina['flagsCpuUniformi'] == false ||
+            r.macchina['flagsCpuCompleti'] == false)) {
+      return (
+        ricetta: null,
+        rilievo: r,
+        errore:
+            'I flag delle CPU non sono uniformi o completi. Usa il target generico: native non è verificabile su tutte le CPU descritte.',
+      );
+    }
     final ccache = (r.macchina['attrezzi'] as List? ?? const []).any(
-        (a) => a is Map && a['nome'] == 'ccache' && a['presente'] == true);
-    final ricetta = calcola(r, s, Officina.cartellePer(s, lavoro),
-        nuclei: (r.macchina['nuclei'] as int?) ?? 1, ccache: ccache);
+      (a) => a is Map && a['nome'] == 'ccache' && a['presente'] == true,
+    );
+    final ricetta = calcola(
+      r,
+      s,
+      Officina.cartellePer(s, lavoro),
+      nuclei: (r.macchina['nuclei'] as int?) ?? 1,
+      ccache: ccache,
+      risorse: risorseCompilazione == null
+          ? const {}
+          : await risorseCompilazione!(),
+    );
     return (ricetta: ricetta, rilievo: r, errore: null);
   }
 
@@ -198,13 +517,26 @@ class FucinaService {
     if (_installando) {
       return {
         'ok': false,
-        'errore': 'Aspetta che finisca l\'installazione in corso: compilare '
+        'errore':
+            'Aspetta che finisca l\'installazione in corso: compilare '
             'adesso riscriverebbe i file che si stanno installando.',
       };
     }
     final c = await _calcola(scelte);
     if (c.errore != null) return {'ok': false, 'errore': c.errore};
-    return officina.avvia(c.ricetta!, c.rilievo!);
+    final ricetta = c.ricetta!;
+    if (ricetta.requisitiMancanti.isNotEmpty) {
+      final pacchetti = ricetta.requisitiMancanti.join(' ');
+      return {
+        'ok': false,
+        'errore':
+            'Mancano i prerequisiti per compilare: '
+            '${ricetta.requisitiMancanti.join(', ')}. Installali con '
+            '`sudo pacman -S --needed $pacchetti`, poi riprova.',
+        'requisitiMancanti': ricetta.requisitiMancanti,
+      };
+    }
+    return officina.avvia(ricetta, c.rilievo!);
   }
 
   Future<Map<String, dynamic>> ferma() async {
@@ -215,16 +547,114 @@ class FucinaService {
 
   // ── Lo scaffale ──────────────────────────────────────────────────────
 
-  Future<Map<String, dynamic>> kernel() async =>
-      {'ok': true, ...await scaffale.elenco()};
+  Future<Map<String, dynamic>> kernel() async => {
+    'ok': true,
+    ...await scaffale.elenco(),
+    'cache': await _statoCache(),
+    if (statoAmministrazione != null)
+      'amministrazione': await statoAmministrazione!(),
+  };
+
+  /// Inventario leggero della cache: non attraversa gli alberi dei sorgenti,
+  /// che possono contenere centinaia di migliaia di file.
+  Future<Map<String, dynamic>> _statoCache() async {
+    String nomePercorso(String percorso) => percorso
+        .split(Platform.pathSeparator)
+        .where((parte) => parte.isNotEmpty)
+        .last;
+
+    final archivi = <Map<String, dynamic>>[];
+    final archivioDir = Directory('$lavoro/archivi');
+    try {
+      await for (final elemento in archivioDir.list(followLinks: false)) {
+        if (elemento is! File ||
+            !(elemento.path.endsWith('.tar.xz') ||
+                elemento.path.endsWith('.tar.gz'))) {
+          continue;
+        }
+        final nome = nomePercorso(elemento.path);
+        final stamp = File('${elemento.path}.firma-verificata');
+        archivi.add({
+          'nome': nome,
+          'byte': (await elemento.stat()).size,
+          'verificato': await stamp.exists(),
+        });
+      }
+    } on FileSystemException {
+      // La cache vuota è uno stato normale al primo avvio.
+    }
+    archivi.sort((a, b) => '${a['nome']}'.compareTo('${b['nome']}'));
+
+    final alberi = <Map<String, dynamic>>[];
+    final alberiDir = Directory('$lavoro/alberi');
+    try {
+      await for (final base in alberiDir.list(followLinks: false)) {
+        if (base is! Directory) continue;
+        final nome = nomePercorso(base.path);
+        final pronti = await File('${base.path}/.fucina-pronto').exists();
+        var versione = '';
+        var sorgentiPresenti = false;
+        try {
+          await for (final albero in base.list(followLinks: false)) {
+            if (albero is Directory &&
+                File('${albero.path}/Makefile').existsSync()) {
+              sorgentiPresenti = true;
+              versione = nomePercorso(albero.path);
+              break;
+            }
+          }
+        } on FileSystemException {
+          // La directory può essere stata rimossa durante l'inventario.
+        }
+        alberi.add({
+          'nome': nome,
+          'versione': versione,
+          'sorgentiPresenti': sorgentiPresenti,
+          'pronto': pronti && sorgentiPresenti,
+        });
+      }
+    } on FileSystemException {
+      // Nessun albero scaricato finora.
+    }
+    alberi.sort((a, b) => '${a['nome']}'.compareTo('${b['nome']}'));
+
+    return {
+      'percorso': lavoro,
+      'percorsoArchivi': archivioDir.path,
+      'percorsoAlberi': alberiDir.path,
+      'archivi': archivi,
+      'alberi': alberi,
+      'recupero': await BloccoLavoro.verifica(lavoro),
+    };
+  }
 
   Future<Map<String, dynamic>> verifica() => scaffale.verifica();
+
+  Future<Map<String, dynamic>> recuperaCache(Object? token) async {
+    if (officina.inCorso || _installando || _rimuovendo) {
+      return {'ok': false, 'errore': 'Attendi la fine del lavoro in corso.'};
+    }
+    try {
+      return await BloccoLavoro.recupera(lavoro, token);
+    } on FileSystemException catch (e) {
+      return {'ok': false, 'errore': e.message};
+    } on FormatException {
+      return {
+        'ok': false,
+        'errore':
+            'I dati del lavoro interrotto non sono validi. Il segnale viene conservato.',
+      };
+    } catch (e) {
+      return {'ok': false, 'errore': 'Non posso riaprire la cache: $e'};
+    }
+  }
 
   /// Vero mentre l'aiutante di root sta installando. Si alza PRIMA del primo
   /// `await`: fra un `await` e l'altro il demone serve altri messaggi, e un
   /// «compila» arrivato in quel mezzo cancellerebbe la cartella d'uscita
   /// mentre root la sta leggendo. (Trovato da una revisione automatica.)
   bool _installando = false;
+  bool _rimuovendo = false;
 
   /// Installa un kernel pronto. Arriva un NOME, mai un percorso: la cartella
   /// la ricava il demone, e l'aiutante di root la ricontrolla.
@@ -239,15 +669,38 @@ class FucinaService {
         'errore': 'Aspetta che finisca la compilazione in corso.',
       };
     }
-    if (_installando) {
-      return {'ok': false, 'errore': 'C\'è già un\'installazione in corso.'};
+    if (_installando || _rimuovendo) {
+      return {
+        'ok': false,
+        'errore': 'C\'è già un\'operazione sui kernel in corso.',
+      };
     }
     _installando = true;
+    BloccoLavoro? blocco;
     try {
+      blocco = await BloccoLavoro.prendi(
+        lavoro,
+        tipo: 'installazione',
+        dettagli: {'rilascio': rel},
+      );
       final elenco = (await scaffale.elenco())['kernel'] as List;
       final voce = elenco.cast<Map>().where((k) => k['rilascio'] == rel);
       if (voce.isEmpty || voce.first['pronto'] != true) {
-        return {'ok': false, 'errore': '«$rel» non è pronto da installare.'};
+        final preparazione = voce.isEmpty ? null : voce.first['preparazione'];
+        final blocchi = preparazione is Map ? preparazione['blocchi'] : null;
+        return {
+          'ok': false,
+          'errore':
+              '«$rel» non è pronto da installare.'
+              '${blocchi is List && blocchi.isNotEmpty ? ' ${blocchi.join(' ')}' : ''}',
+        };
+      }
+      if (rel == await scaffale.inUso()) {
+        return {
+          'ok': false,
+          'errore':
+              'È il kernel che stai usando adesso: riavvia su un altro prima di reinstallarlo.',
+        };
       }
       // Un kernel che in QEMU non è arrivato allo spazio utente non va in
       // /boot: è la ragione per cui la prova esiste.
@@ -255,14 +708,23 @@ class FucinaService {
       if (prova is Map && prova['ok'] == false) {
         return {
           'ok': false,
-          'errore': '«$rel» non è partito nella prova d\'avvio in QEMU '
+          'errore':
+              '«$rel» non è partito nella prova d\'avvio in QEMU '
               '(${prova['perche'] ?? ''}): non lo installo. Ricompilalo, o '
               'rifai la prova.',
         };
       }
+      final impedimento = await _impedimentoAmministrativo('installazione');
+      if (impedimento != null) return {'ok': false, 'errore': impedimento};
       return await _conRadice('fucina-installa', ['$lavoro/uscita/$rel', rel]);
+    } on FileSystemException catch (e) {
+      return {'ok': false, 'errore': e.message};
     } finally {
-      _installando = false;
+      try {
+        await blocco?.chiudi();
+      } finally {
+        _installando = false;
+      }
     }
   }
 
@@ -271,19 +733,61 @@ class FucinaService {
     if (!Scaffale.nostro(rel)) {
       return {'ok': false, 'errore': '«$rel» non è un kernel della Fucina.'};
     }
-    if (rel == await scaffale.inUso()) {
+    if (_installando || _rimuovendo) {
       return {
         'ok': false,
-        'errore': 'È il kernel che stai usando adesso: riavvia su un altro, '
-            'poi toglilo.',
+        'errore': 'C\'è già un\'operazione sui kernel in corso.',
       };
     }
-    return _conRadice('fucina-togli', [rel]);
+    _rimuovendo = true;
+    try {
+      if (rel == await scaffale.inUso()) {
+        return {
+          'ok': false,
+          'errore':
+              'È il kernel che stai usando adesso: riavvia su un altro, '
+              'poi toglilo.',
+        };
+      }
+      final impedimento = await _impedimentoAmministrativo('rimozione');
+      if (impedimento != null) return {'ok': false, 'errore': impedimento};
+      return await _conRadice('fucina-togli', [rel]);
+    } finally {
+      _rimuovendo = false;
+    }
+  }
+
+  Future<String?> _impedimentoAmministrativo(String azione) async {
+    final leggi = statoAmministrazione;
+    if (leggi == null) return null; // callback root sostituito nelle prove
+    try {
+      final info = await leggi();
+      if (info['${azione}Possibile'] == true) return null;
+      final controlli = info['controlli'];
+      final messaggi = controlli is List
+          ? controlli
+                .whereType<Map>()
+                .where(
+                  (c) =>
+                      c['ok'] != true &&
+                      c['necessarioPer'] is List &&
+                      (c['necessarioPer'] as List).contains(azione),
+                )
+                .map((c) => '${c['messaggio'] ?? ''}')
+                .where((s) => s.isNotEmpty)
+                .toList()
+          : <String>[];
+      return messaggi.isNotEmpty
+          ? messaggi.join(' ')
+          : 'I prerequisiti amministrativi non sono verificati. Aggiorna l’elenco e riprova.';
+    } catch (_) {
+      return 'Non riesco a verificare i prerequisiti amministrativi. Nessuna operazione avviata.';
+    }
   }
 
   // ── Su misura del tuo uso: il profilo AutoFDO ────────────────────────
   //
-  // Giacomo, 1° ottobre 2026: kernel «su misura del PC, con le ultime
+  // il manutentore, 1° ottobre 2026: kernel «su misura del PC, con le ultime
   // tecnologie di compilazione». La più su misura di tutte è AutoFDO
   // (Linux 6.13, Clang 17+; llvm-profgen per la conversione dal LLVM 19):
   // Clang ottimizza il kernel sapendo quali rami prende davvero sul TUO
@@ -321,40 +825,56 @@ class FucinaService {
   Future<Map<String, dynamic>> profila(Object? rilascio, Object? minuti) async {
     final rel = '${rilascio ?? ''}';
     Map<String, dynamic> no(String e) => {'ok': false, 'errore': e};
-    if (!Scaffale.nostro(rel)) return no('«$rel» non è un kernel della Fucina.');
+    if (!Scaffale.nostro(rel)) {
+      return no('«$rel» non è un kernel della Fucina.');
+    }
     if (_profilando) return no('C\'è già una registrazione in corso.');
     final uso = await scaffale.inUso();
     if (rel != uso) {
-      return no('Il profilo di «$rel» si registra avviati su quel kernel: '
-          'adesso stai usando «$uso». Riavvia su «$rel» e riprova.');
+      return no(
+        'Il profilo di «$rel» si registra avviati su quel kernel: '
+        'adesso stai usando «$uso». Riavvia su «$rel» e riprova.',
+      );
     }
     final dir = Officina.profiliDi(lavoro, rel);
     if (!await File('$dir/vmlinux').exists()) {
-      return no('«$rel» non è pronto al profilo: non è stato compilato con '
-          'AutoFDO, o il suo vmlinux non c\'è più ($dir).');
+      return no(
+        '«$rel» non è pronto al profilo: non è stato compilato con '
+        'AutoFDO, o il suo vmlinux non c\'è più ($dir).',
+      );
     }
     final r = await _rilievoFresco();
     final hw = r.macchina['profilo'];
     if (hw is! Map || hw['possibile'] != true) {
-      return no('Su questo computer il profilo non si può registrare: '
-          '${hw is Map ? hw['perche'] : 'non so dire perché.'}');
+      return no(
+        'Su questo computer il profilo non si può registrare: '
+        '${hw is Map ? hw['perche'] : 'non so dire perché.'}',
+      );
     }
     final m = (minuti is num ? minuti.toInt() : int.tryParse('$minuti') ?? 10)
         .clamp(1, 60);
     _profilando = true;
     try {
-      final esito = await _conRadice('fucina-profila', ['${m * 60}', '${hw['tipo']}']);
+      final esito = await _conRadice('fucina-profila', [
+        '${m * 60}',
+        '${hw['tipo']}',
+      ]);
       if (esito['ok'] != true) return esito;
       final dati = '$cartellaRegistrazioni/$rel.data';
       if (!(esito['note'] as List).contains('fatto $dati')) {
-        return no('L\'aiutante ha registrato da un\'altra parte: '
-            '${(esito['note'] as List).join(' ')}');
+        return no(
+          'L\'aiutante ha registrato da un\'altra parte: '
+          '${(esito['note'] as List).join(' ')}',
+        );
       }
       final prof = File('$dir/autofdo.prof');
       final nuovo = '$dir/autofdo.prof.nuovo';
       var e = await _prova('llvm-profgen', [
-        '--kernel', '--binary=$dir/vmlinux', '--perfdata=$dati',
-        '-o', nuovo,
+        '--kernel',
+        '--binary=$dir/vmlinux',
+        '--perfdata=$dati',
+        '-o',
+        nuovo,
       ]);
       if (e != null) return no('La conversione del profilo non è riuscita: $e');
       final sommato = await prof.exists();
@@ -362,10 +882,17 @@ class FucinaService {
         // Il profilo di oggi si somma a quelli di prima: i rami di chi apre
         // il browser e di chi compila stanno insieme.
         e = await _prova('llvm-profdata', [
-          'merge', '--sample', '--extbinary', '-o', '$nuovo.somma',
-          prof.path, nuovo,
+          'merge',
+          '--sample',
+          '--extbinary',
+          '-o',
+          '$nuovo.somma',
+          prof.path,
+          nuovo,
         ]);
-        if (e != null) return no('Non riesco a sommare il profilo nuovo al vecchio: $e');
+        if (e != null) {
+          return no('Non riesco a sommare il profilo nuovo al vecchio: $e');
+        }
         await File('$nuovo.somma').rename(prof.path);
         await File(nuovo).delete();
       } else {
@@ -397,7 +924,9 @@ class FucinaService {
   }
 
   Future<Map<String, dynamic>> _conRadice(
-      String verbo, List<String> argomenti) async {
+    String verbo,
+    List<String> argomenti,
+  ) async {
     final esito = await radice(verbo, argomenti);
     final note = esito['uscita'] is List<int>
         ? utf8.decode(esito['uscita'] as List<int>, allowMalformed: true)

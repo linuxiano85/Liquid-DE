@@ -17,6 +17,7 @@ import '../services/system_state_service.dart';
 import '../services/finestre_service.dart';
 import '../services/respiro_service.dart';
 import 'ambiente.dart';
+import '../services/segnalibri_gtk.dart';
 
 /// Coordinatore centrale del backend di Minerva Desktop.
 /// Inizializza tutti i moduli nell'ordine corretto e gestisce il ciclo di vita.
@@ -46,6 +47,7 @@ class MinervaCore {
 
   StreamSubscription? _compositorEventSubscription;
   StreamSubscription? _keybindSubscription;
+  StreamSubscription? _settingsSubscription;
 
   MinervaCore() {
     stateManager = StateManager(eventBus);
@@ -110,6 +112,10 @@ class MinervaCore {
     await appUsageTracker.init();
     await keybindService.init();
 
+    // Le scorciatoie spente nelle Impostazioni, applicate da subito: il
+    // compositore riceve solo quelle accese.
+    _applicaScorciatoieSpente();
+
     // Inizializza il tema icone e avvia la scansione delle app installate.
     //
     // Il tema delle icone non si cerca nella schermata di accesso: l'utente
@@ -173,6 +179,18 @@ class MinervaCore {
       ));
     });
 
+    // Quando cambiano le Impostazioni, rileggi quali scorciatoie sono spente:
+    // spegnerne una deve liberare il tasto senza riavviare la sessione.
+    _settingsSubscription = eventBus.ascolta((evento) {
+      if (evento.type == 'settings_changed') {
+        _applicaScorciatoieSpente();
+        _allineaSegnalibri();
+      }
+    }, chi: 'core-scorciatoie');
+    // Le cartelle fissate anche nelle finestre «Apri/Salva» degli altri
+    // programmi: vedi `SegnalibriGtk`. Una volta all'avvio, poi a ogni cambio.
+    _allineaSegnalibri();
+
     // 4. Avvia il server WebSocket IPC
     await webSocketServer.start();
 
@@ -180,6 +198,41 @@ class MinervaCore {
     await pluginManager.init();
 
     print('[MINERVA][CORE][OK] Minerva Core inizializzato completamente.');
+  }
+
+  final SegnalibriGtk _segnalibriGtk = SegnalibriGtk();
+
+  /// Le cartelle fissate in Minerva File (`files.pinned`) nei segnalibri GTK.
+  /// `SegnalibriGtk` non fa niente se l'elenco non è cambiato. Un errore di
+  /// scrittura si dice nel registro e basta: non è una ragione per fermare
+  /// il demone.
+  void _allineaSegnalibri() {
+    final files = settingsApi.settings['files'];
+    final fissate = (files is Map && files['pinned'] is List)
+        ? (files['pinned'] as List).whereType<String>().toList()
+        : <String>[];
+    _segnalibriGtk.allinea(fissate).catchError((Object e) {
+      print('[MINERVA][SEGNALIBRI][WARN] Segnalibri GTK non aggiornati: $e');
+      return false;
+    });
+  }
+
+  /// Legge `shortcuts.disabled` dalle Impostazioni e la passa al traduttore:
+  /// le scorciatoie spente non vengono registrate nel compositore, e il tasto
+  /// resta libero. Se la lista è cambiata, si ripubblicano le righe.
+  void _applicaScorciatoieSpente() {
+    final raw = settingsApi.settings['shortcuts'];
+    final lista = (raw is Map && raw['disabled'] is List)
+        ? raw['disabled'].cast<String>().toSet()
+        : <String>{};
+    final gia = keybindService.disattivate;
+    final uguali = gia.length == lista.length && gia.containsAll(lista);
+    if (uguali) return;
+    keybindService.disattivate = lista;
+    eventBus.publish(MinervaEvent(
+      type: 'scorciatoie_compositore',
+      payload: {'righe': keybindService.perMinervaWayland()},
+    ));
   }
 
   /// Arresta in modo pulito tutte le risorse e i servizi.
@@ -209,6 +262,7 @@ class MinervaCore {
     // 2. Chi ascolta.
     await _compositorEventSubscription?.cancel();
     await _keybindSubscription?.cancel();
+    await _settingsSubscription?.cancel();
 
     // 3. Chi parla con l'esterno.
     await pluginManager.dispose();

@@ -20,7 +20,7 @@ import "../core" as Core
 //
 // ── Il blocco è vero, non finto ────────────────────────────────────────────
 //
-// Giacomo: «possono anche essere bloccati e diventare parte dello sfondo e non
+// il manutentore: «possono anche essere bloccati e diventare parte dello sfondo e non
 // modificabili cliccabili o rimovibili».
 //
 // «Non cliccabili» non si fa con `enabled: false`: un oggetto disabilitato è

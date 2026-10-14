@@ -29,7 +29,7 @@
 #
 # ── Perché un aiutante, e non «apri la finestra come amministratore» ────────
 #
-# Giacomo, 23 agosto 2026: «nel file manager, se entro nelle cartelle di root,
+# il manutentore, 23 agosto 2026: «nel file manager, se entro nelle cartelle di root,
 # non posso usare una modalità amministratore come fa Linux Mint».
 #
 # La strada breve sarebbe `pkexec minerva-files`: una riga, e funziona. È anche
@@ -65,6 +65,8 @@
 #    l'UID di chi ha chiesto. Un'operazione da root senza traccia è
 #    un'operazione che non si può ricostruire.
 set -eu
+# FUCINA_TRANSACTION_ABI=2
+# Il daemon richiede questa revisione prima di modificare i kernel.
 
 REGISTRO=/var/log/minerva-radice.log
 
@@ -196,6 +198,47 @@ controlla_rilascio() {
         || muori "«$1» non è un kernel della Fucina."
 }
 
+# Una sola installazione o rimozione alla volta, anche fra sessioni Minerva
+# diverse. Il blocco sta in una cartella di root sotto /run: non usare
+# /run/lock, che può essere scrivibile dagli utenti e quindi esposto a link.
+blocca_fucina_kernel() {
+    command -v flock >/dev/null 2>&1 || muori "non trovo flock per proteggere l'operazione sui kernel."
+    [ ! -L /run/minerva-fucina ] || muori "la cartella del blocco Fucina è un collegamento."
+    install -d -o root -g root -m 755 /run/minerva-fucina \
+        || muori "non riesco a preparare il blocco delle operazioni Fucina."
+    [ -d /run/minerva-fucina ] && [ ! -L /run/minerva-fucina ] \
+        || muori "la cartella del blocco Fucina non è sicura."
+    touch /run/minerva-fucina/kernel.lock \
+        || muori "non riesco a preparare il blocco delle operazioni Fucina."
+    chmod 600 /run/minerva-fucina/kernel.lock \
+        || muori "non riesco a proteggere il blocco delle operazioni Fucina."
+    exec 9>/run/minerva-fucina/kernel.lock \
+        || muori "non riesco ad aprire il blocco delle operazioni Fucina."
+    flock -n 9 || muori "un'altra installazione o rimozione di kernel è già in corso."
+}
+
+# Genera il menu in un file temporaneo accanto a grub.cfg e lo pubblica solo
+# dopo una generazione riuscita e non vuota. In caso di errore il menu attivo
+# rimane leggibile e completo.
+rigenera_grub_sicuro() {
+    GRUB_CONFIG=/boot/grub/grub.cfg
+    [ -f "$GRUB_CONFIG" ] && command -v grub-mkconfig >/dev/null 2>&1 || return 0
+    GRUB_TMP=$(mktemp /boot/grub/.grub.cfg.fucina.XXXXXX) || return 1
+    if grub-mkconfig -o "$GRUB_TMP" >/dev/null 2>&1 && [ -s "$GRUB_TMP" ]; then
+        chmod --reference="$GRUB_CONFIG" "$GRUB_TMP" 2>/dev/null || chmod 644 "$GRUB_TMP" || {
+            rm -f -- "$GRUB_TMP"
+            return 1
+        }
+        mv -f -- "$GRUB_TMP" "$GRUB_CONFIG" || {
+            rm -f -- "$GRUB_TMP"
+            return 1
+        }
+        return 0
+    fi
+    rm -f -- "$GRUB_TMP"
+    return 1
+}
+
 # ── La voce nel bootloader ─────────────────────────────────────────────────
 #
 # Tre bootloader, tre trattamenti diversi, e il perché di ognuno:
@@ -246,8 +289,8 @@ voce_avvio() {
         fi
     fi
     if [ -f /boot/grub/grub.cfg ] && command -v grub-mkconfig >/dev/null 2>&1; then
-        grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 \
-            || muori "grub-mkconfig non è riuscito: il kernel è installato ma GRUB non lo vede."
+        rigenera_grub_sicuro \
+            || muori "grub-mkconfig non è riuscito: il kernel è installato e il menu GRUB precedente è rimasto intatto."
         printf 'nota: menu di GRUB rigenerato. GRUB mette in cima il kernel con la versione più alta: se è il nuovo, parte lui di serie, e quello di sempre resta nelle opzioni avanzate.\n'
         FATTO=si
     fi
@@ -432,8 +475,8 @@ togli_voce_avvio() {
     # non c'è più: si dice, e non si risponde «fatto». (Trovato da una
     # revisione automatica della PR: prima l'errore si ingoiava.)
     if [ -f /boot/grub/grub.cfg ] && command -v grub-mkconfig >/dev/null 2>&1; then
-        grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 \
-            || muori "«$1» è tolto, ma grub-mkconfig non è riuscito: il menu di GRUB ha ancora la sua voce. Rilancia «sudo grub-mkconfig -o /boot/grub/grub.cfg»."
+        rigenera_grub_sicuro \
+            || muori "«$1» è tolto, ma il menu GRUB precedente è rimasto intatto e può contenere ancora la sua voce. Rilancia «sudo grub-mkconfig -o /boot/grub/grub.cfg»."
     fi
 }
 
@@ -449,7 +492,7 @@ case "$AZIONE" in
     #
     # Serve a una cosa sola: far comparire la finestrella della password.
     #
-    # Giacomo, 2 settembre 2026: «non chiede una password per entrare in
+    # il manutentore, 2 settembre 2026: «non chiede una password per entrare in
     # modalità amministratore». Era vero, e la ragione è che accendere la
     # modalità non chiamava nessuno: la password la chiedeva la PRIMA
     # operazione. Chi accendeva la modalità restava convinto d'essere già
@@ -639,7 +682,7 @@ case "$AZIONE" in
     # quel servizio è irraggiungibile. Il sintomo è cattivo: il televisore
     # accetta il comando (`MEDIA_STATUS`), la schermata di Chromecast sparisce,
     # e resta **schermo nero**. Il sì arriva subito, il no arriva dopo e in
-    # silenzio. Visto sulla TV di Giacomo il 30 agosto 2026.
+    # silenzio. Visto sulla TV di il manutentore il 30 agosto 2026.
     #
     # ── Perché questo verbo NON prende argomenti ──────────────────────────
     #
@@ -692,7 +735,7 @@ case "$AZIONE" in
 
     # ── Le quattro della manutenzione ─────────────────────────────────────
     #
-    # Giacomo, 9 settembre 2026: «fai i tre verbi per la password». Sono
+    # il manutentore, 9 settembre 2026: «fai i tre verbi per la password». Sono
     # quattro perché la finestra mostra quattro voci che stanno fuori dalla
     # tua cartella, e mostrarne una che poi non si può togliere sarebbe una
     # promessa non mantenuta.
@@ -769,7 +812,7 @@ case "$AZIONE" in
 
         # ── Due lingue non si tolgono MAI, comunque arrivi l'elenco ───────
         #
-        # Giacomo, 9 settembre 2026: «facciamo in modo che lasci sempre
+        # il manutentore, 9 settembre 2026: «facciamo in modo che lasci sempre
         # l'inglese in qualsiasi caso [...] e lasci la lingua usata, come nel
         # mio caso italiano».
         #
@@ -836,7 +879,7 @@ case "$AZIONE" in
         # lingue sarebbero tornate tutte al primo aggiornamento. Cioè l'esatto
         # difetto che questo verbo esiste per non commettere.
         #
-        # Visto sulla macchina di Giacomo il 9 settembre 2026, dopo la prima
+        # Visto sulla macchina di il manutentore il 9 settembre 2026, dopo la prima
         # pulizia vera: «attenzione: /etc/pacman.conf, riga 145: la direttiva
         # NoExtract presente nella sezione multilib non è stata riconosciuta».
         #
@@ -975,6 +1018,7 @@ case "$AZIONE" in
     fucina-installa)
         [ $# -eq 2 ] || muori "servono la cartella d'uscita e il nome del kernel."
         controlla_rilascio "$2"
+        blocca_fucina_kernel
         REL="$2"
         controlla_percorso "$1"
         USCITA="$PULITO"
@@ -1004,8 +1048,47 @@ case "$AZIONE" in
         # un kernel con lo stesso nome installato prima.
         SCATOLA=$(mktemp -d /usr/lib/modules/.fucina-XXXXXX) \
             || muori "non riesco a preparare una cartella di lavoro."
-        # shellcheck disable=SC2064
-        trap "rm -rf -- '$SCATOLA'" EXIT
+        PUBBLICAZIONE=no
+        VECCHI=""
+        MODULI_PREESISTENTI=no
+        # Il trap protegge anche da TERM/HUP durante i mv: cancellare solo
+        # SCATOLA distruggerebbe proprio l'unica copia dei moduli precedenti.
+        ripristina_fucina() {
+            RIPRISTINO=si
+            if [ -d "$SCATOLA/vecchi" ]; then
+                rm -rf -- "/usr/lib/modules/$REL" \
+                    && mv -- "$SCATOLA/vecchi" "/usr/lib/modules/$REL" || RIPRISTINO=no
+            elif [ "$MODULI_PREESISTENTI" = no ]; then
+                rm -rf -- "/usr/lib/modules/$REL" || RIPRISTINO=no
+            fi
+            rm -f -- "/boot/.vmlinuz-$REL.nuovo" "/boot/.initramfs-$REL.img.nuovo" \
+                     "/boot/.config-$REL.nuovo" || RIPRISTINO=no
+            for F in "vmlinuz-$REL" "initramfs-$REL.img" "config-$REL"; do
+                if [ -f "$SCATOLA/vecchio-$F" ]; then
+                    cp -- "$SCATOLA/vecchio-$F" "/boot/.$F.rimesso" \
+                        && mv -f -- "/boot/.$F.rimesso" "/boot/$F" || RIPRISTINO=no
+                else
+                    rm -f -- "/boot/$F" || RIPRISTINO=no
+                fi
+            done
+            [ "$RIPRISTINO" = si ]
+        }
+        termina_fucina() {
+            CODICE_FUCINA=$?
+            trap - EXIT
+            trap '' HUP INT TERM
+            if [ "$PUBBLICAZIONE" = si ] && ! ripristina_fucina; then
+                printf 'minerva-radice: recupero incompleto; copie precedenti conservate in %s.\n' "$SCATOLA" >&2
+                annota "fucina-installa $REL recupero incompleto: $SCATOLA"
+                exit 1
+            fi
+            rm -rf -- "$SCATOLA"
+            exit "$CODICE_FUCINA"
+        }
+        trap termina_fucina EXIT
+        trap 'exit 129' HUP
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
         chmod 700 "$SCATOLA"
         cp -rP -- "$USCITA/boot" "$USCITA/lib" "$SCATOLA/" 2>/dev/null \
             || muori "non riesco a copiare la cartella d'uscita."
@@ -1017,14 +1100,14 @@ case "$AZIONE" in
         [ -z "$STRANI" ] || muori "nella cartella d'uscita c'è un file che non va: ${STRANI#"$SCATOLA"/}"
         IMG="$SCATOLA/boot/vmlinuz-$REL"
         MOD="$SCATOLA/lib/modules/$REL"
-        if [ ! -f "$IMG" ]; then muori "manca l'immagine del kernel."; fi
+        if [ ! -f "$IMG" ] || [ ! -s "$IMG" ]; then muori "manca l'immagine del kernel, o è vuota."; fi
         if [ ! -d "$MOD" ]; then muori "mancano i moduli."; fi
         chown -R root:root -- "$SCATOLA"
         # I permessi si RIFANNO, non si copiano: niente bit setuid, niente
         # scrivibile da altri, qualunque cosa ci fosse nella cartella tua.
         chmod -R u=rwX,go=rX -- "$SCATOLA/boot" "$SCATOLA/lib"
 
-        depmod -b "$SCATOLA" "$REL" >/dev/null 2>&1 \
+        depmod -b "$SCATOLA" "$REL" \
             || muori "depmod non è riuscito: il sistema non è stato toccato."
 
         # L'initramfs, con lo strumento che la distribuzione usa già — le sue
@@ -1034,10 +1117,10 @@ case "$AZIONE" in
         mkdir -p "$SCATOLA/usr/lib"
         ln -s ../../lib/modules "$SCATOLA/usr/lib/modules"
         if command -v mkinitcpio >/dev/null 2>&1; then
-            mkinitcpio -r "$SCATOLA" -k "$REL" -g "$SCATOLA/initramfs.img" >/dev/null 2>&1 \
+            mkinitcpio -r "$SCATOLA" -k "$REL" -g "$SCATOLA/initramfs.img" \
                 || muori "mkinitcpio non è riuscito a fare l'initramfs: il sistema non è stato toccato."
         elif command -v dracut >/dev/null 2>&1; then
-            dracut --force --kmoddir "$MOD" "$SCATOLA/initramfs.img" "$REL" >/dev/null 2>&1 \
+            dracut --force --kmoddir "$MOD" "$SCATOLA/initramfs.img" "$REL" \
                 || muori "dracut non è riuscito a fare l'initramfs: il sistema non è stato toccato."
         else
             muori "non so fare l'initramfs: non trovo né mkinitcpio né dracut."
@@ -1055,30 +1138,28 @@ case "$AZIONE" in
         # initramfs che non si riesce a spostare lasciava il vmlinuz NUOVO
         # accanto all'initramfs VECCHIO e ai moduli vecchi: una coppia che non
         # si avvia.
-        for F in "vmlinuz-$REL" "initramfs-$REL.img"; do
+        for F in "vmlinuz-$REL" "initramfs-$REL.img" "config-$REL"; do
+            [ ! -L "/boot/$F" ] && [ ! -L "/boot/.$F.nuovo" ] \
+                || muori "/boot/$F o il file temporaneo è un collegamento: non lo tocco."
+            if [ -e "/boot/$F" ] && [ ! -f "/boot/$F" ]; then
+                muori "/boot/$F non è un file regolare: non lo tocco."
+            fi
             if [ -f "/boot/$F" ]; then
                 cp -- "/boot/$F" "$SCATOLA/vecchio-$F" \
                     || muori "non riesco a mettere da parte /boot/$F: il sistema non è stato toccato."
             fi
         done
-        VECCHI=""
         if [ -e "/usr/lib/modules/$REL" ]; then
             [ ! -L "/usr/lib/modules/$REL" ] || muori "/usr/lib/modules/$REL è un collegamento."
+            [ -d "/usr/lib/modules/$REL" ] || muori "/usr/lib/modules/$REL non è una cartella."
+            MODULI_PREESISTENTI=si
             VECCHI="$SCATOLA/vecchi"
+        fi
+        PUBBLICAZIONE=si
+        if [ -n "$VECCHI" ]; then
             mv -- "/usr/lib/modules/$REL" "$VECCHI"
         fi
         rimetti() {
-            rm -rf -- "/usr/lib/modules/$REL"
-            if [ -n "$VECCHI" ]; then mv -- "$VECCHI" "/usr/lib/modules/$REL"; fi
-            rm -f -- "/boot/.vmlinuz-$REL.nuovo" "/boot/.initramfs-$REL.img.nuovo"
-            for F in "vmlinuz-$REL" "initramfs-$REL.img"; do
-                if [ -f "$SCATOLA/vecchio-$F" ]; then
-                    cp -- "$SCATOLA/vecchio-$F" "/boot/.$F.rimesso" \
-                        && mv -f -- "/boot/.$F.rimesso" "/boot/$F" || :
-                else
-                    rm -f -- "/boot/$F"
-                fi
-            done
             muori "$1"
         }
         mv -- "$MOD" "/usr/lib/modules/$REL" || rimetti "non riesco a mettere al loro posto i moduli."
@@ -1091,9 +1172,11 @@ case "$AZIONE" in
         mv -f -- "/boot/.initramfs-$REL.img.nuovo" "/boot/initramfs-$REL.img" \
             || rimetti "non riesco a scrivere in /boot."
         if [ -f "$SCATOLA/boot/config-$REL" ]; then
-            install -m 644 -o root -g root -- "$SCATOLA/boot/config-$REL" "/boot/config-$REL" || :
+            install -m 644 -o root -g root -- "$SCATOLA/boot/config-$REL" "/boot/.config-$REL.nuovo" \
+                && mv -f -- "/boot/.config-$REL.nuovo" "/boot/config-$REL" \
+                || rimetti "non riesco a pubblicare la configurazione in /boot."
         fi
-
+        PUBBLICAZIONE=no
         voce_avvio "$REL"
         annota "fucina-installa $REL fatto"
         printf 'fatto %s\n' "$REL"
@@ -1106,6 +1189,7 @@ case "$AZIONE" in
     fucina-togli)
         [ $# -eq 1 ] || muori "serve il nome del kernel."
         controlla_rilascio "$1"
+        blocca_fucina_kernel
         REL="$1"
         [ "$REL" != "$(uname -r)" ] \
             || muori "«$REL» è il kernel in uso: riavvia su un altro, poi toglilo."

@@ -35,7 +35,7 @@ PanelWindow {
 
     // ── Sotto la mano ────────────────────────────────────────────────────
     //
-    // Giacomo, 27 settembre 2026: «vorrei averli sotto il mouse quando li
+    // il manutentore, 27 settembre 2026: «vorrei averli sotto il mouse quando li
     // trascino e rilascio». La colonna aveva la molla sulla posizione anche
     // mentre la si teneva: inseguiva la mano e restava indietro (51 pixel
     // misurati a mano ferma, `prova-riva-scambio.py`). E al rilascio lo
@@ -90,6 +90,8 @@ PanelWindow {
     }
 
     readonly property int attiva: Core.Compositore.scrivaniaAttiva
+    readonly property int selezionata: panoramica.selectedWorkspace
+    readonly property real scorrimentoPanoramica: panoramica.scrollY
 
     /// Le stanze da mostrare: almeno quattro, fino all'ultima occupata o
     /// attiva, più una vuota in fondo (per andarci si tocca quella).
@@ -152,6 +154,8 @@ PanelWindow {
     Component.onCompleted: _aggiornaElenco()
 
     function apri() {
+        if (!Core.Riva.attiva)
+            return;
         if (stanze.aperto) return;
         stanze.sbirciata = false;
         stanze.aperto = true;
@@ -199,6 +203,8 @@ PanelWindow {
 
     // Cambiata la stanza, e non da qui: la colonna sbuca un attimo.
     onAttivaChanged: {
+        if (!Core.Riva.attiva)
+            return;
         // Aperte, o appena chiuse toccando una stanza: la si è appena vista,
         // sbucare di nuovo sarebbe dirlo due volte.
         if (stanze.aperto || Date.now() - stanze._chiuseAlle < 800)
@@ -228,13 +234,26 @@ PanelWindow {
         }
     }
 
-    visible: stanze.mostrato
+    visible: Core.Riva.attiva && stanze.mostrato
+    // Cambiare preset chiude anche lo stato logico, così non riappare tornando.
+    Connections {
+        target: Core.Riva
+        function onAttivaChanged() {
+            if (Core.Riva.attiva)
+                return;
+            stanze.chiudi();
+            stanze.mostrato = false;
+            stanze.sbirciata = false;
+            rientra.stop();
+            spegni.stop();
+        }
+    }
     anchors { top: true; bottom: true; left: true; right: true }
     exclusiveZone: -1
     color: "transparent"
     WlrLayershell.namespace: "liquid-stanze"
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: stanze.aperto ? WlrKeyboardFocus.Exclusive
+    WlrLayershell.keyboardFocus: Core.Riva.attiva && stanze.aperto ? WlrKeyboardFocus.Exclusive
                                                : WlrKeyboardFocus.None
     // Di sbieco non prende niente: è un cartello, sotto si lavora.
     mask: Region { item: stanze.aperto ? fondo : null }
@@ -249,22 +268,28 @@ PanelWindow {
             enabled: stanze.aperto
             onPressed: stanze.chiudi()
         }
-        Item {
-            anchors.fill: parent
-            focus: stanze.aperto
-            Keys.onEscapePressed: stanze.chiudi()
-            Keys.onPressed: function(e) {
-                if (e.key >= Qt.Key_1 && e.key <= Qt.Key_9) {
-                    stanze.vai(e.key - Qt.Key_0);
-                    e.accepted = true;
-                }
-            }
-        }
+    }
+
+    Connections {
+        target:Core.Compositore
+        function onBloccoCambiato(locked) {if(locked) stanze.chiudi();}
+        function onPanoramicaChiesta(monitor) {if(!monitor || (stanze.screen && monitor===stanze.screen.name)) stanze.commuta();}
+    }
+    Panoramica {
+        id: panoramica
+        anchors.centerIn: parent
+        width: Math.min(1200, parent.width-64)
+        height: Math.min(850, parent.height-stanze.margineAlto-stanze.margineBasso-48)
+        visible: stanze.aperto
+        monitor: stanze.screen
+        onChosen: function(number) { stanze.vai(number); }
+        onDismissed: stanze.chiudi()
     }
 
     // ── La colonna ──────────────────────────────────────────────────────
     Rectangle {
         id: colonna
+        visible: !stanze.aperto
         readonly property int margine: Theme.Effects.space4
         readonly property real larga: stanze.aperto ? 260 : 64
         width: larga

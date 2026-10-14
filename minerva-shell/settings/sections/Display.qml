@@ -309,7 +309,7 @@ Page {
 
     // ── Gli schermi, come si vedono ──────────────────────────────────────
     //
-    // Giacomo, 22 settembre 2026: «se ho collegati uno o più monitor esterni
+    // il manutentore, 22 settembre 2026: «se ho collegati uno o più monitor esterni
     // la pagina diventa molto lunga, quindi vorrei come KDE dei monitor in
     // alto e cliccando su quel monitor vedere tutte le sue opzioni». Prima
     // c'era un riquadro per schermo, uno sotto l'altro, con tutte le
@@ -758,7 +758,7 @@ Page {
     // Cinque impostazioni che funzionavano e non si potevano cambiare da
     // nessuna parte: c'era la sola levetta nella tendina della barra, quindi
     // la temperatura, l'orario e l'accensione automatica erano scritte nei
-    // valori di fabbrica e irraggiungibili. Giacomo, 9 settembre 2026: «ho
+    // valori di fabbrica e irraggiungibili. il manutentore, 9 settembre 2026: «ho
     // notato che la funzione luce notturna non funziona più».
     //
     // ── E la riga che dice quando NON può funzionare ─────────────────────
@@ -922,7 +922,7 @@ Page {
 
     // ── Trasmetti a schermo: la prima connessione ────────────────────────
     //
-    // Giacomo, 30 agosto 2026: «se serve anche in impostazioni per la prima
+    // il manutentore, 30 agosto 2026: «se serve anche in impostazioni per la prima
     // connessione». Serve, ma per una ragione diversa da quella che
     // pensavamo: non è il televisore a chiedere di essere accoppiato — è il
     // FIREWALL di questo computer a respingerlo.

@@ -8,7 +8,7 @@ import "." as S
 //
 // ── Perché esiste ─────────────────────────────────────────────────────────
 //
-// Giacomo, 5 settembre 2026: «qualsiasi opzione dove c'è la scelta del
+// il manutentore, 5 settembre 2026: «qualsiasi opzione dove c'è la scelta del
 // percorso o del file globalmente nelle impostazioni deve avere una selezione
 // che si apre il mini file manager come la scelta della cartella in aspetto
 // […] ci sono parti delle impostazioni dove devi incollare il percorso e a me
@@ -44,7 +44,7 @@ Row {
     /// Si sta scegliendo un'IMMAGINE: allora si apre il selettore con le
     /// anteprime, non l'elenco dei nomi.
     ///
-    /// Giacomo, 5 settembre 2026: «se voglio scegliere l'immagine dell'immagine
+    /// il manutentore, 5 settembre 2026: «se voglio scegliere l'immagine dell'immagine
     /// di sfondo vedo solo la lista ma senza anteprima, quindi vado alla
     /// cieca». Aveva ragione, e il selettore giusto esisteva già: è quello di
     /// «Scegli dal disco…» in «Aspetto». Scegliere una fotografia dal nome del

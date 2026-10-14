@@ -1,0 +1,16 @@
+#!/bin/sh
+# Avvia l'interfaccia sperimentale Fucina 2 in un processo Quickshell separato.
+set -eu
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+CONFIG="$ROOT/fucina2/app.qml"
+[ -f "$CONFIG" ] || { echo "minerva-fucina2: non trovo $CONFIG" >&2; exit 1; }
+
+# Se la finestra era stata chiusa mentre Quickshell la teneva pronta, la si
+# risveglia invece di chiedere una seconda istanza (che Quickshell rifiuta).
+if qs ipc -p "$ROOT/fucina2/app.qml" call fucina2 ping >/dev/null 2>&1; then
+    exec qs ipc -p "$ROOT/fucina2/app.qml" call fucina2 apri >/dev/null
+fi
+
+. "$ROOT/scripts/minerva-ambiente-app"
+minerva_avvia_app fucina2 qs -d -n -p "$CONFIG"

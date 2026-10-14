@@ -14,7 +14,8 @@ import { wifiFixture } from './wifi-harness.mjs';
 const root = process.env.SHELL_SOURCE_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = name => fs.readFileSync(path.join(root, name), 'utf8');
 function optional(text, marker) { try { return body(text, marker); } catch { return null; } }
-const network = source('minerva-shell/settings/sections/Network.qml');
+const network = source('minerva-shell/core/WifiController.qml');
+const networkView = source('minerva-shell/settings/sections/Network.qml');
 const notifSource = source('minerva-shell/core/Notifications.qml');
 const gameSource = source('minerva-shell/core/Gioco.qml');
 const userSource = source('minerva-shell/settings/sections/Utente.qml');
@@ -385,12 +386,12 @@ test('Wi-Fi deadline and failed start clear the credential without leaving the U
     }
 });
 test('Wi-Fi UI reveals only while pressed and external text uses PlainText', () => {
-    assert.match(network, /echoMode:\s*revealMouse\.pressed/);
-    assert.doesNotMatch(network, /echoMode:\s*revealMouse\.containsMouse/);
-    assert.match(network, /text: connectDialog\.ssid\s+textFormat: Text\.PlainText/);
-    assert.match(network, /text: page\.error\s+textFormat: Text\.PlainText/);
-    assert.match(network, /text: page\.wired\s+textFormat: Text\.PlainText/);
-    assert.match(network, /id: netName\s+textFormat: Text\.PlainText/);
+    assert.match(networkView, /echoMode:\s*revealMouse\.pressed/);
+    assert.doesNotMatch(networkView, /echoMode:\s*revealMouse\.containsMouse/);
+    assert.match(networkView, /text: connectDialog\.ssid\s+textFormat: Text\.PlainText/);
+    assert.match(networkView, /text: page\.error\s+textFormat: Text\.PlainText/);
+    assert.match(networkView, /text: page\.wired\s+textFormat: Text\.PlainText/);
+    assert.match(networkView, /id: netName\s+textFormat: Text\.PlainText/);
     assert.match(network, /Component\.onDestruction: page\.stopWifi\(\)/);
 });
 

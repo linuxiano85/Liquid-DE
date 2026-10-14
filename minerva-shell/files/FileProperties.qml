@@ -293,7 +293,7 @@ Rectangle {
 
                 // ── La levetta che dice la cosa che si vuole davvero ──────
                 //
-                // Richiesta di Giacomo: una spunta per rendere il file
+                // Richiesta di il manutentore: una spunta per rendere il file
                 // eseguibile. La griglia sotto ce l'ha già — la colonna
                 // «eseguire» — ma sono tre caselle su tre righe, e chi vuole
                 // «questo script deve partire» non pensa in ottale.
@@ -646,7 +646,7 @@ Rectangle {
                                 // non vedeva niente. Adesso la riga che non è
                                 // il predefinito offre di diventarlo, e quella
                                 // che lo è offre di smettere — che è la
-                                // richiesta di Giacomo, «nelle proprietà si
+                                // richiesta di il manutentore, «nelle proprietà si
                                 // può anche cambiare o rimuovere la
                                 // selezione».
                                 visible: true

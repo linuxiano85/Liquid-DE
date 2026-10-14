@@ -7,7 +7,7 @@ import "../ui" as Ui
 
 // ── Il Centro di controllo di Liquid DE ──────────────────────────────────
 //
-// Giacomo, 23 settembre 2026: «e se nel caso vogliamo spegnere il pc o
+// il manutentore, 23 settembre 2026: «e se nel caso vogliamo spegnere il pc o
 // riavviarlo o bloccare lo schermo? e se vogliamo la modalità notte e wifi
 // eccetera? modalità non disturbare e altro dove le mettiamo?». Qui, in un
 // posto solo: scende dall'angolo in alto a destra (la sosta del puntatore,
@@ -44,6 +44,8 @@ PanelWindow {
     Timer { id: disarma; interval: 3000; onTriggered: centro.armato = "" }
 
     function apri() {
+        if (!Core.Riva.attiva)
+            return;
         if (centro.aperto) return;
         centro.aperto = true;
         centro.mostrato = true;
@@ -60,7 +62,7 @@ PanelWindow {
 
     // ── I riquadri: quali, e in che ordine ──────────────────────────────
     //
-    // Giacomo, 5 ottobre 2026: «la possibilità di personalizzare il menu in
+    // il manutentore, 5 ottobre 2026: «la possibilità di personalizzare il menu in
     // alto a destra per accesso rapido alle impostazioni, e l'aggiunta ad
     // esempio del pulsante impostazioni e altre voci, l'ordine». Il catalogo
     // sta qui; quali si vedono e in che ordine sta in `centro.voci`, e si
@@ -69,7 +71,7 @@ PanelWindow {
     // Due generi: le LEVETTE accendono e spengono qualcosa e dicono com'è;
     // le SCORCIATOIE aprono un posto, e il Centro si chiude.
     readonly property var catalogo: [
-        { "id": "wifi",          "nome": "Wi-Fi",          "name": "Wi-Fi",          "levetta": true },
+        { "id": "wifi",          "nome": "Wi-Fi",          "name": "Wi-Fi",          "levetta": true, "tasto": "W" },
         { "id": "bluetooth",     "nome": "Bluetooth",      "name": "Bluetooth",      "levetta": true },
         { "id": "notte",         "nome": "Luce notturna",  "name": "Night light",    "levetta": true },
         { "id": "nondisturbare", "nome": "Non disturbare", "name": "Do not disturb", "levetta": true },
@@ -89,7 +91,10 @@ PanelWindow {
         { "id": "attivita",      "nome": "Attività",       "name": "Activity",
           "detto": "programmi e risorse",    "said": "programs and resources" },
         { "id": "scorciatoie",   "nome": "Scorciatoie",    "name": "Shortcuts",
-          "detto": "i tasti di Minerva",     "said": "Minerva's keys" }
+          "detto": "i tasti di Minerva",     "said": "Minerva's keys" },
+        // Il selettore dei preset (Super+P), per chi lo vuole col mouse.
+        { "id": "preset",        "nome": "Preset",         "name": "Preset",
+          "detto": "Liquid, Windows, Mac…",  "said": "Liquid, Windows, Mac…" }
     ]
     readonly property var vociDiSerie: ["wifi", "bluetooth", "notte", "nondisturbare",
                                         "risparmio", "gioco", "trasmetti", "impostazioni"]
@@ -179,6 +184,12 @@ PanelWindow {
             if (centro.schermiTrovati.length === 0)
                 return centro.it ? "nessuno schermo in rete" : "no screen on the network";
             return centro.schermiTrovati.map(function (s) { return String(s.nome); }).join(", ");
+        }
+        // Il preset dice quello in uso: è la cosa che si vuole sapere prima
+        // di cambiarlo.
+        if (id === "preset") {
+            var p = Core.DesktopStyle.voce(Core.DesktopStyle.attuale);
+            return p ? p.nome + " · Super+P" : "Super+P";
         }
         var v = centro._voceDi(id);
         return v && v.detto ? (centro.it ? v.detto : v.said) : "";
@@ -293,7 +304,18 @@ PanelWindow {
         }
     }
 
-    visible: centro.mostrato
+    visible: Core.Riva.attiva && centro.mostrato
+    // Cambiare preset chiude anche lo stato logico, così non riappare tornando.
+    Connections {
+        target: Core.Riva
+        function onAttivaChanged() {
+            if (Core.Riva.attiva)
+                return;
+            centro.chiudi();
+            centro.mostrato = false;
+            spegni.stop();
+        }
+    }
     anchors { top: true; bottom: true; left: true; right: true }
     exclusiveZone: -1
     color: "transparent"
@@ -304,7 +326,7 @@ PanelWindow {
     // annullava quel clic: levette e pulsanti non rispondevano mai col
     // touchpad vero (visto dalla sonda il 24/09: «premuto» e subito
     // «annullato»). Le barre si salvavano solo perché proteggono la presa.
-    WlrLayershell.keyboardFocus: centro.aperto ? WlrKeyboardFocus.Exclusive
+    WlrLayershell.keyboardFocus: Core.Riva.attiva && centro.aperto ? WlrKeyboardFocus.Exclusive
                                                : WlrKeyboardFocus.None
 
     Timer { id: spegni; interval: Theme.Motion.liquido ? 650 : 0; onTriggered: if (!centro.aperto) centro.mostrato = false }
@@ -394,6 +416,7 @@ PanelWindow {
                         readonly property var voce: centro._voceDi(modelData)
                         nome: voce ? centro.nomeDi(modelData) : modelData
                         scorciatoia: !(voce && voce.levetta)
+                        tasto: voce && voce.tasto ? String(voce.tasto) : ""
                         acceso: centro.accesoDi(modelData)
                         detto: centro.dettoDi(modelData)
                         inModifica: centro.modifica
@@ -683,6 +706,8 @@ PanelWindow {
         property string detto: ""
         /// Apre un posto invece di accendere qualcosa: niente «spento».
         property bool scorciatoia: false
+        /// Il tasto diretto della levetta (es. «W» per il Wi-Fi), se c'è.
+        property string tasto: ""
         property bool inModifica: false
         property bool primo: false
         property bool ultimo: false
@@ -704,7 +729,8 @@ PanelWindow {
         Column {
             x: Theme.Effects.space3
             anchors.verticalCenter: parent.verticalCenter
-            width: parent.width - 2 * Theme.Effects.space3 - (lev.inModifica ? 80 : 0)
+            width: parent.width - 2 * Theme.Effects.space3
+                   - (lev.inModifica ? 80 : (lev.tasto !== "" ? 30 : 0))
             Text {
                 width: parent.width
                 elide: Text.ElideRight
@@ -730,6 +756,29 @@ PanelWindow {
             preventStealing: true
             cursorShape: Qt.PointingHandCursor
             onClicked: lev.scelto()
+        }
+
+        // Il tasto diretto della levetta: una letterina nell'angolo. Nascosta
+        // in modifica (a destra ci sono ‹ › ×) e per le scorciatoie del posto,
+        // che non accendono niente.
+        Rectangle {
+            visible: lev.tasto !== "" && !lev.inModifica && !lev.scorciatoia
+            width: 18; height: 18; radius: 9
+            anchors.right: parent.right
+            anchors.rightMargin: 6
+            anchors.top: parent.top
+            anchors.topMargin: 6
+            color: Qt.alpha(Theme.Colors.panel, 0.9)
+            border.width: 1
+            border.color: Theme.Colors.edge
+            Text {
+                anchors.centerIn: parent
+                text: lev.tasto
+                color: Theme.Colors.textMuted
+                font.family: Theme.Typography.fontDisplay
+                font.pixelSize: 11
+                font.weight: Theme.Typography.weightMedium
+            }
         }
 
         // In modifica: ‹ › spostano, × toglie.

@@ -1,4 +1,8 @@
 #!/bin/sh
+
+_minerva_qml_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+QML_IMPORT_PATH="$_minerva_qml_root/minerva-shell/native${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}"
+export QML_IMPORT_PATH
 # minerva-dentro-wayland — I programmi che partono con la sessione.
 #
 # Lo lancia `minerva-wayland` come primo (e unico) programma, e da qui nascono
@@ -34,7 +38,7 @@ MINERVA_DIR="${MINERVA_ROOT:?minerva-dentro-wayland: manca MINERVA_ROOT}"
 if [ "${MINERVA_PROVA:-}" != "1" ]; then
     dbus-update-activation-environment --systemd \
         WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE PATH \
-        MINERVA_CANALE MINERVA_COMPOSITORE MINERVA_IPC_SOCKET \
+        MINERVA_CANALE MINERVA_COMPOSITORE MINERVA_IPC_SOCKET QML_IMPORT_PATH \
         MINERVA_SESSIONE XDG_SESSION_ID \
         MINERVA_ROOT XDG_SESSION_DESKTOP QS_NO_RELOAD_POPUP \
         QT_QPA_PLATFORM QT_WAYLAND_DISABLE_WINDOWDECORATION \
@@ -48,7 +52,7 @@ fi
 # restava con le cartelle vuote (6 ottobre 2026).
 # Le variabili di Qt e del cursore per la stessa ragione: lo stesso gestore
 # file, partito senza `QT_WAYLAND_DISABLE_WINDOWDECORATION`, si prendeva la
-# barra del titolo chiara di Qt sopra la sua (Giacomo, lo stesso giorno: «due
+# barra del titolo chiara di Qt sopra la sua (il manutentore, lo stesso giorno: «due
 # barre del titolo sovrapposte»), e il cursore di serie al posto del tema.
 # Anche l'ambiente di questo processo deve averli: i figli (demone, shell)
 # li ereditano da qui, non solo da D-Bus.
@@ -69,7 +73,7 @@ export MINERVA_CANALE MINERVA_COMPOSITORE 2>/dev/null || true
 # soprattutto a non avviare `hypridle`, che dopo tanti minuti arriva a
 # `systemctl suspend` — e una sessione di prova che sospende il computer non è
 # una prova andata male: è la macchina che sparisce sotto le mani di chi la sta
-# usando. Giacomo l'ha messo per iscritto: «altrimenti ti perdo».
+# usando. il manutentore l'ha messo per iscritto: «altrimenti ti perdo».
 #
 # La regola non è cambiata, si è spostata dove sta la decisione: `onInattivo`
 # in `minerva-shell/shell.qml` legge `MINERVA_PROVA` e non sospende. È meglio
@@ -168,7 +172,7 @@ fi
 
 # ── Il portachiavi, che nessuno avviava ───────────────────────────────────
 #
-# Giacomo, 8 settembre 2026, chiedendo di sincronizzare con GitHub dalla
+# il manutentore, 8 settembre 2026, chiedendo di sincronizzare con GitHub dalla
 # Custodia: il gettone non si poteva nemmeno salvare. `secret-tool` rispondeva
 # «The name is not activatable», e sul bus non c'era nessuno che dichiarasse
 # `org.freedesktop.secrets`.
@@ -182,7 +186,7 @@ fi
 #
 # Il costo di quel silenzio: la Custodia non poteva tenere un gettone di
 # GitHub, e gli account online non potevano ricordare una password. Nessuno
-# dei due lo diceva — è la «sincronizzazione sospesa» che Giacomo aveva già
+# dei due lo diceva — è la «sincronizzazione sospesa» che il manutentore aveva già
 # incontrato ad agosto.
 #
 # ── Prima quello che ha avviato l'accesso ─────────────────────────────────
@@ -227,6 +231,12 @@ wl-paste --watch cliphist store >/dev/null 2>&1 &
 # Non `minervad` e `qs` diretti: i due guardiani. Se il demone muore, ogni
 # finestra mostra i valori di fabbrica fingendo siano i tuoi; se muore la
 # shell, sparisce la scrivania. Tutti e due sono già successi.
+# Gli adattatori opzionali si attivano al nuovo accesso, prima della scansione
+# delle app. Una prova privata non modifica mai i launcher della sessione vera.
+if [ "$DI_PROVA" != "1" ] && [ -f "$MINERVA_DIR/lib/minerva/libminervatiledheaders.so" ]; then
+    python3 "$MINERVA_DIR/scripts/minerva-installa-app-tiling.py" || \
+        echo "minerva: adattatori app non attivati; restano i launcher precedenti." >&2
+fi
 "$MINERVA_DIR/scripts/minerva-demone" >/dev/null 2>&1 &
 "$MINERVA_DIR/scripts/minerva-interfaccia" >/dev/null 2>&1 &
 

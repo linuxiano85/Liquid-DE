@@ -145,13 +145,13 @@ installa_file() {
     # Qui c'era solo `chmod -R a+rX`, e il commento sopra diceva già la cosa
     # giusta: «scrivibile da nessuno che non sia amministratore». Il comando
     # però non la faceva. `rsync -a` e `cp -a` CONSERVANO il proprietario:
-    # copiando da una cartella di Giacomo, l'installazione restava
-    # `giacomo:giacomo` — e `a+rX` aggiunge permessi, non ne toglie.
+    # copiando da una cartella di il manutentore, l'installazione restava
+    # `utente:utente` — e `a+rX` aggiunge permessi, non ne toglie.
     #
     # Il conto di quanto costava, e non è teorico: qui dentro c'è
     # `greeter.qml`, cioè il programma che disegna la casella della password e
     # che gira PRIMA che qualcuno abbia fatto l'accesso. Un processo qualunque
-    # in esecuzione come Giacomo — un'estensione del browser, un pacchetto
+    # in esecuzione come il manutentore — un'estensione del browser, un pacchetto
     # npm, un gioco — poteva riscriverlo e farsi scrivere dentro le password
     # di tutti quelli che entrano in questo computer. Non serviva essere
     # amministratore: bastava essere lui.
@@ -178,7 +178,7 @@ installa_file() {
     #
     # Serve perché una sessione che muore in un secondo non lasciava NIENTE, e
     # da fuori è indistinguibile da una password sbagliata: nel journal del 20
-    # agosto 2026 si legge «session opened for giacomo» e un secondo dopo
+    # agosto 2026 si legge «session opened for utente» e un secondo dopo
     # «session closed», tre volte di fila. La password era giusta tutte e tre.
     #
     # Va installato come eseguibile e leggibile da tutti: lo esegue l'utente
@@ -220,8 +220,8 @@ installa_file() {
     #
     # Perché il pannello Accesso lo lancia con `pkexec`, cioè come root. Fino
     # al 23 agosto 2026 lo lanciava **dalla cartella del progetto**: root
-    # eseguiva uno script che sta in casa di Giacomo ed è scrivibile da
-    # Giacomo. Non è di per sé una scalata di privilegi — la password di
+    # eseguiva uno script che sta in casa di il manutentore ed è scrivibile da
+    # il manutentore. Non è di per sé una scalata di privilegi — la password di
     # amministratore la chiede lo stesso — ma è la forma classica del guaio:
     # qualunque processo che gira come lui (un pacchetto npm, un'estensione
     # del browser, un gioco) può riscrivere quello script e aspettare che
@@ -398,7 +398,7 @@ scrivi_config() {
     # quello che c'è. Per una prova no: la prova ha promesso di non toccare la
     # sessione di chi sta lavorando, e invece se la prende. È successo il 5
     # agosto 2026: la schermata di prova è comparsa da sola sopra il lavoro di
-    # Giacomo, e se fosse rimasta bloccata l'unica via d'uscita sarebbe stata
+    # il manutentore, e se fosse rimasta bloccata l'unica via d'uscita sarebbe stata
     # una console che lui aveva già detto di non riuscire a cambiare.
     #
     # Quindi: la prova resta dov'è e si va a guardarla; l'accesso vero si
@@ -552,7 +552,7 @@ case "$AZIONE" in
 
         # ── «Per guardarla senza rischi» era falso ────────────────────────
         #
-        # 27 agosto 2026, mattina. Giacomo lancia questa prova dalla sua
+        # 27 agosto 2026, mattina. il manutentore lancia questa prova dalla sua
         # scrivania. Lo schermo diventa nero e resta nero: entra da tty2 e
         # trova greetd fermo, la sessione morta, e nel giornale un `Stopped`
         # senza nessun `Started` dopo.
@@ -616,12 +616,12 @@ case "$AZIONE" in
         # ── E NON una console su cui systemd tiene un «login:» ─────────────
         #
         # Qui c'era `PROVA = 3`, ed è costato una prova che sembrava fallita e
-        # non lo era. Il 16 agosto 2026 Giacomo ha scritto la password giusta e
+        # non lo era. Il 16 agosto 2026 il manutentore ha scritto la password giusta e
         # si è ritrovato «una schermata nera di login da terminale». Nel
         # giornale di sistema, allo stesso secondo in cui greetd apriva la
         # sessione:
         #
-        #     greetd: pam_unix(greetd:session): session opened for user giacomo
+        #     greetd: pam_unix(greetd:session): session opened for user utente
         #     systemd: Started Getty on tty3.
         #
         # systemd tiene un `getty` pronto su ogni console da 1 a `NAutoVTs`
@@ -754,7 +754,7 @@ case "$AZIONE" in
     gestore)
         # ── Scegliere chi ti apre la porta ─────────────────────────────────
         #
-        # Giacomo, 23 agosto 2026: «voglio un'impostazione per impostare il
+        # il manutentore, 23 agosto 2026: «voglio un'impostazione per impostare il
         # login manager predefinito, nel caso in cui io voglia quello di kde o
         # cosmic o gnome o altri».
         #
@@ -835,7 +835,7 @@ case "$AZIONE" in
     # di dieci pixel è sproporzionato, e sproporzionato vuol dire che uno smette
     # di ritoccarla.
     #
-    # Giacomo, 6 settembre 2026, dopo aver rifatto l'accesso: «lo sfondo c'è ma
+    # il manutentore, 6 settembre 2026, dopo aver rifatto l'accesso: «lo sfondo c'è ma
     # ha un effetto blur pesante e quindi si distingue poco». Per provare un
     # altro valore gli sarebbe toccato reinstallare tutto un'altra volta.
     #

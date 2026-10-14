@@ -4,7 +4,7 @@
 //
 // La prima versione della striscia LED era fatta di ventotto rettangoli della
 // scena: quattro gomiti agli angoli e sei segmenti per lato, ognuno di un
-// colore. Funzionava, costava zero, e Giacomo l'ha guardata e ha detto:
+// colore. Funzionava, costava zero, e il manutentore l'ha guardata e ha detto:
 //
 //     «non è venuto bene come rgb, si vedono delle linee intorno e non è un
 //      rgb simile alla strip led. cosa sono quelle linee?»

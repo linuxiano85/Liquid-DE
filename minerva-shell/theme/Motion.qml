@@ -22,7 +22,7 @@ QtObject {
 
     // ── Una manopola sola per tutto il movimento ─────────────────────────
     //
-    // Giacomo, 19 agosto 2026: «la disabilitazione dalla barra sul desktop e
+    // il manutentore, 19 agosto 2026: «la disabilitazione dalla barra sul desktop e
     // nelle impostazioni non porta a nessun cambiamento».
     //
     // Aveva ragione, e la causa stava qui. I tre interruttori delle animazioni

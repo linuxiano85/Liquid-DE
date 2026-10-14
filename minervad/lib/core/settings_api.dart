@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'event_bus.dart';
 import 'minerva_paths.dart';
+import 'desktop_profiles.dart';
 
 /// Gestore delle impostazioni di Minerva.
 /// Carica il file settings.json, lo fonde con i valori predefiniti e ne
@@ -12,9 +13,14 @@ class SettingsApi {
   final String _configPath;
   Map<String, dynamic> _settings = {};
   StreamSubscription? _watcherSubscription;
+  late final _profiles = DesktopProfiles(_fabbrica, (path, value) {
+    final segments = path.split('.');
+    return _esisteDiFabbrica(segments) &&
+        _conforme(path, _fabbricaA(segments), value);
+  });
 
   SettingsApi(this._eventBus, {String? path})
-      : _configPath = path ?? MinervaPaths.settingsFile();
+    : _configPath = path ?? MinervaPaths.settingsFile();
 
   Map<String, dynamic> get settings => _settings;
 
@@ -25,7 +31,9 @@ class SettingsApi {
       await file.parent.create(recursive: true);
       _settings = defaultSettings();
       await _write();
-      print('[MINERVA][CORE][INFO] Creato file impostazioni di default in: $_configPath');
+      print(
+        '[MINERVA][CORE][INFO] Creato file impostazioni di default in: $_configPath',
+      );
     } else {
       await _loadSettings();
       // Un file scritto da una versione precedente può non avere le chiavi
@@ -35,10 +43,15 @@ class SettingsApi {
       final potate = _potaSconosciute();
       if (_fillMissingDefaults() || potate) {
         await _write();
-        print('[MINERVA][CORE][INFO] Impostazioni aggiornate con le nuove opzioni.');
+        print(
+          '[MINERVA][CORE][INFO] Impostazioni aggiornate con le nuove opzioni.',
+        );
       }
     }
 
+    final beforeProfiles = jsonEncode(_settings);
+    _profiles.normalize(_settings);
+    if (beforeProfiles != jsonEncode(_settings)) await _write();
     _startWatcher();
   }
 
@@ -56,12 +69,25 @@ class SettingsApi {
         if (finestre is Map && finestre['effetto'] == 'blur') {
           finestre['effetto'] = 'acquerello';
         }
+        // Upgrade only the old Windows preset, preserving the custom snapshot.
+        final style = _settings['stile'], bar = _settings['bar'];
+        if (style is Map &&
+            style['attuale'] == 'windows' &&
+            (style['profili'] is! Map || (style['profili'] as Map).isEmpty) &&
+            bar is Map &&
+            bar['stile'] == 'classica') {
+          bar['stile'] = 'windows11';
+        }
         print('[MINERVA][CORE][OK] Impostazioni caricate correttamente.');
       } else {
-        throw const FormatException('La radice di settings.json non è un oggetto');
+        throw const FormatException(
+          'La radice di settings.json non è un oggetto',
+        );
       }
     } catch (e) {
-      print('[MINERVA][CORE][ERRORE] Errore nel caricamento delle impostazioni: $e');
+      print(
+        '[MINERVA][CORE][ERRORE] Errore nel caricamento delle impostazioni: $e',
+      );
       if (_settings.isEmpty) _settings = defaultSettings();
     }
   }
@@ -103,7 +129,8 @@ class SettingsApi {
         // vedi `_write`), e allora l'evento è un `move` o un `create`. Con il
         // solo `modify` una modifica fatta da un editor di testo passava
         // inosservata, e il demone restava con le impostazioni di prima.
-        final suo = event.path == file.path ||
+        final suo =
+            event.path == file.path ||
             (event is FileSystemMoveEvent && event.destination == file.path);
         if (!suo) return;
         if (event.type != FileSystemEvent.modify &&
@@ -122,7 +149,9 @@ class SettingsApi {
         // com'è davvero. E si ripara come all'avvio: chi scrive il file a
         // mano può sbagliare un tipo quanto chiunque altro.
         await _inCoda(() async {
-          print('[MINERVA][CORE][INFO] Rilevata modifica a settings.json. Ricaricamento...');
+          print(
+            '[MINERVA][CORE][INFO] Rilevata modifica a settings.json. Ricaricamento...',
+          );
           await _ricarica();
           _notifyChanged();
         });
@@ -141,13 +170,34 @@ class SettingsApi {
   /// mancanti e quelle col tipo sbagliato ai valori di fabbrica. In memoria:
   /// il file si riscrive al prossimo salvataggio.
   Future<void> _ricarica() async {
+    final previous = _settings;
     await _loadSettings();
     _potaSconosciute();
     _fillMissingDefaults();
+    final beforeStyle = previous['stile'];
+    final style = _settings['stile'] as Map<String, dynamic>;
+    final requested = style['attuale'];
+    if (beforeStyle is Map && DesktopProfiles.names.contains(beforeStyle['attuale']) &&
+        DesktopProfiles.names.contains(requested) && beforeStyle['attuale'] != requested) {
+      // Editing the selector in settings.json has the same semantics as IPC.
+      // Explicit desktop edits in that file belong to the destination profile.
+      final before = _profiles.snapshot(previous);
+      final edited = _profiles.snapshot(_settings);
+      style['attuale'] = beforeStyle['attuale'];
+      _profiles.project(_settings, before);
+      _profiles.normalize(_settings);
+      _profiles.activate(_settings, requested as String);
+      for (final e in edited.entries) {
+        if (jsonEncode(e.value) != jsonEncode(before[e.key])) _applyValue(e.key, e.value);
+      }
+    }
+    _profiles.normalize(_settings);
   }
 
   void _notifyChanged() {
-    _eventBus.publish(MinervaEvent(type: 'settings_changed', payload: _settings));
+    _eventBus.publish(
+      MinervaEvent(type: 'settings_changed', payload: _settings),
+    );
   }
 
   // ── Lettura tipizzata ────────────────────────────────────────────────────
@@ -188,7 +238,10 @@ class SettingsApi {
   /// «un verbo che si può scrivere e non fa niente» — arrivato un piano più su.
   Future<bool> setValue(String path, dynamic value) async {
     try {
-      return await _transazione(() => _applyValue(path, value), 'Impostazione "$path" aggiornata');
+      return await _transazione(
+        () => _applyValue(path, value),
+        'Impostazione "$path" aggiornata',
+      );
     } catch (e) {
       print('[MINERVA][CORE][ERRORE] Impostazione non salvata: $e');
       return false;
@@ -208,7 +261,13 @@ class SettingsApi {
     try {
       return await _transazione(() {
         final rifiutate = <String>[];
+        // A batch configures the destination profile regardless of key order.
+        if (updates.containsKey('stile.attuale') &&
+            !_applyValue('stile.attuale', updates['stile.attuale'])) {
+          rifiutate.add('stile.attuale');
+        }
         for (final entry in updates.entries) {
+          if (entry.key == 'stile.attuale') continue;
           if (!_applyValue(entry.key, entry.value)) rifiutate.add(entry.key);
         }
         return rifiutate;
@@ -240,11 +299,26 @@ class SettingsApi {
   /// mappa vuota di fabbrica vuol dire «qui le chiavi le mette l'utente»,
   /// e sotto di esse si scrive quel che si vuole.
   bool _applyValue(String path, dynamic value) {
+    // Profiles are owned by this store: clients edit the active projection.
+    if (path == 'stile.profili' || path.startsWith('stile.profili.'))
+      return false;
+    if (path == 'stile') {
+      if (value is! Map ||
+          !_conforme(path, _fabbrica['stile'], value) ||
+          value.containsKey('profili'))
+        return false;
+      for (final e in value.entries) {
+        if (!_applyValue('stile.${e.key}', e.value)) return false;
+      }
+      return true;
+    }
     final segments = path.split('.');
     if (segments.isEmpty || segments.any((s) => s.isEmpty)) return false;
     if (!_esisteDiFabbrica(segments)) {
-      print('[MINERVA][CORE][ERRORE] Impostazione inesistente: "$path" '
-          '— non è nei valori di fabbrica, e non si inventa');
+      print(
+        '[MINERVA][CORE][ERRORE] Impostazione inesistente: "$path" '
+        '— non è nei valori di fabbrica, e non si inventa',
+      );
       return false;
     }
     // ── E deve avere la FORMA di quella di fabbrica ─────────────────────
@@ -257,9 +331,16 @@ class SettingsApi {
     // può ancora scrivere intero (la shell lo fa con `riva.angoli` e
     // `isola.mostra`), ma con una mappa che ha le sue chiavi e i suoi tipi.
     if (!_conforme(path, _fabbricaA(segments), value)) {
-      print('[MINERVA][CORE][ERRORE] Impostazione "$path": il valore non ha '
-          'il tipo di quello di fabbrica — rifiutato');
+      print(
+        '[MINERVA][CORE][ERRORE] Impostazione "$path": il valore non ha '
+        'il tipo di quello di fabbrica — rifiutato',
+      );
       return false;
+    }
+
+    if (path == 'stile.attuale') {
+      _profiles.activate(_settings, value as String);
+      return true;
     }
 
     Map<String, dynamic> node = _settings;
@@ -293,6 +374,192 @@ class SettingsApi {
   /// fabbrica dice 960. Una lista di fabbrica fatta di nomi vuole nomi; una
   /// lista vuota di fabbrica non dice cosa conterrà, e si accetta.
   static bool _conforme(String percorso, dynamic fabbrica, dynamic valore) {
+    if (percorso == 'files.disposizione') {
+      return const ['auto', 'schede', 'affiancata'].contains(valore);
+    }
+    // Al massimo otto ricerche, ognuna una riga di testo breve senza
+    // caratteri di controllo: è ciò che il pannello Cerca sa mostrare.
+    if (percorso == 'windows11.ricercheRecenti') {
+      return valore is List &&
+          valore.length <= 8 &&
+          valore.every((v) =>
+              v is String &&
+              v.isNotEmpty &&
+              v.length <= 120 &&
+              !v.contains(RegExp(r'[\x00-\x1f]')));
+    }
+    if (percorso == 'files.pannelloLaterale') {
+      return const ['niente', 'dettagli', 'anteprima'].contains(valore);
+    }
+    if (percorso == 'stile.attuale')
+      return DesktopProfiles.names.contains(valore);
+    if (percorso == 'windows.workspaceRecentOrder') {
+      return valore is List &&
+          valore.length == 10 &&
+          valore.every((v) => v is int && v >= 1 && v <= 10) &&
+          valore.toSet().length == 10;
+    }
+    if (percorso == 'windows.workspaceLastLayouts') {
+      return valore is List &&
+          valore.length == 10 &&
+          valore.every(
+            (v) => ['uguale', 'maestro', 'nuovo', 'griglia'].contains(v),
+          );
+    }
+    if (percorso == 'windows.workspaceLayouts') {
+      return valore is List &&
+          valore.length == 10 &&
+          valore.every(
+            (v) => [
+              'eredita',
+              'classico',
+              'uguale',
+              'maestro',
+              'nuovo',
+              'griglia',
+            ].contains(v),
+          );
+    }
+    if (percorso == 'windows.workspaceNames') {
+      return valore is List &&
+          valore.length == 10 &&
+          valore.every(
+            (v) =>
+                v is String &&
+                v.length <= 40 &&
+                !RegExp(r'[\x00-\x1f]').hasMatch(v),
+          );
+    }
+    if (percorso == 'notizie.interessi') {
+      const noti = ['attualita', 'tecnologia', 'scienza', 'economia', 'sport', 'cultura'];
+      return valore is List && valore.every((v) => noti.contains(v));
+    }
+    if (percorso == 'notizie.fontiSpente') {
+      return valore is List &&
+          valore.length <= 50 &&
+          valore.every((v) => v is String && RegExp(r'^https://').hasMatch(v));
+    }
+    if (percorso == 'media.radioPreferite') {
+      // Viene dalla pagina, ma ogni indirizzo finisce in un lettore: solo
+      // http e https, e un tetto, perché è un elenco che si salva intero.
+      return valore is List &&
+          valore.length <= 200 &&
+          valore.every((v) =>
+              v is Map &&
+              v['id'] is String &&
+              v['nome'] is String &&
+              v['url'] is String &&
+              RegExp(r'^https?://').hasMatch(v['url'] as String));
+    }
+    if (percorso == 'windows11.desktops')
+      return valore is List &&
+          valore.isNotEmpty &&
+          valore.length <= 10 &&
+          valore.every((v) => v is int && v >= 1 && v <= 10) &&
+          valore.toSet().length == valore.length;
+    if (percorso == 'windows11.contextHidden')
+      return valore is List && valore.length <= 64 &&
+          valore.every((v) => v is String && v.length <= 128) &&
+          valore.toSet().length == valore.length;
+    if (percorso == 'windows11.startLayout')
+      return ['pinned', 'default', 'recommended'].contains(valore);
+    if (percorso == 'windows11.taskbarSearch')
+      return ['hidden', 'icon', 'label', 'box'].contains(valore);
+    if (percorso == 'windows11.taskbarAlignment')
+      return ['left', 'center'].contains(valore);
+    if (percorso == 'windows11.menu')
+      return ['windows11', 'liquid'].contains(valore);
+    if (percorso == 'windows11.wallpaper')
+      return ['auto', 'light', 'dark', 'current'].contains(valore);
+    if (percorso == 'windows11.theme')
+      return ['light', 'dark'].contains(valore);
+    if (percorso == 'windows11.themeApp')
+      return ['', 'light', 'dark'].contains(valore);
+    if (percorso == 'windows11.accentMode')
+      return ['manuale', 'automatico'].contains(valore);
+    if (percorso == 'windows11.coloriRecenti')
+      return valore is List &&
+          valore.length <= 5 &&
+          valore.every((v) => v is String && RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(v)) &&
+          valore.toSet().length == valore.length;
+    if (percorso == 'windows11.temaCorrente')
+      return valore is String && valore.isNotEmpty && valore.length <= 64;
+    if (percorso == 'windows11.temi')
+      return valore is List &&
+          valore.length <= 20 &&
+          valore.every((t) =>
+              t is Map &&
+              t['nome'] is String && (t['nome'] as String).isNotEmpty && (t['nome'] as String).length <= 64 &&
+              t['sfondo'] is String && (t['sfondo'] as String).length <= 4096 &&
+              ['light', 'dark'].contains(t['tema']) &&
+              t['accento'] is String && RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(t['accento'] as String));
+    if (percorso == 'desktop.wallpaperMode')
+      return ['minerva', 'image', 'folder', 'color'].contains(valore);
+    if (percorso == 'desktop.wallpaperFit')
+      return ['riempi', 'adatta', 'allunga', 'affianca', 'centra', 'estendi'].contains(valore);
+    if (percorso == 'desktop.wallpaperColor')
+      return valore is String && RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(valore);
+    if (percorso == 'desktop.wallpaperRecenti')
+      return valore is List &&
+          valore.length <= 5 &&
+          valore.every((v) => v is String && v.startsWith('/') && v.length <= 4096 && !v.contains('\n')) &&
+          valore.toSet().length == valore.length;
+    if (percorso == 'windows11.accent')
+      return valore is String &&
+          (valore == 'auto' || RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(valore));
+    if (percorso == 'bar.stile')
+      return ['isola', 'classica', 'windows11'].contains(valore);
+    if (percorso == 'windows.tilingMode') {
+      return valore == 'classico' || valore == 'colonne';
+    }
+    if (percorso == 'windows.tilingOrder') {
+      return valore == 'recenti' || valore == 'manuale';
+    }
+    if (percorso == 'windows.tilingLayout') {
+      return valore == 'uguale' ||
+          valore == 'maestro' ||
+          valore == 'nuovo' ||
+          valore == 'griglia';
+    }
+    if (percorso == 'windows.tilingWidth' || percorso == 'windows.tilingGap') {
+      return valore is int &&
+          valore >= (percorso.endsWith('Width') ? 20 : 0) &&
+          valore <= (percorso.endsWith('Width') ? 100 : 40);
+    }
+    if (percorso == 'windows.tilingRules') {
+      if (valore is! List || valore.length > 64) return false;
+      final apps = <String>{};
+      for (final r in valore) {
+        if (r is! Map ||
+            r.keys.any(
+              (k) => ![
+                'app',
+                'enabled',
+                'width',
+                'position',
+                'workspace',
+              ].contains(k),
+            )) {
+          return false;
+        }
+        final app = r['app'], width = r['width'], position = r['position'];
+        final workspace = r['workspace'] ?? 0;
+        if (workspace is! int || workspace < 0 || workspace > 10) return false;
+        if (app is! String ||
+            !RegExp(r'^[A-Za-z0-9_.@+\-]{1,127}$').hasMatch(app) ||
+            !apps.add(app) ||
+            r['enabled'] is! bool ||
+            width is! int ||
+            width < 20 ||
+            width > 100 ||
+            position is! int ||
+            position < -1 ||
+            position > 63) {
+          return false;
+        }
+      }
+      return true;
+    }
     final intervallo = _intervalli[percorso];
     if (intervallo != null) {
       return valore is num &&
@@ -329,8 +596,10 @@ class SettingsApi {
   /// Le manopole degli effetti che hanno un intervallo, oltre al tipo.
   static const _intervalli = <String, List<double>>{
     'windows.rigidita': [0.5, 2],
-    'windows.smorzamento': [0.15, 0.95], 'windows.elastico': [0, 3],
-    'windows.elasticoUltimo': [0.1, 3], 'windows.effettoOpacita': [0.5, 1],
+    'windows.smorzamento': [0.15, 0.95],
+    'windows.elastico': [0, 3],
+    'windows.elasticoUltimo': [0.1, 3],
+    'windows.effettoOpacita': [0.5, 1],
   };
 
   static bool _esisteDiFabbrica(List<String> segments) {
@@ -346,7 +615,10 @@ class SettingsApi {
 
   /// Ripristina tutte le impostazioni ai valori di fabbrica.
   Future<void> resetToDefaults() async {
-    await _transazione(() { _settings = defaultSettings(); }, 'Impostazioni ripristinate ai valori predefiniti');
+    await _transazione(() {
+      _settings = defaultSettings();
+      _profiles.normalize(_settings);
+    }, 'Impostazioni ripristinate ai valori predefiniti');
   }
 
   /// I salvataggi si mettono in fila, uno alla volta.
@@ -388,6 +660,7 @@ class SettingsApi {
       try {
         _settings = jsonDecode(jsonEncode(prima)) as Map<String, dynamic>;
         final risultato = modifica();
+        _profiles.capture(_settings);
         final candidata = _settings;
         _settings = prima;
         if (jsonEncode(candidata) == jsonEncode(prima)) return risultato;
@@ -433,7 +706,6 @@ class SettingsApi {
     _testoNoto = testo;
   }
 
-
   /// Toglie dalle impostazioni le chiavi che i valori di fabbrica non conoscono.
   /// Restituisce true se ha tolto qualcosa.
   ///
@@ -443,7 +715,7 @@ class SettingsApi {
   /// una versione precedente, da uno script di prova, da me durante una prova —
   /// restano lì per sempre: `_fillMissingDefaults` sa solo aggiungere.
   ///
-  /// Nel `settings.json` di Giacomo, l'8 settembre 2026, ce n'erano sette:
+  /// Nel `settings.json` di il manutentore, l'8 settembre 2026, ce n'erano sette:
   /// `animations.enabled`, `bar.opacity`, `launcher.defaultView`,
   /// `launcher.maxShown`, `plugins.enabled`, `windows.blur`,
   /// `windows.compositorBars` — resti dell'era di Hyprland e degli
@@ -484,8 +756,10 @@ class SettingsApi {
 
     gira(_settings, const []);
     if (tolte.isNotEmpty) {
-      print('[MINERVA][CORE][INFO] Tolte ${tolte.length} impostazioni che non '
-          'esistono più: ${tolte.join(", ")}');
+      print(
+        '[MINERVA][CORE][INFO] Tolte ${tolte.length} impostazioni che non '
+        'esistono più: ${tolte.join(", ")}',
+      );
     }
     return tolte.isNotEmpty;
   }
@@ -511,8 +785,11 @@ class SettingsApi {
     // (30 settembre 2026). Un valore che non ha la forma di quello di
     // fabbrica torna di fabbrica, e lo si dice: una scelta persa si vede nel
     // registro, un menù che non si apre più no.
-    void merge(Map<String, dynamic> target, Map<String, dynamic> defaults,
-        String dove) {
+    void merge(
+      Map<String, dynamic> target,
+      Map<String, dynamic> defaults,
+      String dove,
+    ) {
       for (final entry in defaults.entries) {
         final percorso = dove.isEmpty ? entry.key : '$dove.${entry.key}';
         final existing = target[entry.key];
@@ -525,8 +802,10 @@ class SettingsApi {
             diFabbrica.isNotEmpty) {
           merge(existing, diFabbrica, percorso);
         } else if (!_conforme(percorso, diFabbrica, existing)) {
-          print('[MINERVA][CORE][WARN] Impostazione "$percorso" col tipo '
-              'sbagliato (${jsonEncode(existing)}): torna quella di fabbrica.');
+          print(
+            '[MINERVA][CORE][WARN] Impostazione "$percorso" col tipo '
+            'sbagliato (${jsonEncode(existing)}): torna quella di fabbrica.',
+          );
           target[entry.key] = diFabbrica;
           changed = true;
         }
@@ -540,905 +819,987 @@ class SettingsApi {
   /// Valori di fabbrica. Ogni opzione esposta nel pannello Impostazioni
   /// deve avere qui il suo default.
   static Map<String, dynamic> defaultSettings() => {
-        // ── L'aspetto di tutta Minerva ────────────────────────────────
-        //
-        // Un tema è una TINTA e un VERSO (chiaro o scuro). La tavolozza vera
-        // sta in `minerva-shell/theme/Colors.qml`, che è l'unico posto in cui
-        // si sceglie un colore; qui sta solo il nome di quello in uso.
-        //
-        // `schemiChiari` non è un'impostazione: è ciò che il demone deve
-        // sapere per scegliere la variante giusta del tema di icone (le icone
-        // «-Dark» sono chiare, fatte per stare su fondo scuro). Se qualcuno
-        // aggiunge un tema in Colors.qml e si dimentica di questo elenco, se
-        // ne accorge una prova — `test/schemi_test.dart`.
-        'shell': {
-          // ── Qui c'era `clock24`, e non la scriveva nessuno ────────────
-          //
-          // La leggeva la sola schermata di blocco. Nelle Impostazioni → Data
-          // e ora la scelta fra dodici e ventiquattro ore scrive
-          // `clock.format24` (la barra) e `greeter.clock24` (l'accesso): si
-          // metteva l'orologio a dodici ore e la schermata di blocco restava a
-          // ventiquattro, per sempre, senza che nulla lo dicesse.
-          //
-          // Tolta il 9 settembre 2026: adesso il blocco legge `clock.format24`
-          // come la barra. Una terza chiave per la stessa domanda non è una
-          // scelta in più — è un posto in cui la risposta può divergere.
-          //
-          // `greeter.clock24` invece resta e ha ragione di restare: la
-          // schermata di ACCESSO gira prima che ci sia un utente, e le
-          // preferenze di chi non ha ancora fatto l'accesso non si possono
-          // leggere.
-          // Ricarica a caldo dei QML: solo per chi sviluppa Minerva.
-          'hotReload': false,
-          'scheme': 'notte',
-          'accent': '#22D3EE',
-          // ── Il settimo tema ────────────────────────────────────────────
-          //
-          // Con `scheme` a 'personale' la tinta e il verso li scegli tu, e
-          // tutto il resto continua a derivare da quei due come per gli altri
-          // sei. Il verso non si indovina dalla tinta: un grigio medio può
-          // stare bene in tutti e due i modi, e chi sceglie sa quale vuole.
-          'tintaPersonale': '#101018',
-          'versoPersonale': true,
-          // ── E i colori messi a mano, uno per uno ───────────────────────
-          //
-          // Nomi ammessi: base, testo, membrana, bordo, positivo, avviso,
-          // pericolo — l'elenco vero sta in `theme/Colors.qml`
-          // (`scavalcabili`), che è l'unico posto in cui si sceglie un colore.
-          //
-          // Vuoto vuol dire «lascia derivare», ed è il ripiego: un colore
-          // scritto qui vince sul conto che lo avrebbe calcolato, e quel conto
-          // era MISURATO. Le Impostazioni mostrano il contrasto mentre si
-          // sceglie, e avvisano sotto 4,5 senza impedire niente.
-          'scavalca': <String, dynamic>{},
-          'membraneOpacity': 0.93,
-          // ── E la stessa cosa col filtro vero, che è un mestiere diverso ──
-          //
-          // (Le chiavi si chiamano ancora `…Blur`: sono nate col blur, e
-          // rinominarle farebbe perdere a chi le ha già regolate il suo
-          // numero. Oggi valgono con l'acquerello, l'unico filtro rimasto.)
-          //
-          // Due numeri e non uno, perché la domanda «quanto è coprente la
-          // barra» ha due risposte giuste secondo cosa c'è dietro.
-          //
-          // Senza blur dietro c'è una fotografia NITIDA, e sotto 0,75 il testo
-          // ci si perde: è la soglia misurata, ed è dove si ferma il cursore.
-          // Col blur del compositore dietro c'è una macchia morbida e un po'
-          // scurita, che non ruba leggibilità a niente — e lì 0,93 vuol dire
-          // non vedere la sfocatura per cui si è pagato un passaggio di
-          // disegno. Misurato il 9 settembre 2026: fra `vetro` e `blur`, nella
-          // fascia della barra non cambiava NEMMENO UN PIXEL.
-          //
-          // Un numero solo obbligherebbe a scegliere quale delle due
-          // situazioni servire, e a rigirare il cursore ogni volta che si
-          // cambia effetto. Due numeri sono due memorie: ognuno si ricorda
-          // com'era.
-          'membraneOpacityBlur': 0.68,
-          'windowOpacity': 0.88,
-          // ── Il tasto che riavvia la scrivania ──────────────────────────
-          //
-          // Giacomo, 2 settembre 2026: «mettiamo un tasto disattivabile
-          // accanto al meteo dove posso riavviare la shell».
-          //
-          // Acceso di suo: chi sta costruendo Minerva la ricarica dieci volte
-          // al giorno, e la scorciatoia da sola si dimentica. Chi non lo vuole
-          // lo spegne in Impostazioni → Aspetto, e la barra torna com'era.
-          //
-          // Ricarica, non riavvia: la shell si rilegge restando viva, quindi
-          // barra e pannelli non spariscono. È la stessa cosa che fa
-          // `minerva-reload.sh` senza argomenti.
-          'tastoRiavvio': true,
-        },
-        'general': {
-          // Lingua dell'interfaccia: 'auto' segue la lingua di sistema.
-          'language': 'auto',
-          // Modalità principiante: suggerimenti visibili e conferme in più.
-          'beginnerMode': true,
-        },
-        'cheatsheet': {
-          // Il pannello «Scorciatoie» è attivabile da qui.
-          'enabled': true,
-          // Opacità dello sfondo semitrasparente (0 = invisibile, 1 = pieno).
-          'backgroundOpacity': 0.55,
-          // Mostra il pannello automaticamente al primo avvio della sessione.
-          'showOnFirstRun': true,
-        },
-        // ── La finestra delle Impostazioni ────────────────────────────
-        //
-        // `lastSection`: dove si era rimasti. `scripts/minerva-settings` lo
-        // prometteva nella sua riga d'aiuto molto prima che esistesse, e la
-        // finestra si riapriva sempre su «Aspetto».
-        'settings': {
-          'lastSection': 'appearance',
-        },
-        // ── La riva: che cosa esce da quale bordo ─────────────────────────
-        //
-        // «I bordi vivi: banchina in basso, stanze a sinistra, Cassetto a
-        // destra; si scambiano posto trascinandoli». `cassetto` dice da che
-        // parte esce il Cassetto (gli appunti); le Stanze escono dall'altra.
-        // Lo cambia il trascinamento di uno dei due verso l'altro bordo.
-        'riva': {
-          'cassetto': 'destra',
-          // Il carattere della molla di tutta la riva: 'calma', 'liquida',
-          // 'viva' (vedi `minerva-shell/theme/Motion.qml`).
-          'molla': 'liquida',
-          // Con una finestra che riempie lo schermo, angoli e bordi solo con
-          // Super giù (e Super tenuto fa salire la riva). Falso: sempre.
-          'consenso': true,
-          // Che cosa fa ogni angolo: 'menu', 'centro', 'scrivania',
-          // 'stanze', 'isola', 'appunti', 'niente' (`core/Riva.qml`).
-          'angoli': {
-            'altoSx': 'niente',
-            'altoDx': 'centro',
-            'bassoSx': 'menu',
-            'bassoDx': 'scrivania',
-          },
-        },
-        // Che cosa mostra l'Isola, pezzo per pezzo.
-        'isola': {
-          'mostra': {
-            'data': true,
-            'meteo': true,
-            'musica': true,
-            'vassoio': true,
-            'stato': true,
-          },
-        },
-        // Il Centro di controllo (in alto a destra): quali riquadri e in che
-        // ordine. Si cambia dal Centro stesso, con «Personalizza». I nomi
-        // sono quelli del catalogo in `minerva-shell/menu/Centro.qml`; uno
-        // che non conosce si salta.
-        'centro': {
-          'voci': [
-            'wifi',
-            'bluetooth',
-            'notte',
-            'nondisturbare',
-            'risparmio',
-            'gioco',
-            'trasmetti',
-            'impostazioni',
-          ],
-        },
-        'launcher': {
-          // Qui c'era `'maxShown': 7` — quante voci mostrare nel menu — e
-          // non la leggeva nessuno: zero occorrenze in tutto il progetto. Il
-          // pannello delle applicazioni le mostra tutte, e scorre. Tolta il
-          // 5 settembre 2026: una manopola che non fa niente insegna a non
-          // fidarsi delle altre.
-          // ── Il menu delle applicazioni ────────────────────────────────
-          //
-          // `wheelCategories`: la rotellina passa da una categoria all'altra.
-          // `hiddenCategories`: quelle che non si vogliono vedere (Preferiti e
-          //   Tutte non si possono togliere: sono le vie d'uscita).
-          // `startCategory`: con quale si apre.
-          'wheelCategories': true,
-          'hoverCategories': true,
-          // Il Sottomarino (`menu/Sottomarino.qml`): la vista con cui si apre
-          // («categorie», «attivita», «frequenti», «az») e il verso.
-          'vista': 'categorie',
-          'verticale': false,
-          // Le misure che si scelgono trascinando i bordi del menù: una per
-          // verso, perché un menù largo e basso e uno stretto e alto sono due
-          // scelte diverse.
-          'orizzontaleLarghezza': 960,
-          'orizzontaleAltezza': 430,
-          'verticaleLarghezza': 420,
-          'hiddenCategories': <String>[],
-          'startCategory': 'favorites',
-          // Il nostro, dal 15 settembre 2026. Chi ne vuole un altro lo sceglie
-          // in Impostazioni → Applicazioni predefinite; Alacritty resta
-          // installato finché il Terminale di Minerva non ha passato la prova
-          // approfondita (tappa 5 del piano).
-          'defaultTerminal': 'minerva-terminale',
-          // Le app in cima al menu appena installato.
-          //
-          // C'erano `org.kde.dolphin`, `org.kde.kate` e `systemsettings`: i
-          // programmi di KDE, su un ambiente che di KDE non vuole dipendere.
-          // Su un computer senza KDE quelle voci sono tre riquadri vuoti che
-          // non aprono niente — e il gestore file e le Impostazioni Minerva ce
-          // li ha suoi.
-          'fixedApps': [
-            'firefox.desktop',
-            'minerva-files.desktop',
-            'minerva-terminale.desktop',
-            'minerva-settings.desktop',
-          ],
-          // Qui c'era `'defaultView': 'menu'`, con scritto accanto che
-          // `'matrix'` avrebbe dato «cerchi concentrici». Quei cerchi non
-          // esistono, e la chiave non la leggeva nessuno: era la descrizione
-          // di una funzione mai scritta, in un file che si legge come se
-          // dicesse la verità. Tolta il 5 settembre 2026.
-        },
-        'bar': {
-          // ── Da che parte sta la barra ──────────────────────────────────
-          //
-          // 'alto' o 'basso'. Era dichiarata qui dal primo giorno e non la
-          // leggeva nessuno: una impostazione che esiste, si può scrivere, e
-          // non fa niente — il tipo di bugia che nessun errore segnala.
-          //
-          // I lati non ci sono, e non per dimenticanza: barra e dock sono
-          // costruite in orizzontale — la lingua scende, le icone crescono
-          // verso l'interno — e metterle di fianco non è un ancoraggio
-          // diverso, è un'altra geometria. Quando si farà, sarà una voce in
-          // più qui e un lavoro a sé.
-          //
-          // `top` e `bottom` continuano a valere: chi ha un file scritto
-          // prima non deve accorgersi di niente.
-          //
-          // ⚠ Questa e `dock.position` non sono indipendenti: dal 5 settembre
-          // 2026 barra e dock **non possono stare dallo stesso bordo**. Se qui
-          // dentro finiscono uguali — scrivendo il file a mano, per esempio —
-          // vince la dock e la barra va dall'altra parte. La regola sta in
-          // `minerva-shell/core/Posizioni.qml`, che è il solo posto da cui
-          // passano tutti quelli che hanno un verso.
-          'position': 'alto',
-          // 'isola' o 'classica'. L'Isola è la barra della Riva: una capsula
-          // che galleggia in mezzo (`minerva-shell/menu/IsolaBarra.qml`). La
-          // classica è la barra di Minerva, a tutta larghezza, che resta
-          // come scelta.
-          'stile': 'isola',
-          // Come sta l'Isola: 'sempre' (riserva la fascia), 'elude' (c'è
-          // finché nessuna finestra le arriva sotto) o 'nascondi' (oltre il
-          // bordo, torna con una sosta del puntatore lassù). Giacomo, 30
-          // settembre 2026: «servirebbe avere l'isola dove si trova l'ora in
-          // modalità eludi finestre perché quando sono sul desktop per vedere
-          // l'ora devo sempre salire su e farla comparire». Gli stessi tre
-          // modi della dock (`dock.modo`).
-          'modoIsola': 'elude',
-          // Il valore di prima (25 settembre, «così recuperiamo spazio»): si
-          // legge ancora solo per chi l'aveva SPENTO, che ritrova l'Isola
-          // sempre su. Vedi `modoIsola` in `minerva-shell/shell.qml`.
-          'aScomparsa': true,
-          // Qui c'era `'opacity': 0.10`. Tolta il 5 settembre 2026: non la
-          // leggeva NESSUNO — zero occorrenze in tutto il progetto — e la
-          // trasparenza della barra ce l'ha già `shell.membraneOpacity`, che
-          // funziona ed è esposta nelle Impostazioni. Due manopole per lo
-          // stesso valore sono peggio di una: una delle due mente sempre.
-          'showAppMenuButton': true,
-          // Le finestre aperte in fila nella barra, una voce per finestra.
-          // Spenta di suo: con la dock accesa sarebbe la stessa cosa detta
-          // due volte. La accende lo stile «Windows», dove la dock non c'è.
-          'listaFinestre': false,
-          // ── I valori di sistema nella barra ──────────────────────────
-          //
-          // Giacomo, 9 settembre 2026: «dei widget sia sulla barra». Gli
-          // stessi tipi della scrivania (`desktop.widgets`), ma qui basta il
-          // nome: sulla barra non c'è niente da posizionare né da
-          // ridimensionare, c'è solo l'ordine.
-          //
-          //     ['processore', 'memoria']
-          //
-          // Vuota di serie, e non è prudenza: la barra c'è sempre, quindi un
-          // widget qui tiene acceso il campionamento del demone per tutta la
-          // sessione — cinque secondi, quattro file. Chi lo vuole lo accende
-          // sapendolo; a chi non lo vuole non costa niente.
-          'widgets': <String>[],
-        },
-        'windows': {
-          // ── Qui c'era `gap`, e non arrivava da nessuna parte ──────────
-          //
-          // I margini valevano solo per le finestre AFFIANCATE. Hyprland non
-          // c'è più dal 2 settembre 2026, il nostro compositore risponde
-          // «margini non ha una strada» e lo scrive nel registro a ogni
-          // avvio: restava una manopola che si poteva scrivere e che non
-          // cambiava un pixel.
-          //
-          // Trovata dal banco delle manopole il 9 settembre 2026:
-          // «windows.gap 1 → 3, non muove, 0,000 %». Tolta.
-          //
-          // Lo spazio sopra una finestra libera lo mette `abbassa()` in
-          // `spine/TitleBars.qml`, che è dove è sempre stato per davvero.
-          // ── L'effetto sulle finestre: nessuno, vetro, acquerello ───────
-          //
-          // Qui c'era `'blur': 2`, un numero da 0 a 3 che sceglieva quanta
-          // sfocatura chiedere a Hyprland. Sotto minerva-wayland **non faceva
-          // niente**: `Compositore.sfocatura()` era un buco che scriveva una
-          // riga e basta. Un'impostazione che si vede, si cambia, e non cambia
-          // nulla è il difetto che questo progetto si è messo per iscritto di
-          // non commettere — e stava nel nostro pannello.
-          //
-          // Giacomo, 2 settembre 2026: «ci vorrebbero delle impostazioni per
-          // mettere nessun effetto o blur o vetro e queste impostazioni si
-          // dovrebbero applicare alle finestre e in blur o vetro dovrebbero
-          // far vedere un solo corpo trasparente [...] la barra e la finestra
-          // senza stacchi».
-          //
-          //   'nessuno'  finestre opache, come nascono
-          //   'vetro'    una sola trasparenza su tutta la finestra, barra
-          //              compresa: il compositore la applica all'albero intero
-          //              e la barra si disegna opaca per non moltiplicarla
-          //   'acquerello' come il vetro, e dietro il COLORE di quello che
-          //              c'è, cella per cella, steso morbido: niente forme
-          //              dietro il testo
-          //
-          // C'era anche 'blur' (dietro sfocato): tolto il 28 settembre 2026,
-          // visto l'acquerello — «a questo punto il blur lo eliminerei». Chi
-          // l'aveva nel file passa all'acquerello al caricamento.
-          //
-          // Nasceva 'nessuno' («una scrivania che parte con le finestre
-          // trasparenti prima che qualcuno l'abbia chiesto sembra rotta»).
-          // Dal 27 settembre 2026 nasce 'acquerello': è il materiale di
-          // Liquid, e Giacomo, vedendolo: «Lo adotterei per tutto». Non è una
-          // trasparenza qualunque — dietro il testo non passano forme, solo
-          // colore — e costa zero a scrivania ferma.
-          'effetto': 'acquerello',
-          // Quanto è opaca una finestra col vetro acceso. Stesso numero che le
-          // finestre di Minerva usavano già per conto loro
-          // (`shell.windowOpacity`): partire da un valore diverso vorrebbe
-          // dire che accendendo il vetro le nostre cambiano e le altre no.
-          'effettoOpacita': 0.88,
-          // Mercurio: le finestre vicine si fondono come gocce, e si staccano
-          // allontanandole. Acceso di serie: è il secondo materiale di Liquid,
-          // e a scrivania ferma non costa niente (lo disegna il compositore
-          // solo fra finestre a meno di 48 pixel, e solo quando si muovono).
-          'mercurio': true,
-          // ── La cornice attorno alla finestra attiva ────────────────────
-          //
-          // 'spento', 'fisso' o 'gira'. Non è una decorazione in più: c'era
-          // già, ed era trasparente — è l'anello di sei pixel con cui si
-          // prende una finestra per ridimensionarla.
-          //
-          // 'gira' è la striscia LED che Giacomo ha chiesto il 3 settembre
-          // 2026. La anima il compositore, dodici passi al secondo, e SOLO
-          // sulla finestra attiva: un arcobaleno attorno a otto finestre
-          // insieme non è un effetto, è una fiera.
-          //
-          // Nasce spenta. Un effetto che si muove tutto il giorno è una cosa
-          // che si sceglie, non che si subisce — e su un portatile è anche
-          // batteria.
-          'cornice': 'spento',
-          // ── Il bordo colorato: spessore, colori, finestre spente ───────
-          //
-          // Giacomo, 9 settembre 2026: «voglio poter regolare lo spessore del
-          // colore intorno alla finestra attiva [...] e vorrei anche
-          // l'effetto rgb come una strip led e possibilità di scegliere i
-          // colori che si alterneranno».
-          //
-          // Sei pixel è la misura con cui la cornice è nata, ed era legata a
-          // quella della presa per ridimensionare: adesso sono due numeri.
-          'corniceSpessore': 6,
-          // Vuoto vuol dire lo SPETTRO intero, che è l'arcobaleno di sempre.
-          // Da un colore in su, il giro passa per quelli e per nessun altro.
-          'corniceTinte': <String>[],
-          // Zero: la cornice si accende solo sulla finestra attiva, che è la
-          // ragione per cui esiste — dire quale risponde alla tastiera. Da
-          // zero in su diventa il contorno di tutte, ed è un'altra cosa.
-          'corniceSpente': 0.0,
-          // Millisecondi per un giro intero dello spettro. Il compositore
-          // rifiuta sotto i 2000: più veloce non è un colore che gira, è un
-          // lampeggio davanti agli occhi.
-          'cornicePeriodo': 8000,
-          // ── Quanto tremano le finestre ──────────────────────────────
-          //
-          // Giacomo, 10 settembre 2026: «voglio le finestre tremolanti».
-          //
-          // Zero spento, uno normale, tre il massimo. Trascinando, la
-          // finestra resta un po' indietro rispetto al dito; al rilascio
-          // raggiunge la posizione, la supera di poco e si posa.
-          //
-          // Spento di serie, come l'effetto vetro e per la stessa ragione:
-          // una scrivania che parte con le finestre che rimbalzano prima che
-          // qualcuno l'abbia chiesto ha deciso al posto tuo.
-          //
-          // La deformazione è disegnata dal compositore in wobbly.c.
-          // L'ultima elasticità si conserva anche spegnendo l'effetto.
-          'elastico': 0.0,
-          'elasticoUltimo': 1.0,
-          'rigidita': 1.0,
-          'smorzamento': 0.42,
-          // Che fa la barra a schermo intero: 'hover' compare avvicinandosi.
-          'fullscreenBar': 'hover',
-          'titleHeight': 34,
-          // ── Chi disegna la barra del titolo ─────────────────────────────
-          //
-          // `false` (come nasce): la disegna la shell, su una superficie
-          // appoggiata sopra le finestre. `true`: la disegna il compositore,
-          // col plugin `plugins/minerva-bars` — una decorazione vera, che si
-          // muove con la finestra e non copre chi le sta davanti.
-          //
-          // Da che parte stanno riduci/ingrandisci/schermo intero/chiudi:
-          // 'destra' come su Windows, 'sinistra' come su macOS.
-          'buttonsSide': 'destra',
-          // ── I programmi che la barra se la disegnano da soli ─────────────
-          //
-          // Il compositore disegna la barra del titolo a ogni finestra. I
-          // browser e parecchie applicazioni GNOME però se la disegnano da
-          // soli: su quelle la nostra sarebbe la seconda — due titoli, due
-          // file di pulsanti, e trenta pixel di spazio buttati. L'elenco lo
-          // manda la shell al compositore (`Compositore.appConBarraPropria`).
-          //
-          // Qui stanno le classi da lasciar stare. Si confronta la classe
-          // della finestra in minuscolo: basta che la contenga.
-          //
-          // Chi preferisce la barra di Minerva anche su Firefox può dire a
-          // Firefox di usare quella di sistema (Personalizza → «Barra del
-          // titolo») e togliere la voce da questo elenco.
-          'csdApps': [
-            'firefox',
-            'chromium',
-            'google-chrome',
-            'brave-browser',
-            'microsoft-edge',
-            'thunderbird',
-            // Gli editor derivati da VS Code (Antigravity, Code, Cursor,
-            // Windsurf) accendono di serie la loro barra del titolo: su Linux
-            // `window.titleBarStyle` vale «custom». Nessuno di questi lo
-            // dichiara al compositore, e non c'è modo di chiederglielo: si
-            // vede soltanto, ed è il motivo per cui questo elenco è a mano.
-            'antigravity',
-            'org.gnome.',
-            'nautilus',
-            'gnome-',
-          ],
-        },
-        // ── Il gestore file ────────────────────────────────────────────
-        //
-        // Poche, e tutte cose che cambiano come ci si comporta, non come si
-        // vede: le scelte di aspetto stanno nella finestra dove si vedono
-        // (vista, ordine, zoom), qui stanno quelle che valgono per tutte le
-        // cartelle e per tutte le finestre.
-        'files': {
-          'view': 'list',
-          'zoom': 1,
-          'sort': 'name',
-          'sortDesc': false,
-          'pinned': <String>[],
-          // Dove sta ogni icona sulla scrivania, per nome.
-          'desktopPositions': <String, dynamic>{},
-          // Le cartelle che il sistema conosce — Musica, Documenti, Immagini —
-          // prendono da sole uno sfondo a motivo: note sparse su Musica, fogli
-          // su Documenti. Si riconoscono prima di leggerne il nome.
-          'sfondiAutomatici': true,
-          // Un clic solo apre, invece di due. Chi viene da GNOME lo cerca
-          // subito; chi viene da Windows lo trova insopportabile. Spento.
-          'clicSingolo': false,
-          // Le miniature delle immagini. Si spengono su cartelle enormi di
-          // foto su un disco lento, dove ogni miniatura è una lettura.
-          'anteprime': true,
-          // La domanda prima di cestinare. Si può togliere perché il cestino
-          // È la rete: chiedere due volte per un'azione già reversibile è
-          // il tipo di attrito che fa smettere di leggere le domande.
-          'confermaCestino': true,
-          // I file nascosti (il punto in testa al nome). Da ricordare fra
-          // una sessione e l'altra: chi li accende una volta non li rivuole
-          // nascosti al prossimo avvio.
-          'showHidden': false,
-          // ── Tenerlo pronto ────────────────────────────────────────────
-          //
-          // Il gestore file si avvia all'accesso e resta acceso senza
-          // finestra, così la prima cartella che si apre compare subito
-          // invece che dopo circa 800 ms.
-          //
-          // Non è gratis e il numero va detto. Rimisurato il 18 agosto
-          // 2026 sulla macchina vera, dopo il passaggio al disegno col
-          // processore: 84 MB di memoria privata da dormiente. Con la
-          // scheda video erano 116.
-          // Acceso di serie perché l'attesa la paga ogni volta chi usa il
-          // computer, mentre la memoria la paga solo chi ne ha poca — e
-          // quello la spegne qui.
-          //
-          // Chiudendo la finestra con questo spento il programma esce
-          // davvero: vedi `onRequestClose` in `minerva-shell/filemanager.qml`.
-          'tieniAcceso': true,
-        },
-        // ── L'editor di testi ──────────────────────────────────────────
-        //
-        // Come si scrive, non cosa: il carattere, il peso, i colori. Ogni
-        // documento aperto nasce con queste scelte, e chi le cambia le
-        // ritrova alla prossima finestra.
-        // ── Il Terminale ──────────────────────────────────────────────
-        //
-        // 15 settembre 2026. Le manopole stanno nell'app, come per l'editor;
-        // qui i valori di fabbrica. Il carattere vuoto vuol dire «quello
-        // monospazio del tema».
-        'terminale': {
-          'carattere': '',
-          'corpo': 14,
-          // «minerva» segue il tema; «classica» e «solarizzata» sono fisse.
-          'tavolozza': 'minerva',
-          // 0 blocco · 1 sottolineatura · 2 barra. Il programma può
-          // cambiarla (DECSCUSR); questa è quella di partenza.
-          'cursore': 0,
-          'scrollback': 10000,
-          // Il campanello: un suono, o niente.
-          'campanello': true,
-        },
-        'editor': {
-          // La famiglia del carattere. Vuota vuol dire «il monospazio del
-          // tema»: per scrivere si parte da lì.
-          'font': '',
-          'size': 14,
-          'bold': false,
-          'italic': false,
-          // Il colore del testo. L'accento di Minerva come partenza, che è
-          // il colore di tutto il resto.
-          'colore': '',
-          // Fondo scuro o chiaro: sul chiaro il colore del testo scuro si
-          // regge meglio, e viceversa.
-          'fondoScuro': true,
-          // L'a-capo automatico. Spento: con l'a-capo acceso i numeri di riga
-          // non corrispondono più a niente, ed erano proprio quelli a mancare.
-          'piega': false,
-        },
-        'icons': {
-          // Come sono disegnate le icone dell'interfaccia.
-          //
-          //  'minerva'  — i tracciati disegnati da noi (Icon.qml)
-          //  'classiche'— le icone del tema installato, con i loro colori
-          //  'tinta'    — le icone del tema, ricolorate nella nostra tinta
-          //
-          // Le nostre restano il valore di serie perché sono le uniche che
-          // non possono mancare: un tema di icone incompleto lascia buchi,
-          // un tracciato no.
-          'style': 'minerva',
-          // Quale tema usare. Vuoto = quello scelto nelle impostazioni del
-          // sistema, che è già quello che usano i menu delle applicazioni.
-          'theme': '',
-        },
-        'desktop': {
-          // Vero dopo il primo uso del menu del tasto destro: serve a non
-          // ripetere il suggerimento a chi l'ha già trovato.
-          'menuUsed': false,
-          // Menu contestuale con il tasto destro sulla scrivania.
-          'rightClickMenu': true,
-          // Le icone dei file sulla scrivania, come su ogni ambiente
-          // classico: si aprono con un doppio clic, si spostano
-          // trascinandole e ricordano il loro posto.
-          'icons': true,
-          // ── Come stanno disposte ────────────────────────────────────
-          //
-          // Due interruttori e non tre scelte in fila, perché è così che li
-          // conosce chi arriva da Windows, da KDE o da GNOME 2: la
-          // disposizione automatica vince sull'allineamento, e insieme danno
-          // i tre modi che esistono davvero.
-          //
-          // Automatica SPENTA di fabbrica: decide lei dove va ogni cosa, e
-          // una scrivania che rimette le icone dove vuole lei appena ne
-          // arriva una nuova è la ragione per cui in tanti la spengono.
-          'iconAutoArrange': false,
-          // Allineamento ACCESO: è quello che toglie il disordine senza
-          // togliere la libertà di mettere le cose dove si vuole.
-          'iconSnap': true,
-          // Gli stessi nomi del gestore file, e la stessa funzione che
-          // ordina: 'name', 'type', 'size', 'modified'.
-          // ── I widget della scrivania ──────────────────────────────────
-          //
-          // Giacomo, 9 settembre 2026: «vorrei avere dei widget sul desktop
-          // per vedere i valori di sistema [...] ridimensionabili
-          // direttamente da desktop e possono anche essere bloccati e
-          // diventare parte dello sfondo».
-          //
-          // L'elenco è STATO, non una manopola: sono le posizioni in cui li
-          // hai trascinati, come `files.desktopPositions`. Le coordinate sono
-          // FRAZIONI dello schermo e non pixel — vedi `widget/Telaio.qml`.
-          'widgets': <Map<String, dynamic>>[],
-          // Bloccati di serie: chi non li ha mai spostati non deve poterseli
-          // portare via con un clic per sbaglio. Si sbloccano dal tasto
-          // destro sulla barra o dalle Impostazioni.
-          'widgetBloccati': true,
-          'widgetAccesi': true,
-          // La modalità «pulita»: niente icone, niente widget. Per una
-          // schermata, o per mostrare la scrivania a qualcuno.
-          'puliti': false,
-          'iconSort': 'name',
-          'iconSortDesc': false,
-          // Il lato del disegno dell'icona. La cella della griglia si ricava
-          // da qui: un numero solo da regolare, e niente che possa divergere.
-          'iconSize': 46,
-          // ── Il movimento ────────────────────────────────────────────
-          //
-          // `animations` vale per TUTTE e due le metà, ed è la correzione del
-          // 19 agosto 2026: prima toccava solo il compositore (finestre che si
-          // aprono, cambio scrivania) e lasciava correre le animazioni della
-          // shell — pannelli, dock, menu — che sono quelle che si notano.
-          // Giacomo: «non porta a nessun cambiamento». Vedi
-          // `minerva-shell/theme/Motion.qml`.
-          'animations': true,
-          // Quanto dura il movimento, rispetto al normale: 0,5 = doppio della
-          // velocità, 2 = metà. Separata dall'interruttore apposta, così chi
-          // spegne e riaccende ritrova la sua e non quella di fabbrica.
-          'animationSpeed': 1.0,
-          // Qui c'era la scia dietro le finestre (`motionBlur`): era di
-          // Hyprland, e sotto il nostro compositore non la applicava nessuno.
-          // Tolta il 27 settembre 2026 con la sua levetta.
-          // ── Lo sfondo ───────────────────────────────────────────────
-          //
-          // Erano lette da `sections/Appearance.qml` e da `core/Wallpaper.qml`
-          // e non stavano qui: cinque impostazioni che esistevano solo come
-          // valore di ripiego scritto nella shell. È la regola che questo
-          // file dichiara in cima a sé stesso, e che nessuno faceva
-          // rispettare.
-          //
-          //  'minerva' — i sei sfondi che viaggiano con la shell
-          //  'image'   — una immagine scelta
-          //  'folder'  — una cartella che gira
-          'wallpaperMode': 'minerva',
-          // Vuoto vuol dire «quello di Minerva», non «nessuno»: la scrivania
-          // non deve mai restare nera per una impostazione mancante.
-          'wallpaper': '',
-          'wallpaperFolder': '',
-          // Ogni quanti minuti cambia. 0 = mai.
-          'rotateMinutes': 0,
-          'rotateRandom': false,
-        },
-        // ── Lo schermo, non i monitor ─────────────────────────────────
-        //
-        // La disposizione dei monitor sta in `schermi.conf`, che legge il
-        // compositore: qui sta solo quello che Minerva aggiunge sopra, cioè
-        // per ora la luce notturna.
-        'display': {
-          // Il filtro luce blu. Spento di fabbrica: cambia il colore di TUTTO
-          // lo schermo, e una cosa che cambia i colori senza che nessuno
-          // l'abbia chiesta sembra un guasto del monitor.
-          'nightLight': false,
-          // Gradi Kelvin. 6500 è la luce del giorno e non tocca niente; 3800
-          // è una sera tranquilla; sotto i 3000 si comincia a non distinguere
-          // bene i colori, e chi guarda foto se ne accorge.
-          'nightLightTemp': 3800,
-          // Accendersi e spegnersi da sola all'ora scelta.
-          'nightLightAuto': false,
-          'nightLightFrom': 21,
-          'nightLightTo': 7,
-        },
-        // ── Come si DISEGNA l'ora, non che ora è ──────────────────────
-        //
-        // Il fuso e la sincronizzazione appartengono al sistema e li tiene
-        // `timedatectl`: metterne una copia qui vorrebbe dire avere due
-        // verità che prima o poi divergono. Qui sta solo la forma.
-        'clock': {
-          // 24 ore. Il default segue l'Europa, che è dove sta chi usa questo
-          // computer; si cambia da Impostazioni → Data e ora.
-          'format24': true,
-        },
-        // ── Accessibilità ─────────────────────────────────────────────
-        //
-        // Tutte e tre sono cose che il compositore o la tipografia DIMENTICANO a
-        // ogni avvio: il posto dove ricordarle è qui, e la shell le riapplica
-        // appena il demone risponde.
-        'accessibility': {
-          // Moltiplicatore del testo di tutta Minerva. Il tetto vero è 1.3, e
-          // il perché sta scritto in `theme/Typography.qml`.
-          'textScale': 1.0,
-          // Ingrandimento dello schermo attorno al puntatore. 1 = spento.
-          'zoom': 1.0,
-          // Dimensione del puntatore. 24 è quella di serie dei temi di
-          // puntatori più diffusi.
-          'cursorSize': 24,
-        },
-        // ── Il tempo che fa ───────────────────────────────────────────
-        //
-        // Spento finché non c'è una località: senza coordinate il demone non
-        // chiede niente a nessuno. La località la si cerca per nome dalle
-        // Impostazioni, e da lì restano scritte solo le coordinate — al
-        // centesimo di grado, cioè il quartiere e non la casa.
-        'weather': {
-          'enabled': false,
-          'name': '',
-          'lat': 0.0,
-          'lon': 0.0,
-        },
-        'greeter': {
-          'user': '',
-          'session': 'minerva',
-          'autologin': false,
-          'background': 'aurora',
-          'wallpaper': '',
-          'auroraStrength': 0.55,
-          'blur': 48,
-          'scrim': 0.42,
-          'showClock': true,
-          // La schermata di accesso ha una chiave sua perché gira in un
-          // ALTRO processo, con un altro demone e un'altra configurazione
-          // (vedi `scripts/minerva-greetd`): non può leggere quella sopra.
-          // Il pannello «Data e ora» le scrive tutte e due insieme, così non
-          // capita di trovare l'ora scritta in due modi diversi passando
-          // dalla schermata di accesso alla scrivania.
-          'clock24': true,
-          // Le cose in più della schermata di accesso (23 settembre 2026):
-          // il meteo sotto la data (solo se la sessione ne ha uno acceso),
-          // «Buonasera, Giacomo» al posto del nome secco, e batteria e
-          // tastiera nell'angolo. Il meteo mostra la città: si spegne qui.
-          'meteo': true,
-          'saluto': true,
-          'stato': true,
-          // Da che parte stanno l'ora e l'accesso: «sinistra», «destra» o
-          // «centro» (com'era prima). L'altra metà resta libera: nella
-          // schermata di blocco lì vanno le notifiche. Vale per tutte e due
-          // le schermate, che devono somigliarsi.
-          'lato': 'sinistra',
-        },
-        // ── Il lettore multimediale ───────────────────────────────────
-        //
-        // Il volume stava SOLO nel cursore, che partiva da 70 mentre
-        // l'uscita audio era all'unità: all'avvio il numero sullo schermo e
-        // il suono nelle casse dicevano due cose diverse, e spostandolo non
-        // se ne ricordava niente al riavvio.
-        //
-        // `ripeti` ha tre valori perché due non bastano: «tutto» era il
-        // comportamento di prima ed era implicito — la scaletta ripartiva da
-        // capo alla fine e non c'era modo di dirle di smettere.
-        'media': {
-          'volume': 70,
-          'muto': false,
-          // 'no' · 'tutto' · 'uno'
-          'ripeti': 'tutto',
-          'casuale': false,
-          // Quale dei quattro disegni dell'audio: 0 barre, 1 onda,
-          // 2 radiale, 3 neon. Si sceglieva a ogni avvio da capo.
-          'disegno': 0,
-        },
-        // ── Lo stile della scrivania ──────────────────────────────────
-        //
-        // Uno stile non aggiunge manopole: scrive insieme quelle che ci sono
-        // già, sparse fra tre pagine. `libero` è la fotografia di com'era
-        // prima di sceglierne uno, e viaggia come **testo JSON** perché le
-        // chiavi hanno il punto dentro (`bar.position`) e qui il punto vuol
-        // dire «scendi di un livello».
-        'stile': {
-          'attuale': 'libero',
-          'libero': '',
-        },
-        'viewer': {
-          // Anteprima: la striscia delle miniature in fondo alla finestra.
-          // Accesa di suo — è quella che dice a che punto si è dentro una
-          // cartella, e chi guarda una fotografia sola la spegne una volta.
-          'filmstrip': true,
-        },
-        // Qui c'era `'plugins': {'enabled': ['weather', 'system_stats']}`.
-        // Due nomi di moduli che non esistono, in una chiave che NESSUNO
-        // legge: `PluginManager` decide se avviare un modulo dal campo
-        // `enabled` del suo `plugin.json`, non da qui. Chi apriva il file
-        // trovava scritto che due moduli erano attivi, e non lo erano — una
-        // riga di configurazione che dice il falso è peggio di una che manca.
-        // ── La dock ───────────────────────────────────────────────────
-        //
-        // Otto manopole che `dock/Dock.qml` dichiara e la shell legge da
-        // sempre, e che fino al 18 agosto 2026 esistevano SOLO come valore di
-        // ripiego scritto dentro il QML. Erano 46 chiavi su 108 in quello
-        // stato: vedi `test/impostazioni_ripiego_test.dart`.
-        'dock': {
-          'enabled': true,
-          'iconSize': 48,
-          'magnification': 1.6,
-          'reach': 2.2,
-          // ── Come sta la dock sullo schermo ─────────────────────────────
-          //
-          // Tre modi, e non più una levetta:
-          //
-          //   'sempre'   riserva il suo spazio: le finestre si fermano sopra
-          //              di lei e non ci passano mai sotto;
-          //   'nascondi' sparisce, e torna avvicinando il puntatore al bordo
-          //              basso dello schermo;
-          //   'elude'    resta visibile finché nessuna finestra la
-          //              coprirebbe, e si ritira quando una ci arriva sopra.
-          //
-          // Il terzo è quello che Giacomo ha chiesto il 2 settembre 2026 e
-          // che non esisteva: «non hai ancora reso la dock a scomparsa o che
-          // elude le finestre o sempre presente».
-          //
-          // `autoHide` resta scritto qui sotto per una ragione sola: chi
-          // aveva già Minerva installata ha quel valore nel proprio file, e
-          // `dock.modo` lo legge per non far cambiare comportamento a nessuno
-          // di soppiatto. Vedi `Dock.qml`.
-          'modo': 'sempre',
-          'autoHide': false,
-          // ── E da che parte sta la dock ────────────────────────────────
-          //
-          // 'basso' o 'alto'. Sopra o sotto la barra non è una scelta: chi
-          // le mette dalla stessa parte se le trova una sull'altra, e la
-          // shell non glielo impedisce — impedirlo vorrebbe dire decidere
-          // per chi ha due schermi e una barra sola. Le Impostazioni lo
-          // dicono a parole, che è il posto giusto per un avviso.
-          'position': 'basso',
-          'opacity': 0.90,
-          // Col blur vero del compositore dietro. Vedi
-          // `shell.membraneOpacityBlur`, che è lo stesso ragionamento per la
-          // barra: sono due situazioni diverse, quindi due memorie.
-          'opacityBlur': 0.68,
-          'showLabels': true,
-          // ⚠ `spine/panels/AppsPanel.qml` legge questa stessa chiave con un
-          // ripiego DIVERSO (elenco vuoto). Qui vince quello della shell, che
-          // è chi la dock la costruisce davvero.
-          'pinned': ['firefox.desktop', 'minerva-terminale.desktop'],
-        },
-        'audio': {
-          'feedbackSounds': true,
-          'feedbackVolume': 0.4,
-          // Volume oltre il 100%: distorce, e va chiesto.
-          'allowOverdrive': false,
-        },
-        'input': {
-          'layout': 'it',
-          'repeatDelay': 600,
-          'repeatRate': 25,
-          'naturalScroll': true,
-          'tapToClick': true,
-          'disableWhileTyping': true,
-          'sensitivity': 0,
-          'touchpadOn': true,
-          // I pad di gioco passano da InputPlumber, che li presenta a ogni
-          // gioco come un pad del tipo scelto (`ControllerService`).
-          'controllerAutomatico': true,
-          'controllerTipo': 'xbox-series',
-          // Per ogni pad, con chiave il suo indirizzo: preset, mappa dei
-          // tasti, «scambia ✕ e ○» e i colori della barra luminosa. Mappa
-          // libera: i pad sono quelli che uno collega.
-          'controllerPad': <String, dynamic>{},
-        },
-        'power': {
-          // Minuti. 0 = mai.
-          'dimAfter': 5,
-          'lockAfter': 10,
-          // Lo schermo a riposo (verbo `riposo` del compositore): su un fisso
-          // è l'unica cosa che spegne davvero il monitor, perché
-          // `brightnessctl` non ci arriva.
-          'screenOffAfter': 15,
-          'suspendAfter': 30,
-          'lidAction': 'suspend',
-          // Il modo risparmio del compositore: «auto» abbassa gli effetti a
-          // batteria sotto la soglia (o col profilo «risparmio energetico»),
-          // «sempre» sempre, «mai» mai. Vedi `compositore/src/energia.h`.
-          'risparmioEffetti': 'auto',
-          'risparmioSoglia': 20,
-        },
-        // La memoria che respira: le nostre app fuori vista da un minuto si
-        // comprimono in zram («delicata»), o niente («spenta»). Vedi
-        // `services/respiro_service.dart`.
-        'memoria': {
-          'respiro': 'delicata',
-        },
-        'notifications': {
-          'doNotDisturb': false,
-          // Cosa si vede sulla schermata di blocco: «numero» (per programma,
-          // «Thunderbird · 3 email», come sul telefono), «tutto» (anche il
-          // testo), «niente». Il filtro lo fa la shell PRIMA di passarle al
-          // blocco: vedi `Core.Notifications._perIlBlocco`.
-          'bloccoMostra': 'numero',
-        },
-        'windowControls': {
-          'enabled': true,
-        },
-        // ── Le app tenute pronte ───────────────────────────────────────
-        //
-        // Un'app di Minerva chiusa se ne va, e riaprirla costa fra 317 e
-        // 645 ms — misurati il 18 agosto 2026 sulla macchina vera, dal
-        // lancio del processo alla finestra mappata dal compositore. Quasi
-        // tutto quel tempo è la costruzione dell'albero degli oggetti QML,
-        // e le due strade per accorciarla sono già state percorse e sono
-        // chiuse (la cache di compilazione di Qt non si può accendere con
-        // Quickshell 0.3; ridurre il sorgente non sposta niente).
-        //
-        // Resta una strada sola: non ricostruire. Un'app già costruita si
-        // rimostra in 17–50 ms invece che in 317–645 — da dieci a venti volte
-        // più veloce, e anche questo è misurato.
-        //
-        // Il prezzo si paga in memoria e non è piccolo: fra 49 e 98 MB
-        // privati per app, sempre occupati, più uno 0,20% di CPU costante.
-        // Tutte e sei insieme fanno 418 MB.
-        // E non è un prezzo che si può togliere: la memoria che si paga È
-        // la velocità che si compra, perché ciò che resta in memoria è
-        // esattamente l'albero che non va ricostruito.
-        //
-        // Per questo sono tutte spente di fabbrica tranne il gestore file,
-        // che era già acceso per scelta di Giacomo il 16 agosto e ha la sua
-        // chiave storica in `files.tieniAcceso`. Si accendono una alla
-        // volta, guardando il prezzo scritto accanto.
-        'preload': {
-          'calcolatrice': false,
-          'editor': false,
-          'impostazioni': false,
-          'anteprima': false,
-          'attivita': false,
-          // Il Terminale tenuto pronto ha già una shell viva: l'apertura è
-          // istantanea, e il prezzo è quella shell in memoria.
-          'terminale': false,
-          // Dopo quanti minuti da ferma un'app tenuta pronta esce da sola.
-          // Zero la lascia lì per sempre: chi apre la calcolatrice una
-          // volta stamattina non deve ritrovarsela in memoria stasera.
-          'minuti': 30,
-        },
-      };
+    // ── L'aspetto di tutta Minerva ────────────────────────────────
+    //
+    // Un tema è una TINTA e un VERSO (chiaro o scuro). La tavolozza vera
+    // sta in `minerva-shell/theme/Colors.qml`, che è l'unico posto in cui
+    // si sceglie un colore; qui sta solo il nome di quello in uso.
+    //
+    // `schemiChiari` non è un'impostazione: è ciò che il demone deve
+    // sapere per scegliere la variante giusta del tema di icone (le icone
+    // «-Dark» sono chiare, fatte per stare su fondo scuro). Se qualcuno
+    // aggiunge un tema in Colors.qml e si dimentica di questo elenco, se
+    // ne accorge una prova — `test/schemi_test.dart`.
+    'shell': {
+      // ── Qui c'era `clock24`, e non la scriveva nessuno ────────────
+      //
+      // La leggeva la sola schermata di blocco. Nelle Impostazioni → Data
+      // e ora la scelta fra dodici e ventiquattro ore scrive
+      // `clock.format24` (la barra) e `greeter.clock24` (l'accesso): si
+      // metteva l'orologio a dodici ore e la schermata di blocco restava a
+      // ventiquattro, per sempre, senza che nulla lo dicesse.
+      //
+      // Tolta il 9 settembre 2026: adesso il blocco legge `clock.format24`
+      // come la barra. Una terza chiave per la stessa domanda non è una
+      // scelta in più — è un posto in cui la risposta può divergere.
+      //
+      // `greeter.clock24` invece resta e ha ragione di restare: la
+      // schermata di ACCESSO gira prima che ci sia un utente, e le
+      // preferenze di chi non ha ancora fatto l'accesso non si possono
+      // leggere.
+      // Ricarica a caldo dei QML: solo per chi sviluppa Minerva.
+      'hotReload': false,
+      'scheme': 'notte',
+      'accent': '#22D3EE',
+      // ── Il settimo tema ────────────────────────────────────────────
+      //
+      // Con `scheme` a 'personale' la tinta e il verso li scegli tu, e
+      // tutto il resto continua a derivare da quei due come per gli altri
+      // sei. Il verso non si indovina dalla tinta: un grigio medio può
+      // stare bene in tutti e due i modi, e chi sceglie sa quale vuole.
+      'tintaPersonale': '#101018',
+      'versoPersonale': true,
+      // ── E i colori messi a mano, uno per uno ───────────────────────
+      //
+      // Nomi ammessi: base, testo, membrana, bordo, positivo, avviso,
+      // pericolo — l'elenco vero sta in `theme/Colors.qml`
+      // (`scavalcabili`), che è l'unico posto in cui si sceglie un colore.
+      //
+      // Vuoto vuol dire «lascia derivare», ed è il ripiego: un colore
+      // scritto qui vince sul conto che lo avrebbe calcolato, e quel conto
+      // era MISURATO. Le Impostazioni mostrano il contrasto mentre si
+      // sceglie, e avvisano sotto 4,5 senza impedire niente.
+      'scavalca': <String, dynamic>{},
+      'membraneOpacity': 0.93,
+      // ── E la stessa cosa col filtro vero, che è un mestiere diverso ──
+      //
+      // (Le chiavi si chiamano ancora `…Blur`: sono nate col blur, e
+      // rinominarle farebbe perdere a chi le ha già regolate il suo
+      // numero. Oggi valgono con l'acquerello, l'unico filtro rimasto.)
+      //
+      // Due numeri e non uno, perché la domanda «quanto è coprente la
+      // barra» ha due risposte giuste secondo cosa c'è dietro.
+      //
+      // Senza blur dietro c'è una fotografia NITIDA, e sotto 0,75 il testo
+      // ci si perde: è la soglia misurata, ed è dove si ferma il cursore.
+      // Col blur del compositore dietro c'è una macchia morbida e un po'
+      // scurita, che non ruba leggibilità a niente — e lì 0,93 vuol dire
+      // non vedere la sfocatura per cui si è pagato un passaggio di
+      // disegno. Misurato il 9 settembre 2026: fra `vetro` e `blur`, nella
+      // fascia della barra non cambiava NEMMENO UN PIXEL.
+      //
+      // Un numero solo obbligherebbe a scegliere quale delle due
+      // situazioni servire, e a rigirare il cursore ogni volta che si
+      // cambia effetto. Due numeri sono due memorie: ognuno si ricorda
+      // com'era.
+      'membraneOpacityBlur': 0.68,
+      'windowOpacity': 0.88,
+      // ── Il tasto che riavvia la scrivania ──────────────────────────
+      //
+      // il manutentore, 2 settembre 2026: «mettiamo un tasto disattivabile
+      // accanto al meteo dove posso riavviare la shell».
+      //
+      // Acceso di suo: chi sta costruendo Minerva la ricarica dieci volte
+      // al giorno, e la scorciatoia da sola si dimentica. Chi non lo vuole
+      // lo spegne in Impostazioni → Aspetto, e la barra torna com'era.
+      //
+      // Ricarica, non riavvia: la shell si rilegge restando viva, quindi
+      // barra e pannelli non spariscono. È la stessa cosa che fa
+      // `minerva-reload.sh` senza argomenti.
+      'tastoRiavvio': true,
+    },
+    'general': {
+      // Lingua dell'interfaccia: 'auto' segue la lingua di sistema.
+      'language': 'auto',
+      // Modalità principiante: suggerimenti visibili e conferme in più.
+      'beginnerMode': true,
+    },
+    'cheatsheet': {
+      // Il pannello «Scorciatoie» è attivabile da qui.
+      'enabled': true,
+      // Opacità dello sfondo semitrasparente (0 = invisibile, 1 = pieno).
+      'backgroundOpacity': 0.55,
+      // Mostra il pannello automaticamente al primo avvio della sessione.
+      'showOnFirstRun': true,
+    },
+    // ── Le scorciatoie spente ─────────────────────────────────────────
+    //
+    // I `tasti` (come scritti in `scorciatoie.minerva`, es. «$mod W») che
+    // l'utente ha spento nelle Impostazioni: il demone non li registra nel
+    // compositore, e il tasto resta libero.
+    'shortcuts': {'disabled': <String>[]},
+    // ── La finestra delle Impostazioni ────────────────────────────
+    //
+    // `lastSection`: dove si era rimasti. `scripts/minerva-settings` lo
+    // prometteva nella sua riga d'aiuto molto prima che esistesse, e la
+    // finestra si riapriva sempre su «Aspetto».
+    'settings': {
+      'lastSection': 'appearance',
+      // Quali schede delle Impostazioni sono aperte: «sezione#posizione» →
+      // vero/falso. Mappa libera: le schede nuove non vanno dichiarate qui.
+      'schedeAperte': {},
+    },
+    // ── La riva: che cosa esce da quale bordo ─────────────────────────
+    //
+    // «I bordi vivi: banchina in basso, stanze a sinistra, Cassetto a
+    // destra; si scambiano posto trascinandoli». `cassetto` dice da che
+    // parte esce il Cassetto (gli appunti); le Stanze escono dall'altra.
+    // Lo cambia il trascinamento di uno dei due verso l'altro bordo.
+    'riva': {
+      'cassetto': 'destra',
+      // Il carattere della molla di tutta la riva: 'calma', 'liquida',
+      // 'viva' (vedi `minerva-shell/theme/Motion.qml`).
+      'molla': 'liquida',
+      // Con una finestra che riempie lo schermo, angoli e bordi solo con
+      // Super giù (e Super tenuto fa salire la riva). Falso: sempre.
+      'consenso': true,
+      // Che cosa fa ogni angolo: 'menu', 'centro', 'scrivania',
+      // 'stanze', 'isola', 'appunti', 'niente' (`core/Riva.qml`).
+      'angoli': {
+        'altoSx': 'niente',
+        'altoDx': 'centro',
+        'bassoSx': 'menu',
+        'bassoDx': 'scrivania',
+      },
+    },
+    // Che cosa mostra l'Isola, pezzo per pezzo.
+    'isola': {
+      'mostra': {
+        'data': true,
+        'meteo': true,
+        'musica': true,
+        'vassoio': true,
+        'stato': true,
+      },
+    },
+    // Il Centro di controllo (in alto a destra): quali riquadri e in che
+    // ordine. Si cambia dal Centro stesso, con «Personalizza». I nomi
+    // sono quelli del catalogo in `minerva-shell/menu/Centro.qml`; uno
+    // che non conosce si salta.
+    'centro': {
+      'voci': [
+        'wifi',
+        'bluetooth',
+        'notte',
+        'nondisturbare',
+        'risparmio',
+        'gioco',
+        'trasmetti',
+        'impostazioni',
+      ],
+    },
+    'launcher': {
+      // Qui c'era `'maxShown': 7` — quante voci mostrare nel menu — e
+      // non la leggeva nessuno: zero occorrenze in tutto il progetto. Il
+      // pannello delle applicazioni le mostra tutte, e scorre. Tolta il
+      // 5 settembre 2026: una manopola che non fa niente insegna a non
+      // fidarsi delle altre.
+      // ── Il menu delle applicazioni ────────────────────────────────
+      //
+      // `wheelCategories`: la rotellina passa da una categoria all'altra.
+      // `hiddenCategories`: quelle che non si vogliono vedere (Preferiti e
+      //   Tutte non si possono togliere: sono le vie d'uscita).
+      // `startCategory`: con quale si apre.
+      'wheelCategories': true,
+      'hoverCategories': true,
+      // Il Sottomarino (`menu/Sottomarino.qml`): la vista con cui si apre
+      // («categorie», «attivita», «frequenti», «az») e il verso.
+      'vista': 'categorie',
+      'verticale': false,
+      // Le misure che si scelgono trascinando i bordi del menù: una per
+      // verso, perché un menù largo e basso e uno stretto e alto sono due
+      // scelte diverse.
+      'orizzontaleLarghezza': 960,
+      'orizzontaleAltezza': 430,
+      'verticaleLarghezza': 420,
+      'hiddenCategories': <String>[],
+      'startCategory': 'favorites',
+      // Il nostro, dal 15 settembre 2026. Chi ne vuole un altro lo sceglie
+      // in Impostazioni → Applicazioni predefinite; Alacritty resta
+      // installato finché il Terminale di Minerva non ha passato la prova
+      // approfondita (tappa 5 del piano).
+      'defaultTerminal': 'minerva-terminale',
+      // Le app in cima al menu appena installato.
+      //
+      // C'erano `org.kde.dolphin`, `org.kde.kate` e `systemsettings`: i
+      // programmi di KDE, su un ambiente che di KDE non vuole dipendere.
+      // Su un computer senza KDE quelle voci sono tre riquadri vuoti che
+      // non aprono niente — e il gestore file e le Impostazioni Minerva ce
+      // li ha suoi.
+      'fixedApps': [
+        'firefox.desktop',
+        'minerva-files.desktop',
+        'minerva-terminale.desktop',
+        'minerva-settings.desktop',
+      ],
+      // Qui c'era `'defaultView': 'menu'`, con scritto accanto che
+      // `'matrix'` avrebbe dato «cerchi concentrici». Quei cerchi non
+      // esistono, e la chiave non la leggeva nessuno: era la descrizione
+      // di una funzione mai scritta, in un file che si legge come se
+      // dicesse la verità. Tolta il 5 settembre 2026.
+    },
+    'bar': {
+      // ── Da che parte sta la barra ──────────────────────────────────
+      //
+      // 'alto' o 'basso'. Era dichiarata qui dal primo giorno e non la
+      // leggeva nessuno: una impostazione che esiste, si può scrivere, e
+      // non fa niente — il tipo di bugia che nessun errore segnala.
+      //
+      // I lati non ci sono, e non per dimenticanza: barra e dock sono
+      // costruite in orizzontale — la lingua scende, le icone crescono
+      // verso l'interno — e metterle di fianco non è un ancoraggio
+      // diverso, è un'altra geometria. Quando si farà, sarà una voce in
+      // più qui e un lavoro a sé.
+      //
+      // `top` e `bottom` continuano a valere: chi ha un file scritto
+      // prima non deve accorgersi di niente.
+      //
+      // ⚠ Questa e `dock.position` non sono indipendenti: dal 5 settembre
+      // 2026 barra e dock **non possono stare dallo stesso bordo**. Se qui
+      // dentro finiscono uguali — scrivendo il file a mano, per esempio —
+      // vince la dock e la barra va dall'altra parte. La regola sta in
+      // `minerva-shell/core/Posizioni.qml`, che è il solo posto da cui
+      // passano tutti quelli che hanno un verso.
+      'position': 'alto',
+      // 'isola' o 'classica'. L'Isola è la barra della Riva: una capsula
+      // che galleggia in mezzo (`minerva-shell/menu/IsolaBarra.qml`). La
+      // classica è la barra di Minerva, a tutta larghezza, che resta
+      // come scelta.
+      'stile': 'isola',
+      // Come sta l'Isola: 'sempre' (riserva la fascia), 'elude' (c'è
+      // finché nessuna finestra le arriva sotto) o 'nascondi' (oltre il
+      // bordo, torna con una sosta del puntatore lassù). il manutentore, 30
+      // settembre 2026: «servirebbe avere l'isola dove si trova l'ora in
+      // modalità eludi finestre perché quando sono sul desktop per vedere
+      // l'ora devo sempre salire su e farla comparire». Gli stessi tre
+      // modi della dock (`dock.modo`).
+      'modoIsola': 'elude',
+      // Il valore di prima (25 settembre, «così recuperiamo spazio»): si
+      // legge ancora solo per chi l'aveva SPENTO, che ritrova l'Isola
+      // sempre su. Vedi `modoIsola` in `minerva-shell/shell.qml`.
+      'aScomparsa': true,
+      // Qui c'era `'opacity': 0.10`. Tolta il 5 settembre 2026: non la
+      // leggeva NESSUNO — zero occorrenze in tutto il progetto — e la
+      // trasparenza della barra ce l'ha già `shell.membraneOpacity`, che
+      // funziona ed è esposta nelle Impostazioni. Due manopole per lo
+      // stesso valore sono peggio di una: una delle due mente sempre.
+      'showAppMenuButton': true,
+      // Le finestre aperte in fila nella barra, una voce per finestra.
+      // Spenta di suo: con la dock accesa sarebbe la stessa cosa detta
+      // due volte. La accende lo stile «Windows», dove la dock non c'è.
+      'listaFinestre': false,
+      // ── I valori di sistema nella barra ──────────────────────────
+      //
+      // il manutentore, 9 settembre 2026: «dei widget sia sulla barra». Gli
+      // stessi tipi della scrivania (`desktop.widgets`), ma qui basta il
+      // nome: sulla barra non c'è niente da posizionare né da
+      // ridimensionare, c'è solo l'ordine.
+      //
+      //     ['processore', 'memoria']
+      //
+      // Vuota di serie, e non è prudenza: la barra c'è sempre, quindi un
+      // widget qui tiene acceso il campionamento del demone per tutta la
+      // sessione — cinque secondi, quattro file. Chi lo vuole lo accende
+      // sapendolo; a chi non lo vuole non costa niente.
+      'widgets': <String>[],
+    },
+    'windows': {
+      'tilingMode': 'classico',
+      'workspaceLayouts': List<String>.filled(10, 'eredita'),
+      'workspaceLastLayouts': List<String>.filled(10, 'uguale'),
+      'workspaceNames': List<String>.filled(10, ''),
+      'workspaceRecentFirst': true,
+      'workspaceRecentOrder': List<int>.generate(10, (i) => i + 1),
+      'tilingTray': true,
+      'workspacePhotographs': true,
+      'focusBorder': true,
+      'inactiveGray': false,
+      'dockLocalWindows': true,
+      'tilingSettingsExpanded': false,
+      'tilingOrder': 'recenti',
+      'tilingFocusFirst': true,
+      'tilingMasterAdaptive': true,
+      'tilingLayout': 'uguale',
+      'tilingWidth': 50,
+      'tilingGap': 8,
+      'tilingRules': <Map<String, dynamic>>[],
+      // Il fuoco segue il puntatore (focus-follows-mouse).
+      'focusSegueMouse': false,
+      // ── Qui c'era `gap`, e non arrivava da nessuna parte ──────────
+      //
+      // I margini valevano solo per le finestre AFFIANCATE. Hyprland non
+      // c'è più dal 2 settembre 2026, il nostro compositore risponde
+      // «margini non ha una strada» e lo scrive nel registro a ogni
+      // avvio: restava una manopola che si poteva scrivere e che non
+      // cambiava un pixel.
+      //
+      // Trovata dal banco delle manopole il 9 settembre 2026:
+      // «windows.gap 1 → 3, non muove, 0,000 %». Tolta.
+      //
+      // Lo spazio sopra una finestra libera lo mette `abbassa()` in
+      // `spine/TitleBars.qml`, che è dove è sempre stato per davvero.
+      // ── L'effetto sulle finestre: nessuno, vetro, acquerello ───────
+      //
+      // Qui c'era `'blur': 2`, un numero da 0 a 3 che sceglieva quanta
+      // sfocatura chiedere a Hyprland. Sotto minerva-wayland **non faceva
+      // niente**: `Compositore.sfocatura()` era un buco che scriveva una
+      // riga e basta. Un'impostazione che si vede, si cambia, e non cambia
+      // nulla è il difetto che questo progetto si è messo per iscritto di
+      // non commettere — e stava nel nostro pannello.
+      //
+      // il manutentore, 2 settembre 2026: «ci vorrebbero delle impostazioni per
+      // mettere nessun effetto o blur o vetro e queste impostazioni si
+      // dovrebbero applicare alle finestre e in blur o vetro dovrebbero
+      // far vedere un solo corpo trasparente [...] la barra e la finestra
+      // senza stacchi».
+      //
+      //   'nessuno'  finestre opache, come nascono
+      //   'vetro'    una sola trasparenza su tutta la finestra, barra
+      //              compresa: il compositore la applica all'albero intero
+      //              e la barra si disegna opaca per non moltiplicarla
+      //   'acquerello' come il vetro, e dietro il COLORE di quello che
+      //              c'è, cella per cella, steso morbido: niente forme
+      //              dietro il testo
+      //
+      // C'era anche 'blur' (dietro sfocato): tolto il 28 settembre 2026,
+      // visto l'acquerello — «a questo punto il blur lo eliminerei». Chi
+      // l'aveva nel file passa all'acquerello al caricamento.
+      //
+      // Nasceva 'nessuno' («una scrivania che parte con le finestre
+      // trasparenti prima che qualcuno l'abbia chiesto sembra rotta»).
+      // Dal 27 settembre 2026 nasce 'acquerello': è il materiale di
+      // Liquid, e il manutentore, vedendolo: «Lo adotterei per tutto». Non è una
+      // trasparenza qualunque — dietro il testo non passano forme, solo
+      // colore — e costa zero a scrivania ferma.
+      'effetto': 'acquerello',
+      // Quanto è opaca una finestra col vetro acceso. Stesso numero che le
+      // finestre di Minerva usavano già per conto loro
+      // (`shell.windowOpacity`): partire da un valore diverso vorrebbe
+      // dire che accendendo il vetro le nostre cambiano e le altre no.
+      'effettoOpacita': 0.88,
+      // Mercurio: le finestre vicine si fondono come gocce, e si staccano
+      // allontanandole. Acceso di serie: è il secondo materiale di Liquid,
+      // e a scrivania ferma non costa niente (lo disegna il compositore
+      // solo fra finestre a meno di 48 pixel, e solo quando si muovono).
+      'mercurio': true,
+      // ── La cornice attorno alla finestra attiva ────────────────────
+      //
+      // 'spento', 'fisso' o 'gira'. Non è una decorazione in più: c'era
+      // già, ed era trasparente — è l'anello di sei pixel con cui si
+      // prende una finestra per ridimensionarla.
+      //
+      // 'gira' è la striscia LED che il manutentore ha chiesto il 3 settembre
+      // 2026. La anima il compositore, dodici passi al secondo, e SOLO
+      // sulla finestra attiva: un arcobaleno attorno a otto finestre
+      // insieme non è un effetto, è una fiera.
+      //
+      // Nasce spenta. Un effetto che si muove tutto il giorno è una cosa
+      // che si sceglie, non che si subisce — e su un portatile è anche
+      // batteria.
+      'cornice': 'spento',
+      // ── Il bordo colorato: spessore, colori, finestre spente ───────
+      //
+      // il manutentore, 9 settembre 2026: «voglio poter regolare lo spessore del
+      // colore intorno alla finestra attiva [...] e vorrei anche
+      // l'effetto rgb come una strip led e possibilità di scegliere i
+      // colori che si alterneranno».
+      //
+      // Sei pixel è la misura con cui la cornice è nata, ed era legata a
+      // quella della presa per ridimensionare: adesso sono due numeri.
+      'corniceSpessore': 6,
+      // Vuoto vuol dire lo SPETTRO intero, che è l'arcobaleno di sempre.
+      // Da un colore in su, il giro passa per quelli e per nessun altro.
+      'corniceTinte': <String>[],
+      // Zero: la cornice si accende solo sulla finestra attiva, che è la
+      // ragione per cui esiste — dire quale risponde alla tastiera. Da
+      // zero in su diventa il contorno di tutte, ed è un'altra cosa.
+      'corniceSpente': 0.0,
+      // Millisecondi per un giro intero dello spettro. Il compositore
+      // rifiuta sotto i 2000: più veloce non è un colore che gira, è un
+      // lampeggio davanti agli occhi.
+      'cornicePeriodo': 8000,
+      // ── Quanto tremano le finestre ──────────────────────────────
+      //
+      // il manutentore, 10 settembre 2026: «voglio le finestre tremolanti».
+      //
+      // Zero spento, uno normale, tre il massimo. Trascinando, la
+      // finestra resta un po' indietro rispetto al dito; al rilascio
+      // raggiunge la posizione, la supera di poco e si posa.
+      //
+      // Spento di serie, come l'effetto vetro e per la stessa ragione:
+      // una scrivania che parte con le finestre che rimbalzano prima che
+      // qualcuno l'abbia chiesto ha deciso al posto tuo.
+      //
+      // La deformazione è disegnata dal compositore in wobbly.c.
+      // L'ultima elasticità si conserva anche spegnendo l'effetto.
+      'elastico': 0.0,
+      'elasticoUltimo': 1.0,
+      'rigidita': 1.0,
+      'smorzamento': 0.42,
+      // Che fa la barra a schermo intero: 'hover' compare avvicinandosi.
+      'fullscreenBar': 'hover',
+      'titleHeight': 34,
+      // ── Chi disegna la barra del titolo ─────────────────────────────
+      //
+      // `false` (come nasce): la disegna la shell, su una superficie
+      // appoggiata sopra le finestre. `true`: la disegna il compositore,
+      // col plugin `plugins/minerva-bars` — una decorazione vera, che si
+      // muove con la finestra e non copre chi le sta davanti.
+      //
+      // Da che parte stanno riduci/ingrandisci/schermo intero/chiudi:
+      // 'destra' come su Windows, 'sinistra' come su macOS.
+      'buttonsSide': 'destra',
+      // ── I programmi che la barra se la disegnano da soli ─────────────
+      //
+      // Il compositore disegna la barra del titolo a ogni finestra. I
+      // browser e parecchie applicazioni GNOME però se la disegnano da
+      // soli: su quelle la nostra sarebbe la seconda — due titoli, due
+      // file di pulsanti, e trenta pixel di spazio buttati. L'elenco lo
+      // manda la shell al compositore (`Compositore.appConBarraPropria`).
+      //
+      // Qui stanno le classi da lasciar stare. Si confronta la classe
+      // della finestra in minuscolo: basta che la contenga.
+      //
+      // Chi preferisce la barra di Minerva anche su Firefox può dire a
+      // Firefox di usare quella di sistema (Personalizza → «Barra del
+      // titolo») e togliere la voce da questo elenco.
+      'csdApps': [
+        'firefox',
+        'chromium',
+        'google-chrome',
+        'brave-browser',
+        'microsoft-edge',
+        'thunderbird',
+        // Gli editor derivati da VS Code (Antigravity, Code, Cursor,
+        // Windsurf) accendono di serie la loro barra del titolo: su Linux
+        // `window.titleBarStyle` vale «custom». Nessuno di questi lo
+        // dichiara al compositore, e non c'è modo di chiederglielo: si
+        // vede soltanto, ed è il motivo per cui questo elenco è a mano.
+        'antigravity',
+        'org.gnome.',
+        'nautilus',
+        'gnome-',
+      ],
+    },
+    // ── Il gestore file ────────────────────────────────────────────
+    //
+    // Poche, e tutte cose che cambiano come ci si comporta, non come si
+    // vede: le scelte di aspetto stanno nella finestra dove si vedono
+    // (vista, ordine, zoom), qui stanno quelle che valgono per tutte le
+    // cartelle e per tutte le finestre.
+    'files': {
+      // Auto segue il preset senza cancellare una scelta esplicita dell'utente.
+      'disposizione': 'auto',
+      'caselleSelezione': false,
+      // Il riquadro a destra, come in Esplora file: «niente», «dettagli»
+      // (Alt+Maiusc+P) o «anteprima» (Alt+P). Di serie spento.
+      'pannelloLaterale': 'niente',
+      'view': 'list',
+      'zoom': 1,
+      'sort': 'name',
+      'sortDesc': false,
+      'pinned': <String>[],
+      // Dove sta ogni icona sulla scrivania, per nome.
+      'desktopPositions': <String, dynamic>{},
+      // Le cartelle che il sistema conosce — Musica, Documenti, Immagini —
+      // prendono da sole uno sfondo a motivo: note sparse su Musica, fogli
+      // su Documenti. Si riconoscono prima di leggerne il nome.
+      'sfondiAutomatici': true,
+      // Un clic solo apre, invece di due. Chi viene da GNOME lo cerca
+      // subito; chi viene da Windows lo trova insopportabile. Spento.
+      'clicSingolo': false,
+      // Le miniature delle immagini. Si spengono su cartelle enormi di
+      // foto su un disco lento, dove ogni miniatura è una lettura.
+      'anteprime': true,
+      // La domanda prima di cestinare. Si può togliere perché il cestino
+      // È la rete: chiedere due volte per un'azione già reversibile è
+      // il tipo di attrito che fa smettere di leggere le domande.
+      'confermaCestino': true,
+      // I file nascosti (il punto in testa al nome). Da ricordare fra
+      // una sessione e l'altra: chi li accende una volta non li rivuole
+      // nascosti al prossimo avvio.
+      'showHidden': false,
+      // ── Tenerlo pronto ────────────────────────────────────────────
+      //
+      // Il gestore file si avvia all'accesso e resta acceso senza
+      // finestra, così la prima cartella che si apre compare subito
+      // invece che dopo circa 800 ms.
+      //
+      // Non è gratis e il numero va detto. Rimisurato il 18 agosto
+      // 2026 sulla macchina vera, dopo il passaggio al disegno col
+      // processore: 84 MB di memoria privata da dormiente. Con la
+      // scheda video erano 116.
+      // Acceso di serie perché l'attesa la paga ogni volta chi usa il
+      // computer, mentre la memoria la paga solo chi ne ha poca — e
+      // quello la spegne qui.
+      //
+      // Chiudendo la finestra con questo spento il programma esce
+      // davvero: vedi `onRequestClose` in `minerva-shell/filemanager.qml`.
+      'tieniAcceso': true,
+    },
+    // ── L'editor di testi ──────────────────────────────────────────
+    //
+    // Come si scrive, non cosa: il carattere, il peso, i colori. Ogni
+    // documento aperto nasce con queste scelte, e chi le cambia le
+    // ritrova alla prossima finestra.
+    // ── Il Terminale ──────────────────────────────────────────────
+    //
+    // 15 settembre 2026. Le manopole stanno nell'app, come per l'editor;
+    // qui i valori di fabbrica. Il carattere vuoto vuol dire «quello
+    // monospazio del tema».
+    'terminale': {
+      'carattere': '',
+      'corpo': 14,
+      // «minerva» segue il tema; «classica» e «solarizzata» sono fisse.
+      'tavolozza': 'minerva',
+      // 0 blocco · 1 sottolineatura · 2 barra. Il programma può
+      // cambiarla (DECSCUSR); questa è quella di partenza.
+      'cursore': 0,
+      'scrollback': 10000,
+      // Il campanello: un suono, o niente.
+      'campanello': true,
+    },
+    'editor': {
+      // La famiglia del carattere. Vuota vuol dire «il monospazio del
+      // tema»: per scrivere si parte da lì.
+      'font': '',
+      'size': 14,
+      'bold': false,
+      'italic': false,
+      // Il colore del testo. L'accento di Minerva come partenza, che è
+      // il colore di tutto il resto.
+      'colore': '',
+      // Fondo scuro o chiaro: sul chiaro il colore del testo scuro si
+      // regge meglio, e viceversa.
+      'fondoScuro': true,
+      // L'a-capo automatico. Spento: con l'a-capo acceso i numeri di riga
+      // non corrispondono più a niente, ed erano proprio quelli a mancare.
+      'piega': false,
+    },
+    'icons': {
+      // Come sono disegnate le icone dell'interfaccia.
+      //
+      //  'minerva'  — i tracciati disegnati da noi (Icon.qml)
+      //  'classiche'— le icone del tema installato, con i loro colori
+      //  'tinta'    — le icone del tema, ricolorate nella nostra tinta
+      //
+      // Le nostre restano il valore di serie perché sono le uniche che
+      // non possono mancare: un tema di icone incompleto lascia buchi,
+      // un tracciato no.
+      'style': 'minerva',
+      // Quale tema usare. Vuoto = quello scelto nelle impostazioni del
+      // sistema, che è già quello che usano i menu delle applicazioni.
+      'theme': '',
+    },
+    'desktop': {
+      // Vero dopo il primo uso del menu del tasto destro: serve a non
+      // ripetere il suggerimento a chi l'ha già trovato.
+      'menuUsed': false,
+      // Menu contestuale con il tasto destro sulla scrivania.
+      'rightClickMenu': true,
+      // Le icone dei file sulla scrivania, come su ogni ambiente
+      // classico: si aprono con un doppio clic, si spostano
+      // trascinandole e ricordano il loro posto.
+      'icons': true,
+      // ── Come stanno disposte ────────────────────────────────────
+      //
+      // Due interruttori e non tre scelte in fila, perché è così che li
+      // conosce chi arriva da Windows, da KDE o da GNOME 2: la
+      // disposizione automatica vince sull'allineamento, e insieme danno
+      // i tre modi che esistono davvero.
+      //
+      // Automatica SPENTA di fabbrica: decide lei dove va ogni cosa, e
+      // una scrivania che rimette le icone dove vuole lei appena ne
+      // arriva una nuova è la ragione per cui in tanti la spengono.
+      'iconAutoArrange': false,
+      // Allineamento ACCESO: è quello che toglie il disordine senza
+      // togliere la libertà di mettere le cose dove si vuole.
+      'iconSnap': true,
+      // Gli stessi nomi del gestore file, e la stessa funzione che
+      // ordina: 'name', 'type', 'size', 'modified'.
+      // ── I widget della scrivania ──────────────────────────────────
+      //
+      // il manutentore, 9 settembre 2026: «vorrei avere dei widget sul desktop
+      // per vedere i valori di sistema [...] ridimensionabili
+      // direttamente da desktop e possono anche essere bloccati e
+      // diventare parte dello sfondo».
+      //
+      // L'elenco è STATO, non una manopola: sono le posizioni in cui li
+      // hai trascinati, come `files.desktopPositions`. Le coordinate sono
+      // FRAZIONI dello schermo e non pixel — vedi `widget/Telaio.qml`.
+      'widgets': <Map<String, dynamic>>[],
+      // Bloccati di serie: chi non li ha mai spostati non deve poterseli
+      // portare via con un clic per sbaglio. Si sbloccano dal tasto
+      // destro sulla barra o dalle Impostazioni.
+      'widgetBloccati': true,
+      'widgetAccesi': true,
+      // La modalità «pulita»: niente icone, niente widget. Per una
+      // schermata, o per mostrare la scrivania a qualcuno.
+      'puliti': false,
+      'iconSort': 'name',
+      'iconSortDesc': false,
+      // Il lato del disegno dell'icona. La cella della griglia si ricava
+      // da qui: un numero solo da regolare, e niente che possa divergere.
+      'iconSize': 46,
+      // ── Il movimento ────────────────────────────────────────────
+      //
+      // `animations` vale per TUTTE e due le metà, ed è la correzione del
+      // 19 agosto 2026: prima toccava solo il compositore (finestre che si
+      // aprono, cambio scrivania) e lasciava correre le animazioni della
+      // shell — pannelli, dock, menu — che sono quelle che si notano.
+      // il manutentore: «non porta a nessun cambiamento». Vedi
+      // `minerva-shell/theme/Motion.qml`.
+      'animations': true,
+      // Quanto dura il movimento, rispetto al normale: 0,5 = doppio della
+      // velocità, 2 = metà. Separata dall'interruttore apposta, così chi
+      // spegne e riaccende ritrova la sua e non quella di fabbrica.
+      'animationSpeed': 1.0,
+      // Qui c'era la scia dietro le finestre (`motionBlur`): era di
+      // Hyprland, e sotto il nostro compositore non la applicava nessuno.
+      // Tolta il 27 settembre 2026 con la sua levetta.
+      // ── Lo sfondo ───────────────────────────────────────────────
+      //
+      // Erano lette da `sections/Appearance.qml` e da `core/Wallpaper.qml`
+      // e non stavano qui: cinque impostazioni che esistevano solo come
+      // valore di ripiego scritto nella shell. È la regola che questo
+      // file dichiara in cima a sé stesso, e che nessuno faceva
+      // rispettare.
+      //
+      //  'minerva' — i sei sfondi che viaggiano con la shell
+      //  'image'   — una immagine scelta
+      //  'folder'  — una cartella che gira
+      'wallpaperMode': 'minerva',
+      // Vuoto vuol dire «quello di Minerva», non «nessuno»: la scrivania
+      // non deve mai restare nera per una impostazione mancante.
+      'wallpaper': '',
+      'wallpaperFolder': '',
+      // Ogni quanti minuti cambia. 0 = mai.
+      'rotateMinutes': 0,
+      'rotateRandom': false,
+      // Come Impostazioni › Personalizzazione › Sfondo di Windows 11 (12
+      // ottobre 2026): l'adattamento dell'immagine, la tinta unita (modo
+      // 'color') e le ultime cinque immagini usate. Valgono anche per Liquid.
+      'wallpaperFit': 'riempi',
+      'wallpaperColor': '#000000',
+      'wallpaperRecenti': <String>[],
+    },
+    // ── Lo schermo, non i monitor ─────────────────────────────────
+    //
+    // La disposizione dei monitor sta in `schermi.conf`, che legge il
+    // compositore: qui sta solo quello che Minerva aggiunge sopra, cioè
+    // per ora la luce notturna.
+    'display': {
+      // Il filtro luce blu. Spento di fabbrica: cambia il colore di TUTTO
+      // lo schermo, e una cosa che cambia i colori senza che nessuno
+      // l'abbia chiesta sembra un guasto del monitor.
+      'nightLight': false,
+      // Gradi Kelvin. 6500 è la luce del giorno e non tocca niente; 3800
+      // è una sera tranquilla; sotto i 3000 si comincia a non distinguere
+      // bene i colori, e chi guarda foto se ne accorge.
+      'nightLightTemp': 3800,
+      // Accendersi e spegnersi da sola all'ora scelta.
+      'nightLightAuto': false,
+      'nightLightFrom': 21,
+      'nightLightTo': 7,
+    },
+    // ── Come si DISEGNA l'ora, non che ora è ──────────────────────
+    //
+    // Il fuso e la sincronizzazione appartengono al sistema e li tiene
+    // `timedatectl`: metterne una copia qui vorrebbe dire avere due
+    // verità che prima o poi divergono. Qui sta solo la forma.
+    'clock': {
+      // 24 ore. Il default segue l'Europa, che è dove sta chi usa questo
+      // computer; si cambia da Impostazioni → Data e ora.
+      'format24': true,
+    },
+    // ── Accessibilità ─────────────────────────────────────────────
+    //
+    // Tutte e tre sono cose che il compositore o la tipografia DIMENTICANO a
+    // ogni avvio: il posto dove ricordarle è qui, e la shell le riapplica
+    // appena il demone risponde.
+    'accessibility': {
+      // Moltiplicatore del testo di tutta Minerva. Il tetto vero è 1.3, e
+      // il perché sta scritto in `theme/Typography.qml`.
+      'textScale': 1.0,
+      // Ingrandimento dello schermo attorno al puntatore. 1 = spento.
+      'zoom': 1.0,
+      // Dimensione del puntatore. 24 è quella di serie dei temi di
+      // puntatori più diffusi.
+      'cursorSize': 24,
+    },
+    // ── Il tempo che fa ───────────────────────────────────────────
+    //
+    // Spento finché non c'è una località: senza coordinate il demone non
+    // chiede niente a nessuno. La località la si cerca per nome dalle
+    // Impostazioni, e da lì restano scritte solo le coordinate — al
+    // centesimo di grado, cioè il quartiere e non la casa.
+    'weather': {'enabled': false, 'name': '', 'lat': 0.0, 'lon': 0.0},
+    'greeter': {
+      'user': '',
+      'session': 'minerva',
+      'autologin': false,
+      'background': 'aurora',
+      'wallpaper': '',
+      'auroraStrength': 0.55,
+      'blur': 48,
+      'scrim': 0.42,
+      'showClock': true,
+      // La schermata di accesso ha una chiave sua perché gira in un
+      // ALTRO processo, con un altro demone e un'altra configurazione
+      // (vedi `scripts/minerva-greetd`): non può leggere quella sopra.
+      // Il pannello «Data e ora» le scrive tutte e due insieme, così non
+      // capita di trovare l'ora scritta in due modi diversi passando
+      // dalla schermata di accesso alla scrivania.
+      'clock24': true,
+      // Le cose in più della schermata di accesso (23 settembre 2026):
+      // il meteo sotto la data (solo se la sessione ne ha uno acceso),
+      // «Buonasera, il manutentore» al posto del nome secco, e batteria e
+      // tastiera nell'angolo. Il meteo mostra la città: si spegne qui.
+      'meteo': true,
+      'saluto': true,
+      'stato': true,
+      // Da che parte stanno l'ora e l'accesso: «sinistra», «destra» o
+      // «centro» (com'era prima). L'altra metà resta libera: nella
+      // schermata di blocco lì vanno le notifiche. Vale per tutte e due
+      // le schermate, che devono somigliarsi.
+      'lato': 'sinistra',
+    },
+    // ── Il lettore multimediale ───────────────────────────────────
+    //
+    // Il volume stava SOLO nel cursore, che partiva da 70 mentre
+    // l'uscita audio era all'unità: all'avvio il numero sullo schermo e
+    // il suono nelle casse dicevano due cose diverse, e spostandolo non
+    // se ne ricordava niente al riavvio.
+    //
+    // `ripeti` ha tre valori perché due non bastano: «tutto» era il
+    // comportamento di prima ed era implicito — la scaletta ripartiva da
+    // capo alla fine e non c'era modo di dirle di smettere.
+    'media': {
+      'volume': 70,
+      'muto': false,
+      // 'no' · 'tutto' · 'uno'
+      'ripeti': 'tutto',
+      'casuale': false,
+      // Quale dei quattro disegni dell'audio: 0 barre, 1 onda,
+      // 2 radiale, 3 neon. Si sceglieva a ogni avvio da capo.
+      'disegno': 0,
+      // Le radio salvate nella pagina Radio: `{id, nome, url, paese, tag,
+      // codec, bitrate}`, come le dà `RadioService`.
+      'radioPreferite': [],
+    },
+    // ── Lo stile della scrivania ──────────────────────────────────
+    //
+    // Each style owns desktop preferences. Existing clients still read the
+    // active projection; switching restores it atomically from `profili`.
+    // `libero` retains the legacy JSON snapshot solely for migration.
+    // Le notizie della bacheca Widget (`services/notizie_service.dart`):
+    // accese, gli interessi scelti e le fonti spente. Comuni a tutti i preset:
+    // sono cose di chi legge, non dell'aspetto.
+    'notizie': {
+      'attive': true,
+      'interessi': ['attualita', 'tecnologia', 'scienza', 'economia', 'sport', 'cultura'],
+      'fontiSpente': <String>[],
+    },
+    'windows11': {
+      'menu': 'windows11',
+      'theme': 'light',
+      'accent': 'auto',
+      'accentOnStart': false,
+      'recommendations': true,
+      // Scelte della barra e dello Start separate dagli altri preset.
+      'startLayout': 'default',
+      'taskbarSearch': 'icon',
+      'taskbarAlignment': 'center',
+      'taskbarTaskView': true,
+      'taskbarWidgets': true,
+      'taskbarShowDesktop': true,
+      'showTilingButton': false,
+      'wallpaper': 'auto',
+      'desktops': [1],
+      // Le scelte del menu Insider sono del preset, non delle operazioni file.
+      'contextInline': false,
+      'contextPropertiesLast': false,
+      'contextExtensions': true,
+      'contextHidden': <String>[],
+      // Barra e pannelli di vetro smerigliato (l'Acrylic di Windows 11),
+      // anche con l'effetto delle finestre spento.
+      'acrylic': true,
+      // Cerca: le ultime ricerche, solo su questo computer, e
+      // l'interruttore «Cronologia delle ricerche su questo dispositivo».
+      'ricercheRecenti': <String>[],
+      'cronologiaRicerche': true,
+      // Personalizzazione › Colori e Temi di Windows 11 (12 ottobre 2026).
+      // `themeApp` vuoto: le app seguono `theme` (modalità Chiara o Scura);
+      // diverso: la modalità è «Personalizzata».
+      'themeApp': '',
+      'accentMode': 'manuale',
+      'coloriRecenti': <String>[],
+      'accentTitlebar': false,
+      'temaCorrente': 'windows-chiaro',
+      'temi': <Map<String, dynamic>>[],
+    },
+    'stile': {
+      'attuale': 'libero',
+      'libero': '',
+      // Internal snapshots, validated and migrated by DesktopProfiles.
+      'profili': <String, dynamic>{},
+    },
+    'viewer': {
+      // Anteprima: la striscia delle miniature in fondo alla finestra.
+      // Accesa di suo — è quella che dice a che punto si è dentro una
+      // cartella, e chi guarda una fotografia sola la spegne una volta.
+      'filmstrip': true,
+    },
+    // Qui c'era `'plugins': {'enabled': ['weather', 'system_stats']}`.
+    // Due nomi di moduli che non esistono, in una chiave che NESSUNO
+    // legge: `PluginManager` decide se avviare un modulo dal campo
+    // `enabled` del suo `plugin.json`, non da qui. Chi apriva il file
+    // trovava scritto che due moduli erano attivi, e non lo erano — una
+    // riga di configurazione che dice il falso è peggio di una che manca.
+    // ── La dock ───────────────────────────────────────────────────
+    //
+    // Otto manopole che `dock/Dock.qml` dichiara e la shell legge da
+    // sempre, e che fino al 18 agosto 2026 esistevano SOLO come valore di
+    // ripiego scritto dentro il QML. Erano 46 chiavi su 108 in quello
+    // stato: vedi `test/impostazioni_ripiego_test.dart`.
+    'dock': {
+      'enabled': true,
+      'iconSize': 48,
+      'magnification': 1.6,
+      'reach': 2.2,
+      // ── Come sta la dock sullo schermo ─────────────────────────────
+      //
+      // Tre modi, e non più una levetta:
+      //
+      //   'sempre'   riserva il suo spazio: le finestre si fermano sopra
+      //              di lei e non ci passano mai sotto;
+      //   'nascondi' sparisce, e torna avvicinando il puntatore al bordo
+      //              basso dello schermo;
+      //   'elude'    resta visibile finché nessuna finestra la
+      //              coprirebbe, e si ritira quando una ci arriva sopra.
+      //
+      // Il terzo è quello che il manutentore ha chiesto il 2 settembre 2026 e
+      // che non esisteva: «non hai ancora reso la dock a scomparsa o che
+      // elude le finestre o sempre presente».
+      //
+      // `autoHide` resta scritto qui sotto per una ragione sola: chi
+      // aveva già Minerva installata ha quel valore nel proprio file, e
+      // `dock.modo` lo legge per non far cambiare comportamento a nessuno
+      // di soppiatto. Vedi `Dock.qml`.
+      'modo': 'sempre',
+      'autoHide': false,
+      // ── E da che parte sta la dock ────────────────────────────────
+      //
+      // 'basso' o 'alto'. Sopra o sotto la barra non è una scelta: chi
+      // le mette dalla stessa parte se le trova una sull'altra, e la
+      // shell non glielo impedisce — impedirlo vorrebbe dire decidere
+      // per chi ha due schermi e una barra sola. Le Impostazioni lo
+      // dicono a parole, che è il posto giusto per un avviso.
+      'position': 'basso',
+      'opacity': 0.90,
+      // Col blur vero del compositore dietro. Vedi
+      // `shell.membraneOpacityBlur`, che è lo stesso ragionamento per la
+      // barra: sono due situazioni diverse, quindi due memorie.
+      'opacityBlur': 0.68,
+      'showLabels': true,
+      // ⚠ `spine/panels/AppsPanel.qml` legge questa stessa chiave con un
+      // ripiego DIVERSO (elenco vuoto). Qui vince quello della shell, che
+      // è chi la dock la costruisce davvero.
+      'pinned': ['firefox.desktop', 'minerva-terminale.desktop'],
+    },
+    'audio': {
+      'feedbackSounds': true,
+      'feedbackVolume': 0.4,
+      // Volume oltre il 100%: distorce, e va chiesto.
+      'allowOverdrive': false,
+    },
+    'input': {
+      'layout': 'it',
+      'repeatDelay': 600,
+      'repeatRate': 25,
+      'naturalScroll': true,
+      'tapToClick': true,
+      'disableWhileTyping': true,
+      'sensitivity': 0,
+      'touchpadOn': true,
+      // I pad di gioco passano da InputPlumber, che li presenta a ogni
+      // gioco come un pad del tipo scelto (`ControllerService`).
+      'controllerAutomatico': true,
+      'controllerTipo': 'xbox-series',
+      // Per ogni pad, con chiave il suo indirizzo: preset, mappa dei
+      // tasti, «scambia ✕ e ○» e i colori della barra luminosa. Mappa
+      // libera: i pad sono quelli che uno collega.
+      'controllerPad': <String, dynamic>{},
+    },
+    'power': {
+      // Minuti. 0 = mai.
+      'dimAfter': 5,
+      'lockAfter': 10,
+      // Lo schermo a riposo (verbo `riposo` del compositore): su un fisso
+      // è l'unica cosa che spegne davvero il monitor, perché
+      // `brightnessctl` non ci arriva.
+      'screenOffAfter': 15,
+      'suspendAfter': 30,
+      'lidAction': 'suspend',
+      // Il modo risparmio del compositore: «auto» abbassa gli effetti a
+      // batteria sotto la soglia (o col profilo «risparmio energetico»),
+      // «sempre» sempre, «mai» mai. Vedi `compositore/src/energia.h`.
+      'risparmioEffetti': 'auto',
+      'risparmioSoglia': 20,
+    },
+    // La memoria che respira: le nostre app fuori vista da un minuto si
+    // comprimono in zram («delicata»), o niente («spenta»). Vedi
+    // `services/respiro_service.dart`.
+    'memoria': {'respiro': 'delicata'},
+    'notifications': {
+      'doNotDisturb': false,
+      // Cosa si vede sulla schermata di blocco: «numero» (per programma,
+      // «Thunderbird · 3 email», come sul telefono), «tutto» (anche il
+      // testo), «niente». Il filtro lo fa la shell PRIMA di passarle al
+      // blocco: vedi `Core.Notifications._perIlBlocco`.
+      'bloccoMostra': 'numero',
+    },
+    'windowControls': {'enabled': true},
+    // ── Le app tenute pronte ───────────────────────────────────────
+    //
+    // Un'app di Minerva chiusa se ne va, e riaprirla costa fra 317 e
+    // 645 ms — misurati il 18 agosto 2026 sulla macchina vera, dal
+    // lancio del processo alla finestra mappata dal compositore. Quasi
+    // tutto quel tempo è la costruzione dell'albero degli oggetti QML,
+    // e le due strade per accorciarla sono già state percorse e sono
+    // chiuse (la cache di compilazione di Qt non si può accendere con
+    // Quickshell 0.3; ridurre il sorgente non sposta niente).
+    //
+    // Resta una strada sola: non ricostruire. Un'app già costruita si
+    // rimostra in 17–50 ms invece che in 317–645 — da dieci a venti volte
+    // più veloce, e anche questo è misurato.
+    //
+    // Il prezzo si paga in memoria e non è piccolo: fra 49 e 98 MB
+    // privati per app, sempre occupati, più uno 0,20% di CPU costante.
+    // Tutte e sei insieme fanno 418 MB.
+    // E non è un prezzo che si può togliere: la memoria che si paga È
+    // la velocità che si compra, perché ciò che resta in memoria è
+    // esattamente l'albero che non va ricostruito.
+    //
+    // Per questo sono tutte spente di fabbrica tranne il gestore file,
+    // che era già acceso per scelta di il manutentore il 16 agosto e ha la sua
+    // chiave storica in `files.tieniAcceso`. Si accendono una alla
+    // volta, guardando il prezzo scritto accanto.
+    'preload': {
+      'calcolatrice': false,
+      'editor': false,
+      'impostazioni': false,
+      'anteprima': false,
+      'attivita': false,
+      // Il Terminale tenuto pronto ha già una shell viva: l'apertura è
+      // istantanea, e il prezzo è quella shell in memoria.
+      'terminale': false,
+      // Dopo quanti minuti da ferma un'app tenuta pronta esce da sola.
+      // Zero la lascia lì per sempre: chi apre la calcolatrice una
+      // volta stamattina non deve ritrovarsela in memoria stasera.
+      'minuti': 30,
+    },
+  };
 
   Future<void> dispose() async {
     // Prima si aspetta che la fila si svuoti: fermarsi con una scrittura a

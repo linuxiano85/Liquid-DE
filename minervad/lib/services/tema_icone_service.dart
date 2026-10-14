@@ -6,7 +6,7 @@ import 'archive_service.dart';
 ///
 /// ── Perché SOLO le icone, e perché adesso ─────────────────────────────────
 ///
-/// Giacomo, 19 agosto 2026: «vorrei anche poter installare set di icone e temi
+/// il manutentore, 19 agosto 2026: «vorrei anche poter installare set di icone e temi
 /// allo stesso modo».
 ///
 /// I due casi si somigliano solo da fuori. I temi di **icone** sono già file,

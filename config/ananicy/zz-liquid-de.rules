@@ -37,7 +37,7 @@
 # macchina all'utente: il kernel riserva ai processi normali il 5% del tempo
 # (`sched_rt_runtime_us` = 950000 su 1000000), che basta a non perdere i dati
 # e non basta a lavorare. Su una macchina di prova si accetta; su quella con
-# cui Giacomo lavora tutti i giorni no, e il guadagno rispetto a -12 senza
+# cui il manutentore lavora tutti i giorni no, e il guadagno rispetto a -12 senza
 # tempo reale è quello che si sente meno di tutti.
 #
 # Chi lo vuole comunque: sostituire la riga con

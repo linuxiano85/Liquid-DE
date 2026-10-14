@@ -12,9 +12,15 @@ import 'package:test/test.dart';
 // compilazione, o al riavvio.
 void main() {
   /// Un rilievo finto, con un modulo per ogni caso che conta.
-  Rilievo rilievo({bool modprobed = true, String config = '/proc/config.gz',
-      bool gcc = true, Map<String, dynamic> macchina = const {},
-      List<Map<String, dynamic>> attrezzi = const []}) {
+  Rilievo rilievo({
+    bool modprobed = true,
+    String config = '/proc/config.gz',
+    bool gcc = true,
+    Map<String, dynamic> macchina = const {},
+    List<Map<String, dynamic>> attrezzi = const [],
+    bool perifericaStorica = false,
+    Map<String, dynamic> configKernel = const {},
+  }) {
     VoceModulo m(String nome, String famiglia, Set<String> fonti) =>
         VoceModulo(nome, famiglia, 'kernel/x/$nome.ko', false)
           ..fonti.addAll(fonti);
@@ -27,6 +33,7 @@ void main() {
         m('nft_ct', 'firewall', {'caricato'}),
         m('exfat', 'filesystem', {'modprobed'}),
         m('btusb', 'bluetooth', {'candidato'}),
+        if (perifericaStorica) m('xpad', 'controller', {'storico'}),
       ])
         v.nome: v,
     };
@@ -45,11 +52,19 @@ void main() {
       },
       dispositivi: const [],
       moduli: moduli,
-      avvio: Avvio('/dev/nvme0n1p2', 'btrfs', {'nvme', 'btrfs'},
-          {'nvme': 'Il controller del disco di «/».'}, const []),
-      modprobed: DiarioModprobed('/casa/.config/modprobed.db',
-          modprobed ? {'exfat'} : const {}),
+      avvio: Avvio(
+        '/dev/nvme0n1p2',
+        'btrfs',
+        {'nvme', 'btrfs'},
+        {'nvme': 'Il controller del disco di «/».'},
+        const [],
+      ),
+      modprobed: DiarioModprobed(
+        '/casa/.config/modprobed.db',
+        modprobed ? {'exfat'} : const {},
+      ),
       configPartenza: config,
+      configKernel: configKernel,
       indiceRegole: 3,
       avvisi: const [],
     );
@@ -65,9 +80,29 @@ void main() {
       Scelte.daJson({'nome': 'prova', 'versione': '6.17.2', ...extra});
 
   Ricetta ricetta([Map<String, dynamic> extra = const {}, Rilievo? r]) =>
-      calcola(r ?? rilievo(), scelte(extra), cartelle, nuclei: 12);
+      calcola(
+        r ?? rilievo(),
+        scelte(extra),
+        cartelle,
+        nuclei: 12,
+        risorse: const {
+          'memoriaEffettivaBytes': 16 * 1024 * 1024 * 1024,
+          'cgroupV2Verificato': true,
+        },
+      );
 
   group('le scelte che arrivano dal canale', () {
+    test('LSMOD separa anche i nomi più lunghi della colonna', () {
+      const nomi = ['drm_panel_backlight_quirks', 'snd_hda_codec_realtek_lib'];
+      final r = ricetta({'aggiunti': nomi});
+      final letti = r.fileLsmod
+          .split('\n')
+          .skip(1)
+          .map((l) => l.trim().split(RegExp(r'\s+')).first)
+          .toSet();
+      expect(letti, containsAll(nomi));
+      expect(letti, isNot(contains('drm_panel_backlight_quirks0')));
+    });
     test('un nome di kernel buono', () {
       final s = scelte();
       expect(s.localversion, '-fucina-prova');
@@ -75,10 +110,24 @@ void main() {
     });
 
     test('un nome che diventerebbe un percorso si rifiuta', () {
-      for (final cattivo in ['../x', 'a/b', 'Prova', '-x', 'x-', '', 'a b',
-                             'a\nb', 'x' * 25, 'àè', 'a.b']) {
-        expect(() => Scelte.daJson({'nome': cattivo, 'versione': '6.17.2'}),
-            throwsA(isA<SceltaNonValida>()), reason: '«$cattivo»');
+      for (final cattivo in [
+        '../x',
+        'a/b',
+        'Prova',
+        '-x',
+        'x-',
+        '',
+        'a b',
+        'a\nb',
+        'x' * 25,
+        'àè',
+        'a.b',
+      ]) {
+        expect(
+          () => Scelte.daJson({'nome': cattivo, 'versione': '6.17.2'}),
+          throwsA(isA<SceltaNonValida>()),
+          reason: '«$cattivo»',
+        );
       }
     });
 
@@ -86,103 +135,303 @@ void main() {
       for (final buona in ['6.17', '6.17.2', '6.6.110', '7.0']) {
         expect(versioneValida(buona), isTrue, reason: buona);
       }
-      for (final cattiva in ['6', '6.17-rc3', '6.17.2-arch1', 'v6.17', '',
-                             '6.17.2 ', '06.1', '6..1']) {
+      for (final cattiva in [
+        '6',
+        '6.17-rc3',
+        '6.17.2-arch1',
+        'v6.17',
+        '',
+        '6.17.2 ',
+        '06.1',
+        '6..1',
+      ]) {
         expect(versioneValida(cattiva), isFalse, reason: '«$cattiva»');
       }
     });
 
     test('LTO senza Clang si rifiuta con una frase che dice perché', () {
       expect(
-          () => scelte({'compilatore': 'gcc', 'lto': true}),
-          throwsA(isA<SceltaNonValida>().having(
-              (e) => e.messaggio, 'messaggio', contains('Clang'))));
+        () => scelte({'compilatore': 'gcc', 'lto': true}),
+        throwsA(
+          isA<SceltaNonValida>().having(
+            (e) => e.messaggio,
+            'messaggio',
+            contains('Clang'),
+          ),
+        ),
+      );
       expect(scelte({'compilatore': 'clang', 'lto': true}).lto, isTrue);
     });
 
     test('sorgenti, basi e compilatori sconosciuti si rifiutano', () {
-      expect(() => scelte({'sorgente': 'xanmod'}), throwsA(isA<SceltaNonValida>()));
-      expect(() => scelte({'base': '/etc/passwd'}), throwsA(isA<SceltaNonValida>()));
-      expect(() => scelte({'compilatore': 'tcc'}), throwsA(isA<SceltaNonValida>()));
+      expect(
+        () => scelte({'sorgente': 'xanmod'}),
+        throwsA(isA<SceltaNonValida>()),
+      );
+      expect(
+        () => scelte({'base': '/etc/passwd'}),
+        throwsA(isA<SceltaNonValida>()),
+      );
+      expect(
+        () => scelte({'compilatore': 'tcc'}),
+        throwsA(isA<SceltaNonValida>()),
+      );
     });
 
-    test('scorte e preset sconosciuti si lasciano cadere, non si inventano',
-        () {
-      final s = scelte({
-        'scorte': ['filesystem', 'inventata'],
-        'preset': ['gaming', 'inventato'],
-        'tolti': ['snd_hda_intel', 'nome con spazi', 42],
-      });
-      expect(s.scorte, {'filesystem'});
-      expect(s.preset, {'gaming'});
-      expect(s.tolti, {'snd_hda_intel'});
+    test('i lavori paralleli si limitano ai thread disponibili', () {
+      expect(
+        ricetta({
+          'lavori': 3,
+        }).passi.singleWhere((p) => p.id == 'compila').comando,
+        contains('-j3'),
+      );
+      expect(
+        ricetta({
+          'lavori': 20,
+        }).passi.singleWhere((p) => p.id == 'compila').comando,
+        contains('-j12'),
+      );
+      expect(
+        ricetta().passi.singleWhere((p) => p.id == 'compila').comando,
+        contains('-j12'),
+      );
+      for (final valore in [0, -1, 513, 'molti']) {
+        expect(
+          () => scelte({'lavori': valore}),
+          throwsA(isA<SceltaNonValida>()),
+        );
+      }
+    });
+
+    test(
+      'scorte e preset sconosciuti si lasciano cadere, non si inventano',
+      () {
+        final s = scelte({
+          'scorte': ['filesystem', 'inventata'],
+          'preset': ['gaming', 'inventato'],
+          'tolti': ['snd_hda_intel', 'nome con spazi', 42],
+        });
+        expect(s.scorte, {'filesystem'});
+        expect(s.preset, {'gaming'});
+        expect(s.tolti, {'snd_hda_intel'});
+      },
+    );
+  });
+
+  test('un dispositivo ricordato mantiene il modulo anche se scollegato', () {
+    final r = rilievo(perifericaStorica: true);
+    final piano = ricetta(const {}, r);
+    expect(piano.moduli, contains('xpad'));
+    expect(r.moduli['xpad']!.fonti, contains('storico'));
+  });
+
+  group('LSM in uso', () {
+    test('mantiene le protezioni attive e il loro ordine', () {
+      final r = rilievo(
+        configKernel: {
+          'statoLive': {
+            'lsmAttivi': ['capability', 'landlock', 'yama', 'apparmor'],
+          },
+        },
+      );
+      final q = ricetta({}, r);
+      final scelte = {for (final i in q.impostazioni) i.simbolo: i.valore};
+      expect(scelte['SECURITY'], 'y');
+      expect(scelte['SECURITY_LANDLOCK'], 'y');
+      expect(scelte['SECURITY_YAMA'], 'y');
+      expect(scelte['SECURITY_APPARMOR'], 'y');
+      expect(scelte['LSM'], 'landlock,yama,apparmor');
+      expect(q.avvisi, isEmpty);
+      final sicurezza = q.impostazioni
+          .where(
+            (i) =>
+                i.simbolo == 'SECURITY' ||
+                i.simbolo.startsWith('SECURITY_') ||
+                i.simbolo == 'LSM',
+          )
+          .toList();
+      expect(
+        controllaConfig(
+          'CONFIG_SECURITY=y\n'
+          'CONFIG_SECURITY_LANDLOCK=y\n'
+          'CONFIG_SECURITY_YAMA=y\n'
+          'CONFIG_SECURITY_APPARMOR=y\n'
+          'CONFIG_LSM="landlock,yama,apparmor"\n',
+          sicurezza,
+        ),
+        isEmpty,
+      );
+      expect(
+        controllaConfig(
+          'CONFIG_SECURITY=y\nCONFIG_LSM="landlock,apparmor"\n',
+          sicurezza,
+        ),
+        isNotEmpty,
+        reason: 'la verifica deve rilevare se Kconfig cambia la pila',
+      );
+    });
+
+    test('non riscrive la pila se incontra un LSM non riconosciuto', () {
+      final r = rilievo(
+        configKernel: {
+          'statoLive': {
+            'lsmAttivi': ['capability', 'vendor_lsm'],
+          },
+        },
+      );
+      final q = ricetta({}, r);
+      expect(q.impostazioni.any((i) => i.simbolo == 'LSM'), isFalse);
+      expect(q.avvisi.join(' '), contains('vendor_lsm'));
+    });
+  });
+
+  group('filesystem montati', () {
+    test('whitelista quelli integrati e lascia i modulari a LSMOD', () {
+      final r = rilievo(
+        configKernel: {
+          'disponibile': true,
+          'famiglie': [
+            {
+              'id': 'filesystem',
+              'integrate': ['CONFIG_BTRFS_FS', 'CONFIG_EXT4_FS'],
+              'modulari': ['CONFIG_XFS_FS'],
+            },
+          ],
+          'statoLive': {
+            'filesystemMontati': ['btrfs', 'ext4', 'xfs', 'zfs'],
+          },
+        },
+      );
+      final q = ricetta({'base': 'defconfig'}, r);
+      final scelte = {for (final i in q.impostazioni) i.simbolo: i.valore};
+      expect(scelte['BTRFS_FS'], 'y');
+      expect(scelte['EXT4_FS'], 'y');
+      expect(scelte.containsKey('XFS_FS'), isFalse);
+      expect(q.avvisi.join(' '), contains('zfs'));
+    });
+
+    test('senza configurazione non inventa le opzioni', () {
+      final r = rilievo(
+        configKernel: {
+          'disponibile': false,
+          'statoLive': {
+            'filesystemMontati': ['btrfs'],
+          },
+        },
+      );
+      final q = ricetta({'base': 'defconfig'}, r);
+      expect(q.impostazioni.any((i) => i.simbolo == 'BTRFS_FS'), isFalse);
+      expect(q.avvisi.join(' '), contains('whitelist dei filesystem'));
     });
   });
 
   group('i moduli', () {
     test('di serie si tiene tutto quello che ha una ragione vera', () {
       final r = ricetta();
-      expect(r.moduli, containsAll(['nvme', 'btrfs', 'snd_hda_intel', 'amdgpu',
-                                    'nft_ct', 'exfat']));
-      expect(r.moduli, isNot(contains('btusb')),
-          reason: 'un candidato si mostra, non si tiene da solo');
+      expect(
+        r.moduli,
+        containsAll([
+          'nvme',
+          'btrfs',
+          'snd_hda_intel',
+          'amdgpu',
+          'nft_ct',
+          'exfat',
+        ]),
+      );
+      expect(
+        r.moduli,
+        isNot(contains('btusb')),
+        reason: 'un candidato si mostra, non si tiene da solo',
+      );
     });
 
     test('un candidato si tiene se lo si aggiunge', () {
-      expect(ricetta({'aggiunti': ['btusb']}).moduli, contains('btusb'));
+      expect(
+        ricetta({
+          'aggiunti': ['btusb'],
+        }).moduli,
+        contains('btusb'),
+      );
     });
 
     test('un modulo tolto a mano esce, e si dice perché', () {
-      final r = ricetta({'tolti': ['snd_hda_intel']});
+      final r = ricetta({
+        'tolti': ['snd_hda_intel'],
+      });
       expect(r.moduli, isNot(contains('snd_hda_intel')));
       expect(r.tolti['snd_hda_intel'], 'tolto a mano');
     });
 
     test('un essenziale non si toglie, e lo si dice', () {
-      final r = ricetta({'tolti': ['nvme']});
+      final r = ricetta({
+        'tolti': ['nvme'],
+      });
       expect(r.moduli, contains('nvme'));
       expect(r.avvisi.join(), contains('«nvme» serve ad avviare'));
     });
 
     test('le scorte aggiungono moduli che oggi nessuno usa', () {
-      final r = ricetta({'scorte': ['controller']});
-      expect(r.moduli, containsAll(['xpad', 'hid_playstation', 'hid_nintendo']));
+      final r = ricetta({
+        'scorte': ['controller'],
+      });
+      expect(
+        r.moduli,
+        containsAll(['xpad', 'hid_playstation', 'hid_nintendo']),
+      );
       expect(r.perFamiglia['controller'], greaterThan(0));
     });
 
     test('un modulo tolto a mano resta fuori anche se una scorta lo vuole', () {
-      final r = ricetta({'scorte': ['controller'], 'tolti': ['xpad']});
+      final r = ricetta({
+        'scorte': ['controller'],
+        'tolti': ['xpad'],
+      });
       expect(r.moduli, isNot(contains('xpad')));
     });
 
     test('il file per localmodconfig ha la forma di lsmod', () {
       final righe = ricetta().fileLsmod.split('\n');
       expect(righe.first, startsWith('Module'));
-      expect(righe.skip(1).map((l) => l.split(RegExp(r'\s+')).first),
-          orderedEquals(ricetta().moduli));
+      expect(
+        righe.skip(1).map((l) => l.split(RegExp(r'\s+')).first),
+        orderedEquals(ricetta().moduli),
+      );
     });
   });
 
   group('i preset', () {
     test('il server toglie l\'audio anche se è collegato', () {
-      final r = ricetta({'preset': ['server']});
+      final r = ricetta({
+        'preset': ['server'],
+      });
       expect(r.moduli, isNot(contains('snd_hda_intel')));
       expect(r.tolti['snd_hda_intel'], contains('preset'));
     });
 
-    test('ma non se hai scelto anche il gioco: per togliere serve l\'unanimità',
-        () {
-      final r = ricetta({'preset': ['server', 'gaming']});
-      expect(r.moduli, contains('snd_hda_intel'));
-    });
+    test(
+      'ma non se hai scelto anche il gioco: per togliere serve l\'unanimità',
+      () {
+        final r = ricetta({
+          'preset': ['server', 'gaming'],
+        });
+        expect(r.moduli, contains('snd_hda_intel'));
+      },
+    );
 
     test('un preset non toglie mai un essenziale', () {
       // Un audio essenziale è strano, ma è il caso che prova la regola: la
       // famiglia la toglierebbe, l'essenziale vince.
       final ril = rilievo();
       ril.moduli['snd_hda_intel']!.fonti.add('essenziale');
-      final r = calcola(ril, scelte({'preset': ['server']}), cartelle,
-          nuclei: 12);
+      final r = calcola(
+        ril,
+        scelte({
+          'preset': ['server'],
+        }),
+        cartelle,
+        nuclei: 12,
+      );
       expect(r.moduli, contains('snd_hda_intel'));
     });
 
@@ -203,32 +452,47 @@ void main() {
       expect(r.impostazioni.map((i) => i.simbolo), isNot(contains('HZ')));
     });
 
-    test('un modulo aggiunto a mano vince sul preset che toglie la sua famiglia',
-        () {
-      final ril = rilievo();
-      ril.moduli['btusb']!.fonti
-        ..clear()
-        ..add('candidato');
-      final r = calcola(
-          ril, scelte({'preset': ['server'], 'aggiunti': ['btusb']}), cartelle,
-          nuclei: 12);
-      expect(r.moduli, contains('btusb'));
-    });
+    test(
+      'un modulo aggiunto a mano vince sul preset che toglie la sua famiglia',
+      () {
+        final ril = rilievo();
+        ril.moduli['btusb']!.fonti
+          ..clear()
+          ..add('candidato');
+        final r = calcola(
+          ril,
+          scelte({
+            'preset': ['server'],
+            'aggiunti': ['btusb'],
+          }),
+          cartelle,
+          nuclei: 12,
+        );
+        expect(r.moduli, contains('btusb'));
+      },
+    );
 
-    test('nel choice della prelazione c\'è anche PREEMPT_LAZY, e si spegne', () {
-      // Trovato compilando davvero il 7.2: senza nominare PREEMPT_LAZY, due
-      // voci accese nello stesso choice e Kconfig teneva quella di prima.
-      final v = {
-        for (final i in ricetta({'preset': ['gaming']}).impostazioni)
-          i.simbolo: i.valore,
-      };
-      expect(v['PREEMPT'], 'y');
-      expect(v['PREEMPT_LAZY'], 'n');
-      expect(v['TRANSPARENT_HUGEPAGE_ALWAYS'], 'n');
-    });
+    test(
+      'nel choice della prelazione c\'è anche PREEMPT_LAZY, e si spegne',
+      () {
+        // Trovato compilando davvero il 7.2: senza nominare PREEMPT_LAZY, due
+        // voci accese nello stesso choice e Kconfig teneva quella di prima.
+        final v = {
+          for (final i in ricetta({
+            'preset': ['gaming'],
+          }).impostazioni)
+            i.simbolo: i.valore,
+        };
+        expect(v['PREEMPT'], 'y');
+        expect(v['PREEMPT_LAZY'], 'n');
+        expect(v['TRANSPARENT_HUGEPAGE_ALWAYS'], 'n');
+      },
+    );
 
     test('nel choice del tick se ne accende uno e si spengono gli altri', () {
-      final r = ricetta({'preset': ['gaming']});
+      final r = ricetta({
+        'preset': ['gaming'],
+      });
       final v = {for (final i in r.impostazioni) i.simbolo: i.valore};
       expect(v['HZ_1000'], 'y');
       expect(v['HZ_250'], 'n');
@@ -241,7 +505,10 @@ void main() {
 
     test('ogni valore di ogni preset ha scritto il suo perché', () {
       for (final p in presets) {
-        for (final i in [...p.extra, ...combinaPreset([p.id])!.impostazioni]) {
+        for (final i in [
+          ...p.extra,
+          ...combinaPreset([p.id])!.impostazioni,
+        ]) {
           expect(i.perche.trim(), isNotEmpty, reason: '${p.id}: ${i.simbolo}');
         }
       }
@@ -255,32 +522,71 @@ void main() {
       expect(v['LOCALVERSION_AUTO'], 'n');
     });
 
+    test('il target nativo spegne prima le altre voci della scelta CPU', () {
+      final q = ricetta({
+        'nativo': true,
+      }, rilievo(config: 'CONFIG_GENERIC_CPU=y\nCONFIG_MZEN4=y\n'));
+      final valori = {for (final i in q.impostazioni) i.simbolo: i.valore};
+      expect(valori['GENERIC_CPU'], 'n');
+      expect(valori['MZEN4'], 'n');
+      expect(valori['X86_NATIVE_CPU'], 'y');
+      expect(
+        q.impostazioni.indexWhere((i) => i.simbolo == 'GENERIC_CPU'),
+        lessThan(
+          q.impostazioni.indexWhere((i) => i.simbolo == 'X86_NATIVE_CPU'),
+        ),
+      );
+    });
+
     test('i comandi sono elenchi di argomenti, mai righe per una shell', () {
-      for (final p in ricetta({'sorgente': 'cachyos', 'preset': ['gaming']}).passi) {
+      for (final p in ricetta({
+        'sorgente': 'cachyos',
+        'preset': ['gaming'],
+      }).passi) {
         if (p.comando.isEmpty) continue;
-        expect(p.comando.first, isNot(anyOf('sh', 'bash', 'env')), reason: p.id);
+        expect(
+          p.comando.first,
+          isNot(anyOf('sh', 'bash', 'env')),
+          reason: p.id,
+        );
         expect(p.comando, isNot(contains('-c')), reason: p.id);
       }
     });
 
     test('CachyOS aggiunge le patch, vanilla no', () {
       expect(ricetta().passi.map((p) => p.id), isNot(contains('patch')));
-      expect(ricetta({'sorgente': 'cachyos'}).passi.map((p) => p.id),
-          contains('patch'));
+      expect(
+        ricetta({'sorgente': 'cachyos'}).passi.map((p) => p.id),
+        contains('patch'),
+      );
     });
 
     test('Clang passa LLVM=1 a OGNI make, non solo alla compilazione', () {
       final r = ricetta({'compilatore': 'clang'});
-      for (final p in r.passi.where((p) =>
-          p.comando.isNotEmpty && p.comando.first == 'make')) {
+      for (final p in r.passi.where(
+        (p) => p.comando.isNotEmpty && p.comando.first == 'make',
+      )) {
         expect(p.comando, contains('LLVM=1'), reason: p.id);
       }
     });
 
     test('ccache entra come compilatore, se c\'è', () {
-      final r = calcola(rilievo(), scelte(), cartelle, nuclei: 4, ccache: true);
+      final r = calcola(
+        rilievo(),
+        scelte(),
+        cartelle,
+        nuclei: 4,
+        ccache: true,
+        risorse: const {
+          'memoriaEffettivaBytes': 16 * 1024 * 1024 * 1024,
+          'cgroupV2Verificato': true,
+        },
+      );
       final compila = r.passi.firstWhere((p) => p.id == 'compila');
-      expect(compila.comando, containsAllInOrder(['make', 'CC=ccache gcc', '-j4']));
+      expect(
+        compila.comando,
+        containsAllInOrder(['make', 'CC=ccache gcc', '-j4']),
+      );
     });
 
     test('localmodconfig legge il NOSTRO elenco, non lsmod', () {
@@ -289,22 +595,46 @@ void main() {
       expect(screma.comando.last, 'localmodconfig');
     });
 
-    test('i moduli si installano nella cartella d\'uscita, non nel sistema', () {
-      final m = ricetta().passi.firstWhere((p) => p.id == 'moduli');
-      expect(m.comando, contains('INSTALL_MOD_PATH=${cartelle.uscita}'));
-    });
+    test(
+      'i moduli si installano nella cartella d\'uscita, non nel sistema',
+      () {
+        final m = ricetta().passi.firstWhere((p) => p.id == 'moduli');
+        expect(m.comando, contains('INSTALL_MOD_PATH=${cartelle.uscita}'));
+      },
+    );
 
-    test('senza la configurazione in uso si parte da defconfig, e lo si dice',
-        () {
-      final r = ricetta(const {}, rilievo(config: ''));
-      final base = r.passi.firstWhere((p) => p.id == 'base');
-      expect(base.comando, ['make', 'defconfig']);
-      expect(r.avvisi.join(), contains('defconfig'));
-    });
+    test(
+      'senza la configurazione in uso si parte da defconfig, e lo si dice',
+      () {
+        final r = ricetta(const {}, rilievo(config: ''));
+        final base = r.passi.firstWhere((p) => p.id == 'base');
+        expect(base.comando, ['make', 'defconfig']);
+        expect(r.avvisi.join(), contains('defconfig'));
+      },
+    );
 
     test('un compilatore che manca si dice prima di partire', () {
       final r = ricetta(const {}, rilievo(gcc: false));
       expect(r.avvisi.join(), contains('gcc'));
+      expect(r.requisitiMancanti, contains('gcc'));
+      expect(r.toJson()['requisitiMancanti'], contains('gcc'));
+    });
+
+    test('la prova QEMU entra nel piano e dichiara se manca QEMU', () {
+      final r = ricetta(
+        {'provaAvvio': true},
+        rilievo(
+          attrezzi: [
+            {
+              'nome': 'qemu-system-x86',
+              'indispensabile': false,
+              'presente': false,
+            },
+          ],
+        ),
+      );
+      expect(r.passi.map((p) => p.id), contains('avvia'));
+      expect(r.avvisi.join(), contains('qemu-system-x86'));
     });
 
     test('la prova veloce avverte che sched_ext non ci sarà', () {
@@ -321,8 +651,8 @@ void main() {
     // accesi: partendo da lì con Clang restavano accesi anche a chi non li
     // aveva scelti. Trovato rileggendo la catena il 1° ottobre 2026.
     Map<String, String> valori(Map<String, dynamic> extra) => {
-          for (final i in ricetta(extra).impostazioni) i.simbolo: i.valore,
-        };
+      for (final i in ricetta(extra).impostazioni) i.simbolo: i.valore,
+    };
 
     test('Clang senza LTO: LTO_NONE acceso, tutte le altre voci spente', () {
       final v = valori({'compilatore': 'clang'});
@@ -352,31 +682,42 @@ void main() {
     });
 
     test('il choice di LTO si guarda per gruppo, THIN_DIST compreso', () {
-      expect(sceltePerGruppo.any((g) => g.contains('LTO_CLANG_THIN_DIST')),
-          isTrue);
+      expect(
+        sceltePerGruppo.any((g) => g.contains('LTO_CLANG_THIN_DIST')),
+        isTrue,
+      );
     });
 
-    test('LLVM=1 vuole anche lld e gli attrezzi di llvm: se mancano si dice',
-        () {
-      final r = calcola(
-          rilievo(attrezzi: [
-            {'nome': 'lld', 'indispensabile': false, 'presente': false},
-            {'nome': 'llvm', 'indispensabile': false, 'presente': false},
-          ]),
+    test(
+      'LLVM=1 vuole anche lld e gli attrezzi di llvm: se mancano si dice',
+      () {
+        final r = calcola(
+          rilievo(
+            attrezzi: [
+              {'nome': 'lld', 'indispensabile': false, 'presente': false},
+              {'nome': 'llvm', 'indispensabile': false, 'presente': false},
+            ],
+          ),
           scelte({'compilatore': 'clang'}),
           cartelle,
-          nuclei: 4);
-      expect(r.avvisi.join(), contains('pacman -S --needed lld llvm'));
-    });
+          nuclei: 4,
+        );
+        expect(r.avvisi.join(), contains('pacman -S --needed lld llvm'));
+        expect(r.requisitiMancanti, ['lld', 'llvm']);
+      },
+    );
 
     test('senza pahole si avverte che BTF (e sched_ext) non ci sarà', () {
       final r = calcola(
-          rilievo(attrezzi: [
+        rilievo(
+          attrezzi: [
             {'nome': 'pahole', 'indispensabile': false, 'presente': false},
-          ]),
-          scelte(),
-          cartelle,
-          nuclei: 4);
+          ],
+        ),
+        scelte(),
+        cartelle,
+        nuclei: 4,
+      );
       expect(r.avvisi.join(), contains('pahole'));
       expect(r.avvisi.join(), contains('sched_ext'));
     });
@@ -385,16 +726,29 @@ void main() {
   group('AutoFDO: il kernel su misura del tuo uso', () {
     test('senza Clang si rifiuta, e si dice perché', () {
       expect(
-          () => scelte({'autofdo': true}),
-          throwsA(isA<SceltaNonValida>()
-              .having((e) => e.messaggio, 'messaggio', contains('Clang'))));
+        () => scelte({'autofdo': true}),
+        throwsA(
+          isA<SceltaNonValida>().having(
+            (e) => e.messaggio,
+            'messaggio',
+            contains('Clang'),
+          ),
+        ),
+      );
     });
 
     test('il profilo è il NOME di un kernel nostro, mai un percorso', () {
-      for (final cattivo in ['/tmp/x.prof', '../../etc/passwd',
-                             '6.17.2-arch1-1', '6.17.2-fucina-a/b']) {
-        expect(() => scelte({'compilatore': 'clang', 'profilo': cattivo}),
-            throwsA(isA<SceltaNonValida>()), reason: cattivo);
+      for (final cattivo in [
+        '/tmp/x.prof',
+        '../../etc/passwd',
+        '6.17.2-arch1-1',
+        '6.17.2-fucina-a/b',
+      ]) {
+        expect(
+          () => scelte({'compilatore': 'clang', 'profilo': cattivo}),
+          throwsA(isA<SceltaNonValida>()),
+          reason: cattivo,
+        );
       }
       final s = scelte({'compilatore': 'clang', 'profilo': '6.17.2-fucina-a'});
       expect(s.autofdo, isTrue, reason: 'col profilo AutoFDO è acceso');
@@ -405,11 +759,16 @@ void main() {
       final v = {for (final i in r.impostazioni) i.simbolo: i.valore};
       expect(v['AUTOFDO_CLANG'], 'y');
       for (final p in r.passi) {
-        expect(p.comando.any((a) => a.startsWith('CLANG_AUTOFDO_PROFILE')),
-            isFalse, reason: p.id);
+        expect(
+          p.comando.any((a) => a.startsWith('CLANG_AUTOFDO_PROFILE')),
+          isFalse,
+          reason: p.id,
+        );
       }
-      expect(r.passi.firstWhere((p) => p.id == 'impacchetta').spiega,
-          contains('vmlinux'));
+      expect(
+        r.passi.firstWhere((p) => p.id == 'impacchetta').spiega,
+        contains('vmlinux'),
+      );
     });
 
     test('il secondo tempo passa il profilo a OGNI make, identico', () {
@@ -419,26 +778,46 @@ void main() {
         lsmod: '/l',
         profilo: '/cache/fucina/profili/6.17.2-fucina-a/autofdo.prof',
       );
-      final r = calcola(rilievo(),
-          scelte({'compilatore': 'clang', 'lto': true,
-                  'profilo': '6.17.2-fucina-a'}),
-          c, nuclei: 4, ccache: true);
+      final r = calcola(
+        rilievo(),
+        scelte({
+          'compilatore': 'clang',
+          'lto': true,
+          'profilo': '6.17.2-fucina-a',
+        }),
+        c,
+        nuclei: 4,
+        ccache: true,
+      );
       final make = r.passi
           .where((p) => p.comando.isNotEmpty && p.comando.first == 'make')
           .toList();
       expect(make, isNotEmpty);
       for (final p in make) {
-        expect(p.comando,
-            contains('CLANG_AUTOFDO_PROFILE=${c.profilo}'), reason: p.id);
-        expect(p.comando.where((a) => a.startsWith('CC=')), isEmpty,
-            reason: 'ccache non guarda il profilo: riuserebbe gli oggetti '
-                'compilati senza');
+        expect(
+          p.comando,
+          contains('CLANG_AUTOFDO_PROFILE=${c.profilo}'),
+          reason: p.id,
+        );
+        expect(
+          p.comando.where((a) => a.startsWith('CC=')),
+          isEmpty,
+          reason:
+              'ccache non guarda il profilo: riuserebbe gli oggetti '
+              'compilati senza',
+        );
       }
       // E le parti comuni sono le stesse in ogni invocazione.
       final prefissi = {
         for (final p in make)
-          p.comando.where((a) => a.contains('=') && !a.startsWith('LSMOD=') &&
-              !a.startsWith('INSTALL_MOD')).join(' '),
+          p.comando
+              .where(
+                (a) =>
+                    a.contains('=') &&
+                    !a.startsWith('LSMOD=') &&
+                    !a.startsWith('INSTALL_MOD'),
+              )
+              .join(' '),
       };
       expect(prefissi, hasLength(1), reason: '$prefissi');
     });
@@ -450,28 +829,34 @@ void main() {
 
     test('su uno Zen 3 con BRS si accende il campionamento dei salti', () {
       final r = calcola(
-          rilievo(macchina: {
+        rilievo(
+          macchina: {
             'profilo': {'possibile': true, 'tipo': 'amd-brs', 'perche': ''},
-          }),
-          scelte({'compilatore': 'clang', 'lto': true, 'autofdo': true}),
-          cartelle,
-          nuclei: 4);
+          },
+        ),
+        scelte({'compilatore': 'clang', 'lto': true, 'autofdo': true}),
+        cartelle,
+        nuclei: 4,
+      );
       final v = {for (final i in r.impostazioni) i.simbolo: i.valore};
       expect(v['PERF_EVENTS_AMD_BRS'], 'y');
     });
 
     test('se qui il profilo non si può registrare, il primo tempo lo dice', () {
       final r = calcola(
-          rilievo(macchina: {
+        rilievo(
+          macchina: {
             'profilo': {
               'possibile': false,
               'tipo': '',
               'perche': 'Questo AMD non ha un registro dei salti.',
             },
-          }),
-          scelte({'compilatore': 'clang', 'lto': true, 'autofdo': true}),
-          cartelle,
-          nuclei: 4);
+          },
+        ),
+        scelte({'compilatore': 'clang', 'lto': true, 'autofdo': true}),
+        cartelle,
+        nuclei: 4,
+      );
       expect(r.avvisi.join(), contains('non si può registrare'));
       expect(r.avvisi.join(), contains('registro dei salti'));
     });
@@ -479,18 +864,27 @@ void main() {
 
   group('su misura dentro il kernel', () {
     Map<String, String> v(Map<String, dynamic> macchina) => {
-          for (final i in suMisura(macchina)) i.simbolo: i.valore,
-        };
+      for (final i in suMisura(macchina)) i.simbolo: i.valore,
+    };
 
     test('NR_CPUS: la potenza di due sopra i processori possibili', () {
       expect(v({'cpuPossibili': 12, 'nuclei': 12})['NR_CPUS'], '16');
       expect(v({'cpuPossibili': 16, 'nuclei': 16})['NR_CPUS'], '16');
-      expect(v({'cpuPossibili': 24, 'nuclei': 16})['NR_CPUS'], '32',
-          reason: 'i possibili contano anche se oggi non sono accesi');
-      expect(v({'cpuPossibili': 1, 'nuclei': 1})['NR_CPUS'], '2',
-          reason: 'sotto 2 Kconfig non scende');
-      expect(v({'cpuPossibili': 16})['MAXSMP'], 'n',
-          reason: 'con MAXSMP il numero è fisso a 8192');
+      expect(
+        v({'cpuPossibili': 24, 'nuclei': 16})['NR_CPUS'],
+        '32',
+        reason: 'i possibili contano anche se oggi non sono accesi',
+      );
+      expect(
+        v({'cpuPossibili': 1, 'nuclei': 1})['NR_CPUS'],
+        '2',
+        reason: 'sotto 2 Kconfig non scende',
+      );
+      expect(
+        v({'cpuPossibili': 16})['MAXSMP'],
+        'n',
+        reason: 'con MAXSMP il numero è fisso a 8192',
+      );
     });
 
     test('NR_CPUS non si tocca oltre 512, né senza una misura', () {
@@ -501,8 +895,11 @@ void main() {
     test('NUMA si spegne solo con un nodo misurato', () {
       expect(v({'nodiNuma': 1})['NUMA'], 'n');
       expect(v({'nodiNuma': 2}).containsKey('NUMA'), isFalse);
-      expect(v({'nodiNuma': 0}).containsKey('NUMA'), isFalse,
-          reason: 'zero vuol dire «non so»');
+      expect(
+        v({'nodiNuma': 0}).containsKey('NUMA'),
+        isFalse,
+        reason: 'zero vuol dire «non so»',
+      );
     });
 
     test('su Intel si spengono le funzioni che esistono solo su AMD', () {
@@ -535,8 +932,11 @@ void main() {
     });
 
     test('ogni regola ha il suo perché', () {
-      for (final i in suMisura({'cpuPossibili': 8, 'nodiNuma': 1,
-                                'fornitore': 'AuthenticAMD'})) {
+      for (final i in suMisura({
+        'cpuPossibili': 8,
+        'nodiNuma': 1,
+        'fornitore': 'AuthenticAMD',
+      })) {
         expect(i.perche.trim(), isNotEmpty, reason: i.simbolo);
       }
     });
@@ -544,11 +944,14 @@ void main() {
     test('entrano nella ricetta solo se si sceglie «su misura»', () {
       final m = {'cpuPossibili': 8, 'nodiNuma': 1, 'fornitore': 'GenuineIntel'};
       Set<String> simboli(Map<String, dynamic> extra) => {
-            for (final i in calcola(rilievo(macchina: m), scelte(extra),
-                    cartelle, nuclei: 8)
-                .impostazioni)
-              i.simbolo,
-          };
+        for (final i in calcola(
+          rilievo(macchina: m),
+          scelte(extra),
+          cartelle,
+          nuclei: 8,
+        ).impostazioni)
+          i.simbolo,
+      };
       expect(simboli(const {}), isNot(contains('NR_CPUS')));
       expect(simboli({'misura': true}), containsAll(['NR_CPUS', 'NUMA']));
     });
@@ -565,23 +968,35 @@ void main() {
     test('si completano essenziali, scorte scelte e aggiunti; non i tolti', () {
       final ril = rilievo();
       final r = calcola(
-          ril,
-          scelte({'scorte': ['controller'], 'aggiunti': ['btusb'],
-                  'tolti': ['xpad']}),
-          cartelle,
-          nuclei: 4);
+        ril,
+        scelte({
+          'scorte': ['controller'],
+          'aggiunti': ['btusb'],
+          'tolti': ['xpad'],
+        }),
+        cartelle,
+        nuclei: 4,
+      );
       final d = daCompletare(r, ril);
       expect(d, containsAll(['nvme', 'btrfs', 'hid_playstation', 'btusb']));
       expect(d, isNot(contains('xpad')));
-      expect(d, isNot(contains('snd_hda_intel')),
-          reason: 'un modulo legato si tiene, ma non si promette di '
-              'accenderlo: se la configurazione non lo ha, non lo ha');
+      expect(
+        d,
+        isNot(contains('snd_hda_intel')),
+        reason:
+            'un modulo legato si tiene, ma non si promette di '
+            'accenderlo: se la configurazione non lo ha, non lo ha',
+      );
     });
 
     test('da un kernel senza moduli si dice che la scrematura non toglie '
         'niente', () {
-      final r = calcola(rilievo(macchina: {'monolitico': true}), scelte(),
-          cartelle, nuclei: 4);
+      final r = calcola(
+        rilievo(macchina: {'monolitico': true}),
+        scelte(),
+        cartelle,
+        nuclei: 4,
+      );
       expect(r.avvisi.join(), contains('non ha moduli'));
     });
   });
@@ -630,17 +1045,28 @@ CONFIG_PREEMPT_LAZY=y
 
     test('un choice che ha preso tace, anche se le altre voci erano «n»', () {
       const config = 'CONFIG_PREEMPT=y\n# CONFIG_PREEMPT_LAZY is not set\n';
-      expect(controllaConfig(config, const [
-        Impostazione('PREEMPT', 'y', ''),
-        Impostazione('PREEMPT_LAZY', 'n', ''),
-        Impostazione('PREEMPT_VOLUNTARY', 'n', ''),
-      ]), isEmpty);
+      expect(
+        controllaConfig(config, const [
+          Impostazione('PREEMPT', 'y', ''),
+          Impostazione('PREEMPT_LAZY', 'n', ''),
+          Impostazione('PREEMPT_VOLUNTARY', 'n', ''),
+        ]),
+        isEmpty,
+      );
     });
 
     test('un «n» chiesto per un simbolo che non esiste è già vero', () {
-      expect(controllaConfig('', const [Impostazione('HZ_250', 'n', '')]),
-          isEmpty);
+      expect(
+        controllaConfig('', const [Impostazione('HZ_250', 'n', '')]),
+        isEmpty,
+      );
+    });
+
+    test('se i sorgenti non espongono BORE lo dice chiaramente', () {
+      final righe = controllaConfig('', const [
+        Impostazione('SCHED_BORE', 'y', ''),
+      ]);
+      expect(righe.single, contains('non espongono CONFIG_SCHED_BORE'));
     });
   });
 }
-

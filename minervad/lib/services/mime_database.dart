@@ -2,7 +2,7 @@ import 'dart:io';
 
 /// MimeDatabase — Il database dei tipi di file, letto direttamente.
 ///
-/// Nasce da un difetto che Giacomo ha trovato facendo doppio clic sul
+/// Nasce da un difetto che il manutentore ha trovato facendo doppio clic sul
 /// lanciatore di un suo progetto, `joca.sh`: si apriva la finestra delle
 /// PROPRIETÀ. E lì la strada finiva, perché anche l'elenco «Si apre con» era
 /// vuoto.
@@ -215,7 +215,7 @@ class MimeDatabase {
   /// alias.
   ///
   /// Serve a LEGGERE, non a scrivere: i `mimeapps.list` che stanno già sul
-  /// disco — compreso quello di Giacomo — sono scritti con gli alias, e una
+  /// disco — compreso quello di il manutentore — sono scritti con gli alias, e una
   /// ricerca che prova solo il nome canonico non li trova.
   Future<List<String>> nomiDi(String tipo) async {
     await _assicura();
@@ -239,7 +239,7 @@ class MimeDatabase {
   ///   · tutto ciò che non è `inode/*` è figlio di
   ///     `application/octet-stream` (solo se si chiede `conRadice`).
   ///
-  /// È la prima che ripara il caso di Giacomo anche su una macchina dove
+  /// È la prima che ripara il caso di il manutentore anche su una macchina dove
   /// `mimeapps.list` non nomini gli script: nessun programma installato
   /// dichiara `text/x-shellscript`, ma cinque dichiarano `text/plain`, e uno
   /// script È testo semplice con qualcosa in più.

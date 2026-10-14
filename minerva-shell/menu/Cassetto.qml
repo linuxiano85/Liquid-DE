@@ -8,7 +8,7 @@ import "../ui" as Ui
 
 // ── Il Cassetto degli appunti ────────────────────────────────────────────
 //
-// Giacomo, 24 settembre 2026: «Gli appunti dove li vogliamo mettere?». Nel
+// il manutentore, 24 settembre 2026: «Gli appunti dove li vogliamo mettere?». Nel
 // Cassetto: esce dal bordo destro dello schermo quando ci si SPINGE contro
 // il puntatore (`Core.Compositore.bordo`; una sosta non basta, perché lì si
 // va a prendere la barra di scorrimento), o con Super+V.
@@ -86,6 +86,8 @@ PanelWindow {
     }
 
     function apri() {
+        if (!Core.Riva.attiva)
+            return;
         if (cassetto.aperto) return;
         cassetto.aperto = true;
         cassetto.mostrato = true;
@@ -255,7 +257,18 @@ PanelWindow {
         }
     }
 
-    visible: cassetto.mostrato
+    visible: Core.Riva.attiva && cassetto.mostrato
+    // Cambiare preset chiude anche lo stato logico, così non riappare tornando.
+    Connections {
+        target: Core.Riva
+        function onAttivaChanged() {
+            if (Core.Riva.attiva)
+                return;
+            cassetto.chiudi();
+            cassetto.mostrato = false;
+            spegni.stop();
+        }
+    }
     anchors { top: true; bottom: true; left: true; right: true }
     exclusiveZone: -1
     color: "transparent"
@@ -263,7 +276,7 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     // La tastiera SUBITO, come il Centro: con «al primo clic» la finestra si
     // attivava sulla pressione e Qt annullava il clic (qml-fuoco-annulla-clic).
-    WlrLayershell.keyboardFocus: cassetto.aperto ? WlrKeyboardFocus.Exclusive
+    WlrLayershell.keyboardFocus: Core.Riva.attiva && cassetto.aperto ? WlrKeyboardFocus.Exclusive
                                                  : WlrKeyboardFocus.None
 
     Timer { id: spegni; interval: Theme.Motion.liquido ? 650 : 0; onTriggered: if (!cassetto.aperto) cassetto.mostrato = false }

@@ -25,15 +25,75 @@ import "." as Core
 QtObject {
     id: paper
 
+    // Un percorso non è un URL: # e ? nel nome altrimenti diventano
+    // frammento o query. Il demone conserva il percorso originale.
+    function urlFile(percorso) {
+        return percorso ? "file://" + String(percorso).split("/").map(encodeURIComponent).join("/") : "";
+    }
+
     readonly property string mode: Core.Ipc.get("desktop.wallpaperMode", "minerva")
-    readonly property string current: paper.risolvi(Core.Ipc.get("desktop.wallpaper", ""))
+    readonly property string current: {
+        var choice=Core.Ipc.get("windows11.wallpaper","auto");
+        if(Core.Ipc.get("bar.stile","isola")==="windows11" && choice!=="current") {
+            var variant=choice==="auto" ? Core.Ipc.get("windows11.theme","light"):choice;
+            // Gli sfondi Bloom sono di Microsoft e non si possono ridistribuire:
+            // nel repository non ci sono (vedi `.gitignore`). Chi li ha sul
+            // disco li vede; un'installazione nuova riceve uno sfondo nostro
+            // invece di una scrivania nera.
+            if (!paper.bloomPresente)
+                return paper.ownDir + (variant === "dark" ? "orbite.png" : "quiete.png");
+            return decodeURIComponent(Qt.resolvedUrl("../windows11/wallpapers/bloom-"+variant+".jpg").toString().replace(/^file:\/\//,""));
+        }
+        // Tinta unita: nessuna immagine, il colore lo mette il livello.
+        if (paper.mode === "color")
+            return "";
+        return paper.risolvi(Core.Ipc.get("desktop.wallpaper", ""));
+    }
+    /// Adattamento, tinta unita e immagini recenti, come in Windows 11 (12
+    /// ottobre 2026): li disegna `menu/WallpaperLayer.qml`.
+    readonly property string adattamento: Core.Ipc.get("desktop.wallpaperFit", "riempi")
+    readonly property bool tintaUnita: paper.mode === "color"
+    readonly property color colore: Core.Ipc.get("desktop.wallpaperColor", "#000000")
+    readonly property var recenti: Core.Ipc.get("desktop.wallpaperRecenti", [])
+
+    /// Ricorda un'immagine fra le ultime cinque usate (le «Immagini recenti»).
+    function ricorda(path) {
+        if (!path || path === "" || path.charAt(0) !== "/")
+            return;
+        var lista = [path];
+        var vecchie = paper.recenti || [];
+        for (var i = 0; i < vecchie.length && lista.length < 5; i++)
+            if (vecchie[i] !== path)
+                lista.push(vecchie[i]);
+        Core.Ipc.setSetting("desktop.wallpaperRecenti", lista);
+    }
+
+    /// Gli sfondi Bloom ci sono sul disco? Si guarda una volta all'avvio. Di
+    /// partenza «sì», così chi li ha non vede passare uno sfondo diverso.
+    property bool bloomPresente: true
+    property var _cercaBloom: Core.Exec {
+        onDone: function (uscita) { paper.bloomPresente = String(uscita).trim() === "si"; }
+    }
+
+    function _controllaBloom() {
+        function dove(nome) {
+            return decodeURIComponent(Qt.resolvedUrl("../windows11/wallpapers/" + nome)
+                                      .toString().replace(/^file:\/\//, ""));
+        }
+        paper._cercaBloom.shArgs('test -f "$1" && test -f "$2" && echo si',
+                                 [dove("bloom-light.jpg"), dove("bloom-dark.jpg")]);
+    }
+
     readonly property string folder: Core.Ipc.get("desktop.wallpaperFolder", "")
     /// Ogni quanti minuti cambia. Zero: mai.
-    readonly property int rotateMinutes: Core.Ipc.get("desktop.rotateMinutes", 0)
+    readonly property int rotateMinutes: Core.Ipc.get("bar.stile","isola")==="windows11" && Core.Ipc.get("windows11.wallpaper","auto")!=="current" ? 0:Core.Ipc.get("desktop.rotateMinutes", 0)
     readonly property bool rotateRandom: Core.Ipc.get("desktop.rotateRandom", false)
 
     /// Gli sfondi di Minerva, che viaggiano con la shell.
-    readonly property string ownDir: Quickshell.shellDir + "/assets/wallpapers/"
+    // Le app possono importare la shell da un lanciatore in un'altra cartella.
+    // Gli asset appartengono al modulo, non alla directory del lanciatore.
+    readonly property string assetsDir: decodeURIComponent(Qt.resolvedUrl("../assets/").toString().replace(/^file:\/\//, ""))
+    readonly property string ownDir: assetsDir + "wallpapers/"
     readonly property var own: [
         { "file": "continuum.png", "it": "Continuum",  "en": "Continuum" },
         { "file": "aurora.png",    "it": "Aurora",     "en": "Aurora" },
@@ -60,7 +120,7 @@ QtObject {
         var i = String(path).indexOf(segno);
         if (i === -1)
             return path;
-        return Quickshell.shellDir + "/assets/" + path.slice(i + segno.length);
+        return paper.assetsDir + path.slice(i + segno.length);
     }
 
     // ── Applicare ────────────────────────────────────────────────────────
@@ -97,8 +157,10 @@ QtObject {
     function scegli(path) {
         if (!path || path === "")
             return;
+        if(Core.Ipc.get("bar.stile","isola")==="windows11") Core.Ipc.setSetting("windows11.wallpaper","current");
         Core.Ipc.setSetting("desktop.wallpaperMode", "image");
         Core.Ipc.setSetting("desktop.wallpaper", path);
+        paper.ricorda(path);
     }
 
     // ── Il giro automatico ───────────────────────────────────────────────
@@ -126,7 +188,10 @@ QtObject {
     // stessa di partenza, il segnale non scatta e il mazzo resterebbe vuoto
     // per sempre. Si riempie all'accensione e di nuovo quando il demone
     // risponde, perché prima di allora le impostazioni non si sanno.
-    Component.onCompleted: paper.rescan()
+    Component.onCompleted: {
+        paper.rescan();
+        paper._controllaBloom();
+    }
 
     property Connections _daemon: Connections {
         target: Core.Ipc

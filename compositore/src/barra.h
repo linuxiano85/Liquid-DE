@@ -2,7 +2,7 @@
 //
 // ── Perché è nata questa ─────────────────────────────────────────────────
 //
-// Giacomo, 19 agosto 2026, guardando la scrivania dentro minerva-wayland:
+// il manutentore, 19 agosto 2026, guardando la scrivania dentro minerva-wayland:
 // «non vedo la barra del titolo o sbaglio?».
 //
 // Non sbagliava. Minerva sapeva disegnarla in due modi, e nessuno dei due
@@ -25,7 +25,7 @@
 // ── Le misure sono le stesse del plugin, di proposito ────────────────────
 //
 // 42 di altezza, 10 di raggio, pulsanti quadrati alti quanto la barra meno
-// dieci. Non sono numeri nuovi: sono quelli che Giacomo guarda da settimane, e
+// dieci. Non sono numeri nuovi: sono quelli che il manutentore guarda da settimane, e
 // cambiarli qui vorrebbe dire far sembrare «diverso» un compositore che deve
 // sembrare lo stesso, solo migliore.
 #ifndef MINERVA_BARRA_H
@@ -90,6 +90,38 @@ enum pulsante {
 	PULSANTE_CHIUDI,
 };
 
+/// ── Lo stile dei pulsanti ───────────────────────────────────────────────
+///
+/// il manutentore, 11 ottobre 2026, fra le cose da sistemare nella modalità Windows:
+/// il pulsante di chiusura. Col preset Windows le finestre avevano ancora i
+/// quattro pulsanti tondi di Liquid, staccati dal bordo.
+///
+/// In Windows 11 sono tre, rettangolari e attaccati all'angolo: 46 pixel di
+/// larghezza, alti quanto la barra, il fondo pieno fino al bordo, e «chiudi»
+/// rosso sotto il puntatore. Fonti: Microsoft Learn, «Windows app title bar»
+/// (fondo pieno, segni ChromeMinimize/Maximize/Restore/Close), e le risorse
+/// della barra di WinUI (46 pixel, rosso `#C42B1C`). Lo schermo intero resta
+/// su Super+F e nel menu della finestra: Windows non ha un pulsante per lui.
+///
+/// Lo sceglie la shell col verbo `stilebarra`, quando cambia il preset.
+enum barra_stile {
+	BARRA_STILE_LIQUID = 0,
+	BARRA_STILE_WINDOWS,
+};
+
+/// Larghezza di un pulsante in stile Windows.
+#define BARRA_WINDOWS_PULSANTE 46
+
+/// Cambia lo stile dei pulsanti. Valori sconosciuti: torna falso e non
+/// cambia niente.
+bool barra_stile_imposta(enum barra_stile stile);
+enum barra_stile barra_stile_ora(void);
+
+/// Da che parte stanno i pulsanti adesso. In stile Windows sempre a destra,
+/// qualunque cosa dica `windows.buttonsSide`: è una regola di Windows, e il
+/// lato resta salvato per quando si torna a Liquid.
+bool barra_pulsanti_a_destra(void);
+
 struct barra_stato {
 	const char *titolo;
 	int larghezza;
@@ -109,7 +141,7 @@ struct barra_stato {
 	/// e la barra risulterebbe più chiara del resto: cioè proprio lo
 	/// stacco che il corpo unico esiste per togliere.
 	///
-	/// Giacomo, 2 settembre 2026: «in blur o vetro dovrebbero far vedere
+	/// il manutentore, 2 settembre 2026: «in blur o vetro dovrebbero far vedere
 	/// un solo corpo trasparente [...] la barra e la finestra senza
 	/// stacchi di blur o trasparenza».
 	bool corpo_unico;

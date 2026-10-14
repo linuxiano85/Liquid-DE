@@ -174,7 +174,7 @@ class FileService {
       'ordinatoAlContrario': false,
       // ── Se questa cartella si può cambiare ──────────────────────────
       //
-      // Giacomo, 18 agosto 2026: «se clicco su sistema posso cancellare
+      // il manutentore, 18 agosto 2026: «se clicco su sistema posso cancellare
       // qualsiasi file di sistema come se fossero nella mia home, non c'è
       // nessuna protezione dalla cancellazione».
       //
@@ -585,6 +585,91 @@ class FileService {
     } catch (e) {
       return {'ok': false, 'error': '$e', 'path': path};
     }
+  }
+
+  /// Quanto del file legge al massimo il riquadro di anteprima.
+  static const anteprimaMassimo = 16 * 1024;
+
+  /// Il riquadro di anteprima del gestore file, come quello di Esplora file.
+  ///
+  /// il manutentore, 11 ottobre 2026: il gestore file in modalità Windows deve
+  /// avere il pannello dei dettagli e dell'anteprima. Una domanda sola per
+  /// file selezionato porta tutto quello che il pannello mostra:
+  ///
+  ///   - i dettagli (cartella o file, dimensione, ultima modifica, misure di
+  ///     un'immagine, lette dall'intestazione come per `fs_info`);
+  ///   - per un file che è testo, le prime righe: al massimo [massimo] byte,
+  ///     mai il file intero. `fs_read` legge fino a 8 MB per l'editor, e un
+  ///     clic su un file non deve costare tanto.
+  ///
+  /// «È testo» si decide dai byte e non dal nome: un byte zero o troppi
+  /// caratteri non UTF-8 vogliono dire binario, e allora il testo non si
+  /// manda. Il limite di tempo c'è per i dischi di rete caduti, dove un
+  /// `stat` resta appeso (vedi `info`).
+  Future<Map<String, dynamic>> anteprima(String path,
+      {int massimo = anteprimaMassimo}) async {
+    try {
+      return await _anteprima(path, massimo)
+          .timeout(const Duration(seconds: 3));
+    } on TimeoutException {
+      return {'ok': false, 'path': path, 'error': 'Il disco non risponde'};
+    } catch (e) {
+      return {'ok': false, 'path': path, 'error': '$e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> _anteprima(String path, int massimo) async {
+    final st = await FileStat.stat(path);
+    if (st.type == FileSystemEntityType.notFound) {
+      return {'ok': false, 'path': path, 'error': 'Il file non c\'è più'};
+    }
+    final isDir = st.type == FileSystemEntityType.directory;
+    final risposta = <String, dynamic>{
+      'ok': true,
+      'path': path,
+      'isDir': isDir,
+      'size': isDir ? 0 : st.size,
+      'modified': st.modified.millisecondsSinceEpoch,
+      'imageWidth': 0,
+      'imageHeight': 0,
+      'testo': '',
+      'troncato': false,
+      'binario': false,
+    };
+    if (isDir || st.type != FileSystemEntityType.file) return risposta;
+
+    final misure = ImageDims.read(path);
+    if (misure != null) {
+      risposta['imageWidth'] = misure.width;
+      risposta['imageHeight'] = misure.height;
+      // Un'immagine la disegna il pannello dal file: il testo non serve.
+      risposta['binario'] = true;
+      return risposta;
+    }
+
+    final file = await File(path).open();
+    List<int> byte;
+    try {
+      byte = await file.read(massimo);
+    } finally {
+      await file.close();
+    }
+    if (byte.contains(0)) {
+      risposta['binario'] = true;
+      return risposta;
+    }
+    // Tagliati a [massimo], gli ultimi byte possono essere mezzo carattere:
+    // `allowMalformed` lo rende come un segno di sostituzione invece di
+    // rifiutare tutto. Troppi segni così, invece, sono un file binario.
+    final testo = utf8.decode(byte, allowMalformed: true);
+    final storti = '�'.allMatches(testo).length;
+    if (storti > 4 && storti * 50 > testo.length) {
+      risposta['binario'] = true;
+      return risposta;
+    }
+    risposta['testo'] = testo;
+    risposta['troncato'] = st.size > massimo;
+    return risposta;
   }
 
   /// Quanto occupa una cartella, contando dentro.
@@ -1423,7 +1508,7 @@ class FileService {
   }
 
   /// Il punto di montaggio dalla frase di `udisksctl mount`:
-  /// «Mounted /dev/sdb1 at /run/media/giacomo/CHIAVETTA.» — il punto finale
+  /// «Mounted /dev/sdb1 at /run/media/utente/CHIAVETTA.» — il punto finale
   /// c'è in certe versioni e in altre no.
   ///
   /// Si toglie SOLO quel punto. Prima si toglievano tutti: una ISO con

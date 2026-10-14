@@ -4,6 +4,7 @@ import "../../theme" as Theme
 import "../../core" as Core
 import "../../ui" as Ui
 import ".." as S
+import "../../core/PresetVoci.js" as PresetVoci
 
 // Barra, dock e bordi — tutto quello che sta attorno alle finestre: la barra,
 // la dock, la Riva (angoli, bordi, l'Isola) e il menù delle applicazioni.
@@ -96,6 +97,28 @@ Page {
         { "id": "system",      "it": "Sistema",    "en": "System" },
         { "id": "utility",     "it": "Accessori",  "en": "Accessories" }
     ]
+    // ── Col preset Windows ───────────────────────────────────────────────
+    //
+    // Windows ha la sua barra (`windows11/Taskbar.qml`) e le sue opzioni
+    // stanno nella pagina Preset. Le schede qui sotto sono della barra di
+    // Liquid e col preset Windows si nascondono: senza questa riga la pagina
+    // sembrerebbe vuota per errore.
+    Card {
+        preset: PresetVoci.windows
+        chiudibile: false
+        heading: page.it ? "La barra di Windows 11" : "The Windows 11 taskbar"
+        Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: page.it
+                  ? "Menu Start, tema, colore d'accento e icone della barra di Windows si scelgono in Personalizzazione → Preset. Qui sotto resta il menu delle applicazioni, che il menu Start «Liquid» usa anche in Windows."
+                  : "Start menu, theme, accent colour and taskbar icons are chosen in Personalization → Preset. Below stays the application menu, which the «Liquid» Start menu also uses on Windows."
+            color: Theme.Colors.textMuted
+            font.family: Theme.Typography.fontDisplay
+            font.pixelSize: Theme.Typography.sizeSM
+        }
+    }
+
     // ── Dove stanno ──────────────────────────────────────────────────────
     //
     // `bar.position` esisteva dal primo giorno, valeva `'top'`, si poteva
@@ -109,13 +132,14 @@ Page {
     // un'altra geometria. Prometterlo qui con una voce che poi fa una cosa
     // storta sarebbe lo stesso difetto di prima.
     Card {
+        preset: PresetVoci.barraLiquid
         heading: page.it ? "Dove stanno" : "Where they sit"
 
         // ── Non si può più metterle una sull'altra ───────────────────────
         //
         // Qui c'era un avviso: «mettere le due cose dalla stessa parte è
         // permesso — con due schermi può perfino servire — ma chi lo fa deve
-        // saperlo». Giacomo ha deciso il contrario, e il ragionamento non
+        // saperlo». il manutentore ha deciso il contrario, e il ragionamento non
         // reggeva comunque: chi ha due schermi ha una barra sola e una dock
         // sola, e sovrapporle non serve a nessuno.
         //
@@ -180,6 +204,7 @@ Page {
         }
     }
     Card {
+        preset: PresetVoci.barraLiquid
         heading: page.it ? "Come sta sullo schermo" : "How it sits on screen"
 
         S.SettingRow {
@@ -197,7 +222,7 @@ Page {
         // ── I tre modi ───────────────────────────────────────────────────
         //
         // Non una levetta «si nasconde sì/no»: sono tre situazioni diverse, e
-        // la terza — quella che Giacomo ha chiesto — non si può dire con un
+        // la terza — quella che il manutentore ha chiesto — non si può dire con un
         // sì e un no.
         S.SettingRow {
             width: parent.width
@@ -246,6 +271,7 @@ Page {
     // allora funziona — ma restava senza un posto da cui toccarla, che è
     // mezza correzione.
     Card {
+        preset: PresetVoci.barraLiquid
         heading: page.it ? "La barra" : "The bar"
 
         S.SettingRow {
@@ -278,7 +304,7 @@ Page {
 
         // ── Un attrezzo da officina, e si può riporre ────────────────────
         //
-        // Giacomo, 2 settembre 2026: «mettiamo un tasto disattivabile accanto
+        // il manutentore, 2 settembre 2026: «mettiamo un tasto disattivabile accanto
         // al meteo dove posso riavviare la shell».
         //
         // Sta fra le voci della barra e non fra quelle degli sviluppatori
@@ -311,7 +337,7 @@ Page {
         // Senza blur dietro c'è una fotografia nitida e sotto 0,75 il testo si
         // perde (il conto sta in `theme/Colors.qml`). Col blur dietro c'è una
         // macchia morbida e scurita, e si può scendere molto di più: misurato
-        // il 9 settembre 2026 sulla scrivania di Giacomo, a 0,50 il testo
+        // il 9 settembre 2026 sulla scrivania di il manutentore, a 0,50 il testo
         // della barra sta a **10,2:1**, cioè più del doppio della soglia di
         // 4,5:1. Sotto quel valore non si scende, ed è prudenza dichiarata:
         // il contrasto dipende dalla FOTOGRAFIA, e la sfocatura appiattisce i
@@ -348,8 +374,9 @@ Page {
         }
     }
     Card {
+        preset: PresetVoci.barraLiquid
         heading: page.it ? "Aspetto" : "Look"
-        visible: Core.Ipc.get("dock.enabled", true)
+        visible: valePerIlPreset && Core.Ipc.get("dock.enabled", true)
 
         S.SettingRow {
             width: parent.width
@@ -450,6 +477,7 @@ Page {
     }
     // ── Lo schermo in miniatura ─────────────────────────────────────────
     Card {
+        preset: PresetVoci.barraLiquid
         heading: page.it ? "Il tuo schermo" : "Your screen"
         note: page.it
             ? "Tocca un angolo e scegli che cosa fa. Tocca l'Isola per nasconderla o tenerla sempre. ⇄ scambia i bordi."
@@ -796,6 +824,7 @@ Page {
     }
     // ── La molla ────────────────────────────────────────────────────────
     Card {
+        preset: PresetVoci.barraLiquid
         heading: page.it ? "La molla" : "The spring"
         note: page.it
             ? "Com'è il movimento di tutta la riva: menù, Centro, Isola, Cassetto, Stanze. La pallina te lo fa vedere."
@@ -850,8 +879,19 @@ Page {
     }
     // ── L'Isola ─────────────────────────────────────────────────────────
     Card {
+        preset: PresetVoci.barraLiquid
         heading: page.it ? "L'Isola" : "The Island"
-        visible: Core.Ipc.get("bar.stile", "isola") !== "classica"
+        visible: valePerIlPreset && Core.Ipc.get("bar.stile", "isola") !== "classica"
+
+        // Stava fra le «Informazioni» della pagina Minerva (fino all'11
+        // ottobre 2026): spiega come si comporta l'Isola, quindi sta qui.
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "Isola a schermo intero" : "Island in fullscreen"
+            description: page.it
+                         ? "Quando un'app occupa tutto lo schermo, premi Super per mostrare la barra e aprire l'Isola."
+                         : "When an app fills the screen, press Super to reveal the bar and open the Island."
+        }
 
         S.SettingRow {
             width: parent.width
@@ -918,6 +958,7 @@ Page {
     }
     // ── I bordi e il consenso ───────────────────────────────────────────
     Card {
+        preset: PresetVoci.barraLiquid
         heading: page.it ? "I bordi" : "The edges"
 
         S.SettingRow {
@@ -1009,7 +1050,7 @@ Page {
         // Erano otto righe con otto interruttori — «Mostra Internet»,
         // «Mostra Sviluppo»… — cioè mezza pagina per una domanda sola. Dal
         // 28 settembre 2026 è una riga con otto pastiglie: accesa, la
-        // categoria si vede; un tocco la spegne. Giacomo: «servirebbe
+        // categoria si vede; un tocco la spegne. il manutentore: «servirebbe
         // riorganizzare tutto in maniera più semplice e compatta».
         S.SettingRow {
             width: parent.width

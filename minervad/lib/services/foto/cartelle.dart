@@ -8,7 +8,7 @@ import '../../core/minerva_paths.dart';
 ///
 /// ── Perché non «tutta la cartella personale» ───────────────────────────────
 ///
-/// Giacomo ha chiesto «una scansione delle cartelle della home». Preso alla
+/// il manutentore ha chiesto «una scansione delle cartelle della home». Preso alla
 /// lettera darebbe questo, misurato il 26 agosto 2026:
 ///
 /// ```

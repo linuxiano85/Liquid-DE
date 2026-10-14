@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:ffi' show IntPtr, sizeOf;
 import 'dart:io';
 
 import 'dbus.dart';
@@ -8,7 +10,7 @@ import 'processo_limitato.dart';
 ///
 /// ── IL PROBLEMA (4 ottobre 2026) ────────────────────────────────────────────
 ///
-/// Il DualShock 4 di Giacomo, collegato in Bluetooth, funzionava sulla
+/// Il DualShock 4 di il manutentore, collegato in Bluetooth, funzionava sulla
 /// scrivania e non dentro GTA V avviato da Faugus. Il kernel lo vedeva
 /// (`hid_playstation`), i permessi c'erano: il guaio stava sopra. Ogni gioco
 /// sceglie da sé come leggere un pad — XInput, hidraw, SDL — e un DS4 grezzo
@@ -31,7 +33,7 @@ import 'processo_limitato.dart';
 ///
 /// ── OGNI PAD A MODO SUO (4 ottobre 2026) ────────────────────────────────────
 ///
-/// Giacomo: un controller Battletron, uguale a quello della PS5, ma «alla
+/// il manutentore: un controller Battletron, uguale a quello della PS5, ma «alla
 /// giapponese» — si conferma con ○. Per ogni pad si sceglie quindi:
 ///
 ///   · un PRESET: Xbox (i giochi vedono un pad Xbox, ✕ al posto di A), o
@@ -72,9 +74,21 @@ class ControllerService {
   /// InputPlumber (`Gamepad:Button:…`). I grilletti no: sono assi, e un asse
   /// mandato su un tasto è un'altra cosa da un tasto scambiato.
   static const tasti = [
-    'South', 'East', 'West', 'North', 'LeftBumper', 'RightBumper',
-    'LeftStick', 'RightStick', 'Select', 'Start', 'Guide',
-    'DPadUp', 'DPadDown', 'DPadLeft', 'DPadRight',
+    'South',
+    'East',
+    'West',
+    'North',
+    'LeftBumper',
+    'RightBumper',
+    'LeftStick',
+    'RightStick',
+    'Select',
+    'Start',
+    'Guide',
+    'DPadUp',
+    'DPadDown',
+    'DPadLeft',
+    'DPadRight',
   ];
 
   /// Blu come una PlayStation appena accesa; bianco quando si gioca.
@@ -84,10 +98,26 @@ class ControllerService {
   /// Chi tiene aperto un pad senza essere un gioco. `comm` è troncato a
   /// quindici caratteri, ed è con quello che si confronta.
   static const _nonGiochi = {
-    'inputplumber', 'steam', 'steamwebhelper', 'minervad', 'minerva-wayland',
-    'Xwayland', 'qs', 'systemd', 'systemd-logind', 'systemd-udevd', 'udevadm',
-    'upowerd', 'bluetoothd', 'pipewire', 'wireplumber', 'gamescope',
-    'kwin_wayland', 'plasmashell', 'cosmic-comp', 'kded6',
+    'inputplumber',
+    'steam',
+    'steamwebhelper',
+    'minervad',
+    'minerva-wayland',
+    'Xwayland',
+    'qs',
+    'systemd',
+    'systemd-logind',
+    'systemd-udevd',
+    'udevadm',
+    'upowerd',
+    'bluetoothd',
+    'pipewire',
+    'wireplumber',
+    'gamescope',
+    'kwin_wayland',
+    'plasmashell',
+    'cosmic-comp',
+    'kded6',
   };
 
   /// Le impostazioni si leggono ogni volta, non si copiano: così un cambio
@@ -170,15 +200,16 @@ class ControllerService {
   /// «Null check operator used on a null value» (5 ottobre 2026).
   Future<Map<String, dynamic>> status() async {
     if (_stato == null) await _aggiorna();
-    return _stato ?? <String, dynamic>{
-      'motore': 'assente',
-      'automatico': automatico(),
-      'tipo': _tipoValido(),
-      'tipi': tipi,
-      'tasti': tasti,
-      'inGioco': false,
-      'pad': <Map<String, dynamic>>[],
-    };
+    return _stato ??
+        <String, dynamic>{
+          'motore': 'assente',
+          'automatico': automatico(),
+          'tipo': _tipoValido(),
+          'tipi': tipi,
+          'tasti': tasti,
+          'inGioco': false,
+          'pad': <Map<String, dynamic>>[],
+        };
   }
 
   /// Le impostazioni sono cambiate: si riguarda tutto.
@@ -201,25 +232,31 @@ class ControllerService {
 
   void _ascolta() {
     if (_chiuso) return;
-    Process.start('udevadm', ['monitor', '--udev', '--subsystem-match=input'])
-        .then((p) {
-      if (_chiuso) {
-        p.kill();
-        return;
-      }
-      _ascolto = p;
-      p.stdout.listen((_) => _subito(), onError: (Object _) {});
-      p.stderr.listen((_) {}, onError: (Object _) {});
-      p.exitCode.then((_) {
-        _ascolto = null;
-        if (!_chiuso) {
-          _riprova = Timer(const Duration(seconds: 5), _ascolta);
+    Process.start('udevadm', [
+      'monitor',
+      '--udev',
+      '--subsystem-match=input',
+    ]).then(
+      (p) {
+        if (_chiuso) {
+          p.kill();
+          return;
         }
-      });
-    }, onError: (Object e) {
-      print('[MINERVA][CONTROLLER] udevadm non parte: $e');
-      if (!_chiuso) _riprova = Timer(const Duration(seconds: 30), _ascolta);
-    });
+        _ascolto = p;
+        p.stdout.listen((_) => _subito(), onError: (Object _) {});
+        p.stderr.listen((_) {}, onError: (Object _) {});
+        p.exitCode.then((_) {
+          _ascolto = null;
+          if (!_chiuso) {
+            _riprova = Timer(const Duration(seconds: 5), _ascolta);
+          }
+        });
+      },
+      onError: (Object e) {
+        print('[MINERVA][CONTROLLER] udevadm non parte: $e');
+        if (!_chiuso) _riprova = Timer(const Duration(seconds: 30), _ascolta);
+      },
+    );
   }
 
   /// Un pad che si accende manda una decina di eventi in mezzo secondo
@@ -258,7 +295,7 @@ class ControllerService {
   }
 
   Future<void> _unGiro() async {
-    final pad = await _inventario();
+    final pad = await inventario();
     final installato = File(programma).existsSync();
     final acceso = installato && await Dbus.ceIlServizio(servizio);
     var compositi = acceso ? await _compositi() : <_Composito>[];
@@ -267,14 +304,16 @@ class ControllerService {
     }
 
     for (final p in pad) {
-      p['gestito'] =
-          compositi.any((c) => c.sorgenti.any((s) => s.endsWith('/${p['id']}')));
+      p['gestito'] = compositi.any(
+        (c) => c.sorgenti.any((s) => s.endsWith('/${p['id']}')),
+      );
       final chiave = p['chiave'] as String;
       final conf = _conf(chiave);
       p.addAll(conf);
       p['led'] = (_ledDi[chiave] ?? const []).isNotEmpty;
       if (p['led'] == true) {
-        final colore = (_inGioco ? conf['ledGioco'] : conf['ledRiposo']) as String;
+        final colore =
+            (_inGioco ? conf['ledGioco'] : conf['ledRiposo']) as String;
         if (_ledDato[chiave] != colore) {
           _ledScrivibile[chiave] = _colora(_ledDi[chiave]!, colore);
           _ledDato[chiave] = colore;
@@ -322,7 +361,9 @@ class ControllerService {
     final mappa = <String, String>{};
     if (c['mappa'] is Map) {
       (c['mappa'] as Map).forEach((k, v) {
-        if (tasti.contains(k) && tasti.contains(v) && k != v) mappa['$k'] = '$v';
+        if (tasti.contains(k) && tasti.contains(v) && k != v) {
+          mappa['$k'] = '$v';
+        }
       });
     }
     return {
@@ -331,6 +372,7 @@ class ControllerService {
           : (tipo() == 'ds5' ? 'playstation' : 'xbox'),
       'mappa': mappa,
       'scambiaXO': c['scambiaXO'] == true,
+      'scambiaXY': c['scambiaXY'] == true,
       'ledRiposo': colore.hasMatch('${c['ledRiposo']}')
           ? '${c['ledRiposo']}'.toLowerCase()
           : ledRiposoPredefinito,
@@ -350,23 +392,45 @@ class ControllerService {
   /// Il profilo di InputPlumber per un pad: un tasto per ogni riga, solo
   /// quelli che non vanno dove andrebbero da soli. Vuoto vuol dire «come di
   /// fabbrica», ed è anche quello che si carica per togliere una mappatura.
-  static String profilo(String nome, Map<String, dynamic> conf) {
+  static String profilo(
+    String nome,
+    Map<String, dynamic> conf, {
+    String famiglia = 'xbox',
+    List<String> grillettiDigitali = const [],
+  }) {
     final dove = <String, String>{
       if (conf['preset'] == 'personalizzato')
         ...Map<String, String>.from(conf['mappa'] as Map),
     };
-    String verso(String t) => dove[t] ?? t;
-    final fuori = <String, String>{for (final t in tasti) t: verso(t)};
-    if (conf['scambiaXO'] == true) {
-      fuori['South'] = verso('East');
-      fuori['East'] = verso('South');
+    // evdev conserva gli alias storici BTN_X=BTN_NORTH, BTN_Y=BTN_WEST
+    // per Xbox/PlayStation. hid-nintendo usa invece le posizioni geografiche.
+    // Le impostazioni usano sempre le POSIZIONI, indipendentemente dal pad.
+    String superiore(String t) => switch (t) {
+      'West' => 'North',
+      'North' => 'West',
+      _ => t,
+    };
+    final fuori = <String, String>{};
+    for (final sorgente in tasti) {
+      var posizione = famiglia == 'nintendo' ? sorgente : superiore(sorgente);
+      if (conf['scambiaXO'] == true) {
+        posizione = switch (posizione) {
+          'South' => 'East',
+          'East' => 'South',
+          _ => posizione,
+        };
+      }
+      if (conf['scambiaXY'] == true) posizione = superiore(posizione);
+      final destinazione = dove[posizione] ?? posizione;
+      // I target Xbox e DualSense di InputPlumber usano gli alias storici.
+      fuori[sorgente] = superiore(destinazione);
     }
     final righe = StringBuffer()
       ..writeln('version: 1')
       ..writeln('kind: DeviceProfile')
-      ..writeln('name: "Liquid DE — ${nome.replaceAll('"', '')}"');
+      ..writeln('name: ${jsonEncode('Liquid DE — $nome')}');
     final cambiati = fuori.entries.where((e) => e.key != e.value).toList();
-    if (cambiati.isEmpty) {
+    if (cambiati.isEmpty && grillettiDigitali.isEmpty) {
       righe.writeln('mapping: []');
       return righe.toString();
     }
@@ -381,33 +445,69 @@ class ControllerService {
         ..writeln('      - gamepad:')
         ..writeln('          button: ${e.value}');
     }
+    // Un Switch invia ZL/ZR come pulsanti. Chrome legge invece gli assi
+    // del DualSense: InputPlumber converte Bool in 0.0/1.0 tramite il profilo.
+    // Non aggiungere questi eventi quando esistono già grilletti analogici.
+    for (final t in grillettiDigitali) {
+      righe
+        ..writeln('  - name: $t')
+        ..writeln('    source_event:')
+        ..writeln('      gamepad:')
+        ..writeln('        button: $t')
+        ..writeln('    target_events:')
+        ..writeln('      - gamepad:')
+        ..writeln('          button: $t')
+        ..writeln('      - gamepad:')
+        ..writeln('          trigger:')
+        ..writeln('            name: $t');
+    }
     return righe.toString();
   }
 
   /// Fa quello che le impostazioni chiedono. Vero se ha cambiato qualcosa,
   /// e quindi i dispositivi composti vanno riletti.
   Future<bool> _decidi(
-      List<Map<String, dynamic>> pad, List<_Composito> compositi) async {
+    List<Map<String, dynamic>> pad,
+    List<_Composito> compositi,
+  ) async {
     final vuole = automatico();
     final tutti = await Dbus.proprieta(
-        servizio, _gestore, _ifGestore, 'ManageAllDevices');
+      servizio,
+      _gestore,
+      _ifGestore,
+      'ManageAllDevices',
+    );
     var cambiato = false;
 
     if (vuole && pad.isNotEmpty && tutti != true) {
-      if (await Dbus.scrivi(servizio, _gestore, _ifGestore,
-          'ManageAllDevices', 'b', 'true')) {
+      if (await Dbus.scrivi(
+        servizio,
+        _gestore,
+        _ifGestore,
+        'ManageAllDevices',
+        'b',
+        'true',
+      )) {
         print('[MINERVA][CONTROLLER] InputPlumber gestisce ora i pad');
         _rifiutoDetto = false;
         cambiato = true;
       } else if (!_rifiutoDetto) {
         _rifiutoDetto = true;
-        print('[MINERVA][CONTROLLER] InputPlumber ha rifiutato '
-            'ManageAllDevices (l\'utente è nel gruppo wheel?)');
+        print(
+          '[MINERVA][CONTROLLER] InputPlumber ha rifiutato '
+          'ManageAllDevices (l\'utente è nel gruppo wheel?)',
+        );
       }
     } else if (!vuole && tutti == true) {
       // Spento dalla pagina: i pad tornano grezzi, come prima.
-      await Dbus.scrivi(servizio, _gestore, _ifGestore, 'ManageAllDevices',
-          'b', 'false');
+      await Dbus.scrivi(
+        servizio,
+        _gestore,
+        _ifGestore,
+        'ManageAllDevices',
+        'b',
+        'false',
+      );
       _tipoDato.clear();
       return true;
     }
@@ -427,10 +527,21 @@ class ControllerService {
       if (suo == null) continue;
       final conf = _conf(suo['chiave'] as String);
       final voluto = _tipoPer(conf);
+      // Un riavvio del demone non deve scollegare pad già corretti dal
+      // browser o dal gioco: leggi i target esistenti prima di ricrearli.
+      if (!_tipoDato.containsKey(c.percorso) &&
+          await _haTarget(c.percorso, voluto)) {
+        _tipoDato[c.percorso] = voluto;
+      }
       if (_tipoDato[c.percorso] != voluto) {
-        final ok = await Dbus.chiama(servizio, c.percorso, _ifComposito,
-            'SetTargetDevices',
-            firma: 'as', argomenti: ['3', voluto, 'mouse', 'keyboard']);
+        final ok = await Dbus.chiama(
+          servizio,
+          c.percorso,
+          _ifComposito,
+          'SetTargetDevices',
+          firma: 'as',
+          argomenti: ['3', voluto, 'mouse', 'keyboard'],
+        );
         if (ok != null) {
           _tipoDato[c.percorso] = voluto;
           cambiato = true;
@@ -438,17 +549,29 @@ class ControllerService {
         }
       }
       if (await _filtraSensori(c, suo)) cambiato = true;
-      final yaml = profilo('${suo['nome']}', conf);
+      final yaml = profilo(
+        '${suo['nome']}',
+        conf,
+        famiglia: suo['famiglia'] as String,
+        grillettiDigitali: List<String>.from(suo['grillettiDigitali'] as List),
+      );
       if (_profiloDato[c.percorso] != yaml) {
-        final ok = await Dbus.chiama(servizio, c.percorso, _ifComposito,
-            'LoadProfileFromYaml',
-            firma: 's', argomenti: [yaml]);
+        final ok = await Dbus.chiama(
+          servizio,
+          c.percorso,
+          _ifComposito,
+          'LoadProfileFromYaml',
+          firma: 's',
+          argomenti: [yaml],
+        );
         if (ok != null) {
           _profiloDato[c.percorso] = yaml;
           print('[MINERVA][CONTROLLER] «${c.nome}»: tasti aggiornati');
         } else {
-          print('[MINERVA][CONTROLLER] «${c.nome}»: InputPlumber ha rifiutato '
-              'il profilo dei tasti');
+          print(
+            '[MINERVA][CONTROLLER] «${c.nome}»: InputPlumber ha rifiutato '
+            'il profilo dei tasti',
+          );
         }
       }
     }
@@ -457,6 +580,31 @@ class ControllerService {
     _tipoDato.removeWhere((k, _) => !vivi.contains(k));
     _profiloDato.removeWhere((k, _) => !vivi.contains(k));
     return cambiato;
+  }
+
+  static Future<bool> _haTarget(String percorso, String voluto) async {
+    final target = await Dbus.proprieta(
+      servizio,
+      percorso,
+      _ifComposito,
+      'TargetDevices',
+    );
+    if (target is! List) return false;
+    final tipi = <String>[];
+    for (final p in target) {
+      final t = await Dbus.proprieta(
+        servizio,
+        '$p',
+        'org.shadowblip.Input.Target',
+        'DeviceType',
+      );
+      if (t is! String) return false;
+      // Il target D-Bus è aggiunto automaticamente da InputPlumber.
+      if (t != 'dbus') tipi.add(t);
+    }
+    tipi.sort();
+    final attesi = [voluto, 'mouse', 'keyboard']..sort();
+    return tipi.join('|') == attesi.join('|');
   }
 
   // ── Le levette vengono solo dalle levette ───────────────────────────────
@@ -476,23 +624,35 @@ class ControllerService {
   // (`FilteredEvents`); i suoi tasti — il clic del touchpad — passano.
   Future<bool> _filtraSensori(_Composito c, Map<String, dynamic> pad) async {
     final filtrabili = await Dbus.proprieta(
-        servizio, c.percorso, _ifComposito, 'FilterableEvents');
+      servizio,
+      c.percorso,
+      _ifComposito,
+      'FilterableEvents',
+    );
     if (filtrabili is! Map) return false;
     final principale = 'evdev://${pad['id']}';
     final voluti = <String, List<String>>{};
     filtrabili.forEach((sorgente, eventi) {
       if (sorgente == principale || eventi is! List) return;
-      final via = eventi
-          .map((e) => '$e')
-          .where((e) =>
-              e.startsWith('Gamepad:Axis:') || e.startsWith('Gamepad:Trigger:'))
-          .toList()
-        ..sort();
+      final via =
+          eventi
+              .map((e) => '$e')
+              .where(
+                (e) =>
+                    e.startsWith('Gamepad:Axis:') ||
+                    e.startsWith('Gamepad:Trigger:'),
+              )
+              .toList()
+            ..sort();
       if (via.isNotEmpty) voluti['$sorgente'] = via;
     });
 
     final ora = await Dbus.proprieta(
-        servizio, c.percorso, _ifComposito, 'FilteredEvents');
+      servizio,
+      c.percorso,
+      _ifComposito,
+      'FilteredEvents',
+    );
     final attuali = <String, List<String>>{};
     if (ora is Map) {
       ora.forEach((k, v) {
@@ -500,8 +660,11 @@ class ControllerService {
       });
     }
     final chiavi = {...voluti.keys, ...attuali.keys};
-    final uguali = chiavi.every((k) =>
-        (voluti[k] ?? const []).join('|') == (attuali[k] ?? const []).join('|'));
+    final uguali = chiavi.every(
+      (k) =>
+          (voluti[k] ?? const []).join('|') ==
+          (attuali[k] ?? const []).join('|'),
+    );
     if (uguali) return false;
 
     final argomenti = <String>['${voluti.length}'];
@@ -513,33 +676,39 @@ class ControllerService {
     });
     try {
       final r = await eseguiLimitato('busctl', [
-        '--system', 'set-property', servizio, c.percorso, _ifComposito,
-        'FilteredEvents', 'a{sas}', ...argomenti,
+        '--system',
+        'set-property',
+        servizio,
+        c.percorso,
+        _ifComposito,
+        'FilteredEvents',
+        'a{sas}',
+        ...argomenti,
       ], limite: const Duration(seconds: 3));
       if (!r.ok) {
-        print('[MINERVA][CONTROLLER] «${c.nome}»: filtro dei sensori '
-            'rifiutato: ${r.stderr.trim()}');
+        print(
+          '[MINERVA][CONTROLLER] «${c.nome}»: filtro dei sensori '
+          'rifiutato: ${r.stderr.trim()}',
+        );
         return false;
       }
     } on ProcessException {
       return false;
     }
-    print('[MINERVA][CONTROLLER] «${c.nome}»: levette e grilletti solo dal '
-        'pad, non dai sensori (${voluti.keys.join(', ')})');
+    print(
+      '[MINERVA][CONTROLLER] «${c.nome}»: levette e grilletti solo dal '
+      'pad, non dai sensori (${voluti.keys.join(', ')})',
+    );
     return false;
   }
 
   // ── Che pad ci sono ─────────────────────────────────────────────────────
   //
-  // Da `/sys/class/input/js*`: joydev crea un `js` solo per ciò che il kernel
-  // riconosce come joystick o pad, ed è la domanda giusta senza lanciare un
-  // `udevadm info` per ogni dispositivo d'ingresso. I pad VIRTUALI — quelli
-  // di InputPlumber, di Steam — stanno in `/devices/virtual/input/` e si
-  // saltano: sono il risultato, non la sorgente. Attenzione a non saltare
-  // anche i pad Bluetooth: passano da uhid, e stanno in
-  // `/devices/virtual/misc/uhid/`.
-
-  Future<List<Map<String, dynamic>>> _inventario() async {
+  /// Inventario in sola lettura: niente D-Bus, profili o scritture ai LED.
+  /// Joydev espone anche alcuni sensori come js*: servono veri tasti da
+  /// joystick. I target UHID USB sono virtuali; i pad Bluetooth UHID sono
+  /// invece sorgenti fisiche e devono restare nell'elenco.
+  Future<List<Map<String, dynamic>>> inventario() async {
     final fuori = <Map<String, dynamic>>[];
     final radice = Directory(radiceSys);
     if (!radice.existsSync()) return fuori;
@@ -549,12 +718,18 @@ class ControllerService {
       try {
         final vero = Link('${voce.path}/device').resolveSymbolicLinksSync();
         if (vero.contains('/devices/virtual/input/')) continue;
+        final bus = _leggi('$vero/id/bustype');
+        if (vero.contains('/devices/virtual/misc/uhid/') && bus != '0005') {
+          continue;
+        }
+        final tastiPad = _leggi('$vero/capabilities/key');
+        if (!_haTastiJoystick(tastiPad)) continue;
+        final assi = _leggi('$vero/capabilities/abs');
         final evento = Directory(vero)
             .listSync()
             .map((e) => e.uri.pathSegments.where((s) => s.isNotEmpty).last)
             .firstWhere((n) => n.startsWith('event'), orElse: () => '');
         if (evento.isEmpty) continue;
-        final bus = _leggi('$vero/id/bustype');
         // La chiave che resta: l'indirizzo Bluetooth (o il seriale) se c'è,
         // altrimenti marca, modello e nome — due pad uguali via cavo
         // condividono le scelte, che è il meno peggio.
@@ -562,17 +737,26 @@ class ControllerService {
         final chiave = uniq.isNotEmpty
             ? uniq
             : '${_leggi('$vero/id/vendor')}:${_leggi('$vero/id/product')}'
-                ':${_leggi('$vero/name')}';
+                  ':${_leggi('$vero/name')}';
         _ledDi[chiave] = _led(vero);
         fuori.add({
           'chiave': chiave,
           'id': evento,
           'nome': _leggi('$vero/name'),
+          'famiglia': switch (_leggi('$vero/id/vendor')) {
+            '057e' => 'nintendo',
+            '054c' => 'playstation',
+            _ => 'xbox',
+          },
           'collegamento': switch (bus) {
             '0005' => 'bluetooth',
             '0003' => 'usb',
             _ => 'altro',
           },
+          'grillettiDigitali': [
+            if (_haBit(tastiPad, 0x138) && !_haBit(assi, 2)) 'LeftTrigger',
+            if (_haBit(tastiPad, 0x139) && !_haBit(assi, 5)) 'RightTrigger',
+          ],
           'batteria': _batteria(vero),
           'gestito': false,
         });
@@ -584,12 +768,34 @@ class ControllerService {
     return fuori;
   }
 
+  static bool _haTastiJoystick(String bitmap) {
+    for (var codice = 0x120; codice < 0x140; codice++) {
+      if (_haBit(bitmap, codice)) return true;
+    }
+    return false;
+  }
+
+  static bool _haBit(String bitmap, int codice) {
+    final parole = bitmap.trim().split(RegExp(r'\s+')).reversed.toList();
+    final bits = sizeOf<IntPtr>() * 8;
+    final indice = codice ~/ bits;
+    if (indice >= parole.length) return false;
+    try {
+      final parola = BigInt.parse(parole[indice], radix: 16);
+      return (parola & (BigInt.one << (codice % bits))) != BigInt.zero;
+    } on FormatException {
+      return false;
+    }
+  }
+
   /// I LED della barra luminosa, accanto al dispositivo HID come la
   /// batteria. Solo quelli di colore: i cinque LED bianchi del giocatore di
   /// un DualSense non sono una barra luminosa.
   static List<String> _led(String dispositivo) {
-    final cartella = Directory('${Directory(dispositivo).parent.parent.path}'
-        '/leds');
+    final cartella = Directory(
+      '${Directory(dispositivo).parent.parent.path}'
+      '/leds',
+    );
     if (!cartella.existsSync()) return const [];
     return cartella
         .listSync()
@@ -624,9 +830,12 @@ class ControllerService {
         scrivi('$d/brightness', '1');
       } else if (File('$d/multi_intensity').existsSync()) {
         scrivi('$d/multi_intensity', '$r $g $b');
-        scrivi('$d/brightness', _leggi('$d/max_brightness').isEmpty
-            ? '255'
-            : _leggi('$d/max_brightness'));
+        scrivi(
+          '$d/brightness',
+          _leggi('$d/max_brightness').isEmpty
+              ? '255'
+              : _leggi('$d/max_brightness'),
+        );
       }
     }
     return ok;
@@ -681,8 +890,10 @@ class ControllerService {
   /// La batteria sta accanto al dispositivo HID, due piani sopra quello di
   /// input: `…/0005:054C:09CC.0008/power_supply/ps-controller-battery-…`.
   static int? _batteria(String dispositivo) {
-    final cartella = Directory('${Directory(dispositivo).parent.parent.path}'
-        '/power_supply');
+    final cartella = Directory(
+      '${Directory(dispositivo).parent.parent.path}'
+      '/power_supply',
+    );
     if (!cartella.existsSync()) return null;
     for (final b in cartella.listSync()) {
       final v = int.tryParse(_leggi('${b.path}/capacity'));
@@ -704,9 +915,12 @@ class ControllerService {
   Future<List<_Composito>> _compositi() async {
     final UscitaLimitata r;
     try {
-      r = await eseguiLimitato(
-          'busctl', ['--system', '--list', 'tree', servizio],
-          limite: const Duration(seconds: 3));
+      r = await eseguiLimitato('busctl', [
+        '--system',
+        '--list',
+        'tree',
+        servizio,
+      ], limite: const Duration(seconds: 3));
     } on ProcessException {
       return const [];
     }
@@ -717,14 +931,24 @@ class ControllerService {
       final percorso = riga.trim();
       if (!composto.hasMatch(percorso)) continue;
       final nome = await Dbus.proprieta(
-          servizio, percorso, _ifComposito, 'Name');
-      final sorgenti = await Dbus.proprieta(
-          servizio, percorso, _ifComposito, 'SourceDevicePaths');
-      fuori.add(_Composito(
+        servizio,
         percorso,
-        nome is String ? nome : '',
-        sorgenti is List ? sorgenti.map((s) => '$s').toList() : const [],
-      ));
+        _ifComposito,
+        'Name',
+      );
+      final sorgenti = await Dbus.proprieta(
+        servizio,
+        percorso,
+        _ifComposito,
+        'SourceDevicePaths',
+      );
+      fuori.add(
+        _Composito(
+          percorso,
+          nome is String ? nome : '',
+          sorgenti is List ? sorgenti.map((s) => '$s').toList() : const [],
+        ),
+      );
     }
     return fuori;
   }

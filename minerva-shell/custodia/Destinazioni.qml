@@ -10,7 +10,7 @@ import "../ui" as Ui
 //
 // ── Perché un elenco e non un posto solo ───────────────────────────────────
 //
-// Parole di Giacomo: «vorrei poter scegliere in fase di caricamento quale
+// Parole di il manutentore: «vorrei poter scegliere in fase di caricamento quale
 // opzione voglio». Ha ragione, e non è una preferenza: un progetto di codice
 // vuole GitHub, 286 GB di immagini ROM vogliono un disco in un cassetto, e chi
 // ha entrambe le cose vuole tutte e due.
@@ -18,7 +18,7 @@ import "../ui" as Ui
 // ── Perché si mostrano i dischi, invece di far scrivere un percorso ────────
 //
 // Perché il caso vero è «ho attaccato il disco esterno adesso», e chiedere di
-// scrivere `/run/media/giacomo/Disco Rosso` a mano trasforma un gesto di un
+// scrivere `/run/media/utente/Disco Rosso` a mano trasforma un gesto di un
 // secondo in un errore di battitura. La casella per scrivere resta, sotto, per
 // chi manda in una cartella di rete o dentro casa propria.
 Column {
@@ -149,7 +149,7 @@ Column {
     // collegato: mostrava «per mandare su GitHub serve una chiave» a uno che
     // era entrato dieci minuti prima.
     //
-    // Giacomo, quel giorno: «nell'app non vedo se ho effettuato l'accesso, non
+    // il manutentore, quel giorno: «nell'app non vedo se ho effettuato l'accesso, non
     // dà nessuna informazione». Uno stato che c'è e non si vede è come non
     // averlo — ed è la stessa famiglia di difetti che questo progetto passa le
     // giornate a togliere.
@@ -559,7 +559,7 @@ Column {
 
                 // ── La strada nuova: entra e basta ───────────────────
                 //
-                // Giacomo, 8 settembre 2026: «lo fa Antigravity, VS Code e
+                // il manutentore, 8 settembre 2026: «lo fa Antigravity, VS Code e
                 // tanti altri. Perché non noi? Siamo di serie B?». Aveva
                 // ragione, e dieci minuti dopo il gesto che criticava è finito
                 // male: il gettone appena creato è stato incollato dentro una

@@ -2,7 +2,7 @@
 //
 // ── Che cosa fa ────────────────────────────────────────────────────────────
 //
-// Giacomo, 10 settembre 2026: «voglio le finestre tremolanti». Il modello è
+// il manutentore, 10 settembre 2026: «voglio le finestre tremolanti». Il modello è
 // Compiz: mentre trascini, il punto preso resta sotto il dito e il resto
 // della finestra resta indietro e si piega; al rilascio rimbalza e si posa.
 //

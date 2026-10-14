@@ -8,7 +8,7 @@ import "../monitor" as Mon
 
 // ── Attività, dentro la shell ────────────────────────────────────────────
 //
-// Giacomo, 28 settembre 2026: il gestore dei processi «molto pesante per
+// il manutentore, 28 settembre 2026: il gestore dei processi «molto pesante per
 // essere un task manager che dovrebbe essere piccolissimo […] rifacessi il
 // look per liquid e la rendessi fondamentale per il sistema». Fra tre strade
 // ha scelto questa: un pannello della shell, come il Centro. Una finestra Qt
@@ -36,6 +36,8 @@ PanelWindow {
     readonly property bool it: Core.Strings.lang === "it"
 
     function apri() {
+        if (!Core.Riva.attiva)
+            return;
         if (attivita.aperto) return;
         attivita.aperto = true;
         attivita.mostrato = true;
@@ -67,7 +69,18 @@ PanelWindow {
         attivo: attivita.aperto
     }
 
-    visible: attivita.mostrato
+    visible: Core.Riva.attiva && attivita.mostrato
+    // Cambiare preset chiude anche lo stato logico, così non riappare tornando.
+    Connections {
+        target: Core.Riva
+        function onAttivaChanged() {
+            if (Core.Riva.attiva)
+                return;
+            attivita.chiudi();
+            attivita.mostrato = false;
+            spegni.stop();
+        }
+    }
     anchors { top: true; bottom: true; left: true; right: true }
     exclusiveZone: -1
     color: "transparent"
@@ -75,7 +88,7 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     // La tastiera SUBITO, come il Centro: si apre per cercare, e con
     // «al primo clic» Qt annullava proprio quel clic (qml-fuoco-annulla-clic).
-    WlrLayershell.keyboardFocus: attivita.aperto ? WlrKeyboardFocus.Exclusive
+    WlrLayershell.keyboardFocus: Core.Riva.attiva && attivita.aperto ? WlrKeyboardFocus.Exclusive
                                                  : WlrKeyboardFocus.None
 
     Timer { id: spegni; interval: Theme.Motion.liquido ? 650 : 0; onTriggered: if (!attivita.aperto) attivita.mostrato = false }

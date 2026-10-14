@@ -16,6 +16,7 @@ import "../theme" as Theme
 // libera.
 Item {
     id: workspaces
+    signal overviewRequested()
 
     /// Numero minimo di scrivanie sempre mostrate. Averne un numero fisso
     /// rende il bersaglio stabile: la quarta pastiglia è sempre nello stesso
@@ -40,6 +41,11 @@ Item {
         return set;
     }
 
+    readonly property var attention: {
+        var marked={};
+        Core.Windows.all.forEach(function(w){if(w.attention) marked[w.workspace-1]=true;});
+        return marked;
+    }
     readonly property int count: {
         var maximum = workspaces.minimumCount;
         for (var i = 0; i < list.length; i++) {
@@ -100,7 +106,7 @@ Item {
                     anchors.fill: parent
                     radius: height / 2
 
-                    color: pill.isActive ? Theme.Colors.accent
+                    color: workspaces.attention[pill.index] ? Theme.Colors.accentWarm : pill.isActive ? Theme.Colors.accent
                          : pill.isOccupied ? Theme.Colors.textFaint
                          : Qt.alpha(Theme.Colors.text, 0.13)
 
@@ -137,7 +143,7 @@ Item {
                     width: Math.max(parent.width, 22) + 6
                     height: Theme.Effects.barButton
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: Core.Compositore.vaiAScrivania(pill.index + 1)
+                    onClicked: {if(pill.isActive) workspaces.overviewRequested(); else Core.Compositore.vaiAScrivania(pill.index + 1);}
                 }
             }
         }

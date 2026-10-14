@@ -9,7 +9,7 @@ import "../ui" as Ui
 //
 // ── Da dove nasce ──────────────────────────────────────────────────────────
 //
-// Da una cartella di Giacomo che si chiama `Documenti/Progetti/Minerva-Copie` e
+// Da una cartella di il manutentore che si chiama `Documenti/Progetti/Minerva-Copie` e
 // che contiene questo:
 //
 //     minerva-2026-08-04_2014-utente-e-accesso.tar.zst   18 MB
@@ -55,7 +55,7 @@ FloatingWindow {
     //
     // Il 2 settembre 2026 qui c'era `color: "transparent"` più un
     // `Ui.FondoFinestra` — un rettangolo a tutta finestra col raggio — per
-    // arrotondare gli angoli, che Giacomo aveva chiesto.
+    // arrotondare gli angoli, che il manutentore aveva chiesto.
     //
     // Funzionava, e si è visto nelle fotografie. Costava però **quindici
     // megabyte per applicazione**, misurati: 55 MB senza, 69-72 con. Provato

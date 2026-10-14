@@ -156,13 +156,24 @@ if [ -n "$LIVE_PID" ] && kill -0 "$LIVE_PID" 2>/dev/null; then
     # Un controllo che grida al lupo a ogni ricarica smette di essere letto, e
     # allora il giorno che l'errore c'è davvero nessuno lo vede. Le due righe
     # si escludono per nome, e solo quelle.
+    #
+    # ── Solo le righe di QUESTA ricarica ──────────────────────────────────
+    #
+    # Si guardavano le ultime 40 righe del registro, che comprendono quelle
+    # della ricarica precedente: dopo un `tutto`, il riavvio del demone lascia
+    # «Socket error … ServerNotFoundError», e la ricarica successiva le
+    # segnalava come errori suoi (notato da Claude e da ChatGPT l'11 ottobre
+    # 2026). Ora si parte dall'ultimo «Reloading configuration» di quickshell.
     SHELL_LOG="$STATO/shell.log"
-    if [ -f "$SHELL_LOG" ] \
-       && tail -40 "$SHELL_LOG" \
-          | grep -viE 'host portal|Connessione persa, riprovo' \
-          | grep -qiE 'error|warning:.*qml|cannot assign'; then
-        bad "ma il registro riporta errori — guarda $SHELL_LOG"
-        tail -12 "$SHELL_LOG" | sed 's/^/    /'
+    if [ -f "$SHELL_LOG" ]; then
+        QUESTA=$(awk '/Reloading configuration/ { n = NR } END { print n + 0 }' "$SHELL_LOG")
+        RIGHE=$(tail -n +"$((QUESTA > 0 ? QUESTA : 1))" "$SHELL_LOG")
+        if printf '%s\n' "$RIGHE" \
+           | grep -viE 'host portal|Connessione persa, riprovo' \
+           | grep -qiE 'error|warning:.*qml|cannot assign'; then
+            bad "ma il registro riporta errori — guarda $SHELL_LOG"
+            printf '%s\n' "$RIGHE" | tail -12 | sed 's/^/    /'
+        fi
     fi
 else
     say "non risponde, la riavvio"
@@ -219,19 +230,28 @@ if [ "$MODE" = "tutto" ]; then
     # `dart run` (vedi `scripts/minerva-demone`).
     come_la_sessione nohup "$MINERVA_DIR/scripts/minerva-demone" >/dev/null 2>&1 &
     say "il demone riparte, ~10 secondi"
-    # Il socket lo scrive il demone stesso nel file del canale, e ci scrive
-    # DOPO averlo preso: se la riga c'e', dall'altra parte c'e' qualcuno.
+    # Il socket lo scrive il demone stesso nel file del canale. Il file può
+    # però restare dopo un arresto forzato: proviamo una connessione reale,
+    # come fa minerva-check.sh, invece di fidarci del solo percorso.
     # Cercare un percorso fisso vorrebbe dire indovinare la sessione.
     CANALE="$CARTELLA_RUNTIME/sessioni/${MINERVA_SESSIONE:-unica}/canale"
     SOCKET=""
+    demone_risponde() {
+        python3 -c 'import socket,sys
+s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM); s.settimeout(1)
+try: s.connect(sys.argv[1])
+except OSError: sys.exit(1)
+s.close()' "$1" 2>/dev/null
+    }
     for _ in $(seq 1 20); do
         sleep 1
         SOCKET=$(sed -n 's/^socket=//p' "$CANALE" 2>/dev/null | head -1)
-        if [ -n "$SOCKET" ] && [ -S "$SOCKET" ]; then
+        if [ -n "$SOCKET" ] && [ -S "$SOCKET" ] && demone_risponde "$SOCKET"; then
             ok "demone in ascolto su $SOCKET"
             break
         fi
     done
     [ -n "$SOCKET" ] && [ -S "$SOCKET" ] \
+        && demone_risponde "$SOCKET" \
         || bad "il demone non ha aperto nessun socket (cercato in $CANALE)"
 fi

@@ -8,7 +8,7 @@ import "." as Ui
 //
 // ── Da dove viene ──────────────────────────────────────────────────────────
 //
-// Giacomo faceva doppio clic su `joca.sh` — il lanciatore di un suo progetto —
+// il manutentore faceva doppio clic su `joca.sh` — il lanciatore di un suo progetto —
 // e si aprivano le PROPRIETÀ. Non era una scelta: era il ripiego che qualcuno
 // aveva messo lì per il caso «non so con che cosa aprirlo», e la finestra
 // delle proprietà è un posto dove si guardano i permessi e la data, non dove
@@ -28,7 +28,7 @@ import "." as Ui
 // ── Le tre righe, in quest'ordine ─────────────────────────────────────────
 //
 // «Esegui nel terminale» sopra, «Apri con <il predefinito>» sotto, e l'elenco
-// completo più in basso. Deciso con Giacomo il 17 agosto 2026: per uno script
+// completo più in basso. Deciso con il manutentore il 17 agosto 2026: per uno script
 // le prime due sono quello che si vuole quasi sempre, e la terza serve il
 // giorno che l'editor predefinito non è quello giusto — senza, si tornerebbe
 // al vicolo cieco di prima.
@@ -72,6 +72,22 @@ Rectangle {
     /// dove nella cartella ci si è già.
     property bool offriCartella: false
 
+    /// Lo schema, quando non è un file ma un link che un programma ha chiesto
+    /// di aprire (`minecraft:`, `steam:`, `zoommtg:`): il tipo arriva come
+    /// `x-scheme-handler/minecraft`, e mostrarlo così non diceva niente
+    /// (il manutentore, 11 ottobre 2026, da Chrome).
+    readonly property string schema: chiedi.tipo.indexOf("x-scheme-handler/") === 0
+                                     ? chiedi.tipo.substring("x-scheme-handler/".length) : ""
+
+    /// Chiudere perché lo ha chiesto chi guarda (Lascia perdere, Esc, clic
+    /// fuori), e non perché è arrivata un'altra domanda: chi la contiene se
+    /// lo ricorda, e per un po' non rifà la stessa domanda.
+    signal lasciatoPerdere(string tipo)
+    function lasciaPerdere() {
+        chiedi.lasciatoPerdere(chiedi.tipo);
+        chiedi.chiudi();
+    }
+
     readonly property string nome: {
         var p = String(chiedi.percorso || "");
         var taglio = p.lastIndexOf("/");
@@ -92,7 +108,7 @@ Rectangle {
         chiedi.tipo = "";
         chiedi.predefinito = "";
         chiedi.candidati = [];
-        // La spunta nasce VUOTA a ogni apertura. Scelta di Giacomo: «da
+        // La spunta nasce VUOTA a ogni apertura. Scelta di il manutentore: «da
         // mettere». Cambiare un'impostazione di sistema è una cosa che si fa
         // apposta, non una cosa che capita mentre si apre un file.
         chiedi.ricorda = false;
@@ -107,7 +123,7 @@ Rectangle {
 
     // ── Cercare un programma nello store ─────────────────────────────────
     //
-    // Giacomo, 6 ottobre 2026: un collegamento che cerchi nel gestore
+    // il manutentore, 6 ottobre 2026: un collegamento che cerchi nel gestore
     // pacchetti un programma adatto. Quale store e come gli si passa la
     // ricerca lo sa `scripts/minerva-store`; qui si chiede una volta sola
     // come si chiama e se sa cercare da solo, per scriverlo sulla riga.
@@ -166,7 +182,7 @@ Rectangle {
     // all'apertura: senza, i tasti vanno a chi c'era prima e la finestra
     // sembra sorda.
     focus: chiedi.visible
-    Keys.onEscapePressed: chiedi.chiudi()
+    Keys.onEscapePressed: chiedi.lasciaPerdere()
 
     /// Come in `Condividi.qml`: sulla scrivania questa finestrella vive dentro
     /// una finestra di sovrapposizione, che va spenta insieme a lei.
@@ -214,7 +230,7 @@ Rectangle {
     // finestra sotto.
     MouseArea {
         anchors.fill: parent
-        onClicked: chiedi.chiudi()
+        onClicked: chiedi.lasciaPerdere()
     }
 
     Rectangle {
@@ -241,7 +257,11 @@ Rectangle {
             Text {
                 width: parent.width
                 elide: Text.ElideMiddle
-                text: chiedi.nome
+                textFormat: Text.PlainText
+                text: chiedi.nome !== "" ? chiedi.nome
+                      : chiedi.schema !== "" ? (chiedi.it ? "Un link «" + chiedi.schema + ":»"
+                                                          : "A «" + chiedi.schema + ":» link")
+                      : ""
                 color: Theme.Colors.text
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeMD
@@ -254,6 +274,8 @@ Rectangle {
                 text: {
                     if (chiedi.aspetto)
                         return chiedi.it ? "Sto guardando…" : "Looking…";
+                    if (chiedi.schema !== "")
+                        return chiedi.it ? "Chiesto da un altro programma" : "Asked by another program";
                     var t = chiedi.tipo !== "" ? chiedi.tipo : "?";
                     if (chiedi.eseguibile)
                         t += chiedi.it ? "  ·  si può eseguire"
@@ -324,11 +346,15 @@ Rectangle {
                 width: parent.width
                 wrapMode: Text.WordWrap
                 visible: !chiedi.aspetto && chiedi.candidati.length === 0
-                text: chiedi.it
-                      ? "Nessun programma installato dichiara di saper aprire "
-                        + "questo tipo di file."
-                      : "No installed program declares that it can open this "
-                        + "kind of file."
+                text: chiedi.schema !== ""
+                      ? (chiedi.it
+                         ? "Nessun programma installato sa aprire i link «" + chiedi.schema + ":»."
+                         : "No installed program can open «" + chiedi.schema + ":» links.")
+                      : (chiedi.it
+                         ? "Nessun programma installato dichiara di saper aprire "
+                           + "questo tipo di file."
+                         : "No installed program declares that it can open this "
+                           + "kind of file.")
                 color: Theme.Colors.textFaint
                 font.family: Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeSM
@@ -464,6 +490,7 @@ Rectangle {
                 height: 34
 
                 Rectangle {
+                    objectName: "apriConLasciaPerdere"
                     anchors.right: parent.right
                     width: 130
                     height: 34
@@ -487,7 +514,7 @@ Rectangle {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: chiedi.chiudi()
+                        onClicked: chiedi.lasciaPerdere()
                     }
                 }
             }

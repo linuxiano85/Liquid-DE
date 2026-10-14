@@ -51,7 +51,7 @@ Singleton {
     // `set_minimized`, `set_maximized` e `set_fullscreen`, come il
     // trascinamento della barra usa `startSystemMove()`. Si perde solo ciò
     // che è nostro: «riduci» nel pannello delle ridotte, «ingrandisci» che si
-    // ferma allo spazio utile. Richiesta di Giacomo del 30 agosto 2026: «le
+    // ferma allo spazio utile. Richiesta di il manutentore del 30 agosto 2026: «le
     // nostre app funzionanti su altri desktop environment di qualsiasi tipo».
     /// Vero quando c'è un compositore che ascolta i comandi di Minerva.
     ///
@@ -92,6 +92,7 @@ Singleton {
         onConnectedChanged: {
             comp._inCorso = [];
             if (!canale.connected) {
+                comp.nativeWindowsReady=false;
                 comp._riprovaFraPoco();
                 return;
             }
@@ -109,16 +110,16 @@ Singleton {
                 // Non «tutto»: ogni annuncio è una sveglia per questo
                 // processo, e iscriversi a quelli che non servono vuol dire
                 // una shell che si sveglia a ogni finestra che si muove.
-                canale.write("ascolta scrivania scorciatoia coperchio "
-                             + "inattivo attivo schermi bordoalto risparmio angolo bordo "
-                             + "menufinestra\n");
-                comp._inCorso.push("ascolta");
+                comp.subscribe();
                 comp.chiedi("schermi");
                 // Com'è il risparmio adesso: l'annuncio arriva solo quando
                 // CAMBIA, e un'app aperta a risparmio già acceso deve
                 // saperlo lo stesso (`Core.Vetro.effetto`).
                 comp.chiediRisparmio();
+                comp._nostro("tiling",[]);
+                comp._nostro("focus-style",[]);
                 comp.aggiornaScrivanie();
+                if(comp.scrivania) comp.chiedi("finestre");
                 comp.scorciatoieDaMandare();
                 // Tastiera, touchpad e puntatore. Qui e non solo dalla pagina
                 // Impostazioni: vedi `applicaIngresso()`, che è il motivo per
@@ -274,14 +275,34 @@ Singleton {
     /// non ambigua: un elenco di schermi comincia con `ok [{"nome":`. Quando
     /// la forma parla, vince lei e la coda si allinea a quello che è
     /// davvero arrivato.
+    signal nativeWindows(var list)
+    property bool nativeWindowsReady:false
+    property var nativeWindowList:[]
+    property var focusCapabilities:({desaturation:false})
+    property Timer windowRefresh:Timer {interval:16;onTriggered:comp.chiedi("finestre")}
+    property var tilingState: ({modalita: "classico", ordine: "recenti"})
+    function _tilingFrom(text) {
+        try { var state=JSON.parse(text); if(state.modalita) tilingState=state; }
+        catch(e) { console.warn("[MINERVA][TILING] " + text); }
+    }
+
     function _risposta(riga) {
         var testo = String(riga);
         var quale = comp._inCorso.length > 0 ? comp._inCorso.shift() : "";
+        if(quale==="finestre" && testo.indexOf("ok [")===0) {
+            try {comp.nativeWindowList=JSON.parse(testo.substring(3));comp.nativeWindowsReady=true;comp.nativeWindows(comp.nativeWindowList);} catch(e) {console.warn("Window model:",e);}
+        }
+        if(quale==="lancio") comp.risposta(quale,testo);
+        if(quale==="focus-style" && testo.indexOf("ok {")===0) {
+            try {comp.focusCapabilities=JSON.parse(testo.substring(3));} catch(e) {console.warn(e);}
+        }
+        if(quale === "tiling" && testo.indexOf("ok {")===0) comp._tilingFrom(testo.substring(3));
         if (testo.indexOf('ok [{"nome"') === 0 && quale !== "schermi") {
             var dove = comp._inCorso.indexOf("schermi");
             if (dove >= 0) comp._inCorso.splice(dove, 1);
             quale = "schermi";
         }
+        if (quale === "anteprima") comp.risposta(quale, String(riga));
         if (quale.indexOf("monitori-") === 0) comp.risposta(quale, String(riga));
         if (quale === "schermo-prova" || quale === "schermo-conferma" || quale === "schermo-annulla")
             comp.risposta(quale, String(riga));
@@ -299,6 +320,13 @@ Singleton {
             comp.risposta("puntatore", riga.substring(3));
         if (quale === "risparmio" && String(riga).indexOf("ok {") === 0)
             comp._risparmioDa(riga.substring(3));
+        // Il vetro dietro la barra Windows c'è davvero solo se il compositore
+        // ha risposto di sì: uno più vecchio non conosce il verbo, e senza
+        // sfocatura dietro i pannelli trasparenti non si leggerebbero.
+        if (quale === "vetrobarra") {
+            comp.vetroBarra = String(riga).indexOf("ok si") === 0;
+            comp.vetroAcrylic = String(riga).indexOf("ok si acrylic") === 0;
+        }
         if (quale === "stato" && String(riga).indexOf("ok {") === 0) {
             try {
                 comp.statoCompositore = JSON.parse(riga.substring(3));
@@ -307,6 +335,13 @@ Singleton {
             }
         }
     }
+
+    /// Il compositore ha acceso il vetro dietro la barra Windows (verbo
+    /// «vetrobarra»). Lo legge `windows11/Style.qml`.
+    property bool vetroBarra: false
+    /// E ci stende sopra la ricetta Acrylic di Windows (risposta «ok si
+    /// acrylic»): luminosità, tinta e rumore li fa lui.
+    property bool vetroAcrylic: false
 
     /// ── Quello che il compositore SA di sé ───────────────────────────────
     ///
@@ -372,8 +407,22 @@ Singleton {
     /// Una riga di annuncio. Qui ne arriva una sola — vedi il commento sul
     /// socket — e trattarne una in più senza dirlo sarebbe il modo di
     /// ritrovarsi la shell sveglia a ogni tasto premuto in un terminale.
+    signal panoramicaChiesta(string monitor)
+    signal bloccoCambiato(bool locked)
+    signal previewReady(var entry)
     function _annuncio(riga) {
         var t = String(riga);
+        if(t.indexOf("evento anteprima ")===0) {try {comp.previewReady(JSON.parse(t.substring(17)));} catch(e) {console.warn("Preview event:",e);}return;}
+        if(comp.scrivania && /^evento (aperta|chiusa|fuoco|mossa|titolo|stato|scrivania) /.test(t) && !windowRefresh.running) windowRefresh.start();
+        if(t.indexOf("evento istanza-unica ")===0) {
+            var fields=t.split(" ");Notifications.daMinerva("Nuova finestra", "L’app ha richiamato una finestra esistente nella stanza "+fields[2]+". La trovi nella panoramica dei desktop.");return;
+        }
+        if(t.indexOf("evento blocco ")===0) {
+            try {comp.bloccoCambiato(JSON.parse(t.substring(14)).bloccato===true);} catch(e) {}
+            return;
+        }
+
+        if(t.indexOf("evento tiling ")===0) { comp._tilingFrom(t.substring(14)); return; }
         // ── Uno schermo è arrivato o se n'è andato ───────────────────────
         //
         // Il compositore lo annuncia (`evento schermi`), e da qui si richiede
@@ -486,6 +535,7 @@ Singleton {
             var d = JSON.parse(t.substring(17));
             if (d && d.attiva > 0) {
                 comp._scrivaniaDaEvento = d.attiva;
+                comp._nostro("tiling", []);
                 // L'elenco di quali scrivanie esistono cambia insieme a
                 // questo: chi era vuota adesso si guarda, e va accesa.
                 comp.aggiornaScrivanie();
@@ -691,7 +741,7 @@ Singleton {
     // «Ingrandisci» qui è GEOMETRIA — `Windows.maximize` ridimensiona e
     // sposta, e il plugin fa lo stesso conto. Una finestra nel modo 1 del
     // compositore si prende l'ingresso e lascia le altre disegnate e mute:
-    // Giacomo, 12 agosto 2026, «è diventata una finestra fantasma». Il
+    // il manutentore, 12 agosto 2026, «è diventata una finestra fantasma». Il
     // colpevole era proprio quel comando, dentro il plugin.
     //
     // Una porta che offre un attrezzo che non va usato è una porta che invita
@@ -711,7 +761,7 @@ Singleton {
     // Chiedere soltanto l'elenco non basta: il 25 agosto 2026, fotografando
     // lo schermo subito dopo il cambio di scrivania, le barre del titolo della
     // scrivania di prima restavano disegnate fra i 150 e i 550 millisecondi,
-    // il tempo della risposta. Le parole di Giacomo: «rimangono dei residui».
+    // il tempo della risposta. Le parole di il manutentore: «rimangono dei residui».
 
     /// La scrivania detta dall'ultimo evento del compositore, o 0.
     property int _scrivaniaDaEvento: 0
@@ -828,12 +878,17 @@ Singleton {
         return {
             "address": c.id || "",
             "pid": c.pid || 0,
+            "surfaceId":c.surfaceId || 0,
+            "birth":c.birth || 0,
             "title": titolo,
             "appClass": c.classe || "",
             "minimized": c.ridotta === true,
-            // In minerva-wayland il tiling non c'è: ogni finestra galleggia.
-            // Non è un ripiego — è la scelta di Minerva, presa a luglio.
-            "floating": true,
+            "floating": c.tiling !== true,
+            "tiling": c.tiling === true,
+            "attention": c.attenzione === true,
+            "focused":c.focused===true, "dragging":c.dragging===true, "output":c.output || "",
+            "logical":c.logical || [], "viewport":c.viewport || [],
+            "column": c.colonna || 0,
             // `posto` è già l'ordine di sovrapposizione: 0 la finestra
             // attiva.
             "stack": c.posto === undefined ? 9999 : c.posto,
@@ -883,7 +938,7 @@ Singleton {
     /// Col vetro il compositore mette la STESSA trasparenza su tutto l'albero
     /// della finestra — la barra che disegna lui e il contenuto del programma
     /// — così che siano un corpo solo invece di due trasparenze attaccate con
-    /// una linea in mezzo. È la richiesta di Giacomo del 2 settembre 2026.
+    /// una linea in mezzo. È la richiesta di il manutentore del 2 settembre 2026.
     ///
     /// Col blur, in più, quello che sta DIETRO la finestra è sfocato: è un
     /// nodo che il compositore mette sotto di lei, non un ritocco alla
@@ -954,7 +1009,7 @@ Singleton {
 
     /// ── L'elastico: quanto tremano le finestre ──────────────────────────
     ///
-    /// Giacomo, 10 settembre 2026: «voglio le finestre tremolanti».
+    /// il manutentore, 10 settembre 2026: «voglio le finestre tremolanti».
     ///
     /// Zero spento, uno normale, tre il massimo. Il numero è una forza, e
     /// dentro il compositore vale il contrario di quel che sembra — più forza
@@ -1002,7 +1057,7 @@ Singleton {
 
     /// ── I colori che si alternano nel giro ──────────────────────────────
     ///
-    /// Giacomo, 9 settembre 2026: «vorrei anche l'effetto rgb come una strip
+    /// il manutentore, 9 settembre 2026: «vorrei anche l'effetto rgb come una strip
     /// led e possibilità di scegliere i colori che si alterneranno».
     ///
     /// Un elenco vuoto vuol dire lo SPETTRO intero, che è come la cornice è
@@ -1162,6 +1217,12 @@ Singleton {
         comp._nostro("csd", l);
     }
 
+    /// Il fuoco segue il puntatore (focus-follows-mouse): `focussegue si|no`.
+    function focusSegue(acceso) {
+        if (comp.nostro)
+            comp._nostro("focussegue", [acceso ? "si" : "no"]);
+    }
+
     /// Siamo il processo che disegna la scrivania, o una finestra qualunque?
     ///
     /// Il contrassegno lo mette `scripts/minerva-interfaccia`, ed è l'unico che
@@ -1191,6 +1252,15 @@ Singleton {
         var v = String(Quickshell.env("MINERVA_SCRIVANIA") || "");
         return v !== "" && v !== "0";
     }
+    // shell.qml declares its role after singleton construction. The socket
+    // may already be connected then: update the subscription and bootstrap
+    // the native model instead of freezing its first (often empty) snapshot.
+    function subscribe() {
+        if(!canale.connected) return;
+        canale.write("ascolta scrivania scorciatoia coperchio inattivo attivo schermi bordoalto risparmio angolo bordo menufinestra tiling blocco istanza-unica anteprima "
+                     +(comp.scrivania ? "aperta chiusa fuoco mossa titolo stato ":"")+"\n");
+        comp._inCorso.push("ascolta");
+    }
 
     // ── L'altro verso della stessa porta ─────────────────────────────────
     //
@@ -1212,6 +1282,7 @@ Singleton {
     // di prima: chi manda resta uno solo. Cambia solo che adesso i due
     // messaggi si possono incrociare senza perdersi.
     onScrivaniaChanged: {
+        if(canale.connected) {subscribe();if(scrivania) chiedi("finestre");}
         if (comp.nostro && comp.scrivania && Ipc.impostazioniArrivate) {
             console.debug("[MINERVA][Compositore] la scrivania si è "
                           + "dichiarata dopo le impostazioni: applico "
@@ -1528,6 +1599,10 @@ Singleton {
     signal risposta(string cosa, string testo)
 
     function chiedi(cosa) {
+        if (cosa === "finestre") {
+            comp._nostro("finestre", []);
+            return;
+        }
         if (cosa === "schermi") {
             comp._nostro("schermi", []);
             return;

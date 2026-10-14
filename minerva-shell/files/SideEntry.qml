@@ -75,19 +75,22 @@ Rectangle {
     radius: Theme.Effects.radiusSM
     // Il passaggio del mouse e la voce attiva li disegna la goccia; qui resta
     // solo il bersaglio di un trascinamento, che è un'altra cosa.
-    color: entry.bersaglio ? Qt.alpha(Theme.Colors.accent, 0.34) : "transparent"
+    color: entry.bersaglio ? Qt.alpha(FileStyle.accent, 0.34)
+        : FileStyle.windows && entry.attiva ? FileStyle.selected
+        : FileStyle.windows && mouse.containsMouse ? FileStyle.hover
+        : "transparent"
     Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
     opacity: entry.dimmed ? 0.6 : 1
 
-    Ui.Icon {
+    FileIcon {
         id: entryIcon
         anchors.left: parent.left
         anchors.leftMargin: Theme.Effects.space2
         anchors.verticalCenter: parent.verticalCenter
         width: 15; height: 15
         name: entry.icon
-        color: mouse.containsMouse || entry.attiva ? Theme.Colors.accent
-                                                   : Theme.Colors.textFaint
+        color: mouse.containsMouse || entry.attiva ? FileStyle.accent
+                                                   : FileStyle.textFaint
         Behavior on color { ColorAnimation { duration: Theme.Motion.instant } }
     }
 
@@ -108,9 +111,12 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         anchors.verticalCenterOffset: entry.detail !== "" ? -9 : 0
         elide: Text.ElideMiddle
+        // Nomi di dischi, telefoni e cartelle di rete: li sceglie chi li
+        // ha fatti, quindi testo semplice, mai HTML.
+        textFormat: Text.PlainText
         text: entry.label
-        color: entry.attiva ? Theme.Colors.text : Theme.Colors.textMuted
-        font.family: Theme.Typography.fontDisplay
+        color: entry.attiva ? FileStyle.text : FileStyle.textMuted
+        font.family: FileStyle.font
         font.weight: Theme.Typography.weightRegular
         font.pixelSize: Theme.Typography.sizeSM
     }
@@ -121,8 +127,9 @@ Rectangle {
         anchors.top: entryLabel.bottom
         visible: entry.detail !== ""
         elide: Text.ElideMiddle
+        textFormat: Text.PlainText
         text: entry.detail
-        color: Theme.Colors.textFaint
+        color: FileStyle.textFaint
         font.family: Theme.Typography.fontMono
         font.pixelSize: Theme.Typography.sizeXS
     }
@@ -141,15 +148,15 @@ Rectangle {
         width: 20; height: 20
         radius: Theme.Effects.radiusXS
         visible: entry.hasAction && (mouse.containsMouse || actionMouse.containsMouse)
-        color: actionMouse.containsMouse ? Qt.alpha(Theme.Colors.danger, 0.2)
+        color: actionMouse.containsMouse ? Qt.alpha(FileStyle.danger, 0.2)
                                          : "transparent"
 
         Ui.Icon {
             anchors.centerIn: parent
             width: 12; height: 12
             name: entry.ejectable ? "logout" : "close"
-            color: actionMouse.containsMouse ? Theme.Colors.danger
-                                             : Theme.Colors.textFaint
+            color: actionMouse.containsMouse ? FileStyle.danger
+                                             : FileStyle.textFaint
         }
 
         MouseArea {

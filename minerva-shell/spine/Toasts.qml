@@ -260,7 +260,7 @@ PanelWindow {
                                                 : Qt.ArrowCursor
                     // ── Cliccare APRE ───────────────────────────────────
                     //
-                    // Prima chiudeva e basta. Giacomo: «se scatto uno
+                    // Prima chiudeva e basta. il manutentore: «se scatto uno
                     // screenshot e compare la notifica e ci clicco devo poter
                     // vedere l'immagine con anteprima [...] e questo per tutte
                     // le notifiche».

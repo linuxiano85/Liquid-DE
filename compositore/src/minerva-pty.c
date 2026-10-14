@@ -36,7 +36,7 @@
 //
 // Non aggiunge variabili d'ambiente oltre a TERM, COLORTERM e TERM_PROGRAM;
 // non cambia utente; non tocca file. Gira come chi lo lancia e niente di più:
-// è la riga che vale per «sicuro» nella richiesta di Giacomo.
+// è la riga che vale per «sicuro» nella richiesta di il manutentore.
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>

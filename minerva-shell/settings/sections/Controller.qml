@@ -3,23 +3,8 @@ import "../../theme" as Theme
 import "../../core" as Core
 import ".." as S
 
-// Controller — I pad di gioco, uguali per tutti i giochi.
-//
-// Il lavoro lo fa il demone (`ControllerService`): quando un pad si accende
-// lo affida a InputPlumber, che lo presenta ai giochi come un pad Xbox o
-// PlayStation. Questa pagina mostra cosa sta succedendo e, per ogni pad,
-// lascia scegliere:
-//
-//   · il PRESET — cosa vedono i giochi;
-//   · «scambia ✕ e ○», per i pad alla giapponese (Giacomo, 4 ottobre 2026:
-//     un Battletron identico a quello della PS5, che conferma con ○);
-//   · i due colori della barra luminosa, a riposo e mentre un gioco usa il
-//     pad;
-//   · la mappa dei tasti, che è il preset «Personalizzato».
-//
-// Le scelte stanno in `input.controllerPad`, una voce per pad con chiave il
-// suo indirizzo. La pagina mostra i valori che il demone ha RISOLTO (quelli
-// di serie dove non si è scelto niente) e scrive solo quello che si tocca.
+// Ogni controller fisico ha un profilo indipendente. I tasti sono indicati
+// con i simboli stampati sul pad; i target virtuali e i sensori non sono pad.
 Page {
     id: page
 
@@ -64,21 +49,24 @@ Page {
         Core.Ipc.setSetting("input.controllerPad", tutti);
     }
 
-    // ── I nomi dei tasti ─────────────────────────────────────────────────
-    //
-    // A sinistra il tasto che si PREME, coi simboli PlayStation stampati sul
-    // pad; a destra quello che ARRIVA al gioco, con tutti e due i nomi —
-    // il gioco può mostrarli alla Xbox o alla PlayStation.
-    readonly property var premuti: ({
-        "South": "✕", "East": "○", "West": "□", "North": "△",
-        "LeftBumper": "L1", "RightBumper": "R1",
-        "LeftStick": "L3", "RightStick": "R3",
-        "Select": "Share / Create", "Start": "Options", "Guide": "PS",
-        "DPadUp": page.it ? "Croce ↑" : "D-pad ↑",
-        "DPadDown": page.it ? "Croce ↓" : "D-pad ↓",
-        "DPadLeft": page.it ? "Croce ←" : "D-pad ←",
-        "DPadRight": page.it ? "Croce →" : "D-pad →"
-    })
+    function nomeTasto(famiglia, tasto) {
+        var nomi = famiglia === "nintendo" ? {
+            "South": "B · ↓", "East": "A · →", "West": "Y · ←", "North": "X · ↑",
+            "LeftBumper": "L", "RightBumper": "R", "LeftStick": "LS", "RightStick": "RS",
+            "Select": "−", "Start": "+", "Guide": "Home"
+        } : famiglia === "playstation" ? {
+            "South": "✕ · ↓", "East": "○ · →", "West": "□ · ←", "North": "△ · ↑",
+            "LeftBumper": "L1", "RightBumper": "R1", "LeftStick": "L3", "RightStick": "R3",
+            "Select": "Share / Create", "Start": "Options", "Guide": "PS"
+        } : {
+            "South": "A · ↓", "East": "B · →", "West": "X · ←", "North": "Y · ↑",
+            "LeftBumper": "LB", "RightBumper": "RB", "LeftStick": "LS", "RightStick": "RS",
+            "Select": "View", "Start": "Menu", "Guide": "Xbox"
+        };
+        var croce = { "DPadUp": "↑", "DPadDown": "↓", "DPadLeft": "←", "DPadRight": "→" };
+        return nomi[tasto] || ((page.it ? "Croce " : "D-pad ") + (croce[tasto] || tasto));
+    }
+
     readonly property var arrivi: [
         { "value": "South", "label": "A · ✕" },
         { "value": "East", "label": "B · ○" },
@@ -119,8 +107,8 @@ Page {
             width: parent.width
             label: page.it ? "Pad uguali in tutti i giochi" : "Same gamepad in every game"
             description: page.it
-                         ? "Ogni pad che colleghi diventa un pad virtuale che tutti i giochi capiscono, anche quelli di Faugus, Heroic e Lutris"
-                         : "Every gamepad you connect becomes a virtual one that every game understands, including Faugus, Heroic and Lutris"
+                         ? "Ogni controller fisico diventa un solo pad virtuale. I profili restano separati, anche nei giochi a due giocatori e nel browser"
+                         : "Each physical controller becomes one virtual gamepad. Profiles remain separate, including in two-player games and the browser"
             controlWidth: 60
             control: S.ToggleSwitch {
                 checked: page.automatico
@@ -158,7 +146,7 @@ Page {
                   ? (page.it ? "La compatibilità è spenta: preset e tasti valgono solo quando è accesa."
                              : "Compatibility is off: presets and buttons only apply when it is on.")
                   : modelData.gestito
-                    ? (page.it ? "Pronto per tutti i giochi." : "Ready for every game.")
+                    ? (page.it ? "Gestito da InputPlumber." : "Managed by InputPlumber.")
                   : (page.it
                      ? "InputPlumber non ha preso in carico questo pad: i controlli sono disattivati. Verifica che il servizio sia attivo e che il dispositivo sia supportato; scollega e ricollega il pad dopo aver avviato InputPlumber."
                      : "InputPlumber has not claimed this gamepad, so its controls are disabled. Check that the service is running and the device is supported; reconnect the gamepad after starting InputPlumber.")
@@ -172,8 +160,8 @@ Page {
                              : scheda.modelData.preset === "personalizzato"
                                ? (page.it ? "I giochi vedono un pad Xbox, con i tasti scelti qui sotto"
                                           : "Games see an Xbox pad, with the buttons chosen below")
-                               : (page.it ? "I giochi vedono un pad Xbox: ✕ è A, ○ è B. Va bene quasi ovunque"
-                                          : "Games see an Xbox pad: ✕ is A, ○ is B. Works almost everywhere")
+                               : (page.it ? "I giochi vedono un pad Xbox. La disposizione dei tasti si sceglie qui sotto"
+                                          : "Games see an Xbox pad. Choose its button layout below")
                 controlWidth: 340
                 control: S.ChoicePicker {
                     value: scheda.modelData.preset
@@ -190,15 +178,58 @@ Page {
 
             S.SettingRow {
                 width: parent.width
-                label: page.it ? "Scambia ✕ e ○" : "Swap ✕ and ○"
-                description: page.it
-                             ? "Per i pad alla giapponese, dove si conferma con ○"
-                             : "For Japanese-style pads, where ○ confirms"
+                label: page.it ? "Disposizione dei tasti" : "Button layout"
+                description: scheda.modelData.famiglia === "nintendo"
+                             ? (page.it ? "Posizioni Xbox: B in basso diventa A, A a destra diventa B, Y a sinistra diventa X, X in alto diventa Y. Lettere Nintendo: le lettere restano uguali a quelle stampate."
+                             : "Xbox positions: bottom B becomes A, right A becomes B, left Y becomes X, top X becomes Y. Nintendo letters: match the printed letters.")
+                             : (page.it ? "Occidentale: tasto di conferma in basso. Nintendo: scambia basso/destra e sinistra/alto. Puoi anche cambiare solo una coppia con gli interruttori."
+                                        : "Western: bottom button confirms. Nintendo: swap bottom/right and left/top. You can also swap just one pair using the switches.")
+                controlWidth: 340
+                control: S.ChoicePicker {
+                    value: scheda.modelData.scambiaXO === true && scheda.modelData.scambiaXY === true
+                           ? "lettere" : scheda.modelData.scambiaXO !== true && scheda.modelData.scambiaXY !== true
+                           ? "posizioni" : "personalizzato"
+                    options: [
+                        { "value": "posizioni", "label": page.it ? "Posizioni Xbox" : "Xbox positions" },
+                        { "value": "lettere", "label": page.it ? "Disposizione Nintendo" : "Nintendo layout" }
+                    ]
+                    onPicked: function(v) {
+                        page.salvaPad(scheda.chiave, function(c) {
+                            c.scambiaXO = v === "lettere";
+                            c.scambiaXY = v === "lettere";
+                        });
+                    }
+                }
+            }
+
+            S.SettingRow {
+                width: parent.width
+                label: (page.it ? "Scambia " : "Swap ")
+                       + page.nomeTasto(scheda.modelData.famiglia, "South") + " / "
+                       + page.nomeTasto(scheda.modelData.famiglia, "East")
+                description: page.it ? "Inverte solo il tasto in basso e quello a destra"
+                                     : "Swap only the bottom and right buttons"
                 controlWidth: 60
                 control: S.ToggleSwitch {
                     checked: scheda.modelData.scambiaXO === true
                     onToggled: function(v) {
                         page.salvaPad(scheda.chiave, function(c) { c.scambiaXO = v; });
+                    }
+                }
+            }
+
+            S.SettingRow {
+                width: parent.width
+                label: (page.it ? "Scambia " : "Swap ")
+                       + page.nomeTasto(scheda.modelData.famiglia, "West") + " / "
+                       + page.nomeTasto(scheda.modelData.famiglia, "North")
+                description: page.it ? "Inverte solo il tasto a sinistra e quello in alto"
+                                     : "Swap only the left and top buttons"
+                controlWidth: 60
+                control: S.ToggleSwitch {
+                    checked: scheda.modelData.scambiaXY === true
+                    onToggled: function(v) {
+                        page.salvaPad(scheda.chiave, function(c) { c.scambiaXY = v; });
                     }
                 }
             }
@@ -283,7 +314,7 @@ Page {
                     id: riga
                     required property string modelData
                     width: parent.width
-                    label: page.premuti[riga.modelData]
+                    label: page.nomeTasto(scheda.modelData.famiglia, riga.modelData)
                     controlWidth: 200
                     control: S.Tendina {
                         width: 200

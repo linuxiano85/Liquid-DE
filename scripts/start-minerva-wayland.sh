@@ -26,7 +26,7 @@ export MINERVA_ROOT="$MINERVA_DIR"
 # scarno di systemd — `/usr/local/bin:/usr/bin` e poco altro. `~/.local/bin`,
 # dove i programmi si installano quando non si è root, **non c'è**.
 #
-# Il costo, trovato il 3 settembre 2026 guardando la sessione vera di Giacomo:
+# Il costo, trovato il 3 settembre 2026 guardando la sessione vera di il manutentore:
 # `minerva-polkit` era compilato e installato (`permessi/costruisci.sh` lo mette
 # proprio lì), l'installatore diceva verde, e il compositore non lo trovava.
 # Risultato: nessun agente dei permessi per due giorni, cioè **nessuna finestra
@@ -75,7 +75,7 @@ export MOZ_ENABLE_WAYLAND=1
 # disegnano da soli, e il tema se lo vanno a prendere da `XCURSOR_THEME` —
 # oppure, se quella manca, dal nome scritto nelle impostazioni di GTK.
 #
-# Giacomo, 5 settembre 2026: «sono su google e nella lista dei risultati il
+# il manutentore, 5 settembre 2026: «sono su google e nella lista dei risultati il
 # mouse non compare sulla pagina web, probabilmente ci sarà lo stesso errore
 # in molte altre app o pagine».
 #
@@ -161,7 +161,7 @@ LOG="$STATO/session.log"
 # parlare di questo avvio e non di quello di ieri. Ma lanciando questo script
 # a mano per provare qualcosa — cosa che si fa, ed è come è nata la sessione
 # di recupero — quella riga cancellava il registro della sessione **in corso**:
-# il racconto di come Giacomo è entrato stamattina, sparito per una prova.
+# il racconto di come il manutentore è entrato stamattina, sparito per una prova.
 #
 # È la stessa famiglia dei difetti raccolti in `minerva-trappole-prove`: una
 # prova che tocca la sessione viva. `MINERVA_PROVA` è il contrassegno che le

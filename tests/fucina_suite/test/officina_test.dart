@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:minervad/services/fucina/officina.dart';
+import 'package:minervad/services/fucina/blocco_lavoro.dart';
 import 'package:minervad/services/fucina/ricetta.dart';
 import 'package:minervad/services/fucina/rilievo.dart';
 import 'package:minervad/services/fucina/sorgenti.dart';
@@ -35,9 +36,13 @@ void main() {
   var rilascioDetto = '6.17.2-fucina-prova';
   var sommaPubblicata = '';
   var compilaDorme = false;
+  var righeCompila = 0;
+  var compilaFallisce = false;
   // Kconfig finto: `olddefconfig` rimette a «n» quello che dipende da
   // qualcosa che manca. Qui, se vero, btrfs.
   var kconfigTogleBtrfs = false;
+  var kconfigToglieNative = false;
+  var kconfigToglieFortify = false;
   // Come va la prova d'avvio: «parte», «panico», «manca» (QEMU non c'è).
   var qemu = 'parte';
   late List<String> qemuArgomenti;
@@ -62,13 +67,21 @@ void main() {
     firmaRisposta = null;
     rilascioDetto = '6.17.2-fucina-prova';
     compilaDorme = false;
+    righeCompila = 0;
+    compilaFallisce = false;
     kconfigTogleBtrfs = false;
+    kconfigToglieNative = false;
+    kconfigToglieFortify = false;
     qemu = 'parte';
     qemuArgomenti = [];
     // La configurazione di partenza, compressa come /proc/config.gz.
     File('${tana.path}/proc/config.gz')
       ..createSync(recursive: true)
-      ..writeAsBytesSync(gzip.encode('CONFIG_HZ_300=y\nCONFIG_HZ=300\n'.codeUnits));
+      ..writeAsBytesSync(
+        gzip.encode(
+          'CONFIG_HZ_300=y\nCONFIG_HZ=300\nCONFIG_GENERIC_CPU=y\n'.codeUnits,
+        ),
+      );
   });
 
   tearDown(() => tana.deleteSync(recursive: true));
@@ -83,50 +96,76 @@ void main() {
       final t = a.contains('--strip-components=1')
           ? a[3]
           : '${a[3]}/linux-6.17.2';
-      return 'mkdir -p "$t/scripts" "$t/fs/fat" "$t/fs/btrfs" && '
+      return 'mkdir -p "$t/scripts" "$t/fs/fat" "$t/fs/btrfs" "$t/drivers/sound" && '
           'echo "VERSION = 6" > "$t/Makefile" && '
           'printf "obj-\\\$(CONFIG_VFAT_FS) += vfat.o\\n" > "$t/fs/fat/Makefile" && '
           'printf "config VFAT_FS\\n\\ttristate \\"VFAT\\"\\n" > "$t/fs/fat/Kconfig" && '
           'printf "obj-\\\$(CONFIG_BTRFS_FS) := btrfs.o\\n" > "$t/fs/btrfs/Makefile" && '
-          'printf "config BTRFS_FS\\n\\ttristate \\"Btrfs\\"\\n" > "$t/fs/btrfs/Kconfig"';
+          'printf "config BTRFS_FS\\n\\ttristate \\"Btrfs\\"\\n" > "$t/fs/btrfs/Kconfig" && '
+          'printf "obj-\\\$(CONFIG_SND_HDA_INTEL) += snd_hda_intel.o hda_controller.o\\n" > "$t/drivers/sound/Makefile" && '
+          'printf "config SND_HDA_INTEL\\n\\ttristate \\"HDA\\"\\n" > "$t/drivers/sound/Kconfig"';
     }
     if (eseguibile.endsWith('/scripts/config')) {
-      // Solo «--module»: è quello che scrive il passo «completa». Gli altri
-      // verbi non scrivono niente, e la prova del controllo se ne accorge.
+      // Simula i due verbi che cambiano .config: --module e --disable.
+      final disattiva = [
+        for (var i = 0; i + 1 < a.length; i++)
+          if (a[i] == '--disable')
+            'sed -i \'/^CONFIG_${a[i + 1]}=/d; /^# CONFIG_${a[i + 1]} is not set\$/d\' .config && '
+                'echo "# CONFIG_${a[i + 1]} is not set" >> .config',
+      ];
       final righe = [
+        ...disattiva,
         for (var i = 0; i + 1 < a.length; i++)
           if (a[i] == '--module') 'echo "CONFIG_${a[i + 1]}=m" >> .config',
+        for (var i = 0; i + 1 < a.length; i++)
+          if (a[i] == '--enable') 'echo "CONFIG_${a[i + 1]}=y" >> .config',
       ];
       return righe.isEmpty ? 'exit 0' : righe.join(' && ');
     }
     if (eseguibile == 'qemu-system-x86_64') {
       qemuArgomenti = a;
       return switch (qemu) {
-        'parte' => 'echo "Run /init as init process"; echo; '
-            'echo FUCINA-AVVIO-OK; exit 99',
-        'panico' => 'echo "Kernel panic - not syncing: No working init found."; '
-            'exit 0',
-        _ => 'echo "setsid: failed to execute qemu-system-x86_64" >&2; exit 127',
+        'parte' =>
+          'echo "Run /init as init process"; echo; '
+              'echo FUCINA-AVVIO-OK; exit 99',
+        'panico' =>
+          'echo "Kernel panic - not syncing: No working init found."; '
+              'exit 0',
+        _ =>
+          'echo "setsid: failed to execute qemu-system-x86_64" >&2; exit 127',
       };
     }
     if (eseguibile == 'cp') return 'cp -- "${a[a.length - 2]}" "${a.last}"';
     if (eseguibile == 'patch') return 'exit 0';
     if (eseguibile == 'make') {
       if (a.contains('kernelrelease')) return 'echo "$rilascioDetto"';
-      if (a.contains('olddefconfig') && kconfigTogleBtrfs) {
-        return 'sed -i "/CONFIG_BTRFS_FS=m/d" .config';
+      if (a.contains('olddefconfig')) {
+        final righe = [
+          if (kconfigToglieFortify)
+            'sed -i "/^CONFIG_FORTIFY_SOURCE=y\$/d" .config',
+          if (kconfigTogleBtrfs) 'sed -i "/CONFIG_BTRFS_FS=m/d" .config',
+          if (kconfigToglieNative)
+            'sed -i "/^CONFIG_X86_NATIVE_CPU=y\$/d" .config',
+          // Kconfig mantiene la vecchia voce della scelta CPU se la ricetta
+          // prova ad accenderne una seconda senza spegnerla.
+          'if grep -q "^CONFIG_GENERIC_CPU=y\$" .config && grep -q "^CONFIG_X86_NATIVE_CPU=y\$" .config; then sed -i "/^CONFIG_X86_NATIVE_CPU=y\$/d" .config; fi',
+        ];
+        return righe.isEmpty ? 'exit 0' : righe.join(' && ');
       }
       if (a.contains('defconfig')) {
         return 'printf "CONFIG_MODULES=y\\n" > .config';
       }
       if (a.contains('bzImage')) {
         return '${compilaDorme ? 'sleep 30; ' : ''}'
+            '${righeCompila > 0 ? 'i=1; while [ \$i -le $righeCompila ]; do echo "uscita-prova-\$i"; i=\$((i+1)); done; ' : ''}'
+            '${compilaFallisce ? 'echo "fatal error: sentinella-compilatore" >&2; exit 2; ' : ''}'
             'echo "  CC      kernel/fork.o"; echo "  CC [M]  drivers/x.o"; '
             'echo "  LD      vmlinux" ; echo VMLINUX > vmlinux; '
             'mkdir -p arch/x86/boot && echo IMMAGINE > arch/x86/boot/bzImage';
       }
       if (a.contains('modules_install')) {
-        final dove = a.firstWhere((x) => x.startsWith('INSTALL_MOD_PATH='))
+        final dove = a
+            .firstWhere((x) => x.startsWith('INSTALL_MOD_PATH='))
             .substring('INSTALL_MOD_PATH='.length);
         return 'mkdir -p "$dove/lib/modules/$rilascioDetto/kernel" && '
             'ln -s /da/qualche/parte "$dove/lib/modules/$rilascioDetto/build"';
@@ -137,79 +176,82 @@ void main() {
   }
 
   Officina officina() => Officina(
-        lavoro: lavoro,
-        statoDir: statoDir,
-        radice: '${tana.path}/',
-        spazioMinimo: 0,
-        sorgenti: Sorgenti(
-          testo: (u) async => u.path.contains('/CachyOS/linux/')
-              ? (etichettaCachyos == null
-                  ? '0000'
-                  : '003f${'b' * 40} refs/tags/$etichettaCachyos\n0000')
-              : u.host == 'github.com'
-                  ? '003f${'a' * 40} refs/heads/master\n0000'
-                  : '$sommaPubblicata  linux-6.17.2.tar.xz\n',
-          esiste: (u) async =>
-              u.path.contains('/sched/') || baseCachyosEsiste,
-        ),
-        scarica: (u, f, {progresso, annullato}) async {
-          scaricamenti++;
-          scaricati.add(u.pathSegments.last);
-          await f.parent.create(recursive: true);
-          await f.writeAsString(contenuto);
-          progresso?.call(contenuto.length, contenuto.length);
-          return null;
-        },
-        // La firma finta: quella vera va in rete e chiede gpg. La vera è
-        // provata a parte, su un archivio vero, prima di questa PR.
-        verificaFirma: (versione, archivio) async {
-          verifiche++;
-          return firmaRisposta;
-        },
-        conKvm: () async => false,
-        lancia: (e, a, {workingDirectory}) {
-          var eseguibile = e;
-          var argomenti = a;
-          if (e == 'setsid') {
-            eseguibile = a.first;
-            argomenti = a.sublist(1);
-          }
-          lanciati.add([eseguibile, ...argomenti]);
-          final sh = ['sh', '-c', copione(eseguibile, argomenti)];
-          // `setsid` vero, se lo chiede l'officina: è lui che rende possibile
-          // fermare il gruppo intero, ed è quello che la prova di «ferma»
-          // deve mettere alla prova.
-          return e == 'setsid'
-              ? Process.start('setsid', sh, workingDirectory: workingDirectory)
-              : Process.start(sh.first, sh.sublist(1),
-                  workingDirectory: workingDirectory);
-        },
-      );
+    lavoro: lavoro,
+    statoDir: statoDir,
+    radice: '${tana.path}/',
+    spazioMinimo: 0,
+    sorgenti: Sorgenti(
+      testo: (u) async => u.path.contains('/CachyOS/linux/')
+          ? (etichettaCachyos == null
+                ? '0000'
+                : '003f${'b' * 40} refs/tags/$etichettaCachyos\n0000')
+          : u.host == 'github.com'
+          ? '003f${'a' * 40} refs/heads/master\n0000'
+          : '$sommaPubblicata  linux-6.17.2.tar.xz\n',
+      esiste: (u) async => u.path.contains('/sched/') || baseCachyosEsiste,
+    ),
+    scarica: (u, f, {progresso, annullato}) async {
+      scaricamenti++;
+      scaricati.add(u.pathSegments.last);
+      await f.parent.create(recursive: true);
+      await f.writeAsString(contenuto);
+      progresso?.call(contenuto.length, contenuto.length);
+      return null;
+    },
+    // La firma finta: quella vera va in rete e chiede gpg. La vera è
+    // provata a parte, su un archivio vero, prima di questa PR.
+    verificaFirma: (versione, archivio) async {
+      verifiche++;
+      return firmaRisposta;
+    },
+    conKvm: () async => false,
+    lancia: (e, a, {workingDirectory}) {
+      var eseguibile = e;
+      var argomenti = a;
+      if (e == 'setsid') {
+        eseguibile = a.first;
+        argomenti = a.sublist(1);
+      }
+      lanciati.add([eseguibile, ...argomenti]);
+      final sh = ['sh', '-c', copione(eseguibile, argomenti)];
+      // `setsid` vero, se lo chiede l'officina: è lui che rende possibile
+      // fermare il gruppo intero, ed è quello che la prova di «ferma»
+      // deve mettere alla prova.
+      return e == 'setsid'
+          ? Process.start('setsid', sh, workingDirectory: workingDirectory)
+          : Process.start(
+              sh.first,
+              sh.sublist(1),
+              workingDirectory: workingDirectory,
+            );
+    },
+  );
 
   Rilievo rilievo({Set<String> essenziali = const {}}) => Rilievo(
-        rilascio: '6.17.2-arch1-1',
-        macchina: const {'nuclei': 4, 'attrezzi': []},
-        dispositivi: const [
-          Dispositivo(
-              percorso: '/pci0000:00/0000:00:1b.0',
-              modalias: 'pci:v1',
-              bus: 'pci',
-              driver: 'snd_hda_intel',
-              modulo: 'snd_hda_intel'),
-          Dispositivo(percorso: '/usb1/1-7', modalias: 'usb:v2', bus: 'usb'),
-        ],
-        moduli: {
-          'snd_hda_intel': VoceModulo('snd_hda_intel', 'audio', null, false)
-            ..fonti.add('legato'),
-          for (final e in essenziali)
-            e: VoceModulo(e, 'altro', null, false)..fonti.add('essenziale'),
-        },
-        avvio: Avvio('', '', essenziali, const {}, const []),
-        modprobed: const DiarioModprobed('', {}),
-        configPartenza: '/proc/config.gz',
-        indiceRegole: 0,
-        avvisi: const [],
-      );
+    rilascio: '6.17.2-arch1-1',
+    macchina: const {'nuclei': 4, 'attrezzi': []},
+    dispositivi: const [
+      Dispositivo(
+        percorso: '/pci0000:00/0000:00:1b.0',
+        modalias: 'pci:v1',
+        bus: 'pci',
+        driver: 'snd_hda_intel',
+        modulo: 'snd_hda_intel',
+      ),
+      Dispositivo(percorso: '/usb1/1-7', modalias: 'usb:v2', bus: 'usb'),
+    ],
+    moduli: {
+      'snd_hda_intel': VoceModulo('snd_hda_intel', 'audio', null, false)
+        ..fonti.add('legato'),
+      for (final e in essenziali)
+        e: VoceModulo(e, 'altro', null, false)..fonti.add('essenziale'),
+    },
+    avvio: Avvio('', '', essenziali, const {}, const []),
+    modprobed: const DiarioModprobed('', {}),
+    configPartenza: '/proc/config.gz',
+    indiceRegole: 0,
+    avvisi: const [],
+  );
 
   Ricetta ricetta([Map<String, dynamic> extra = const {}]) {
     final s = Scelte.daJson({'nome': 'prova', 'versione': '6.17.2', ...extra});
@@ -217,8 +259,14 @@ void main() {
   }
 
   /// Avvia e aspetta la fine, raccogliendo il racconto.
-  Future<({Map<String, dynamic> fatto, List<Map<String, dynamic>> passi,
-          List<String> righe})> gira(Officina o, Ricetta r) async {
+  Future<
+    ({
+      Map<String, dynamic> fatto,
+      List<Map<String, dynamic>> passi,
+      List<String> righe,
+    })
+  >
+  gira(Officina o, Ricetta r) async {
     final fine = Completer<Map<String, dynamic>>();
     final passi = <Map<String, dynamic>>[];
     final righe = <String>[];
@@ -233,41 +281,58 @@ void main() {
     return (fatto: fatto, passi: passi, righe: righe);
   }
 
-  test('una compilazione intera lascia un kernel pronto da installare',
-      () async {
-    final o = officina();
-    final r = ricetta();
-    final g = await gira(o, r);
-    expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
-    expect(g.fatto['rilascio'], '6.17.2-fucina-prova');
+  test(
+    'una compilazione intera lascia un kernel pronto da installare',
+    () async {
+      final o = officina();
+      final r = ricetta();
+      final g = await gira(o, r);
+      expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
+      expect(g.fatto['rilascio'], '6.17.2-fucina-prova');
 
-    final uscita = '$lavoro/uscita/6.17.2-fucina-prova';
-    expect(File('$uscita/boot/vmlinuz-6.17.2-fucina-prova').readAsStringSync(),
-        'IMMAGINE\n');
-    expect(File('$uscita/boot/config-6.17.2-fucina-prova').existsSync(), isTrue);
-    expect(File('$uscita/fucina.json').existsSync(), isTrue);
-    expect(Link('$uscita/lib/modules/6.17.2-fucina-prova/build').existsSync(),
+      final uscita = '$lavoro/uscita/6.17.2-fucina-prova';
+      expect(
+        File('$uscita/boot/vmlinuz-6.17.2-fucina-prova').readAsStringSync(),
+        'IMMAGINE\n',
+      );
+      expect(
+        File('$uscita/boot/config-6.17.2-fucina-prova').existsSync(),
+        isTrue,
+      );
+      expect(File('$uscita/fucina.json').existsSync(), isTrue);
+      final metadati =
+          jsonDecode(File('$uscita/fucina.json').readAsStringSync())
+              as Map<String, dynamic>;
+      expect(metadati['secondiPreparazione'], isA<int>());
+      expect(metadati['secondiPreparazione'], greaterThanOrEqualTo(0));
+      expect(
+        Link('$uscita/lib/modules/6.17.2-fucina-prova/build').existsSync(),
         isFalse,
-        reason: 'l\'aiutante di root rifiuta i collegamenti: non devono '
-            'arrivargli');
+        reason:
+            'l\'aiutante di root rifiuta i collegamenti: non devono '
+            'arrivargli',
+      );
 
-    // Ogni passo è partito ed è finito, nell'ordine della ricetta.
-    final finiti = [
-      for (final p in g.passi)
-        if (p['stato'] == 'fatto') p['id'],
-    ];
-    expect(finiti, orderedEquals(r.passi.map((p) => p.id)));
-  });
+      // Ogni passo è partito ed è finito, nell'ordine della ricetta.
+      final finiti = [
+        for (final p in g.passi)
+          if (p['stato'] == 'fatto') p['id'],
+      ];
+      expect(finiti, orderedEquals(r.passi.map((p) => p.id)));
+    },
+  );
 
-  test('la configurazione di partenza è quella del kernel in uso, scompattata',
-      () async {
-    final o = officina();
-    await gira(o, ricetta());
-    final config = File(
-            '$lavoro/alberi/6.17.2-vanilla/linux-6.17.2/.config')
-        .readAsStringSync();
-    expect(config, contains('CONFIG_HZ=300'));
-  });
+  test(
+    'la configurazione di partenza è quella del kernel in uso, scompattata',
+    () async {
+      final o = officina();
+      await gira(o, ricetta());
+      final config = File(
+        '$lavoro/alberi/6.17.2-vanilla/linux-6.17.2/.config',
+      ).readAsStringSync();
+      expect(config, contains('CONFIG_HZ=300'));
+    },
+  );
 
   test('localmodconfig riceve il nostro elenco, in un file', () async {
     final o = officina();
@@ -279,12 +344,116 @@ void main() {
     expect(screma, contains('LSMOD=$lavoro/lsmod-prova.txt'));
   });
 
+  test(
+    'una regola di esclusione spegne anche un driver integrato in Kconfig',
+    () async {
+      File('${tana.path}/proc/config.gz').writeAsBytesSync(
+        gzip.encode(
+          '''
+CONFIG_MODULES=y
+CONFIG_HZ_300=y
+CONFIG_SND_HDA_INTEL=y
+'''
+              .codeUnits,
+        ),
+      );
+      final g = await gira(
+        officina(),
+        ricetta({
+          'tolti': ['snd_hda_intel'],
+        }),
+      );
+
+      expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
+      final config = File(
+        '$lavoro/alberi/6.17.2-vanilla/linux-6.17.2/.config',
+      ).readAsStringSync();
+      expect(config, contains('# CONFIG_SND_HDA_INTEL is not set'));
+      expect(
+        lanciati.any(
+          (c) => c.contains('--disable') && c.contains('SND_HDA_INTEL'),
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'non spegne un simbolo Kconfig condiviso con un modulo richiesto',
+    () async {
+      File('${tana.path}/proc/config.gz').writeAsBytesSync(
+        gzip.encode(
+          '''
+CONFIG_MODULES=y
+CONFIG_HZ_300=y
+CONFIG_SND_HDA_INTEL=y
+'''
+              .codeUnits,
+        ),
+      );
+      final g = await gira(
+        officina(),
+        ricetta({
+          'tolti': ['snd_hda_intel'],
+          'aggiunti': ['hda_controller'],
+        }),
+      );
+
+      expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
+      expect(
+        lanciati.any(
+          (c) => c.contains('--disable') && c.contains('SND_HDA_INTEL'),
+        ),
+        isFalse,
+      );
+      final avvisi = (g.fatto['avvisi'] as List).join('\n');
+      expect(avvisi, contains('snd_hda_intel'));
+      expect(avvisi, contains('opzioni condivise'));
+    },
+  );
+
   test('un valore che non ha preso nel .config diventa un avviso', () async {
     // Il `scripts/config` finto non scrive niente: il nome del kernel non è
     // nel .config, e il controllo se ne deve accorgere.
     final o = officina();
     final g = await gira(o, ricetta());
     expect((g.fatto['avvisi'] as List).join('\n'), contains('LOCALVERSION'));
+  });
+
+  test(
+    'Kconfig rifiuta il target nativo e si ferma prima di compilare',
+    () async {
+      kconfigToglieNative = true;
+      final g = await gira(officina(), ricetta({'nativo': true}));
+      expect(g.fatto['ok'], isFalse);
+      expect(g.fatto['errore'], contains('Kconfig non ha attivato'));
+      expect(lanciati.any((comando) => comando.contains('bzImage')), isFalse);
+    },
+  );
+
+  test(
+    'il target nativo accettato da Kconfig arriva alla compilazione',
+    () async {
+      final g = await gira(officina(), ricetta({'nativo': true}));
+      expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
+      expect(lanciati.any((comando) => comando.contains('bzImage')), isTrue);
+    },
+  );
+
+  test('perdere FORTIFY blocca prima di bzImage e modules_install', () async {
+    File(
+      '${tana.path}/proc/config.gz',
+    ).writeAsBytesSync(gzip.encode('CONFIG_FORTIFY_SOURCE=y\n'.codeUnits));
+    kconfigToglieFortify = true;
+    final g = await gira(officina(), ricetta());
+    expect(g.fatto['ok'], isFalse);
+    expect(g.fatto['errore'], contains('FORTIFY_SOURCE'));
+    expect(
+      lanciati.any(
+        (c) => c.contains('bzImage') || c.contains('modules_install'),
+      ),
+      isFalse,
+    );
   });
 
   test('la seconda volta non riscarica e non riestrae', () async {
@@ -313,23 +482,29 @@ void main() {
     expect(lanciati.where((c) => c.first == 'patch'), isEmpty);
   });
 
-  test('CachyOS col suo archivio: firma verificata, niente patch, resta scritto',
-      () async {
-    etichettaCachyos = 'cachyos-6.17.2-3';
-    final o = officina();
-    final g = await gira(o, ricetta({'sorgente': 'cachyos'}));
-    expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
-    expect(scaricati, ['cachyos-6.17.2-3.tar.gz']);
-    expect(verifiche, 1);
-    expect(lanciati.where((c) => c.first == 'patch'), isEmpty,
-        reason: 'le loro patch ci sono già');
-    final tar = lanciati.firstWhere((c) => c.first == 'tar');
-    expect(tar, containsAll(['-xzf', '--strip-components=1']));
-    expect(g.righe.join('\n'), contains('ci sono già'));
-    final info = File('$lavoro/uscita/6.17.2-fucina-prova/fucina.json')
-        .readAsStringSync();
-    expect(info, contains('cachyos-6.17.2-3.tar.gz'));
-  });
+  test(
+    'CachyOS col suo archivio: firma verificata, niente patch, resta scritto',
+    () async {
+      etichettaCachyos = 'cachyos-6.17.2-3';
+      final o = officina();
+      final g = await gira(o, ricetta({'sorgente': 'cachyos'}));
+      expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
+      expect(scaricati, ['cachyos-6.17.2-3.tar.gz']);
+      expect(verifiche, 1);
+      expect(
+        lanciati.where((c) => c.first == 'patch'),
+        isEmpty,
+        reason: 'l\'archivio CachyOS non riceve patch duplicate',
+      );
+      final tar = lanciati.firstWhere((c) => c.first == 'tar');
+      expect(tar, containsAll(['-xzf', '--strip-components=1']));
+      expect(g.righe.join('\n'), contains('verifico quali opzioni'));
+      final info = File(
+        '$lavoro/uscita/6.17.2-fucina-prova/fucina.json',
+      ).readAsStringSync();
+      expect(info, contains('cachyos-6.17.2-3.tar.gz'));
+    },
+  );
 
   test('CachyOS col suo archivio: una firma che non torna lo butta', () async {
     etichettaCachyos = 'cachyos-6.17.2-3';
@@ -337,29 +512,37 @@ void main() {
     final o = officina();
     final g = await gira(o, ricetta({'sorgente': 'cachyos'}));
     expect(g.fatto['ok'], isFalse);
-    expect(File('$lavoro/archivi/cachyos-6.17.2-3.tar.gz').existsSync(), isFalse);
+    expect(
+      File('$lavoro/archivi/cachyos-6.17.2-3.tar.gz').existsSync(),
+      isFalse,
+    );
     expect(lanciati.where((c) => c.first == 'tar'), isEmpty);
   });
 
-  test('le patch si scaricano da un commit preciso, e il commit resta scritto',
-      () async {
-    baseCachyosEsiste = true;
-    final o = officina();
-    final g = await gira(o, ricetta({'sorgente': 'cachyos'}));
-    expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
-    final info = File('$lavoro/uscita/6.17.2-fucina-prova/fucina.json')
-        .readAsStringSync();
-    expect(info, contains('"commit": "${'a' * 40}"'));
-    expect(info, contains('0001-bore-cachy.patch'));
-  });
+  test(
+    'le patch si scaricano da un commit preciso, e il commit resta scritto',
+    () async {
+      baseCachyosEsiste = true;
+      final o = officina();
+      final g = await gira(o, ricetta({'sorgente': 'cachyos'}));
+      expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
+      final info = File(
+        '$lavoro/uscita/6.17.2-fucina-prova/fucina.json',
+      ).readAsStringSync();
+      expect(info, contains('"commit": "${'a' * 40}"'));
+      expect(info, contains('0001-bore-cachy.patch'));
+    },
+  );
 
   test('CachyOS con la serie base: prima la base, poi BORE', () async {
     baseCachyosEsiste = true;
     final o = officina();
     final g = await gira(o, ricetta({'sorgente': 'cachyos'}));
     expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
-    expect(scaricati.skip(1),
-        ['0001-cachyos-base-all.patch', '0001-bore-cachy.patch']);
+    expect(scaricati.skip(1), [
+      '0001-cachyos-base-all.patch',
+      '0001-bore-cachy.patch',
+    ]);
   });
 
   test('una firma che non torna ferma tutto e butta l\'archivio', () async {
@@ -369,21 +552,26 @@ void main() {
     expect(g.fatto['ok'], isFalse);
     expect(g.fatto['errore'], contains('firma'));
     expect(File('$lavoro/archivi/linux-6.17.2.tar.xz').existsSync(), isFalse);
-    expect(lanciati.where((c) => c.first == 'tar'), isEmpty,
-        reason: 'un archivio non firmato non si apre');
+    expect(
+      lanciati.where((c) => c.first == 'tar'),
+      isEmpty,
+      reason: 'un archivio non firmato non si apre',
+    );
   });
 
-  test('la firma si verifica una volta per archivio, non a ogni compilazione',
-      () async {
-    final o = officina();
-    await gira(o, ricetta());
-    expect(verifiche, 1);
-    // Albero da rifare (segno di «pronto» tolto), archivio già verificato.
-    File('$lavoro/alberi/6.17.2-vanilla/.fucina-pronto').deleteSync();
-    await gira(o, ricetta());
-    expect(scaricamenti, 1);
-    expect(verifiche, 1, reason: 'stesso archivio, stessa somma: già fatto');
-  });
+  test(
+    'la firma si verifica una volta per archivio, non a ogni compilazione',
+    () async {
+      final o = officina();
+      await gira(o, ricetta());
+      expect(verifiche, 1);
+      // Albero da rifare (segno di «pronto» tolto), archivio già verificato.
+      File('$lavoro/alberi/6.17.2-vanilla/.fucina-pronto').deleteSync();
+      await gira(o, ricetta());
+      expect(scaricamenti, 1);
+      expect(verifiche, 1, reason: 'stesso archivio, stessa somma: già fatto');
+    },
+  );
 
   test('chi riapre a metà vede i passi già fatti e la barra', () async {
     compilaDorme = true;
@@ -391,7 +579,9 @@ void main() {
     final fine = Completer<void>();
     final a = Completer<void>();
     o.ascolta(#prova, (tipo, dati) {
-      if (tipo == 'passo' && dati['id'] == 'compila' && dati['stato'] == 'via' &&
+      if (tipo == 'passo' &&
+          dati['id'] == 'compila' &&
+          dati['stato'] == 'via' &&
           !a.isCompleted) {
         a.complete();
       }
@@ -404,6 +594,7 @@ void main() {
     expect((s['passi'] as Map)['screma'], 'fatto');
     expect((s['passi'] as Map)['compila'], 'via');
     expect(s['passo'], 'Compila');
+    expect(s['ricetta'], ricetta().toJson());
     await o.ferma();
     await fine.future.timeout(const Duration(seconds: 15));
   });
@@ -415,25 +606,29 @@ void main() {
     expect(misure, contains('"oggetti":2'));
   });
 
-  test('i dispositivi attesi al primo avvio sono quelli con un driver',
-      () async {
-    final o = officina();
-    await gira(o, ricetta());
-    final attesi =
-        File('$statoDir/attesi-6.17.2-fucina-prova.json').readAsStringSync();
-    expect(attesi, contains('snd_hda_intel'));
-    expect(attesi, isNot(contains('usb:v2')));
-  });
+  test(
+    'i dispositivi attesi al primo avvio sono quelli con un driver',
+    () async {
+      final o = officina();
+      await gira(o, ricetta());
+      final attesi = File(
+        '$statoDir/attesi-6.17.2-fucina-prova.json',
+      ).readAsStringSync();
+      expect(attesi, contains('snd_hda_intel'));
+      expect(attesi, isNot(contains('usb:v2')));
+    },
+  );
 
-  test('un kernel con un altro nome si ferma prima di impacchettare',
-      () async {
+  test('un kernel con un altro nome si ferma prima di impacchettare', () async {
     rilascioDetto = '6.17.2-fucina-prova-dirty';
     final o = officina();
     final g = await gira(o, ricetta());
     expect(g.fatto['ok'], isFalse);
     expect(g.fatto['errore'], contains('si chiama'));
-    expect(Directory('$lavoro/uscita/6.17.2-fucina-prova').existsSync(),
-        isFalse);
+    expect(
+      Directory('$lavoro/uscita/6.17.2-fucina-prova').existsSync(),
+      isFalse,
+    );
   });
 
   test('un archivio che non torna con la somma si butta', () async {
@@ -445,12 +640,35 @@ void main() {
       expect(g.fatto['ok'], isFalse);
       expect(g.fatto['errore'], contains('somma'));
       expect(File('$lavoro/archivi/linux-6.17.2.tar.xz').existsSync(), isFalse);
-      expect(lanciati.where((c) => c.first == 'tar'), isEmpty,
-          reason: 'un archivio che non torna non si apre');
+      expect(
+        lanciati.where((c) => c.first == 'tar'),
+        isEmpty,
+        reason: 'un archivio che non torna non si apre',
+      );
     } finally {
       sommaPubblicata = vera;
     }
   });
+
+  test(
+    'cache occupata: nessun comando o download, poi si può riprovare',
+    () async {
+      final blocco = await BloccoLavoro.prendi(lavoro);
+      final o = officina();
+      try {
+        final g = await gira(o, ricetta());
+        expect(g.fatto['ok'], isFalse);
+        expect(g.fatto['errore'], contains('occupata'));
+        expect(lanciati, isEmpty);
+        expect(scaricamenti, 0);
+        expect(o.inCorso, isFalse);
+      } finally {
+        await blocco.chiudi();
+      }
+      final g = await gira(o, ricetta());
+      expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
+    },
+  );
 
   test('una seconda compilazione mentre ce n\'è una si rifiuta', () async {
     compilaDorme = true;
@@ -472,7 +690,9 @@ void main() {
     final o = officina();
     final fine = Completer<Map<String, dynamic>>();
     o.ascolta(#prova, (tipo, dati) {
-      if (tipo == 'passo' && dati['id'] == 'compila' && dati['stato'] == 'via') {
+      if (tipo == 'passo' &&
+          dati['id'] == 'compila' &&
+          dati['stato'] == 'via') {
         // Un attimo perché il processo parta davvero.
         Timer(const Duration(milliseconds: 300), o.ferma);
       }
@@ -483,8 +703,14 @@ void main() {
     final fatto = await fine.future.timeout(const Duration(seconds: 20));
     expect(fatto['ok'], isFalse);
     expect(fatto['annullato'], isTrue);
-    expect(t.elapsed.inSeconds, lessThan(15),
-        reason: 'make dormiva trenta secondi: fermare deve fermarlo');
+    final log = File(fatto['log'] as String).readAsStringSync();
+    expect(log, contains('"annullato":true'));
+    expect(officina().stato()['esito'], fatto);
+    expect(
+      t.elapsed.inSeconds,
+      lessThan(15),
+      reason: 'make dormiva trenta secondi: fermare deve fermarlo',
+    );
     expect(o.inCorso, isFalse);
   });
 
@@ -497,103 +723,218 @@ void main() {
     expect((s['esito'] as Map)['ok'], isTrue);
   });
 
-  test('senza spazio non si comincia nemmeno, e si dice quanto ne serve',
-      () async {
-    final o = Officina(
-      lavoro: lavoro,
-      statoDir: statoDir,
-      radice: '${tana.path}/',
-      // Più di quanto un disco abbia: il controllo deve dire di no.
-      spazioMinimo: 1 << 62,
-      scarica: (u, f, {progresso, annullato}) async {
-        scaricamenti++;
-        return null;
-      },
-      lancia: (e, a, {workingDirectory}) =>
-          Process.start('sh', ['-c', 'exit 0']),
-    );
-    final g = await gira(o, ricetta());
+  test(
+    'il log completo conserva anche le righe escluse da IPC e coda',
+    () async {
+      righeCompila = 1200;
+      final o = officina();
+      final g = await gira(o, ricetta());
+      expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
+      final log = File(g.fatto['log'] as String).readAsStringSync();
+      for (var i = 1; i <= 1200; i++) {
+        expect(log, contains('uscita-prova-$i\n'));
+      }
+      expect(log, contains('] ricetta '));
+      expect(log, contains('] comando '));
+      expect(log, contains('"codice":0'));
+      expect(log, contains('] esito {"ok":true'));
+      expect((o.stato()['righe'] as List).length, lessThanOrEqualTo(400));
+      expect(
+        (o.stato()['righe'] as List).join('\n'),
+        isNot(contains('uscita-prova-1\n')),
+      );
+      expect(o.stato()['log'], g.fatto['log']);
+      final meta =
+          jsonDecode(
+                File('${g.fatto['uscita']}/fucina.json').readAsStringSync(),
+              )
+              as Map;
+      expect(meta['log'], g.fatto['log']);
+    },
+  );
+
+  test('anche stderr e l’esito fallito rimangono nel log completo', () async {
+    righeCompila = 900;
+    compilaFallisce = true;
+    final g = await gira(officina(), ricetta());
     expect(g.fatto['ok'], isFalse);
-    expect(g.fatto['errore'], contains('GB liberi'));
-    expect(scaricamenti, 0, reason: 'lo si dice PRIMA di scaricare');
-    expect(g.passi, isEmpty);
+    final log = File(g.fatto['log'] as String).readAsStringSync();
+    expect(log, contains('uscita-prova-1\n'));
+    expect(log, contains('uscita-prova-900\n'));
+    expect(log, contains('[stderr] fatal error: sentinella-compilatore'));
+    expect(log, contains('"codice":2'));
+    expect(log, contains('] esito {"ok":false'));
   });
 
+  test(
+    'riprovare lo stesso rilascio non sovrascrive il diario precedente',
+    () async {
+      final o = officina();
+      final primo = await gira(o, ricetta());
+      final file = File(primo.fatto['log'] as String);
+      final prima = file.readAsStringSync();
+      final secondo = await gira(o, ricetta());
+      expect(secondo.fatto['log'], isNot(primo.fatto['log']));
+      expect(file.readAsStringSync(), prima);
+      final riaperta = officina().stato();
+      expect(riaperta['inCorso'], isFalse);
+      expect(riaperta['log'], secondo.fatto['log']);
+      expect(riaperta['esito'], secondo.fatto);
+      expect(riaperta['righe'], o.stato()['righe']);
+      expect(riaperta['secondi'], secondo.fatto['secondi']);
+      expect(riaperta['ricetta'], ricetta().toJson());
+    },
+  );
+
+  test(
+    'senza poter creare il log non parte nessun comando della build',
+    () async {
+      File('$statoDir/log-compilazioni')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('ostacolo');
+      final g = await gira(officina(), ricetta());
+      expect(g.fatto['ok'], isFalse);
+      expect(g.fatto['errore'], contains('Non riesco a creare il log'));
+      expect(lanciati, isEmpty);
+      expect(scaricamenti, 0);
+    },
+  );
+
+  test(
+    'senza spazio non si comincia nemmeno, e si dice quanto ne serve',
+    () async {
+      final o = Officina(
+        lavoro: lavoro,
+        statoDir: statoDir,
+        radice: '${tana.path}/',
+        // Più di quanto un disco abbia: il controllo deve dire di no.
+        spazioMinimo: 1 << 62,
+        scarica: (u, f, {progresso, annullato}) async {
+          scaricamenti++;
+          return null;
+        },
+        lancia: (e, a, {workingDirectory}) =>
+            Process.start('sh', ['-c', 'exit 0']),
+      );
+      final g = await gira(o, ricetta());
+      expect(g.fatto['ok'], isFalse);
+      expect(g.fatto['errore'], contains('GB liberi'));
+      expect(scaricamenti, 0, reason: 'lo si dice PRIMA di scaricare');
+      expect(g.passi, isEmpty);
+    },
+  );
+
   group('completare quello che localmodconfig non aggiunge', () {
-    test('le scorte che la configurazione non ha si accendono dai Makefile',
-        () async {
-      final o = officina();
-      final g = await gira(o, ricetta({'scorte': ['filesystem']}));
-      expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
-      final config = File('$lavoro/alberi/6.17.2-vanilla/linux-6.17.2/.config')
-          .readAsStringSync();
-      expect(config, contains('CONFIG_VFAT_FS=m'));
-      expect(config, contains('CONFIG_BTRFS_FS=m'));
-      final completa = lanciati.firstWhere((c) => c.contains('--module'));
-      expect(completa, containsAllInOrder(['--module', 'BTRFS_FS']));
-      expect(g.righe.join('\n'), contains('Da accendere'));
-      // Gli altri filesystem della scorta non sono in questo albero
-      // piccolo: si nominano, non si inventano.
-      expect(g.righe.join('\n'), contains('Non trovo nei sorgenti'));
-    });
+    test(
+      'le scorte che la configurazione non ha si accendono dai Makefile',
+      () async {
+        final o = officina();
+        final g = await gira(
+          o,
+          ricetta({
+            'scorte': ['filesystem'],
+          }),
+        );
+        expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
+        final config = File(
+          '$lavoro/alberi/6.17.2-vanilla/linux-6.17.2/.config',
+        ).readAsStringSync();
+        expect(config, contains('CONFIG_VFAT_FS=m'));
+        expect(config, contains('CONFIG_BTRFS_FS=m'));
+        final completa = lanciati.firstWhere((c) => c.contains('--module'));
+        expect(completa, containsAllInOrder(['--module', 'BTRFS_FS']));
+        expect(g.righe.join('\n'), contains('Da accendere'));
+        // Gli altri filesystem della scorta non sono in questo albero
+        // piccolo: si nominano, non si inventano.
+        expect(g.righe.join('\n'), contains('Non trovo nei sorgenti'));
+      },
+    );
 
-    test('quello che Kconfig rimette a «n» si dice, per nome di modulo',
-        () async {
-      kconfigTogleBtrfs = true;
-      final o = officina();
-      final g = await gira(o, ricetta({'scorte': ['filesystem']}));
-      expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
-      final avvisi = (g.fatto['avvisi'] as List).join('\n');
-      expect(avvisi, contains('Non sono entrati'));
-      expect(avvisi, contains('btrfs'));
-      expect(avvisi, isNot(contains('vfat,')));
-    });
+    test(
+      'quello che Kconfig rimette a «n» si dice, per nome di modulo',
+      () async {
+        kconfigTogleBtrfs = true;
+        final o = officina();
+        final g = await gira(
+          o,
+          ricetta({
+            'scorte': ['filesystem'],
+          }),
+        );
+        expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
+        final avvisi = (g.fatto['avvisi'] as List).join('\n');
+        expect(avvisi, contains('Non sono entrati'));
+        expect(avvisi, contains('btrfs'));
+        expect(avvisi, isNot(contains('vfat,')));
+      },
+    );
 
-    test('anche gli essenziali: un disco d\'avvio su Btrfs con defconfig',
-        () async {
-      final o = officina();
-      final s = Scelte.daJson(
-          {'nome': 'prova', 'versione': '6.17.2', 'base': 'defconfig'});
-      final ril = rilievo(essenziali: {'btrfs'});
-      final r = calcola(ril, s, Officina.cartellePer(s, lavoro), nuclei: 4);
-      final fine = Completer<Map<String, dynamic>>();
-      o.ascolta(#e, (t, d) {
-        if (t == 'fatto' && !fine.isCompleted) fine.complete(d);
-      });
-      o.avvia(r, ril);
-      final fatto = await fine.future.timeout(const Duration(seconds: 30));
-      expect(fatto['ok'], isTrue, reason: '$fatto');
-      expect(File('$lavoro/alberi/6.17.2-vanilla/linux-6.17.2/.config')
-          .readAsStringSync(), contains('CONFIG_BTRFS_FS=m'));
-    });
+    test(
+      'anche gli essenziali: un disco d\'avvio su Btrfs con defconfig',
+      () async {
+        final o = officina();
+        final s = Scelte.daJson({
+          'nome': 'prova',
+          'versione': '6.17.2',
+          'base': 'defconfig',
+        });
+        final ril = rilievo(essenziali: {'btrfs'});
+        final r = calcola(ril, s, Officina.cartellePer(s, lavoro), nuclei: 4);
+        final fine = Completer<Map<String, dynamic>>();
+        o.ascolta(#e, (t, d) {
+          if (t == 'fatto' && !fine.isCompleted) fine.complete(d);
+        });
+        o.avvia(r, ril);
+        final fatto = await fine.future.timeout(const Duration(seconds: 30));
+        expect(fatto['ok'], isTrue, reason: '$fatto');
+        expect(
+          File(
+            '$lavoro/alberi/6.17.2-vanilla/linux-6.17.2/.config',
+          ).readAsStringSync(),
+          contains('CONFIG_BTRFS_FS=m'),
+        );
+      },
+    );
   });
 
   group('la configurazione di partenza viaggia col kernel', () {
-    test('accanto ai moduli, per ripartire da lei e non da quella scremata',
-        () async {
-      final o = officina();
-      await gira(o, ricetta());
-      final f = File('$lavoro/uscita/6.17.2-fucina-prova/lib/modules/'
-          '6.17.2-fucina-prova/fucina-partenza.config');
-      expect(f.readAsStringSync(), contains('CONFIG_HZ=300'));
-    });
+    test(
+      'accanto ai moduli, per ripartire da lei e non da quella scremata',
+      () async {
+        final o = officina();
+        await gira(o, ricetta());
+        final f = File(
+          '$lavoro/uscita/6.17.2-fucina-prova/lib/modules/'
+          '6.17.2-fucina-prova/fucina-partenza.config',
+        );
+        expect(f.readAsStringSync(), contains('CONFIG_HZ=300'));
+      },
+    );
 
-    test('da defconfig non c\'è, e quella di prima non resta a mentire',
-        () async {
-      final o = officina();
-      await gira(o, ricetta());
-      await gira(o, ricetta({'base': 'defconfig'}));
-      expect(File('$lavoro/uscita/6.17.2-fucina-prova/lib/modules/'
-              '6.17.2-fucina-prova/fucina-partenza.config')
-          .existsSync(), isFalse);
-    });
+    test(
+      'da defconfig non c\'è, e quella di prima non resta a mentire',
+      () async {
+        final o = officina();
+        await gira(o, ricetta());
+        await gira(o, ricetta({'base': 'defconfig'}));
+        expect(
+          File(
+            '$lavoro/uscita/6.17.2-fucina-prova/lib/modules/'
+            '6.17.2-fucina-prova/fucina-partenza.config',
+          ).existsSync(),
+          isFalse,
+        );
+      },
+    );
   });
 
   group('AutoFDO', () {
     test('il primo tempo mette da parte vmlinux e configurazione', () async {
       final o = officina();
       final g = await gira(
-          o, ricetta({'compilatore': 'clang', 'lto': true, 'autofdo': true}));
+        o,
+        ricetta({'compilatore': 'clang', 'lto': true, 'autofdo': true}),
+      );
       expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
       final p = '$lavoro/profili/6.17.2-fucina-prova';
       expect(File('$p/vmlinux').readAsStringSync(), 'VMLINUX\n');
@@ -602,75 +943,104 @@ void main() {
 
     test('il secondo tempo senza profilo non comincia nemmeno', () async {
       final o = officina();
-      final g = await gira(o, ricetta({
-        'compilatore': 'clang', 'lto': true, 'profilo': '6.17.2-fucina-a',
-        'nome': 'prova-afdo',
-      }));
+      final g = await gira(
+        o,
+        ricetta({
+          'compilatore': 'clang',
+          'lto': true,
+          'profilo': '6.17.2-fucina-a',
+          'nome': 'prova-afdo',
+        }),
+      );
       expect(g.fatto['ok'], isFalse);
       expect(g.fatto['errore'], contains('Non trovo il profilo'));
       expect(scaricamenti, 0);
     });
 
-    test('col profilo, make lo riceve e fucina.json ne scrive la somma',
-        () async {
-      final prof = File('$lavoro/profili/6.17.2-fucina-a/autofdo.prof')
-        ..createSync(recursive: true)
-        ..writeAsStringSync('PROFILO');
-      rilascioDetto = '6.17.2-fucina-prova-afdo';
-      final o = officina();
-      final g = await gira(o, ricetta({
-        'compilatore': 'clang', 'lto': true, 'profilo': '6.17.2-fucina-a',
-        'nome': 'prova-afdo',
-      }));
-      expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
-      final compila = lanciati.firstWhere((c) => c.contains('bzImage'));
-      expect(compila, contains('CLANG_AUTOFDO_PROFILE=${prof.path}'));
-      final info = File('$lavoro/uscita/6.17.2-fucina-prova-afdo/fucina.json')
-          .readAsStringSync();
-      expect(info, contains('"da": "6.17.2-fucina-a"'));
-    });
+    test(
+      'col profilo, make lo riceve e fucina.json ne scrive la somma',
+      () async {
+        final prof = File('$lavoro/profili/6.17.2-fucina-a/autofdo.prof')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('PROFILO');
+        rilascioDetto = '6.17.2-fucina-prova-afdo';
+        final o = officina();
+        final g = await gira(
+          o,
+          ricetta({
+            'compilatore': 'clang',
+            'lto': true,
+            'profilo': '6.17.2-fucina-a',
+            'nome': 'prova-afdo',
+          }),
+        );
+        expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
+        final compila = lanciati.firstWhere((c) => c.contains('bzImage'));
+        expect(compila, contains('CLANG_AUTOFDO_PROFILE=${prof.path}'));
+        final info = File(
+          '$lavoro/uscita/6.17.2-fucina-prova-afdo/fucina.json',
+        ).readAsStringSync();
+        expect(info, contains('"da": "6.17.2-fucina-a"'));
+      },
+    );
   });
 
   group('la prova d\'avvio in QEMU', () {
-    Map<String, dynamic> provaScritta() => (jsonDecode(
-            File('$lavoro/uscita/6.17.2-fucina-prova/fucina.json')
-                .readAsStringSync()) as Map)['provaAvvio'] as Map<String, dynamic>;
+    Map<String, dynamic> provaScritta() =>
+        (jsonDecode(
+                  File(
+                    '$lavoro/uscita/6.17.2-fucina-prova/fucina.json',
+                  ).readAsStringSync(),
+                )
+                as Map)['provaAvvio']
+            as Map<String, dynamic>;
 
-    test('un kernel che arriva a /init è «partito», e lo resta scritto',
-        () async {
-      final o = officina();
-      final g = await gira(o, ricetta({'provaAvvio': true}));
-      expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
-      expect(g.passi.last['id'], 'avvia');
-      expect(qemuArgomenti, containsAllInOrder([
-        '-kernel', '$lavoro/uscita/6.17.2-fucina-prova/boot/vmlinuz-6.17.2-fucina-prova',
-        '-initrd', '$lavoro/prova-avvio.cpio',
-      ]));
-      expect(qemuArgomenti, containsAllInOrder(['-accel', 'tcg']));
-      expect(provaScritta()['ok'], isTrue);
-      expect(File('$lavoro/prova-avvio.cpio').existsSync(), isTrue);
-    });
+    test(
+      'un kernel che arriva a /init è «partito», e lo resta scritto',
+      () async {
+        final o = officina();
+        final g = await gira(o, ricetta({'provaAvvio': true}));
+        expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
+        expect(g.passi.last['id'], 'avvia');
+        expect(
+          qemuArgomenti,
+          containsAllInOrder([
+            '-kernel',
+            '$lavoro/uscita/6.17.2-fucina-prova/boot/vmlinuz-6.17.2-fucina-prova',
+            '-initrd',
+            '$lavoro/prova-avvio.cpio',
+          ]),
+        );
+        expect(qemuArgomenti, containsAllInOrder(['-accel', 'tcg']));
+        expect(provaScritta()['ok'], isTrue);
+        expect(File('$lavoro/prova-avvio.cpio').existsSync(), isTrue);
+      },
+    );
 
-    test('un kernel in panico ferma tutto e resta segnato «non partito»',
-        () async {
-      qemu = 'panico';
-      final o = officina();
-      final g = await gira(o, ricetta({'provaAvvio': true}));
-      expect(g.fatto['ok'], isFalse);
-      expect(g.fatto['errore'], contains('non arriva allo spazio utente'));
-      expect(g.fatto['errore'], contains('No working init'));
-      expect(provaScritta()['ok'], isFalse);
-    });
+    test(
+      'un kernel in panico ferma tutto e resta segnato «non partito»',
+      () async {
+        qemu = 'panico';
+        final o = officina();
+        final g = await gira(o, ricetta({'provaAvvio': true}));
+        expect(g.fatto['ok'], isFalse);
+        expect(g.fatto['errore'], contains('non arriva allo spazio utente'));
+        expect(g.fatto['errore'], contains('No working init'));
+        expect(provaScritta()['ok'], isFalse);
+      },
+    );
 
-    test('senza QEMU la prova non si fa, e lo si dice: non è un fallimento',
-        () async {
-      qemu = 'manca';
-      final o = officina();
-      final g = await gira(o, ricetta({'provaAvvio': true}));
-      expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
-      expect((g.fatto['avvisi'] as List).join(), contains('manca QEMU'));
-      expect(provaScritta()['ok'], isNull);
-    });
+    test(
+      'senza QEMU la prova non si fa, e lo si dice: non è un fallimento',
+      () async {
+        qemu = 'manca';
+        final o = officina();
+        final g = await gira(o, ricetta({'provaAvvio': true}));
+        expect(g.fatto['ok'], isTrue, reason: '${g.fatto}');
+        expect((g.fatto['avvisi'] as List).join(), contains('manca QEMU'));
+        expect(provaScritta()['ok'], isNull);
+      },
+    );
 
     test('un kernel per questo processore, senza KVM: un fallimento non dice '
         'niente', () async {

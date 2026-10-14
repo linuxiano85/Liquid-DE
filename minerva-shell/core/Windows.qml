@@ -93,6 +93,9 @@ QtObject {
     /// prossimo è uguale.
     property string _firma: ""
 
+    property var nativeSnapshot:Compositore.nativeWindowsReady ? Compositore.nativeWindowList:null
+    onNativeSnapshotChanged:if(nativeSnapshot!==null) windows._parse(nativeSnapshot)
+
     function _parse(dati) {
         var list = dati;
         if (typeof dati === "string") {
@@ -134,7 +137,7 @@ QtObject {
             // perdere — una scrivania cambiata mentre la shell si ricarica, un
             // avvio in cui la prima finestra c'era già — e una barra del titolo
             // spenta su una finestra accesa non si corregge da sé.
-            if (entry.address !== "" && entry.stack === 0)
+            if (entry.address !== "" && entry.focused===true)
                 attiva = entry.address;
 
             every.push(entry);
@@ -183,7 +186,7 @@ QtObject {
     ///
     /// Il 10 agosto 2026, appena attaccato il secondo schermo, la garanzia che
     /// tiene le finestre dentro lo spazio utile si è messa a trascinare sul
-    /// monitor attivo anche le finestre dell'altro: il terminale di Giacomo,
+    /// monitor attivo anche le finestre dell'altro: il terminale di il manutentore,
     /// che stava sul portatile, si è ritrovato a x=1536 — cioè appena fuori
     /// dal suo schermo. Una garanzia che sposta le finestre dove non erano è
     /// peggio del difetto che doveva impedire.
@@ -248,8 +251,9 @@ QtObject {
 
     property Connections _ipcState: Connections {
         target: Core.Ipc
+        function onConnectedChanged() {if(Core.Ipc.connected) {windows.refresh();windows.refreshUsable();}}
         function onWindowsStateReceived(clients) {
-            windows._parse(clients);
+            if(!Compositore.scrivania || !Compositore.nativeWindowsReady) windows._parse(clients);
         }
         function onMonitorsStateReceived(monitorsJson) {
             windows._parseMonitors(monitorsJson);
@@ -283,7 +287,7 @@ QtObject {
     // Una finestra portata troppo in alto ci finisce sotto insieme alla propria
     // barra del titolo — e la barra del titolo è la maniglia: sparita quella,
     // la finestra non si può più né spostare, né ingrandire, né chiudere col
-    // mouse. Parole di Giacomo: «le finestre sono incollate alla barra e non
+    // mouse. Parole di il manutentore: «le finestre sono incollate alla barra e non
     // hanno la barra del titolo, devo chiuderle con super+C».
     //
     // ── Per TUTTE le finestre ────────────────────────────────────────────
@@ -330,7 +334,7 @@ QtObject {
 
             // Le ingrandite e quelle a schermo intero le mette a posto il
             // compositore: spostarle a mano lo contraddirebbe.
-            if (!w.address || w.address === "" || w.minimized || w.modoSchermo !== 0)
+            if (!w.address || w.address === "" || w.minimized || w.dragging || w.tiling || w.modoSchermo !== 0)
                 continue;
             if (w.w <= 0 || w.h <= 0)
                 continue;
@@ -340,7 +344,7 @@ QtObject {
             // Questa garanzia manda «sposta». Il trascinamento col mouse lo
             // fa il compositore, con la sua strada. Se i due agiscono
             // insieme, la finestra viene tirata da due parti: segue la mano a
-            // scatti, si ferma, torna indietro. Parole di Giacomo l'11 agosto:
+            // scatti, si ferma, torna indietro. Parole di il manutentore l'11 agosto:
             // «non c'è più un trascinamento libero, vuole per forza stare
             // nelle posizioni degli angoli o tutto lo schermo».
             //
@@ -398,7 +402,7 @@ QtObject {
     // cima.
     //
     // Misurato il 10 agosto 2026 sul gestore file: posizione -2,44, misura
-    // 1536x864. Le parole di Giacomo erano «le
+    // 1536x864. Le parole di il manutentore erano «le
     // finestre escono fuori dallo schermo e devo passarle a schermo intero»:
     // il rimedio che aveva trovato è giusto, perché «schermo intero» è
     // l'unico comando che rifà i conti da capo.
@@ -458,7 +462,13 @@ QtObject {
         return null;
     }
 
-    Component.onCompleted: windows.refreshUsable()
+    function findSurface(pid,surfaceId) {
+        if(!surfaceId) return null;
+        var matches=windows.all.filter(function(w){return w.pid===pid && w.surfaceId===surfaceId;});
+        return matches.length===1 ? matches[0]:null;
+    }
+
+    Component.onCompleted: {windows.refresh();windows.refreshUsable();}
 
     /// Ingrandisce, o rimette com'era. `selector` è `address:0x…` o
     /// `pid:1234`, come per tutti i comandi sulle finestre.
@@ -552,8 +562,7 @@ QtObject {
     function focus(address) {
         if (!address)
             return;
-        Compositore.fuoco(address);
-        Compositore.davanti(address);
+        Tiling.recall(address);
         refreshSoon.restart();
     }
 

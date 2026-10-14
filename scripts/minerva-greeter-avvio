@@ -7,7 +7,7 @@
 # greetd legge la sua configurazione UNA volta, quando parte. Il 23 settembre
 # 2026 l'installazione ha spostato la schermata da Hyprland al nostro
 # compositore riscrivendo /etc/greetd/config.toml, e per tre accessi di fila
-# Giacomo ha continuato a vedere Hyprland — con il suo avviso rosso — perché
+# il manutentore ha continuato a vedere Hyprland — con il suo avviso rosso — perché
 # greetd era partito alle 19:22 e il file era delle 19:35. Il comando nuovo
 # sarebbe valso solo al riavvio del computer.
 #
@@ -25,7 +25,7 @@
 # (`agreety`): nome utente e password sulla stessa console, e dentro si entra
 # in Liquid DE come sempre.
 #
-# Fino al 28 settembre 2026 la riserva era Hyprland. Giacomo ha chiesto di
+# Fino al 28 settembre 2026 la riserva era Hyprland. il manutentore ha chiesto di
 # togliere dal computer tutto quello che non è Liquid, e una riserva che
 # dipende da un altro desktop è proprio la cosa che impedisce di toglierlo:
 # `agreety` arriva col pacchetto di greetd, cioè con la schermata stessa, e

@@ -10,6 +10,7 @@ uniform vec4 color;
 
 
 varying vec2 v_minerva;
+uniform float minerva_desaturation;
 uniform vec2 minerva_size;
 uniform vec4 minerva_radii;
 uniform vec4 minerva_hole;
@@ -68,5 +69,6 @@ float minerva_coverage() {
 
 void main() {
 	gl_FragColor = color;
+	gl_FragColor.rgb=mix(gl_FragColor.rgb,vec3(dot(gl_FragColor.rgb,vec3(0.2126,0.7152,0.0722))),minerva_desaturation);
 	gl_FragColor *= minerva_coverage();
 }

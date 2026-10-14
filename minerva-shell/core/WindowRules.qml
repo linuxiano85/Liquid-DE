@@ -1,17 +1,21 @@
 import QtQuick
 import "../theme" as Theme
+import "../windows11/Gettoni.js" as Gettoni
 
 // WindowRules — L'aspetto delle finestre deciso nelle Impostazioni e mandato
 // al compositore: colore del bordo, cornice, effetto, molla, respiro,
 // mercurio.
 //
-// Le finestre sono tutte libere — minerva-wayland non affianca niente — e la
-// misura con cui nascono la decide il compositore (`finestra_misura_alla_
-// nascita`). Qui resta solo quello che dipende da una scelta dell'utente.
+// La disposizione classica o a colonne è gestita da Tiling.qml e dal
+// compositore. Qui si applicano le scelte sull'aspetto delle finestre.
 //
 // Le scrive la SCRIVANIA e nessun'altra finestra: vedi `write()`.
 QtObject {
     id: rules
+    property bool focusBorder:Ipc.get("windows.focusBorder",true)===true
+    property bool inactiveGray:Ipc.get("windows.inactiveGray",false)===true
+    onFocusBorderChanged:applySoon.restart()
+    onInactiveGrayChanged:applySoon.restart()
 
     /// Da un colore QML alla forma del verbo `bordo` del compositore:
     /// `rgba(RRGGBBAA)`.
@@ -86,6 +90,32 @@ QtObject {
     // ── Applicazione immediata ───────────────────────────────────────────
 
     onEffettoChanged: applySoon.restart()
+
+    /// Il vetro dietro la barra del preset Windows e i suoi pannelli: in
+    /// Windows 11 sono di Acrylic anche quando le finestre sono piene. Un
+    /// verbo a parte del compositore («vetrobarra»), così non accende il
+    /// vetro alle finestre (11 ottobre 2026).
+    readonly property bool vetroBarra: DesktopStyle.attuale === "windows"
+                                       && Ipc.get("windows11.acrylic", true) === true
+    onVetroBarraChanged: applySoon.restart()
+
+    /// La ricetta Acrylic di quel vetro, dai gettoni di Windows: cambia col
+    /// tema, con l'accento e con «accento su Start e barra». La stessa che
+    /// usa `windows11/Style.qml` per sapere che colori si vedono.
+    readonly property var ricettaVetro: {
+        var scuro = Ipc.get("windows11.theme", "light") === "dark";
+        var voluto = Ipc.get("windows11.accent", "auto");
+        var accento = /^#[0-9a-f]{6}$/i.test(voluto) ? voluto : Gettoni.azzurroDiSerie.accento;
+        return Gettoni.ricettaVetro(scuro, scuro && Ipc.get("windows11.accentOnStart", false) === true, accento);
+    }
+    onRicettaVetroChanged: applySoon.restart()
+
+    /// I pulsanti delle barre del titolo disegnate dal compositore: quelli
+    /// di Windows 11 col preset Windows, quelli di Liquid negli altri. Le
+    /// barre delle nostre app lo leggono da sé (`ui/WindowTitleBar.qml`).
+    readonly property string stileBarra: DesktopStyle.attuale === "windows"
+                                         ? "windows" : "liquid"
+    onStileBarraChanged: applySoon.restart()
     onElasticoChanged: applySoon.restart()
     onRespiroChanged: applySoon.restart()
     onMercurioChanged: applySoon.restart()
@@ -121,8 +151,17 @@ QtObject {
         // le SCRIVE.
         if (!Compositore.scrivania)
             return;
+        Compositore._nostro("focus-style",[focusBorder ? "1":"0",rgbaEsa(Theme.Colors.accent,1).substring(5,11),inactiveGray ? "1":"0"]);
         Compositore.coloriBordo(rules.borderActive);
         Compositore.effetto(rules.effetto, rules.effettoOpacita);
+        if (rules.vetroBarra) {
+            var r = rules.ricettaVetro;
+            Compositore._nostro("vetrobarra", ["si", r.tinta.replace("#", ""), r.tintaOpacita.toFixed(2),
+                                               r.luminosita.replace("#", ""), r.luminositaOpacita.toFixed(2)]);
+        } else {
+            Compositore._nostro("vetrobarra", ["no"]);
+        }
+        Compositore._nostro("stilebarra", [rules.stileBarra]);
         Compositore.cornice(rules.cornice, rules.cornicePeriodo,
                             Theme.Colors.accent, rules.corniceSpessore);
         Compositore.corniceColori(rules.corniceTinte);

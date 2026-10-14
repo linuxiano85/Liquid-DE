@@ -12,3 +12,4 @@ ListaFinestre 1.0 ListaFinestre.qml
 Osd           1.0 Osd.qml
 FullscreenBar 1.0 FullscreenBar.qml
 WidgetBarra   1.0 WidgetBarra.qml
+TilingButton  1.0 TilingButton.qml

@@ -105,7 +105,7 @@ ShellRoot {
     /// un verbo e degli argomenti, l'a-capo è il confine — e non per gusto:
     /// è già scritto, già provato, e chi legge uno dei due capisce l'altro.
     ///
-    ///     richiesta "giacomo" "Autenticazione richiesta per…"
+    ///     richiesta "utente" "Autenticazione richiesta per…"
     ///     chiedi segreto "Password: "
     ///     errore "Authentication failure"
     ///     nota "…"
@@ -297,7 +297,7 @@ ShellRoot {
 
             // Lo scatto orizzontale quando la password è sbagliata: è l'unico
             // messaggio che si capisce senza leggere. Tre e basta — nella
-            // schermata di accesso era senza fine, e Giacomo l'ha descritta
+            // schermata di accesso era senza fine, e il manutentore l'ha descritta
             // come «dolori di pancia».
             SequentialAnimation {
                 id: scossa

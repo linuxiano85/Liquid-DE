@@ -6,3 +6,10 @@ Transfers   1.0 Transfers.qml
 SideEntry   1.0 SideEntry.qml
 FileProperties 1.0 FileProperties.qml
 Briciole 1.0 Briciole.qml
+Collega 1.0 Collega.qml
+FileTabs 1.0 FileTabs.qml
+FileIcon 1.0 FileIcon.qml
+singleton FileStyle 1.0 FileStyle.qml
+CommandGlyph 1.0 CommandGlyph.qml
+WindowsCommands 1.0 WindowsCommands.qml
+PannelloLaterale 1.0 PannelloLaterale.qml

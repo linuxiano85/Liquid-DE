@@ -89,7 +89,7 @@ QtObject {
     // ── Il colore ───────────────────────────────────────────────────────
     //
     // Non otto colori scritti a mano: otto **giri** intorno all'accento che
-    // ha scelto Giacomo. Con una tavolozza fissa, il giorno che l'accento
+    // ha scelto il manutentore. Con una tavolozza fissa, il giorno che l'accento
     // diventa rosa l'anello resta ciano e verde, e la finestra smette di
     // appartenere al resto della scrivania — è la regola di
     // `minerva-temi-colore`, «un tema è una tinta e un verso».

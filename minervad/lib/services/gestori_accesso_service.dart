@@ -37,7 +37,7 @@ class GestoreAccesso {
 ///
 /// ── Perché esiste ──────────────────────────────────────────────────────────
 ///
-/// Giacomo, 23 agosto 2026: «nelle impostazioni voglio aggiungere
+/// il manutentore, 23 agosto 2026: «nelle impostazioni voglio aggiungere
 /// un'impostazione per impostare il login manager predefinito, nel caso in cui
 /// io voglia quello di kde o cosmic o gnome o altri».
 ///

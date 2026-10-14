@@ -2,7 +2,7 @@
 """make-ritratti.py — Disegna i ritratti di serie di Minerva.
 
 Sono le immagini che si scelgono in Impostazioni → Utente quando non si ha una
-foto propria, e che si vedono nella schermata di accesso. Giacomo li ha chiesti
+foto propria, e che si vedono nella schermata di accesso. il manutentore li ha chiesti
 così: «tipo la paperella, il gattino e tante di tanti tipi, un controller RGB,
 in base ai gusti».
 

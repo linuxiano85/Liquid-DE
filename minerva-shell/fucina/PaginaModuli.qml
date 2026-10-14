@@ -68,6 +68,7 @@ Item {
         case "legato": return "in uso";
         case "caricato": return "caricato";
         case "modprobed": return "ricordato";
+        case "storico": return "periferica ricordata";
         case "essenziale": return "avvio";
         case "candidato": return "possibile";
         }

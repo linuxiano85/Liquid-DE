@@ -9,7 +9,7 @@ import "../ui" as Ui
 //
 // ── Da dove nasce ──────────────────────────────────────────────────────────
 //
-// Giacomo, 30 settembre 2026: una utility «per creare kernel ultra snelli e
+// il manutentore, 30 settembre 2026: una utility «per creare kernel ultra snelli e
 // ottimizzati per il computer, con i moduli necessari per leggere tutto
 // l'hardware», che tolga quello che non si usa «in modo per avere un kernel
 // più snello possibile e quindi meno attaccabile», e che non faccia perdere

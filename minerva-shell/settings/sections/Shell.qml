@@ -5,16 +5,20 @@ import "../../theme" as Theme
 import "../../core" as Core
 import ".." as S
 
-// Minerva — l'aiuto e il ripristino. Il resto che stava qui (le finestre, il
-// menù delle applicazioni, la scrivania) dal 28 settembre 2026 sta nella
-// pagina della cosa di cui parla.
+// Informazioni — il sistema, la versione, il progetto e il ripristino.
+//
+// Si chiamava «Minerva». Le finestre, il menù delle applicazioni e la
+// scrivania se ne sono andati il 28 settembre 2026; l'11 ottobre anche le
+// voci grafiche (promemoria delle scorciatoie, suggerimenti, Isola a schermo
+// intero), che il manutentore voleva in Personalizzazione: ora stanno in Aspetto e
+// nella scheda dell'Isola. Qui resta solo quello che non si vede.
 Page {
     id: page
 
-    title: Core.Strings.lang === "it" ? "Minerva" : "Minerva"
+    title: Core.Strings.lang === "it" ? "Informazioni" : "About"
     subtitle: Core.Strings.lang === "it"
-              ? "Aiuto, ripristino e informazioni"
-              : "Help, reset and about"
+              ? "Sistema, versione e ripristino"
+              : "System, version and reset"
 
     readonly property bool it: Core.Strings.lang === "it"
     property string infoSistema: ""
@@ -45,79 +49,6 @@ Page {
     Component.onCompleted: leggiSistema.running = true
     // «Non disturbare» stava qui fino al 23 settembre 2026: adesso sta nella
     // pagina Notifiche, con quello che si vede a schermo bloccato.
-
-    Card {
-        heading: Core.Strings.t("help")
-
-        S.SettingRow {
-            width: parent.width
-            label: Core.Strings.t("showCheatsheet")
-            description: Core.Strings.t("showCheatsheetDesc")
-            controlWidth: 60
-            control: S.ToggleSwitch {
-                checked: Core.Ipc.get("cheatsheet.enabled", true)
-                onToggled: function(v) { Core.Ipc.setSetting("cheatsheet.enabled", v); }
-            }
-        }
-
-        S.SettingRow {
-            width: parent.width
-            label: Core.Strings.t("showOnFirstRun")
-            description: Core.Strings.t("showOnFirstRunDesc")
-            controlWidth: 60
-            enabled: Core.Ipc.get("cheatsheet.enabled", true)
-            opacity: enabled ? 1 : 0.4
-            control: S.ToggleSwitch {
-                checked: Core.Ipc.get("cheatsheet.showOnFirstRun", true)
-                onToggled: function(v) {
-                    Core.Ipc.setSetting("cheatsheet.showOnFirstRun", v);
-                }
-            }
-        }
-
-        S.SettingRow {
-            width: parent.width
-            label: Core.Strings.t("cheatsheetOpacity")
-            description: Core.Strings.t("cheatsheetOpacityDesc")
-            controlWidth: 220
-            enabled: Core.Ipc.get("cheatsheet.enabled", true)
-            opacity: enabled ? 1 : 0.4
-            control: S.ValueSlider {
-                width: 220
-                value: Core.Ipc.get("cheatsheet.backgroundOpacity", 0.55)
-                onReleased: function(v) {
-                    Core.Ipc.setSetting("cheatsheet.backgroundOpacity",
-                                        Math.round(v * 100) / 100);
-                }
-            }
-        }
-
-
-        // ── Le spiegazioni sotto ogni interruttore ───────────────────
-        //
-        // `general.beginnerMode` la legge `menu/DesktopLayer.qml` (il
-        // suggerimento sulla scrivania). Le spiegazioni delle piastrelle della
-        // tendina se ne sono andate con lei (5 ottobre 2026). Era accesa di fabbrica e non si poteva spegnere da
-        // nessuna parte: chi Minerva la conosce si teneva le spiegazioni per
-        // sempre.
-        S.SettingRow {
-            width: parent.width
-            label: page.it ? "Suggerimenti per chi comincia"
-                           : "Hints for beginners"
-            description: page.it
-                ? "La riga in fondo alla scrivania vuota: «Super+K per le "
-                  + "scorciatoie · Clic destro qui per il menu». Chi Minerva "
-                  + "la conosce può spegnerla."
-                : "The hint on the desktop. Turn it off once you know Minerva."
-            controlWidth: 60
-            control: S.ToggleSwitch {
-                checked: Core.Ipc.get("general.beginnerMode", true)
-                onToggled: function(v) {
-                    Core.Ipc.setSetting("general.beginnerMode", v);
-                }
-            }
-        }
-    }
 
     Card {
         heading: page.it ? "Informazioni" : "About"
@@ -164,14 +95,6 @@ Page {
                     onClicked: Qt.openUrlExternally("https://github.com/linuxiano85/Liquid-DE")
                 }
             }
-        }
-
-        S.SettingRow {
-            width: parent.width
-            label: page.it ? "Isola a schermo intero" : "Island in fullscreen"
-            description: page.it
-                         ? "Quando un'app occupa tutto lo schermo, premi Super per mostrare la barra e aprire l'Isola."
-                         : "When an app fills the screen, press Super to reveal the bar and open the Island."
         }
     }
     // ── Ripristino ───────────────────────────────────────────────────────

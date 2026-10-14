@@ -31,34 +31,78 @@ class Famiglia {
 /// Nell'ordine in cui si mostrano: prima quello che serve ad avviare, poi
 /// quello che si usa ogni giorno, in fondo il resto.
 const List<Famiglia> famiglie = [
-  Famiglia('dischi', 'Dischi e controller',
-      'NVMe, SATA, SCSI, RAID: senza questi il sistema non trova sé stesso.'),
-  Famiglia('filesystem', 'Filesystem',
-      'I formati che il kernel sa leggere e scrivere.'),
-  Famiglia('crypto', 'Cifratura',
-      'Algoritmi usati da dischi cifrati, VPN e rete.'),
+  Famiglia(
+    'dischi',
+    'Dischi e controller',
+    'NVMe, SATA, SCSI, RAID: senza questi il sistema non trova sé stesso.',
+  ),
+  Famiglia(
+    'filesystem',
+    'Filesystem',
+    'I formati che il kernel sa leggere e scrivere.',
+  ),
+  Famiglia(
+    'crypto',
+    'Cifratura',
+    'Algoritmi usati da dischi cifrati, VPN e rete.',
+  ),
   Famiglia('video', 'Scheda video', 'Il driver della GPU e i suoi aiutanti.'),
-  Famiglia('input', 'Tastiera, mouse, touchpad',
-      'Dispositivi HID e d\'ingresso.'),
-  Famiglia('controller', 'Controller di gioco',
-      'Gamepad, volanti, joystick.'),
+  Famiglia(
+    'framebuffer',
+    'Framebuffer e console video',
+    'Framebuffer legacy, console virtuali e visualizzazione prima del driver grafico completo.',
+  ),
+  Famiglia(
+    'sicurezza',
+    'Sicurezza del kernel',
+    'LSM e componenti di audit e sicurezza caricabili. Le opzioni integrate si verificano nella configurazione del kernel.',
+  ),
+  Famiglia(
+    'osservabilita',
+    'BPF e tracciamento',
+    'BPF, tracing e strumenti di osservabilità del kernel.',
+  ),
+  Famiglia(
+    'input',
+    'Tastiera, mouse, touchpad',
+    'Dispositivi HID e d\'ingresso.',
+  ),
+  Famiglia('controller', 'Controller di gioco', 'Gamepad, volanti, joystick.'),
   Famiglia('audio', 'Audio', 'Schede audio, HDMI audio, cuffie USB.'),
-  Famiglia('rete', 'Rete via cavo e protocolli',
-      'Schede Ethernet e i protocolli di rete caricabili.'),
+  Famiglia(
+    'rete',
+    'Rete via cavo e protocolli',
+    'Schede Ethernet e i protocolli di rete caricabili.',
+  ),
   Famiglia('wifi', 'Wi-Fi', 'Schede senza fili.'),
   Famiglia('bluetooth', 'Bluetooth', 'Adattatori e protocolli Bluetooth.'),
-  Famiglia('firewall', 'Firewall e filtri',
-      'nftables, iptables: li usa anche chi non sa di averli.'),
+  Famiglia(
+    'firewall',
+    'Firewall e filtri',
+    'nftables, iptables: li usa anche chi non sa di averli.',
+  ),
   Famiglia('usb', 'USB', 'Controller USB e periferiche generiche.'),
-  Famiglia('chiavette', 'Chiavette e dischi USB',
-      'Memorie di massa USB e lettori ottici.'),
-  Famiglia('stampa', 'Stampanti USB',
-      'Il solo driver di stampa che sta nel kernel è quello generico.'),
+  Famiglia(
+    'chiavette',
+    'Chiavette e dischi USB',
+    'Memorie di massa USB e lettori ottici.',
+  ),
+  Famiglia(
+    'stampa',
+    'Stampanti USB',
+    'Il solo driver di stampa che sta nel kernel è quello generico.',
+  ),
   Famiglia('webcam', 'Webcam e TV', 'Videocamere, sintonizzatori, cattura.'),
-  Famiglia('virtualizzazione', 'Virtualizzazione',
-      'KVM, VFIO, vhost: servono a far girare macchine virtuali.'),
-  Famiglia('piattaforma', 'Scheda madre e sensori',
-      'Sensori, ventole, ACPI, gestione dell\'energia.'),
+  Famiglia(
+    'virtualizzazione',
+    'Virtualizzazione',
+    'KVM, VFIO, vhost: servono a far girare macchine virtuali.',
+  ),
+  Famiglia(
+    'piattaforma',
+    'Scheda madre e sensori',
+    'Sensori, ventole, ACPI, gestione dell\'energia.',
+  ),
   Famiglia('altro', 'Altro', 'Tutto quello che non sta in una famiglia sopra.'),
 ];
 
@@ -100,11 +144,21 @@ String famigliaDi(String nome, String? percorso) {
   if (in_('crypto/') || in_('arch/x86/crypto/') || in_('lib/crypto/')) {
     return 'crypto';
   }
+  if (in_('drivers/video/fbdev/') || in_('drivers/video/console/')) {
+    return 'framebuffer';
+  }
   if (in_('drivers/gpu/') || in_('drivers/video/')) return 'video';
+  if (in_('security/') || in_('kernel/security/') || in_('kernel/audit/')) {
+    return 'sicurezza';
+  }
+  if (in_('kernel/bpf/') || in_('kernel/trace/') || in_('kernel/events/')) {
+    return 'osservabilita';
+  }
   if (in_('drivers/input/joystick/')) return 'controller';
   if (in_('drivers/hid/') || in_('drivers/input/')) return 'input';
   if (in_('sound/')) return 'audio';
-  if (in_('drivers/net/wireless/') || in_('net/wireless/') ||
+  if (in_('drivers/net/wireless/') ||
+      in_('net/wireless/') ||
       in_('net/mac80211/')) {
     return 'wifi';
   }
@@ -139,7 +193,7 @@ String famigliaDi(String nome, String? percorso) {
 
 // ── Le scorte ───────────────────────────────────────────────────────────
 //
-// Giacomo, 30 settembre 2026: il kernel deve tenere «solamente i moduli ad
+// il manutentore, 30 settembre 2026: il kernel deve tenere «solamente i moduli ad
 // esempio per leggere tutti i vari file system disponibili, controller di
 // gioco».
 //
@@ -154,85 +208,132 @@ class Scorta {
   final String spiega;
   final List<String> moduli;
   final bool predefinita;
-  const Scorta(this.id, this.nome, this.spiega, this.moduli,
-      {this.predefinita = false});
+  const Scorta(
+    this.id,
+    this.nome,
+    this.spiega,
+    this.moduli, {
+    this.predefinita = false,
+  });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'nome': nome,
-        'spiega': spiega,
-        'moduli': moduli,
-        'predefinita': predefinita,
-      };
+    'id': id,
+    'nome': nome,
+    'spiega': spiega,
+    'moduli': moduli,
+    'predefinita': predefinita,
+  };
 }
 
 const List<Scorta> scorte = [
   Scorta(
-      'filesystem',
-      'Tutti i filesystem comuni',
-      'ext4, Btrfs, XFS, F2FS, FAT, exFAT, NTFS, CD e DVD: qualunque chiavetta '
-          'o disco tu colleghi, si legge.',
-      [
-        'ext4', 'btrfs', 'xfs', 'f2fs', 'fat', 'vfat', 'exfat', 'ntfs3',
-        'isofs', 'udf', 'fuse', 'overlay', 'squashfs', 'nls_utf8',
-        'nls_cp437', 'nls_iso8859_1', 'nls_ascii',
-      ],
-      predefinita: true),
+    'filesystem',
+    'Tutti i filesystem comuni',
+    'ext4, Btrfs, XFS, F2FS, FAT, exFAT, NTFS, CD e DVD: qualunque chiavetta '
+        'o disco tu colleghi, si legge.',
+    [
+      'ext4',
+      'btrfs',
+      'xfs',
+      'f2fs',
+      'fat',
+      'vfat',
+      'exfat',
+      'ntfs3',
+      'isofs',
+      'udf',
+      'fuse',
+      'overlay',
+      'squashfs',
+      'nls_utf8',
+      'nls_cp437',
+      'nls_iso8859_1',
+      'nls_ascii',
+    ],
+    predefinita: true,
+  ),
   Scorta(
-      'chiavette',
-      'Chiavette e dischi USB',
-      'Memorie USB, dischi esterni, lettori ottici. Senza, una chiavetta non '
-          'compare nemmeno.',
-      ['usb_storage', 'uas', 'sd_mod', 'sr_mod', 'cdrom'],
-      predefinita: true),
+    'chiavette',
+    'Chiavette e dischi USB',
+    'Memorie USB, dischi esterni, lettori ottici. Senza, una chiavetta non '
+        'compare nemmeno.',
+    ['usb_storage', 'uas', 'sd_mod', 'sr_mod', 'cdrom'],
+    predefinita: true,
+  ),
   Scorta(
-      'controller',
-      'Controller di gioco',
-      'Xbox, PlayStation, Nintendo, Steam: anche quelli che colleghi solo '
-          'quando giochi.',
-      [
-        'xpad', 'hid_playstation', 'hid_sony', 'hid_nintendo', 'hid_steam',
-        'hid_microsoft', 'joydev', 'uinput', 'ff_memless',
-        // I pad Bluetooth passano da BlueZ attraverso uhid: senza, un
-        // DualShock si accoppia e poi non esiste.
-        'uhid',
-      ],
-      // Di serie, come le chiavette: un pad si collega il giorno in cui si
-      // gioca, e quel giorno il kernel non si ricompila. È anche quello su
-      // cui conta `ControllerService` — InputPlumber vuole uinput.
-      predefinita: true),
+    'controller',
+    'Controller di gioco',
+    'Xbox, PlayStation, Nintendo, Steam: anche quelli che colleghi solo '
+        'quando giochi.',
+    [
+      'xpad', 'hid_playstation', 'hid_sony', 'hid_nintendo', 'hid_steam',
+      'hid_microsoft', 'joydev', 'uinput', 'ff_memless',
+      // I pad Bluetooth passano da BlueZ attraverso uhid: senza, un
+      // DualShock si accoppia e poi non esiste.
+      'uhid',
+    ],
+    // Di serie, come le chiavette: un pad si collega il giorno in cui si
+    // gioca, e quel giorno il kernel non si ricompila. È anche quello su
+    // cui conta `ControllerService` — InputPlumber vuole uinput.
+    predefinita: true,
+  ),
   Scorta(
+    'bluetooth',
+    'Bluetooth',
+    'Adattatori USB, cuffie, controller senza fili.',
+    [
       'bluetooth',
-      'Bluetooth',
-      'Adattatori USB, cuffie, controller senza fili.',
-      ['bluetooth', 'btusb', 'btintel', 'btrtl', 'btbcm', 'btmtk', 'rfcomm',
-       'bnep', 'hidp']),
+      'btusb',
+      'btintel',
+      'btrtl',
+      'btbcm',
+      'btmtk',
+      'rfcomm',
+      'bnep',
+      'hidp',
+    ],
+  ),
   Scorta(
-      'vpn',
-      'VPN',
-      'WireGuard e le interfacce virtuali che usano OpenVPN e le app VPN.',
-      ['wireguard', 'tun', 'tap']),
+    'vpn',
+    'VPN',
+    'WireGuard e le interfacce virtuali che usano OpenVPN e le app VPN.',
+    ['wireguard', 'tun', 'tap'],
+  ),
   Scorta(
-      'virtualizzazione',
-      'Macchine virtuali',
-      'KVM con QEMU, virt-manager o GNOME Boxes, e il passaggio di una scheda '
-          'alla macchina virtuale.',
-      ['kvm', 'kvm_amd', 'kvm_intel', 'vhost_net', 'vhost', 'tun', 'bridge',
-       'vfio', 'vfio_pci', 'vfio_iommu_type1']),
+    'virtualizzazione',
+    'Macchine virtuali',
+    'KVM con QEMU, virt-manager o GNOME Boxes, e il passaggio di una scheda '
+        'alla macchina virtuale.',
+    [
+      'kvm',
+      'kvm_amd',
+      'kvm_intel',
+      'vhost_net',
+      'vhost',
+      'tun',
+      'bridge',
+      'vfio',
+      'vfio_pci',
+      'vfio_iommu_type1',
+    ],
+  ),
+  Scorta('webcam', 'Webcam', 'Le webcam USB standard, quasi tutte (UVC).', [
+    'uvcvideo',
+    'videodev',
+    'videobuf2_common',
+    'videobuf2_v4l2',
+    'videobuf2_vmalloc',
+    'videobuf2_memops',
+  ]),
   Scorta(
-      'webcam',
-      'Webcam',
-      'Le webcam USB standard, quasi tutte (UVC).',
-      ['uvcvideo', 'videodev', 'videobuf2_common', 'videobuf2_v4l2',
-       'videobuf2_vmalloc', 'videobuf2_memops']),
-  Scorta(
-      'stampa',
-      'Stampanti USB (driver del kernel)',
-      'Solo il driver generico `usblp`. Attenzione: i driver veri di Canon, '
-          'Epson e HP stanno in CUPS, fuori dal kernel, e di solito non usano '
-          'nemmeno questo. Scremare le marche si fa togliendo pacchetti, non '
-          'moduli.',
-      ['usblp']),
+    'stampa',
+    'Stampanti USB (driver del kernel)',
+    'Solo il driver generico `usblp`. Attenzione: i driver veri di Canon, '
+        'Epson e HP stanno in CUPS, fuori dal kernel, e di solito non usano '
+        'nemmeno questo. Scremare le marche si fa togliendo pacchetti, non '
+        'moduli.',
+    ['usblp'],
+  ),
 ];
 
 // ── I preset ────────────────────────────────────────────────────────────
@@ -247,8 +348,11 @@ class Impostazione {
   final String perche;
   const Impostazione(this.simbolo, this.valore, this.perche);
 
-  Map<String, dynamic> toJson() =>
-      {'simbolo': simbolo, 'valore': valore, 'perche': perche};
+  Map<String, dynamic> toJson() => {
+    'simbolo': simbolo,
+    'valore': valore,
+    'perche': perche,
+  };
 }
 
 class Preset {
@@ -272,23 +376,27 @@ class Preset {
 
   final List<Impostazione> extra;
 
-  const Preset(this.id, this.nome, this.spiega,
-      {required this.hz,
-      required this.prelazione,
-      this.scorte = const [],
-      this.togliFamiglie = const [],
-      this.extra = const []});
+  const Preset(
+    this.id,
+    this.nome,
+    this.spiega, {
+    required this.hz,
+    required this.prelazione,
+    this.scorte = const [],
+    this.togliFamiglie = const [],
+    this.extra = const [],
+  });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'nome': nome,
-        'spiega': spiega,
-        'hz': hz,
-        'prelazione': prelazione,
-        'scorte': scorte,
-        'togliFamiglie': togliFamiglie,
-        'extra': [for (final e in extra) e.toJson()],
-      };
+    'id': id,
+    'nome': nome,
+    'spiega': spiega,
+    'hz': hz,
+    'prelazione': prelazione,
+    'scorte': scorte,
+    'togliFamiglie': togliFamiglie,
+    'extra': [for (final e in extra) e.toJson()],
+  };
 }
 
 /// ── Una cosa detta chiaramente sul tick ─────────────────────────────────
@@ -299,39 +407,60 @@ class Preset {
 /// valori qui sotto sono quelli ragionevoli per l'uso, non promesse di
 /// fotogrammi: la sola prova vera è misurare, prima e dopo.
 const List<Preset> presets = [
-  Preset('gaming', 'Gioco',
-      'Reattività prima di tutto: tick alto, prelazione piena, controller '
-          'sempre pronti.',
-      hz: 1000,
-      prelazione: 'full',
-      scorte: ['controller'],
-      extra: [
-        Impostazione('TRANSPARENT_HUGEPAGE_MADVISE', 'y',
-            'Le pagine enormi solo a chi le chiede: evita i blocchi di '
-                'compattazione nel mezzo di una partita.'),
-        // Le altre due voci dello stesso «choice», spente a mano: con due
-        // voci accese decide `olddefconfig`, e di solito tiene quella che
-        // c'era. È successo col modello di prelazione, compilando davvero.
-        Impostazione('TRANSPARENT_HUGEPAGE_ALWAYS', 'n',
-            'Escluso: si usa TRANSPARENT_HUGEPAGE_MADVISE.'),
-        Impostazione('TRANSPARENT_HUGEPAGE_NEVER', 'n',
-            'Escluso: si usa TRANSPARENT_HUGEPAGE_MADVISE.'),
-      ]),
-  Preset('ufficio', 'Ufficio',
-      'Un desktop tranquillo: consuma meno, risponde bene.',
-      hz: 300,
-      prelazione: 'voluntary'),
-  Preset('studio', 'Studio audio e video',
-      'Latenza bassa e costante per registrare e montare.',
-      hz: 1000,
-      prelazione: 'full',
-      scorte: ['webcam']),
-  Preset('server', 'Server',
-      'Resa sostenuta: tick basso, nessuna prelazione, via audio, controller, '
-          'webcam e Bluetooth anche se collegati.',
-      hz: 250,
-      prelazione: 'none',
-      togliFamiglie: ['audio', 'controller', 'webcam', 'bluetooth']),
+  Preset(
+    'gaming',
+    'Gioco',
+    'Reattività prima di tutto: tick alto, prelazione piena, controller '
+        'sempre pronti.',
+    hz: 1000,
+    prelazione: 'full',
+    scorte: ['controller'],
+    extra: [
+      Impostazione(
+        'TRANSPARENT_HUGEPAGE_MADVISE',
+        'y',
+        'Le pagine enormi solo a chi le chiede: evita i blocchi di '
+            'compattazione nel mezzo di una partita.',
+      ),
+      // Le altre due voci dello stesso «choice», spente a mano: con due
+      // voci accese decide `olddefconfig`, e di solito tiene quella che
+      // c'era. È successo col modello di prelazione, compilando davvero.
+      Impostazione(
+        'TRANSPARENT_HUGEPAGE_ALWAYS',
+        'n',
+        'Escluso: si usa TRANSPARENT_HUGEPAGE_MADVISE.',
+      ),
+      Impostazione(
+        'TRANSPARENT_HUGEPAGE_NEVER',
+        'n',
+        'Escluso: si usa TRANSPARENT_HUGEPAGE_MADVISE.',
+      ),
+    ],
+  ),
+  Preset(
+    'ufficio',
+    'Ufficio',
+    'Un desktop tranquillo: consuma meno, risponde bene.',
+    hz: 300,
+    prelazione: 'voluntary',
+  ),
+  Preset(
+    'studio',
+    'Studio audio e video',
+    'Latenza bassa e costante per registrare e montare.',
+    hz: 1000,
+    prelazione: 'full',
+    scorte: ['webcam'],
+  ),
+  Preset(
+    'server',
+    'Server',
+    'Resa sostenuta: tick basso, nessuna prelazione, via audio, controller, '
+        'webcam e Bluetooth anche se collegati.',
+    hz: 250,
+    prelazione: 'none',
+    togliFamiglie: ['audio', 'controller', 'webcam', 'bluetooth'],
+  ),
 ];
 
 /// Il risultato di più preset scelti insieme.
@@ -341,15 +470,20 @@ class PresetCombinati {
   final Set<String> scorte;
   final Set<String> togliFamiglie;
   final List<Impostazione> impostazioni;
-  const PresetCombinati(this.hz, this.prelazione, this.scorte,
-      this.togliFamiglie, this.impostazioni);
+  const PresetCombinati(
+    this.hz,
+    this.prelazione,
+    this.scorte,
+    this.togliFamiglie,
+    this.impostazioni,
+  );
 }
 
 const _ordinePrelazione = ['none', 'voluntary', 'full'];
 
 /// ── Come si combinano ───────────────────────────────────────────────────
 ///
-/// Giacomo voleva poterne scegliere più d'uno («gaming» e «studio» sulla
+/// il manutentore voleva poterne scegliere più d'uno («gaming» e «studio» sulla
 /// stessa macchina). Le regole sono due, e sono scelte perché si possano
 /// dire in una riga:
 ///
@@ -398,12 +532,17 @@ PresetCombinati? combinaPreset(Iterable<String> scelti) {
 /// «choice» di Kconfig due voci accese lasciano decidere a `olddefconfig`,
 /// e non si sa quale sceglie.
 List<Impostazione> _tick(int hz) => [
-      for (final v in const [100, 250, 300, 1000])
-        Impostazione('HZ_$v', v == hz ? 'y' : 'n',
-            v == hz ? 'Il timer batte $hz volte al secondo.' : 'Escluso: '
-                'si usa HZ_$hz.'),
-      Impostazione('HZ', '$hz', 'Il valore numerico che va col simbolo scelto.'),
-    ];
+  for (final v in const [100, 250, 300, 1000])
+    Impostazione(
+      'HZ_$v',
+      v == hz ? 'y' : 'n',
+      v == hz
+          ? 'Il timer batte $hz volte al secondo.'
+          : 'Escluso: '
+                'si usa HZ_$hz.',
+    ),
+  Impostazione('HZ', '$hz', 'Il valore numerico che va col simbolo scelto.'),
+];
 
 /// ── Il modello di prelazione, e il kernel che cambia sotto i piedi ──────
 ///
@@ -428,15 +567,20 @@ List<Impostazione> _prelazione(String p) {
   };
   const perche = {
     'none': 'Nessuna prelazione nel kernel: più resa, meno reattività.',
-    'voluntary': 'Il kernel cede il passo nei punti sicuri: l\'equilibrio '
+    'voluntary':
+        'Il kernel cede il passo nei punti sicuri: l\'equilibrio '
         'di un desktop.',
-    'full': 'Il kernel si può interrompere quasi ovunque: la risposta più '
+    'full':
+        'Il kernel si può interrompere quasi ovunque: la risposta più '
         'rapida all\'utente.',
   };
   return [
     for (final e in simboli.entries)
-      Impostazione(e.value, e.key == p ? 'y' : 'n',
-          e.key == p ? perche[p]! : 'Escluso: si usa ${simboli[p]}.'),
+      Impostazione(
+        e.value,
+        e.key == p ? 'y' : 'n',
+        e.key == p ? perche[p]! : 'Escluso: si usa ${simboli[p]}.',
+      ),
     // Resta la possibilità di cambiarla all'avvio con `preempt=`, se il
     // kernel di partenza l'aveva: non la si toglie a nessuno.
   ];
@@ -452,13 +596,23 @@ List<Impostazione> _prelazione(String p) {
 /// partono. Per provare se il kernel si avvia va benissimo; per il kernel di
 /// tutti i giorni no.
 const List<Impostazione> provaVeloce = [
-  Impostazione('DEBUG_INFO_NONE', 'y',
-      'Niente simboli di debug: la compilazione dura molto meno.'),
-  Impostazione('DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT', 'n', 'Va con DEBUG_INFO_NONE.'),
+  Impostazione(
+    'DEBUG_INFO_NONE',
+    'y',
+    'Niente simboli di debug: la compilazione dura molto meno.',
+  ),
+  Impostazione(
+    'DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT',
+    'n',
+    'Va con DEBUG_INFO_NONE.',
+  ),
   Impostazione('DEBUG_INFO_DWARF4', 'n', 'Va con DEBUG_INFO_NONE.'),
   Impostazione('DEBUG_INFO_DWARF5', 'n', 'Va con DEBUG_INFO_NONE.'),
-  Impostazione('DEBUG_INFO_BTF', 'n',
-      'Senza debug non c\'è BTF: sched_ext non sarà disponibile.'),
+  Impostazione(
+    'DEBUG_INFO_BTF',
+    'n',
+    'Senza debug non c\'è BTF: sched_ext non sarà disponibile.',
+  ),
 ];
 
 /// Clang con LTO sottile. Con GCC non si chiede: nel kernel ufficiale LTO
@@ -474,9 +628,12 @@ const List<Impostazione> provaVeloce = [
 /// `CONFIG_LTO_CLANG_THIN`). `LTO_CLANG_THIN_DIST` (7.x) è ThinLTO
 /// distribuito: stesso risultato, serve a chi compila su più macchine.
 const List<Impostazione> ltoSottile = [
-  Impostazione('LTO_CLANG_THIN', 'y',
-      'Ottimizza fra un file e l\'altro, in parallelo: kernel un po\' più '
-          'rapido, compilazione più lunga.'),
+  Impostazione(
+    'LTO_CLANG_THIN',
+    'y',
+    'Ottimizza fra un file e l\'altro, in parallelo: kernel un po\' più '
+        'rapido, compilazione più lunga.',
+  ),
   Impostazione('LTO_NONE', 'n', 'Va con LTO_CLANG_THIN.'),
   Impostazione('LTO_CLANG_FULL', 'n', 'Va con LTO_CLANG_THIN.'),
   Impostazione('LTO_CLANG_THIN_DIST', 'n', 'Va con LTO_CLANG_THIN.'),
@@ -486,8 +643,12 @@ const List<Impostazione> ltoSottile = [
 /// configurazione di partenza compilata con ThinLTO (quella di CachyOS) lo
 /// terrebbe acceso.
 const List<Impostazione> ltoNessuno = [
-  Impostazione('LTO_NONE', 'y', 'LTO non scelto: spento anche se il kernel '
-      'di partenza lo aveva.'),
+  Impostazione(
+    'LTO_NONE',
+    'y',
+    'LTO non scelto: spento anche se il kernel '
+        'di partenza lo aveva.',
+  ),
   Impostazione('LTO_CLANG_THIN', 'n', 'Va con LTO_NONE.'),
   Impostazione('LTO_CLANG_FULL', 'n', 'Va con LTO_NONE.'),
   Impostazione('LTO_CLANG_THIN_DIST', 'n', 'Va con LTO_NONE.'),
@@ -495,7 +656,7 @@ const List<Impostazione> ltoNessuno = [
 
 // ── Su misura dentro il kernel ──────────────────────────────────────────
 //
-// Giacomo, 1° ottobre 2026: «kernel mai visti prima per precisione di
+// il manutentore, 1° ottobre 2026: «kernel mai visti prima per precisione di
 // personalizzazione su misura del PC». `localmodconfig` lavora solo sui
 // moduli; queste regole toccano quello che sta DENTRO il kernel, e ognuna
 // viene da una misura fatta sulla macchina nel rilievo.
@@ -520,7 +681,6 @@ const Map<String, String> _soloIntel = {
 // I regolatori di frequenza (`X86_INTEL_PSTATE`, `X86_AMD_PSTATE`) NON sono
 // qui: li accende `SCHED_MC_PRIO` per i core preferiti, e chiederli spenti
 // dava solo un avviso. Trovato compilando davvero il 7.2.8, 1° ottobre 2026.
-
 
 /// Funzioni che esistono solo sui processori AMD.
 const Map<String, String> _soloAmd = {
@@ -557,12 +717,22 @@ List<Impostazione> suMisura(Map<String, dynamic> macchina) {
     }
     if (nr > 512) nr = 512; // il massimo senza CPUMASK_OFFSTACK
     if (nr >= quanti) {
-      fuori.add(Impostazione('MAXSMP', 'n',
-          'MAXSMP fissa NR_CPUS a 8192: spento, per poterlo misurare.'));
-      fuori.add(Impostazione('NR_CPUS', '$nr',
+      fuori.add(
+        Impostazione(
+          'MAXSMP',
+          'n',
+          'MAXSMP fissa NR_CPUS a 8192: spento, per poterlo misurare.',
+        ),
+      );
+      fuori.add(
+        Impostazione(
+          'NR_CPUS',
+          '$nr',
           'Questa macchina ha $quanti processori possibili: se ne prevedono '
               '$nr (la potenza di due successiva, come margine) invece di '
-              'centinaia.'));
+              'centinaia.',
+        ),
+      );
     }
   }
 
@@ -573,9 +743,14 @@ List<Impostazione> suMisura(Map<String, dynamic> macchina) {
   // per niente. Un Threadripper o un EPYC impostati per avere più nodi li
   // mostrano in /sys, e lì la regola non scatta.
   if (macchina['nodiNuma'] == 1) {
-    fuori.add(const Impostazione('NUMA', 'n',
+    fuori.add(
+      const Impostazione(
+        'NUMA',
+        'n',
         'Un solo nodo di memoria: il codice NUMA non avrebbe niente da '
-            'bilanciare.'));
+            'bilanciare.',
+      ),
+    );
   }
 
   // ── Le funzioni dell'altro fornitore ─────────────────────────────────

@@ -6,7 +6,7 @@ import 'dart:io';
 ///
 /// ── Perché esiste, e perché il telefono non si accoppiava ─────────────────
 ///
-/// Giacomo, 18 agosto 2026: «non riesco ad accoppiare il mio Redmi Note 12
+/// il manutentore, 18 agosto 2026: «non riesco ad accoppiare il mio Redmi Note 12
 /// Pro Plus 5G». Il difetto era già scritto, e da un mese: la pagina delle
 /// Impostazioni registra `agent NoInputNoOutput`, e accanto c'era la nota
 /// «per i dispositivi che vogliono confrontare un codice a video servirà un

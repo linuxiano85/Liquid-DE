@@ -4,7 +4,7 @@ import "../theme" as Theme
 
 // WobblyControls — Le finestre tremolanti: acceso o spento, e quanto.
 //
-// Giacomo, 10 settembre 2026: «voglio le finestre tremolanti». E il 12, a
+// il manutentore, 10 settembre 2026: «voglio le finestre tremolanti». E il 12, a
 // Codex: «vorrei avere l'effetto e l'impostazione della sua elasticità nelle
 // impostazioni».
 //

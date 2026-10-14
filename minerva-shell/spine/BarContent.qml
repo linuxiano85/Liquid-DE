@@ -90,6 +90,7 @@ Item {
 
         Workspaces {
             anchors.verticalCenter: parent.verticalCenter
+            onOverviewRequested:Core.Compositore.panoramicaChiesta(bar.spine.screen ? bar.spine.screen.name:"")
         }
 
         // ── Le finestre aperte, per chi non ha la dock ───────────────────
@@ -281,7 +282,7 @@ Item {
 
         // ── Il cartello del demone muto ──────────────────────────────
         //
-        // 31 agosto 2026. Giacomo: «sia qui che nella sessione wlroot non ho
+        // 31 agosto 2026. il manutentore: «sia qui che nella sessione wlroot non ho
         // la dock e nemmeno le voci nel menu delle applicazioni».
         //
         // Il demone era caduto e la shell non era più riuscita a ritrovarlo.
@@ -340,7 +341,7 @@ Item {
 
         // ── Ricarica la scrivania ────────────────────────────────────
         //
-        // Giacomo, 2 settembre 2026: «mettiamo un tasto disattivabile accanto
+        // il manutentore, 2 settembre 2026: «mettiamo un tasto disattivabile accanto
         // al meteo dove posso riavviare la shell».
         //
         // ── Ricarica, non riavvia, e la differenza si vede ───────────────
@@ -377,6 +378,11 @@ Item {
         // I programmi che vivono senza finestra. Sta PRIMA dello stato del
         // sistema perché appartiene ai programmi, non alla macchina: a destra
         // di qui comincia Minerva, a sinistra ci sono ancora loro.
+        TilingButton {
+            anchors.verticalCenter: parent.verticalCenter
+            onSettingsRequested: bar.spine.windowSettingsRequested()
+        }
+
         Vassoio {
             anchors.verticalCenter: parent.verticalCenter
         }

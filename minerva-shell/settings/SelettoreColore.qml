@@ -8,7 +8,7 @@ import "../theme" as Theme
 // In tutta Minerva non esisteva un modo di scegliere un colore: l'accento era
 // una fila di otto pasticche, e il tema uno di sei. Va benissimo per chi vuole
 // una scrivania che stia insieme senza pensarci — ed è il motivo per cui le
-// otto pasticche restano — ma Giacomo, 3 settembre 2026: «se voglio il colore
+// otto pasticche restano — ma il manutentore, 3 settembre 2026: «se voglio il colore
 // delle finestre rosa i caratteri viola e altre cose stravaganti?».
 //
 // ── Perché è fatto di rettangoli e non di uno shader ───────────────────────

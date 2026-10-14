@@ -9,20 +9,21 @@ import 'ricetta.dart';
 ///
 /// ── Le due sorgenti ─────────────────────────────────────────────────────
 ///
-/// Giacomo usava «sia i repository di Linux che quelli di CachyOS».
+/// il manutentore usava «sia i repository di Linux che quelli di CachyOS».
 ///
 /// * **Linux**: l'archivio ufficiale da kernel.org.
 /// * **CachyOS, dalla 6.17**: l'archivio di CachyOS stesso
-///   (`github.com/CachyOS/linux`, etichetta `cachyos-<versione>-<n>`), che è
-///   già il loro kernel con le loro patch e lo scheduler BORE dentro — quello
-///   che scarica il loro PKGBUILD. Firmato da due sviluppatori di CachyOS.
+///   (`github.com/CachyOS/linux`, etichetta `cachyos-<versione>-<n>`), cioè
+///   l'albero firmato che usano per il loro kernel. La firma autentica i
+///   sorgenti, ma le singole opzioni — compreso BORE — vanno verificate nel
+///   Kconfig della versione scaricata: non si presume che esistano.
 /// * **CachyOS prima della 6.17**: l'archivio di kernel.org con la loro serie
-///   base e BORE applicati sopra, come faceva il loro PKGBUILD allora.
+///   base e la patch BORE applicate sopra, come faceva il loro PKGBUILD allora.
 ///
 /// Fino al 4 ottobre 2026 la Fucina faceva la terza cosa per TUTTE le serie.
 /// Dalla 6.18 la serie base non c'è più, e la patch BORE è scritta per il
 /// LORO albero, non per quello di kernel.org: sul 7.2.9 falliva 9 blocchi su
-/// 22. Giacomo: «cerca di applicare delle patch e fallisce quando il kernel
+/// 22. il manutentore: «cerca di applicare delle patch e fallisce quando il kernel
 /// cachy ha già tante patch».
 ///
 /// ── Due controlli, e che cosa garantisce ognuno ─────────────────────────
@@ -57,20 +58,22 @@ class Sorgenti {
   Sorgenti({
     Future<String?> Function(Uri)? testo,
     Future<bool> Function(Uri)? esiste,
-  })  : testo = testo ?? _testoVero,
-        esiste = esiste ?? _esisteVero;
+  }) : testo = testo ?? _testoVero,
+       esiste = esiste ?? _esisteVero;
 
   static final Uri rilasci = Uri.parse('https://www.kernel.org/releases.json');
 
   static Uri archivio(String versione) => Uri.parse(
-      'https://cdn.kernel.org/pub/linux/kernel/v${versione.split('.').first}.x/'
-      'linux-$versione.tar.xz');
+    'https://cdn.kernel.org/pub/linux/kernel/v${versione.split('.').first}.x/'
+    'linux-$versione.tar.xz',
+  );
 
   /// La firma dello sviluppatore: è sull'archivio `.tar`, non sul `.xz`,
   /// quindi si verifica decomprimendo.
   static Uri firma(String versione) => Uri.parse(
-      'https://cdn.kernel.org/pub/linux/kernel/v${versione.split('.').first}.x/'
-      'linux-$versione.tar.sign');
+    'https://cdn.kernel.org/pub/linux/kernel/v${versione.split('.').first}.x/'
+    'linux-$versione.tar.sign',
+  );
 
   /// Chi firma i rilasci del kernel, per impronta primaria. Dalla pagina
   /// https://www.kernel.org/signature.html, sezione «Important fingerprints».
@@ -85,27 +88,33 @@ class Sorgenti {
   /// kernel.org. Il nome del file sono gli ultimi sedici caratteri
   /// dell'impronta.
   static Uri chiave(String impronta) => Uri.parse(
-      'https://git.kernel.org/pub/scm/docs/kernel/pgpkeys.git/plain/keys/'
-      '${impronta.substring(impronta.length - 16)}.asc');
+    'https://git.kernel.org/pub/scm/docs/kernel/pgpkeys.git/plain/keys/'
+    '${impronta.substring(impronta.length - 16)}.asc',
+  );
 
   /// Dall'uscita `--status-fd` di gpg: l'impronta primaria di una firma
   /// valida, o `null`. La riga è `[GNUPG:] VALIDSIG` seguita
   /// dall'impronta della sottochiave, da altri campi e, in fondo,
   /// dall'impronta primaria: conta l'ultima.
   static String? firmataDa(String stato) {
-    if (RegExp(r'^\[GNUPG:\] (BADSIG|ERRSIG|EXPKEYSIG|REVKEYSIG) ', multiLine: true)
-        .hasMatch(stato)) {
+    if (RegExp(
+      r'^\[GNUPG:\] (BADSIG|ERRSIG|EXPKEYSIG|REVKEYSIG) ',
+      multiLine: true,
+    ).hasMatch(stato)) {
       return null;
     }
-    final m = RegExp(r'^\[GNUPG:\] VALIDSIG (.+)$', multiLine: true)
-        .firstMatch(stato);
+    final m = RegExp(
+      r'^\[GNUPG:\] VALIDSIG (.+)$',
+      multiLine: true,
+    ).firstMatch(stato);
     if (m == null) return null;
     return m.group(1)!.trim().split(RegExp(r'\s+')).last.toUpperCase();
   }
 
   static Uri somme(String versione) => Uri.parse(
-      'https://cdn.kernel.org/pub/linux/kernel/v${versione.split('.').first}.x/'
-      'sha256sums.asc');
+    'https://cdn.kernel.org/pub/linux/kernel/v${versione.split('.').first}.x/'
+    'sha256sums.asc',
+  );
 
   /// La serie base di CachyOS per una serie del kernel. **Può non
   /// esserci**: fino alla 6.17 CachyOS la pubblicava in
@@ -113,32 +122,37 @@ class Sorgenti {
   /// (trovato il 30 settembre 2026 guardando il loro repository, dopo che la
   /// prima versione della Fucina la dava per scontata).
   static Uri baseCachyos(String serie, [String rif = 'master']) => Uri.parse(
-      'https://raw.githubusercontent.com/CachyOS/kernel-patches/$rif/'
-      '$serie/all/0001-cachyos-base-all.patch');
+    'https://raw.githubusercontent.com/CachyOS/kernel-patches/$rif/'
+    '$serie/all/0001-cachyos-base-all.patch',
+  );
 
   /// Lo scheduler BORE nella versione di CachyOS: c'è per tutte le serie, ed
   /// è quello del loro kernel di serie.
   static Uri boreCachyos(String serie, [String rif = 'master']) => Uri.parse(
-      'https://raw.githubusercontent.com/CachyOS/kernel-patches/$rif/'
-      '$serie/sched/0001-bore-cachy.patch');
+    'https://raw.githubusercontent.com/CachyOS/kernel-patches/$rif/'
+    '$serie/sched/0001-bore-cachy.patch',
+  );
 
   /// Dove si chiede a che commit è `master` delle patch di CachyOS: il
   /// protocollo HTTP di git, lo stesso di `git ls-remote`, che non passa
   /// dall'API di GitHub e dai suoi limiti.
   static final Uri refsCachyos = Uri.parse(
-      'https://github.com/CachyOS/kernel-patches/info/refs?service=git-upload-pack');
+    'https://github.com/CachyOS/kernel-patches/info/refs?service=git-upload-pack',
+  );
 
   /// Le etichette dell'albero di CachyOS, dallo stesso protocollo di git.
   static final Uri refsLinuxCachyos = Uri.parse(
-      'https://github.com/CachyOS/linux/info/refs?service=git-upload-pack');
+    'https://github.com/CachyOS/linux/info/refs?service=git-upload-pack',
+  );
 
   /// L'etichetta di CachyOS per una versione di kernel.org: la più recente
   /// (`cachyos-7.2.9-2` batte `cachyos-7.2.9-1`), o `null` se non c'è.
   static String? etichettaCachyos(String refs, String versione) {
     final v = RegExp.escape(versione);
     var meglio = -1;
-    for (final m in RegExp('refs/tags/cachyos-$v-(\\d+)(?![\\d.^])')
-        .allMatches(refs)) {
+    for (final m in RegExp(
+      'refs/tags/cachyos-$v-(\\d+)(?![\\d.^])',
+    ).allMatches(refs)) {
       final n = int.parse(m.group(1)!);
       if (n > meglio) meglio = n;
     }
@@ -146,13 +160,15 @@ class Sorgenti {
   }
 
   static Uri archivioCachyos(String etichetta) => Uri.parse(
-      'https://github.com/CachyOS/linux/releases/download/$etichetta/'
-      '$etichetta.tar.gz');
+    'https://github.com/CachyOS/linux/releases/download/$etichetta/'
+    '$etichetta.tar.gz',
+  );
 
   /// La firma è sull'archivio `.tar.gz` così com'è.
   static Uri firmaCachyos(String etichetta) => Uri.parse(
-      'https://github.com/CachyOS/linux/releases/download/$etichetta/'
-      '$etichetta.tar.gz.asc');
+    'https://github.com/CachyOS/linux/releases/download/$etichetta/'
+    '$etichetta.tar.gz.asc',
+  );
 
   /// Chi firma gli archivi di CachyOS: i `validpgpkeys` del PKGBUILD di
   /// `linux-cachyos`, copiati il 4 ottobre 2026.
@@ -169,9 +185,8 @@ class Sorgenti {
 
   /// Il commit di `master` dalla risposta di [refsCachyos], o `null`.
   static String? commitDaRefs(String risposta) => RegExp(
-          r'([0-9a-f]{40}) refs/heads/master\b')
-      .firstMatch(risposta)
-      ?.group(1);
+    r'([0-9a-f]{40}) refs/heads/master\b',
+  ).firstMatch(risposta)?.group(1);
 
   /// Le versioni che si possono scegliere, con quale sorgente ha ognuna.
   ///
@@ -207,15 +222,17 @@ class Sorgenti {
       for (final v in fuori)
         () async {
           final versione = '${v['versione']}';
-          final etichetta =
-              refs == null ? null : etichettaCachyos(refs, versione);
+          final etichetta = refs == null
+              ? null
+              : etichettaCachyos(refs, versione);
           if (etichetta != null) {
             v['cachyos'] = true;
             v['cachyosEtichetta'] = etichetta;
             return;
           }
-          final base = await esiste(baseCachyos(serieDi(versione)))
-              .catchError((_) => false);
+          final base = await esiste(
+            baseCachyos(serieDi(versione)),
+          ).catchError((_) => false);
           v['cachyosBase'] = base;
           v['cachyos'] = base;
         }(),
@@ -250,8 +267,10 @@ class Sorgenti {
   /// firma, le intestazioni) non combacia con la forma e si salta.
   static String? sommaDi(String somme, String nomeFile) {
     final nome = RegExp.escape(nomeFile);
-    final m = RegExp('^([0-9a-f]{64})\\s+\\*?$nome\\s*\$', multiLine: true)
-        .firstMatch(somme);
+    final m = RegExp(
+      '^([0-9a-f]{64})\\s+\\*?$nome\\s*\$',
+      multiLine: true,
+    ).firstMatch(somme);
     return m?.group(1);
   }
 
@@ -364,12 +383,12 @@ Future<void> _togli(File f) async {
 /// chi usa il computer), e gpg sull'archivio decompresso. Si accetta solo
 /// una firma valida la cui impronta primaria è fra `Sorgenti.firmatari`.
 Future<String?> verificaArchivio({
-required String versione,
-required File archivio,
-required String portachiavi,
-required Sorgenti sorgenti,
-required Future<String?> Function(Uri, File) scarica,
-void Function(String)? racconta,
+  required String versione,
+  required File archivio,
+  required String portachiavi,
+  required Sorgenti sorgenti,
+  required Future<String?> Function(Uri, File) scarica,
+  void Function(String)? racconta,
 }) async {
   final firma = File('${archivio.path.replaceAll('.tar.xz', '')}.tar.sign');
   final e = await scarica(Sorgenti.firma(versione), firma);
@@ -384,8 +403,13 @@ void Function(String)? racconta,
     final chiave = await sorgenti.testo(Sorgenti.chiave(impronta));
     if (chiave == null) continue;
     try {
-      final p = await Process.start(
-          'gpg', ['--homedir', casa.path, '--batch', '--quiet', '--import']);
+      final p = await Process.start('gpg', [
+        '--homedir',
+        casa.path,
+        '--batch',
+        '--quiet',
+        '--import',
+      ]);
       p.stdin.write(chiave);
       await p.stdin.close();
       await p.stdout.drain<void>();
@@ -402,15 +426,23 @@ void Function(String)? racconta,
   try {
     xz = await Process.start('xz', ['-dc', archivio.path]);
     gpg = await Process.start('gpg', [
-      '--homedir', casa.path, '--batch', '--status-fd', '1',
-      '--verify', firma.path, '-',
+      '--homedir',
+      casa.path,
+      '--batch',
+      '--status-fd',
+      '1',
+      '--verify',
+      firma.path,
+      '-',
     ]);
   } on ProcessException catch (e) {
     return 'Non riesco ad avviare «${e.executable}»: serve per verificare '
         'la firma.';
   }
   final stato = StringBuffer();
-  final letto = gpg.stdout.transform(utf8.decoder).listen(stato.write)
+  final letto = gpg.stdout
+      .transform(utf8.decoder)
+      .listen(stato.write)
       .asFuture<void>();
   final errori = gpg.stderr.drain<void>();
   try {
@@ -431,7 +463,9 @@ void Function(String)? racconta,
         'firmatari di kernel.org: ho cancellato l\'archivio. Se succede '
         'ancora, non fidarti della rete che stai usando.';
   }
-  racconta?.call('Firmato da ${Sorgenti.firmatari[chi]} ($chi): la firma torna.');
+  racconta?.call(
+    'Firmato da ${Sorgenti.firmatari[chi]} ($chi): la firma torna.',
+  );
   return null;
 }
 
@@ -461,8 +495,13 @@ Future<String?> verificaArchivioCachyos({
     final chiave = await sorgenti.testo(Sorgenti.chiaveCachyos(impronta));
     if (chiave == null) continue;
     try {
-      final p = await Process.start(
-          'gpg', ['--homedir', casa.path, '--batch', '--quiet', '--import']);
+      final p = await Process.start('gpg', [
+        '--homedir',
+        casa.path,
+        '--batch',
+        '--quiet',
+        '--import',
+      ]);
       p.stdin.write(chiave);
       await p.stdin.close();
       await p.stdout.drain<void>();
@@ -477,8 +516,14 @@ Future<String?> verificaArchivioCachyos({
   final ProcessResult r;
   try {
     r = await Process.run('gpg', [
-      '--homedir', casa.path, '--batch', '--status-fd', '1',
-      '--verify', firma.path, archivio.path,
+      '--homedir',
+      casa.path,
+      '--batch',
+      '--status-fd',
+      '1',
+      '--verify',
+      firma.path,
+      archivio.path,
     ]);
   } on ProcessException {
     return 'Manca gpg (pacchetto gnupg): senza, la firma di CachyOS non si '
@@ -491,6 +536,7 @@ Future<String?> verificaArchivioCachyos({
         'della rete che stai usando.';
   }
   racconta?.call(
-      'Firmato da ${Sorgenti.firmatariCachyos[chi]} ($chi): la firma torna.');
+    'Firmato da ${Sorgenti.firmatariCachyos[chi]} ($chi): la firma torna.',
+  );
   return null;
 }
