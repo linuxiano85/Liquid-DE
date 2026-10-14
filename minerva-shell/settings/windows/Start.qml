@@ -121,10 +121,12 @@ PaginaWindows {
         disponibile: false
     }
     SchedaImpostazione {
+        objectName: "startCartelle"
         titolo: W.Style.label("Cartelle", "Folders")
         descrizione: W.Style.label("Queste cartelle vengono visualizzate su Start accanto al pulsante Arresta.", "These folders appear on Start next to the Power button.")
         icona: "folder"
-        disponibile: false
+        porta: true
+        onAttivata: if (pagina.finestra) pagina.finestra.apriWindows("w-start-cartelle")
     }
     GruppoImpostazioni { testo: Dati.t(pagina.lingua, "opzioniLiquid") }
     SchedaImpostazione {

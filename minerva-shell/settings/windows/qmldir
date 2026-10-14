@@ -14,6 +14,7 @@ Temi 1.0 Temi.qml
 Personalizzazione 1.0 Personalizzazione.qml
 CatalogoTemi 1.0 CatalogoTemi.qml
 Start 1.0 Start.qml
+CartelleStart 1.0 CartelleStart.qml
 Barra 1.0 Barra.qml
 AnteprimaStart 1.0 AnteprimaStart.qml
 ScegliFileWindows 1.0 ScegliFileWindows.qml

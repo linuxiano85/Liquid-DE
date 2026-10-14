@@ -307,6 +307,13 @@ ShellRoot {
                 rawMuted: Core.SystemState.muted});
         }
         function open(name:string):void {bar.toggle(name);}
+        function focusStartFolder(name:string):bool {
+            var button=root.find(bar.contentItem,"windowsStartFolder-"+name);
+            if (!button)
+                return false;
+            button.forceActiveFocus(Qt.TabFocusReason);
+            return true;
+        }
         function catalog():string {return JSON.stringify(Core.Apps.all);}
         function liquidOpen():void {bar.close();liquid.apri("");}
         function liquidClose():void {liquid.chiudi();}

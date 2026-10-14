@@ -14,6 +14,12 @@ FocusScope {
     readonly property int pinnedRows: layout === "pinned" ? 4 : layout === "recommended" ? 2 : 3
     readonly property int pageSize: pinnedRows * 6
     readonly property int recommendedY: 78 + pinnedRows * 80
+    readonly property var folderShortcuts: {
+        var enabled = Core.Ipc.get("windows11.startFolders", []);
+        return StartPlaces.entries.filter(function(entry) {
+            return entry.available !== false && enabled.indexOf(entry.id) >= 0;
+        });
+    }
     onPageSizeChanged: page = Math.floor(selectedIndex / pageSize)
     property int page: 0
     property int selectedIndex: 0
@@ -79,6 +85,17 @@ FocusScope {
 
     signal closeRequested()
     signal actionRequested(string action)
+    signal folderRequested(string path)
+
+    function openFolder(id) {
+        if (id === "settings") {
+            menu.actionRequested("w-home");
+            return;
+        }
+        var path = StartPlaces.pathFor(id);
+        if (path !== "")
+            menu.folderRequested(path);
+    }
 
     function launch(a) {
         if (!a)
@@ -955,6 +972,7 @@ FocusScope {
             // sta nel menu di questo pulsante, e così non lo si trovava
             // (il manutentore, 12 ottobre 2026: «non vedo esci dalla sessione»).
             text: Core.Utente.nome
+            maximumTextWidth: Math.max(0, collegamenti.x - x - 76)
             avatar: true
             ritratto: Core.Utente.ritratto
             tooltip: Core.Utente.nome
@@ -972,6 +990,26 @@ FocusScope {
             tooltip: Style.label("Alimentazione", "Power")
             selected: menu.piccolo === "power"
             onClicked: menu.piccolo = menu.piccolo === "power" ? "" : "power"
+        }
+
+        Row {
+            id: collegamenti
+            objectName: "windowsStartFolders"
+            anchors.right: pulsanteAlimentazione.left
+            anchors.rightMargin: 4
+            anchors.verticalCenter: parent.verticalCenter
+            Repeater {
+                model: menu.folderShortcuts
+                delegate: Button {
+                    required property var modelData
+                    objectName: "windowsStartFolder-" + modelData.id
+                    width: 36
+                    height: 40
+                    icon: modelData.icon
+                    tooltip: Style.label(modelData.it, modelData.en)
+                    onClicked: menu.openFolder(modelData.id)
+                }
+            }
         }
 
     }

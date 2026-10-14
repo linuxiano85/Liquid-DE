@@ -1,4 +1,5 @@
 module windows11
+singleton StartPlaces 1.0 StartPlaces.qml
 singleton Style 1.0 Style.qml
 Taskbar 1.0 Taskbar.qml
 TaskModel 1.0 TaskModel.qml

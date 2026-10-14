@@ -16,12 +16,19 @@ Future<void> main() async {
 
   try {
     await api.init();
+    check(await api.setValue('stile.attuale', 'windows'), 'preset Windows attivo');
     check(await api.setValue('bar.stile', 'windows11'), 'dedicated taskbar accepted');
     check(await api.setValue('windows11.menu', 'liquid'), 'alternative Start accepted');
     check(await api.setValue('windows11.theme', 'dark'), 'dark theme accepted');
     check(await api.setValue('windows11.wallpaper', 'current'), 'custom wallpaper accepted');
     check(await api.setValue('windows11.showTilingButton', true), 'optional tiling icon accepted');
     check(await api.setValue('windows11.desktops', [1, 3, 7]), 'desktop IDs persist');
+    final folders = ['settings', 'files', 'documents', 'downloads',
+      'music', 'pictures', 'videos', 'home'];
+    check(await api.setValue('windows11.startFolders', folders), 'collegamenti Start accettati');
+    for (final invalid in [null, 'home', ['home', 'home'], ['network'], ['../tmp'], [1]]) {
+      check(!await api.setValue('windows11.startFolders', invalid), 'rifiuta collegamenti invalidi: $invalid');
+    }
     final liquidAccent = api.settings['shell']['accent'];
     check(api.settings['windows11']['accent'] == 'auto', 'Windows accent starts automatic');
     for (final color in ['auto', '#000000', '#ffffff', '#FFB900', '#C239B3']) {
@@ -72,6 +79,11 @@ Future<void> main() async {
         && saved['windows11']['taskbarAlignment'] == 'center'
         && saved['windows11']['taskbarWidgets'] == false, 'nuove preferenze persistenti');
     check(saved['windows11']['theme'] == 'dark' && saved['windows11']['menu'] == 'liquid', 'preferences survive reload');
+    check(jsonEncode(saved['windows11']['startFolders']) == jsonEncode(folders), 'collegamenti persistenti dopo riavvio');
+    check(await api.setValue('stile.attuale', 'liquid'), 'passaggio a Liquid per isolamento collegamenti');
+    check(await api.setValue('windows11.startFolders', ['home']), 'collegamenti diversi nel preset Liquid');
+    check(await api.setValue('stile.attuale', 'windows'), 'ritorno al preset Windows');
+    check(jsonEncode(api.settings['windows11']['startFolders']) == jsonEncode(folders), 'Windows recupera i propri collegamenti');
     check(saved['windows11']['accent'] == '#C239B3' && saved['windows11']['accentOnStart'] == true, 'Windows accent preferences survive reload');
     await api.dispose();
     final original = SettingsApi.defaultSettings();

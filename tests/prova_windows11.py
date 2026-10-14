@@ -55,7 +55,7 @@ try:
  # Il giro integrale comprende anche il mixer, che vuole il suo PipeWire
  # privato già acceso quando parte la shell. I giri mirati non lo accendono.
  GIRI_MIRATI=('AUDIO_MIXER','VOLUME_CONTEXT','MIXER_SHORTCUT','WIFI','BLUETOOTH','QUICK_TILES',
-     'VOLUME_OVERDRIVE','VOLUME_WHEEL','QUICK_AUDIO','DESKTOP_SAFETY','PREVIEWS_ONLY','START_VIEWS_ONLY','START_BAR_OPTIONS','APP_REFRESH')
+     'VOLUME_OVERDRIVE','VOLUME_WHEEL','QUICK_AUDIO','DESKTOP_SAFETY','PREVIEWS_ONLY','START_VIEWS_ONLY','START_BAR_OPTIONS','START_FOLDERS','APP_REFRESH')
  giro_integrale=not any(os.environ.get('MINERVA_TEST_'+g)=='1' for g in GIRI_MIRATI)
  if os.environ.get('MINERVA_TEST_AUDIO_MIXER') == '1' or giro_integrale:
      # Senza gestore sessione non si enumerano schede ALSA: questi flussi
@@ -65,6 +65,17 @@ try:
      env['PULSE_SERVER']='unix:'+tmp+'/pulse/native'
      private_audio=spawn(['pipewire'],env,'pipewire')
      wait(lambda:Path(tmp+'/pipewire-0').exists())
+ # Percorsi XDG spostati con caratteri riservati, prima che Qt li legga.
+ folder_paths={}
+ if os.environ.get('MINERVA_TEST_START_FOLDERS') == '1':
+     config_dir=Path(env['XDG_CONFIG_HOME']);config_dir.mkdir(parents=True,exist_ok=True)
+     xdg=[]
+     for folder,kind in [('documents','DOCUMENTS'),('downloads','DOWNLOAD'),('music','MUSIC'),('pictures','PICTURES'),('videos','VIDEOS')]:
+         destination=Path(tmp)/'Raccolta #é %test'/folder
+         destination.mkdir(parents=True)
+         folder_paths[folder]=str(destination)
+         xdg.append('XDG_'+kind+'_DIR="'+str(destination)+'"')
+     (config_dir/'user-dirs.dirs').write_text('\n'.join(xdg)+'\n')
  env.pop('MINERVA_CANALE',None)
  wifi_state_file=Path(tmp)/'wifi-state.json'
  wifi_state_file.write_text(json.dumps({'radio':True,'selected':'Rete salvata','networks':[
@@ -363,6 +374,48 @@ try:
      time.sleep(3)
      check('nessuna scansione periodica con launcher chiusi',scans() == before)
      check('sorgenti invariati durante la prova',source_hashes() == source_snapshot)
+     completed=True
+     raise SystemExit(0)
+ if os.environ.get('MINERVA_TEST_START_FOLDERS') == '1':
+     all_folders=['settings','files','documents','downloads','music','pictures','videos','home']
+     call('preference','windows11.startFolders',json.dumps(all_folders[::-1]))
+     for theme in ['light','dark']:
+         call('theme',theme)
+         call('open','start');settle()
+         controls=ui_state()['controls']
+         shortcuts=[controls['windowsStartFolder-'+name] for name in all_folders]
+         check('collegamenti ordinati come Windows in '+theme,all(a['x']<b['x'] for a,b in zip(shortcuts,shortcuts[1:])))
+         account=controls['windowsStartAccount'];power=controls['windowsStartPower']
+         check('account e collegamenti non si sovrappongono in '+theme,account['x']+account['width']/2 <= shortcuts[0]['x']-shortcuts[0]['width']/2)
+         check('collegamenti separati da alimentazione in '+theme,shortcuts[-1]['x']+shortcuts[-1]['width']/2 < power['x']-power['width']/2)
+         screenshot('start-cartelle-'+theme)
+         call('close');settle()
+     for name in all_folders:
+         call('open','start');settle()
+         click('windowsStartFolder-'+name)
+         check(name+' chiude Start dopo il clic',ui_state()['panel']=='')
+         if name=='settings':
+             check('Impostazioni richiede Home Windows',ui_state()['ultimaSezione']=='w-home')
+         else:
+             actions=json.loads((Path(tmp)/'actions.json').read_text())
+             expected=folder_paths.get(name,os.environ['HOME'])
+             check(name+' invia il percorso reale senza alterarlo',actions[-1].get('action')=='open_default' and actions[-1].get('paths')==[expected],actions[-1])
+     call('open','start');settle()
+     check('fuoco sui collegamenti accessibile da tastiera',call('focusStartFolder','files')=='true')
+     key('Tab',[])
+     key('Return',[])
+     check('Tab e Invio aprono Documenti',json.loads((Path(tmp)/'actions.json').read_text())[-1].get('paths')==[folder_paths['documents']])
+     check('Invio chiude Start',ui_state()['panel']=='')
+     call('open','start');settle()
+     call('focusStartFolder','downloads')
+     key('space',[])
+     check('Spazio apre Download',json.loads((Path(tmp)/'actions.json').read_text())[-1].get('paths')==[folder_paths['downloads']])
+     check('Spazio chiude Start',ui_state()['panel']=='')
+     call('preference','windows11.startFolders','[]')
+     call('open','start');settle()
+     check('tutti i collegamenti possono essere nascosti',not any(k.startswith('windowsStartFolder-') for k in ui_state()['controls']))
+     call('close');settle()
+     check('sorgenti invariati durante la prova',source_hashes()==source_snapshot)
      completed=True
      raise SystemExit(0)
  if os.environ.get('MINERVA_TEST_START_BAR_OPTIONS') == '1':
@@ -1440,7 +1493,7 @@ try:
      raw=real_call('status');return json.loads(raw) if raw else {'ready':False}
  wait(lambda:real_state()['ready'],25);settle()
  check('actual shell registers dedicated Windows taskbar',real_state()['windowsMode'] and real_state()['bar'],real_state())
- check('actual shell resolves its wallpaper to an existing filesystem asset',Path(real_state()['wallpaper']).is_file(),real_state())
+ check('actual shell resolves Bloom to existing filesystem asset',Path(real_state()['wallpaper']).is_file(),real_state())
  # La barra nascosta non basta: bordi, IPC, Super e cambio stanza erano ingressi separati.
  def no_islands(st):
      return (not st['rivaEnabled'] and not st['guide'] and not st['consent']

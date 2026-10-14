@@ -15,3 +15,6 @@ info, person_feedback, phone_laptop (24 regular), stesso commit.
 
 Personalizzazione Start/barra, 13 ottobre 2026: arrow_download, star e
 calendar (24 regular), stesso commit e licenza MIT.
+
+Cartelle dello Start, 14 ottobre 2026: music_note_2, video e folder_person
+(24 regular), stesso commit e licenza MIT. Nessuna modifica ai tracciati.

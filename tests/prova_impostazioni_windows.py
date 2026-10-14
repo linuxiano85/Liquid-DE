@@ -512,6 +512,45 @@ def main():
             (ART / 'selettore.json').write_text(json.dumps({'passati': PASSATI, 'erroriQml': errors}, indent=2))
             riuscita = True
             return 0
+        if os.environ.get('MINERVA_TEST_SETTINGS_FOLDERS') == '1':
+            chiama('paginaWindows', 'w-start')
+            aspetta(lambda: 'startCartelle' in stato()['controlli'])
+            clic_su('startCartelle')
+            try:
+                aspetta(lambda: 'startCartellaScheda-network' in stato()['controlli'])
+            except AssertionError:
+                (ART/'cartelle-debug.json').write_text(json.dumps(stato(),indent=2))
+                raise
+            controlla(stato()['paginaWindows'] == 'w-start-cartelle', 'Start apre la sottopagina Cartelle')
+            controlla(stato()['controlli']['startCartellaScheda-network']['enabled'] is False,
+                      'Rete resta disabilitata senza vista delle risorse di rete')
+            for folder in ['settings', 'files', 'documents', 'downloads', 'music', 'pictures', 'videos', 'home']:
+                chiama('fuoco', 'startCartella-' + folder)
+                cmd('tasto Space premi')
+                cmd('tasto Space lascia')
+                aspetta(lambda: folder in json.loads(chiama('valore', 'windows11.startFolders')))
+                controlla(True, folder + ' attivabile da tastiera')
+            cattura('windows-start-cartelle')
+            chiama('tema', 'scuro')
+            aspetta(lambda: stato()['colori']['scura'])
+            clic_su('startCartella-documents')
+            aspetta(lambda: 'documents' not in json.loads(chiama('valore', 'windows11.startFolders')))
+            controlla(True, 'Documenti disattivabile con clic in scuro')
+            cattura('windows-start-cartelle-scuro')
+            chiama('lingua', 'en')
+            aspetta(lambda: stato()['controlli']['startCartellaScheda-home']['titolo'] == 'Personal folder')
+            controlla(True, 'Cartelle segue la lingua inglese senza riaprire la pagina')
+            cattura('windows-start-folders-en')
+            controlla(not stato()['fuoriPosto'], 'nessun controllo fuori dalla pagina Cartelle', stato()['fuoriPosto'])
+            clic_su('indietroWindows')
+            aspetta(lambda: stato()['paginaWindows'] == 'w-start')
+            controlla(True, 'Indietro riporta a Start e conserva le cartelle scelte')
+            controlla('home' in json.loads(chiama('valore', 'windows11.startFolders')), 'la navigazione non azzera le scelte')
+            logs = (Path(tmp) / 'shell.log').read_text().splitlines()
+            errors = [line for line in logs if re.search(r'ReferenceError|TypeError|Cannot assign|Unable to assign|Binding loop|Error loading QML', line)]
+            controlla(not errors, 'nessun errore QML nella pagina Cartelle', errors)
+            riuscita = True
+            return 0
         if os.environ.get('MINERVA_TEST_SETTINGS_HISTORY') == '1':
             def key(name):
                 cmd('tasto ' + name + ' premi')
@@ -900,6 +939,26 @@ def main():
         clic_su('startConsigliati')
         aspetta(lambda: valore('windows11.recommendations') != consigliati)
         controlla(True, 'la pagina Start modifica la visibilità dei file recenti')
+        clic_su('startCartelle')
+        aspetta(lambda: stato()['paginaWindows'] == 'w-start-cartelle')
+        controlla(True, 'Start apre la sottopagina Cartelle')
+        aspetta(lambda: 'startCartellaScheda-network' in stato()['controlli'])
+        controlla(stato()['controlli']['startCartellaScheda-network']['enabled'] is False,
+                  'Rete è esplicitamente disabilitata senza un browser delle risorse di rete')
+        for folder in ['settings', 'files', 'documents', 'downloads', 'music', 'pictures', 'videos', 'home']:
+            chiama('fuoco', 'startCartella-' + folder)
+            tasto_reale('Space')
+            aspetta(lambda: folder in valore('windows11.startFolders'))
+            controlla(True, folder + ' attivabile da tastiera nella pagina Cartelle')
+        cattura('windows-start-cartelle')
+        chiama('tema', 'scuro')
+        aspetta(lambda: stato()['colori']['scura'])
+        clic_su('startCartella-documents')
+        aspetta(lambda: 'documents' not in valore('windows11.startFolders'))
+        controlla(True, 'Documenti si nasconde con clic in modalità scura')
+        cattura('windows-start-cartelle-scuro')
+        chiama('paginaWindows', 'w-start')
+        aspetta(lambda: stato()['paginaWindows'] == 'w-start')
         chiama('paginaWindows', 'w-barra')
         aspetta(lambda: stato()['paginaWindows'] == 'w-barra')
         clic_su('barraTaskView')

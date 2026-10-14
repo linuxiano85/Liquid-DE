@@ -33,6 +33,7 @@ ShellRoot {
                 fuori[it.objectName] = { "x": Math.round(p.x), "y": Math.round(p.y),
                                          "w": Math.round(it.width), "h": Math.round(it.height),
                                          "testo": it.text !== undefined ? String(it.text) : "",
+                                         "titolo": it.titolo !== undefined ? String(it.titolo) : "",
                                          "colore": it.color !== undefined ? String(it.color) : "",
                                          "enabled": it.enabled, "aperta": it.aperta !== undefined ? it.aperta : false,
                                          "status": it.status !== undefined ? it.status : -1 };

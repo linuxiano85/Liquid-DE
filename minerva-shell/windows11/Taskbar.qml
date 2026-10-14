@@ -219,9 +219,20 @@ PanelWindow {
     function azioneStart(a) {
         bar.close();
         if (["sospendi","spegni","riavvia","blocca","esci"].indexOf(a) >= 0) bar.actionRequested(a);
-        else bar.settingsRequested(a === "accesso" ? "accesso" : "utente");
+        else bar.settingsRequested(a === "w-home" ? "w-home" : a === "accesso" ? "accesso" : "utente");
     }
-    Component {id:startPanel;StartMenu {onCloseRequested:bar.close();onActionRequested:function(a){bar.azioneStart(a);}}}
+    // Il percorso passa come dato IPC, mai come comando interpolato nella shell.
+    Component {
+        id: startPanel
+        StartMenu {
+            onCloseRequested: bar.close()
+            onActionRequested: function(a) { bar.azioneStart(a); }
+            onFolderRequested: function(path) {
+                Core.Ipc.apriOChiedi(path);
+                bar.close();
+            }
+        }
+    }
     // Cerca ha il suo pannello, come l'ultima Windows 11 (`SearchPanel.qml`):
     // l'ingranaggio apre le impostazioni della ricerca (pagina Preset).
     Component {

@@ -463,6 +463,14 @@ class SettingsApi {
           valore.toSet().length == valore.length;
     if (percorso == 'windows11.startLayout')
       return ['pinned', 'default', 'recommended'].contains(valore);
+    if (percorso == 'windows11.startFolders') {
+      // Solo destinazioni note: nessun comando o percorso eseguibile nelle preferenze.
+      const cartelle = ['settings', 'files', 'documents', 'downloads',
+        'music', 'pictures', 'videos', 'home'];
+      return valore is List && valore.length <= cartelle.length &&
+          valore.every((v) => v is String && cartelle.contains(v)) &&
+          valore.toSet().length == valore.length;
+    }
     if (percorso == 'windows11.taskbarSearch')
       return ['hidden', 'icon', 'label', 'box'].contains(valore);
     if (percorso == 'windows11.taskbarAlignment')
@@ -1608,6 +1616,7 @@ class SettingsApi {
       'recommendations': true,
       // Scelte della barra e dello Start separate dagli altri preset.
       'startLayout': 'default',
+      'startFolders': <String>[],
       'taskbarSearch': 'icon',
       'taskbarAlignment': 'center',
       'taskbarTaskView': true,

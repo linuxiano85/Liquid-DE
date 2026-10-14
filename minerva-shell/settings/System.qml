@@ -325,6 +325,7 @@ FloatingWindow {
         "w-colori": { "file": "windows/Colori.qml", "categoria": "personalizzazione" },
         "w-temi": { "file": "windows/Temi.qml", "categoria": "personalizzazione" },
         "w-start": { "file": "windows/Start.qml", "categoria": "personalizzazione" },
+        "w-start-cartelle": { "file": "windows/CartelleStart.qml", "categoria": "personalizzazione" },
         "w-barra": { "file": "windows/Barra.qml", "categoria": "personalizzazione" }
     })
 

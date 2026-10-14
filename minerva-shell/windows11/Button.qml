@@ -20,6 +20,8 @@ FocusScope {
     readonly property bool _focoVisibile: root.activeFocus && !root._focoDalMouse
     onActiveFocusChanged: if (!activeFocus) _focoDalMouse = false
     property string tooltip: text
+    // I collegamenti dello Start devono lasciare spazio anche a nomi lunghi.
+    property real maximumTextWidth: -1
     /// Icona e testo a sinistra invece che al centro: gli elenchi di azioni
     /// (l'anteprima di Cerca) in Windows sono allineati a sinistra.
     property bool aSinistra: false
@@ -33,7 +35,7 @@ FocusScope {
     signal clicked()
     signal rightClicked()
     signal middleClicked()
-    implicitWidth: text === "" ? 40 : Math.max(40, caption.implicitWidth + (icon === "" && !avatar ? 24 : (avatar ? 62 : 54)))
+    implicitWidth: text === "" ? 40 : Math.max(40, caption.width + (icon === "" && !avatar ? 24 : (avatar ? 62 : 54)))
     implicitHeight: 34
     Accessible.role: Accessible.Button; Accessible.name: tooltip
     Accessible.onPressAction: clicked()
@@ -74,7 +76,17 @@ FocusScope {
             }
             Ui.RitrattoTondo { id: foto; anchors.fill: parent; fonte: root.avatar ? root.ritratto : "" }
         }
-        Text { id: caption; visible: root.text !== ""; text: root.text; color: root.foreground; font.family: Style.font; font.pixelSize: 12 * Style.textScale; anchors.verticalCenter: parent.verticalCenter }
+        Text {
+            id: caption
+            visible: root.text !== ""
+            width: root.maximumTextWidth < 0 ? implicitWidth : Math.min(implicitWidth, root.maximumTextWidth)
+            elide: Text.ElideRight
+            text: root.text
+            color: root.foreground
+            font.family: Style.font
+            font.pixelSize: 12 * Style.textScale
+            anchors.verticalCenter: parent.verticalCenter
+        }
     }
     MouseArea {
         id: mouse; anchors.fill: parent; hoverEnabled: true

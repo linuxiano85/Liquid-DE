@@ -721,3 +721,22 @@ un pulsante Avanti e non salva focus, testo di ricerca o campi dei dialoghi.
 Il ripristino di scorrimento è provato sulle pagine del banco, non su ogni
 sottopagina dinamica o su tutte le scale. Non sono implementate per questo
 solo intervento le schede Sistema ancora grigie.
+
+### Cartelle accanto all’alimentazione in Start (14 ottobre)
+
+**Personalizzazione → Start → Cartelle** permette di mostrare Impostazioni,
+Esplora file, Documenti, Download, Musica, Immagini, Video e Cartella personale
+nel piede dello Start. I pulsanti seguono l’ordine del riferimento Windows,
+anche quando attivati in ordine diverso; si possono nascondere tutti.
+Il nome dell’account si abbrevia quando serve spazio, conservando il nome
+completo nel suggerimento e nell’etichetta accessibile.
+
+Le cartelle vengono lette attraverso QStandardPaths e la configurazione XDG:
+non sono costruite aggiungendo nomi italiani alla home. Il percorso passa
+come dato al servizio di apertura, senza interpolazione in comandi shell.
+Le preferenze sono salvate per preset e validate dal demone. La voce Rete
+resta disabilitata: manca ancora una vista delle risorse di rete equivalente.
+
+Riferimenti: [personalizzazione di Start Microsoft](https://support.microsoft.com/it-it/windows/experience/personalization/customize-the-windows-start-menu),
+[QML StandardPaths](https://doc.qt.io/qt-6/qml-qtcore-standardpaths.html);
+misure e ordine confrontati con la pagina Cartelle della VM privata.
