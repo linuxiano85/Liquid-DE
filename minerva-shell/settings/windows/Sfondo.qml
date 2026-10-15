@@ -61,8 +61,9 @@ PaginaWindows {
     readonly property var recenti: {
         var lista = [];
         var usate = Core.Wallpaper.recenti || [];
-        for (var i = 0; i < usate.length; i++)
-            lista.push(usate[i]);
+        for (var i = 0; i < usate.length && lista.length < 5; i++)
+            if (lista.indexOf(usate[i]) < 0)
+                lista.push(usate[i]);
         var proprie = [];
         if (Core.Wallpaper.bloomPresente) {
             var base = decodeURIComponent(Qt.resolvedUrl("../../windows11/wallpapers/").toString().replace(/^file:\/\//, ""));
@@ -74,6 +75,34 @@ PaginaWindows {
             if (lista.indexOf(proprie[k]) < 0)
                 lista.push(proprie[k]);
         return lista;
+    }
+
+    property string focusRecente: ""
+    function ripristinaFocusRecente() {
+        if (focusRecente === "" || String(recenti[0]) !== focusRecente)
+            return;
+        for (var i = 0; i < miniature.count; i++) {
+            var item = miniature.itemAt(i);
+            if (item && String(item.modelData) === focusRecente) {
+                item.forceActiveFocus(Qt.OtherFocusReason);
+                focusRecente = "";
+                break;
+            }
+        }
+    }
+    onRecentiChanged: Qt.callLater(pagina.ripristinaFocusRecente)
+    function scegliRecente(percorso) {
+        focusRecente = String(percorso);
+        Core.Wallpaper.scegli(percorso);
+        // Si aspetta l'ordine aggiornato del demone: un richiamo prima della
+        // risposta riporterebbe il fuoco su un delegato che viene distrutto.
+        Qt.callLater(pagina.ripristinaFocusRecente);
+    }
+    function spostaRecente(indice, passo) {
+        var prossimo = Math.max(0, Math.min(miniature.count - 1, indice + passo));
+        var item = miniature.itemAt(prossimo);
+        if (item)
+            item.forceActiveFocus(Qt.TabFocusReason);
     }
 
     readonly property var adattamenti: [
@@ -99,8 +128,8 @@ PaginaWindows {
 
     AnteprimaDesktop {
         objectName: "anteprimaDesktop"
-        width: 336
-        height: 188
+        width: Math.min(336, pagina.larghezza)
+        height: Math.round(width * 188 / 336)
         tinta: pagina.tipo === "tinta" ? Core.Wallpaper.colore : "transparent"
     }
     Item { width: 1; height: 11 }
@@ -127,7 +156,7 @@ PaginaWindows {
         Item {
             visible: pagina.tipo === "immagine"
             width: parent.width
-            height: visible ? 144 : 0
+            height: visible ? immaginiRecenti.y + immaginiRecenti.implicitHeight + 6 : 0
             Rectangle { width: parent.width; height: 1; color: W.Style.divider }
             Text {
                 x: 59; y: 13
@@ -136,21 +165,38 @@ PaginaWindows {
                 font.family: W.Style.font
                 font.pixelSize: 14
             }
-            Row {
-                x: 59; y: 38
+            // A 940 px cinque miniature da 100 non entrano sempre: il
+            // ritorno a capo mantiene la misura e non invade la scrollbar.
+            Flow {
+                id: immaginiRecenti
+                objectName: "recentiSfondo"
+                x: 59
+                y: 38
+                width: Math.max(0, parent.width - x - 16)
                 spacing: 4
                 Repeater {
+                    id: miniature
                     model: pagina.recenti
                     delegate: Rectangle {
                         id: miniatura
                         required property var modelData
                         required property int index
                         objectName: "recente-" + index
-                        width: 100; height: 100; radius: 4
+                        readonly property bool attuale: Core.Wallpaper.current === String(modelData)
+                        width: Math.min(100, immaginiRecenti.width)
+                        height: width
+                        radius: 4
                         color: W.Style.field
                         clip: true
-                        border.width: presaMin.containsMouse ? 2 : 0
-                        border.color: W.Style.text
+                        border.width: activeFocus || attuale || presaMin.containsMouse ? 2 : 0
+                        border.color: activeFocus ? W.Style.accent : W.Style.text
+                        activeFocusOnTab: true
+                        Keys.onReturnPressed: pagina.scegliRecente(modelData)
+                        Keys.onSpacePressed: pagina.scegliRecente(modelData)
+                        Keys.onLeftPressed: pagina.spostaRecente(index, -1)
+                        Keys.onRightPressed: pagina.spostaRecente(index, 1)
+                        Keys.onUpPressed: pagina.spostaRecente(index, -Math.max(1, Math.floor((immaginiRecenti.width + 4) / (width + 4))))
+                        Keys.onDownPressed: pagina.spostaRecente(index, Math.max(1, Math.floor((immaginiRecenti.width + 4) / (width + 4))))
                         Image {
                             anchors.fill: parent
                             anchors.margins: miniatura.border.width
@@ -159,14 +205,19 @@ PaginaWindows {
                             fillMode: Image.PreserveAspectCrop
                             asynchronous: true
                         }
-                        Accessible.role: Accessible.Button
-                        Accessible.name: miniatura.modelData
+                        Accessible.role: Accessible.RadioButton
+                        Accessible.name: String(modelData).substring(String(modelData).lastIndexOf("/") + 1)
+                        Accessible.description: String(modelData)
+                        Accessible.checkable: true
+                        Accessible.checked: attuale
+                        Accessible.onPressAction: pagina.scegliRecente(modelData)
+                        Accessible.onToggleAction: pagina.scegliRecente(modelData)
                         MouseArea {
                             id: presaMin
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: Core.Wallpaper.scegli(miniatura.modelData)
+                            onClicked: pagina.scegliRecente(miniatura.modelData)
                         }
                     }
                 }

@@ -41,12 +41,17 @@ Rectangle {
     signal attivata()
 
     readonly property bool it: W.Style.it
+    // WinUI dispone il comando sotto al testo quando la riga non offre più
+    // spazio leggibile: evita descrizioni ridotte a una parola per riga.
+    readonly property bool comandoSotto: posto.visible && posto.width > 0
+        && width - testi.x - posto.width - 32 < 180
 
     width: parent ? parent.width : 400
     // Misurate su Windows: le schede alte 69 (anche senza descrizione), le
     // righe dentro un Expander 50.
     implicitHeight: Math.max(scheda.interna ? (scheda.descrizione !== "" ? 69 : 50) : 69,
-                             testi.implicitHeight + 24, posto.childrenRect.height + 24)
+                             comandoSotto ? testi.implicitHeight + posto.childrenRect.height + 36
+                                          : Math.max(testi.implicitHeight, posto.childrenRect.height) + 24)
     height: implicitHeight
     radius: scheda.interna ? 0 : 4
     color: !scheda.interna && scheda.porta && scheda.disponibile && presa.containsMouse
@@ -121,8 +126,8 @@ Rectangle {
         x: (scheda.icona !== "" || scheda.immagine.toString() !== "" ? 59 : 17) + scheda.rientro
         // x più un solo ancoraggio a destra non definisce la larghezza:
         // il testo che legge parent.width rimaneva a zero e non si vedeva.
-        width: Math.max(0, posto.x - x - 16)
-        anchors.verticalCenter: parent.verticalCenter
+        width: Math.max(0, (scheda.comandoSotto ? scheda.width : posto.x) - x - 16)
+        y: scheda.comandoSotto ? 12 : (scheda.height - implicitHeight) / 2
         spacing: 1
 
         Text {
@@ -160,9 +165,10 @@ Rectangle {
 
     Item {
         id: posto
-        anchors.right: freccia.visible ? freccia.left : parent.right
-        anchors.rightMargin: freccia.visible ? 12 : 16
-        anchors.verticalCenter: parent.verticalCenter
+        // Le coordinate non lasciano ancoraggi residui passando da una
+        // disposizione all'altra durante il ridimensionamento della finestra.
+        x: scheda.comandoSotto ? testi.x : scheda.width - (freccia.visible ? 44 : 16) - width
+        y: scheda.comandoSotto ? testi.y + testi.implicitHeight + 12 : (scheda.height - height) / 2
         // childrenRect comprende la x allineata al bordo destro, che a sua
         // volta dipende da questa larghezza: misurare solo i figli spezza
         // il ciclo senza cambiare l'allineamento dei comandi.
