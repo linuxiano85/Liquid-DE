@@ -45,6 +45,7 @@ Rectangle {
     // La freccia: un pulsante da 32 a destra della testata.
     Rectangle {
         id: freccia
+        objectName: espansore.objectName ? espansore.objectName + "-espandi" : ""
         anchors.right: parent.right
         anchors.rightMargin: 8
         y: (testa.height - height) / 2

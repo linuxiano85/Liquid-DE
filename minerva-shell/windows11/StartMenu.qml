@@ -503,7 +503,9 @@ FocusScope {
         z: -1
         anchors.fill: parent
         radius: 8
-        color: menu.searchOnly ? Style.surface : menu.modern ? Style.pannello : Style.startSurface
+        // Anche il layout precedente usa il materiale Acrylic: un fondo
+        // pieno nascondeva il blur del compositore, soprattutto in chiaro.
+        color: menu.searchOnly ? Style.surface : Style.pannello
         border.color: Style.edge
     }
 
@@ -1029,13 +1031,13 @@ FocusScope {
         anchors.bottom: parent.bottom
         width: parent.width
         height: 64
-        color: menu.modern ? Style.pannelloPiede : Style.startFooter
+        color: Style.pannelloPiede
         radius: 8
 
         Rectangle {
             width: parent.width
             height: 8
-            color: menu.modern ? Style.pannelloPiede : Style.startFooter
+            color: Style.pannelloPiede
         }
 
         Button {

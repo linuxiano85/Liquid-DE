@@ -25,8 +25,10 @@ Rectangle {
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
     Accessible.name: pulsante.testo
-    Keys.onReturnPressed: pulsante.premuto()
-    Keys.onSpacePressed: pulsante.premuto()
+    // Un tasto tenuto premuto non deve confermare anche il secondo passo
+    // di un ripristino né inviare richieste ripetute al servizio.
+    Keys.onReturnPressed: function(event) { if (!event.isAutoRepeat) pulsante.premuto(); }
+    Keys.onSpacePressed: function(event) { if (!event.isAutoRepeat) pulsante.premuto(); }
 
     Rectangle {
         visible: !pulsante.accento

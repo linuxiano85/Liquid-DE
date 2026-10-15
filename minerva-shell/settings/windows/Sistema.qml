@@ -32,9 +32,9 @@ PaginaWindows {
         {id:"condivisione", icon:"network", it:"Condivisione in prossimità", en:"Nearby sharing", descIt:"Rilevabilità, percorso dei file ricevuti", descEn:"Discoverability, received file location"},
         {id:"multitasking", icon:"restore", it:"Multitasking", en:"Multitasking", descIt:"Ancoraggio finestre, desktop, cambio attività", descEn:"Window snapping, desktops, task switching", pagina:"finestre"},
         {id:"sviluppatori", icon:"settings", it:"Per sviluppatori", en:"For developers", descIt:"Impostazioni per attività di sviluppo", descEn:"Settings for development tasks"},
-        {id:"licenza", icon:"check", it:"Licenza", en:"License", descIt:"Liquid DE è software libero, licenza GPL-3.0", descEn:"Liquid DE is free software, GPL-3.0 license", pagina:"shell"},
+        {id:"licenza", icon:"check", it:"Licenza", en:"License", descIt:"Liquid DE è software libero, licenza GPL-3.0", descEn:"Liquid DE is free software, GPL-3.0 license", destinazione:"w-licenza"},
         {id:"risoluzione", icon:"settings", it:"Risoluzione problemi", en:"Troubleshoot", descIt:"Strumenti consigliati, preferenze, cronologia", descEn:"Recommended tools, preferences, history"},
-        {id:"ripristino", icon:"restore", it:"Ripristino", en:"Recovery", descIt:"Ripristina le impostazioni di Liquid", descEn:"Reset Liquid settings", pagina:"shell"},
+        {id:"ripristino", icon:"restore", it:"Ripristino", en:"Recovery", descIt:"Ripristina le impostazioni di Liquid", descEn:"Reset Liquid settings", destinazione:"w-ripristino"},
         {id:"proiezione", icon:"monitor", it:"Proiezione su questo PC", en:"Projecting to this PC", descIt:"Autorizzazioni, associazione, rilevabilità", descEn:"Permissions, pairing, discoverability"},
         {id:"remoto", icon:"network", it:"Desktop remoto", en:"Remote Desktop", descIt:"Utenti desktop remoto, autorizzazioni di connessione", descEn:"Remote desktop users, connection permissions"},
         {id:"appunti", icon:"document", it:"Appunti", en:"Clipboard", descIt:"Cronologia delle operazioni di taglia e copia, sincronizzazione, cancellazione", descEn:"Cut and copy history, synchronization, clearing"},
@@ -50,9 +50,13 @@ PaginaWindows {
             icona: modelData.icon
             titolo: pagina.tr(modelData.it, modelData.en)
             descrizione: pagina.tr(modelData.descIt, modelData.descEn)
-            disponibile: !!modelData.pagina
+            disponibile: !!modelData.pagina || !!modelData.destinazione
             porta: true
-            onAttivata: if (pagina.finestra) pagina.finestra.apriSezione(modelData.pagina, "sistema");
+            onAttivata: {
+                if (!pagina.finestra) return;
+                if (modelData.destinazione) pagina.finestra.apriWindows(modelData.destinazione);
+                else pagina.finestra.apriSezione(modelData.pagina, "sistema");
+            }
         }
     }
     Item { width: 1; height: 20 }

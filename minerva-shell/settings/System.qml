@@ -320,6 +320,8 @@ FloatingWindow {
         "w-giochi": { "file": "windows/Giochi.qml", "categoria": "giochi" },
         "w-privacy": { "file": "windows/Privacy.qml", "categoria": "privacy" },
         "w-sistema": { "file": "windows/Sistema.qml", "categoria": "sistema" },
+        "w-ripristino": { "file": "windows/Ripristino.qml", "categoria": "sistema" },
+        "w-licenza": { "file": "windows/Informazioni.qml", "categoria": "sistema" },
         "w-home": { "file": "windows/Home.qml", "categoria": "home" },
         "w-update": { "file": "windows/LiquidUpdate.qml", "categoria": "update" },
         "w-personalizzazione": { "file": "windows/Personalizzazione.qml", "categoria": "personalizzazione" },
@@ -400,6 +402,10 @@ FloatingWindow {
                 return;
             if (item.posizioneScorrimento !== undefined)
                 item.posizioneScorrimento = Math.max(0, percorso.scorrimento || 0);
+            // Le destinazioni interne si applicano dopo lo storico, altrimenti
+            // il ripristino dello zero annulla il collegamento alla riga.
+            if (typeof item.ripristinaDestinazione === "function")
+                item.ripristinaDestinazione(percorso);
         });
     }
     function impostaPercorso(percorso, registra) {
@@ -604,7 +610,7 @@ FloatingWindow {
         { "id": "accesso",    "icon": "lock",      "it": "Accesso",       "en": "Login",
           "cerca": "accesso login greeter sfondo aurora automatico" },
         { "id": "shell",      "icon": "info",      "it": "Informazioni",  "en": "About",
-          "cerca": "minerva ripristino valori di fabbrica informazioni about versione sistema progetto github" },
+          "cerca": "minerva ripristino valori di fabbrica informazioni about versione sistema progetto github processore processor cpu ram memoria memory kernel distribuzione linux specifiche specifications hardware architettura architecture" },
         { "id": "scorciatoie", "icon": "keyboard", "it": "Scorciatoie",   "en": "Shortcuts",
           "cerca": "scorciatoie tasti combinazioni super disattiva attiva wifi bluetooth"
         }
@@ -1193,7 +1199,7 @@ FloatingWindow {
             case "account":  return "sections/Account.qml";
             case "utente":   return "sections/Utente.qml";
             case "accesso":  return "sections/Accesso.qml";
-            case "shell":    return "sections/Shell.qml";
+            case "shell":    return settings.stileWindows ? "windows/Informazioni.qml" : "sections/Shell.qml";
             case "preset":   return "sections/Preset.qml";
             case "scorciatoie": return "sections/Scorciatoie.qml";
             default:         return "sections/Appearance.qml";

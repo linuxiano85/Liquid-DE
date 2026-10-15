@@ -18,3 +18,7 @@ calendar (24 regular), stesso commit e licenza MIT.
 
 Cartelle dello Start, 14 ottobre 2026: music_note_2, video e folder_person
 (24 regular), stesso commit e licenza MIT. Nessuna modifica ai tracciati.
+
+Informazioni sul sistema, 15 ottobre 2026: hard_drive e developer_board
+(24 regular), stesso commit e licenza MIT. Il tracciato ram è originale
+del progetto Liquid DE e segue la licenza del progetto.
