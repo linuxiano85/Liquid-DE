@@ -1159,6 +1159,7 @@ FocusScope {
         }
         readonly property var voci: menu.piccolo === "power" ? [
             { "id": "accesso", "icon": "settings", "label": Style.label("Opzioni di accesso", "Sign-in options") },
+            { "id": "esci", "icon": "logout", "label": Style.label("Chiudi sessione", "Sign out") },
             { "id": "sospendi", "icon": "moon", "label": Style.label("Sospendi", "Sleep") },
             { "id": "spegni", "icon": "power", "label": Style.label("Arresta il sistema", "Shut down") },
             { "id": "riavvia", "icon": "restart", "label": Style.label("Riavvia il sistema", "Restart") }

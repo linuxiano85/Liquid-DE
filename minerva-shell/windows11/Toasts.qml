@@ -4,6 +4,7 @@ import Quickshell.Wayland
 import "../core" as Core
 PanelWindow {
     id: toast
+    objectName: "windowsToasts"
     property var items: []
     property bool locked:false
     visible:items.length>0
@@ -18,7 +19,7 @@ PanelWindow {
     function remove(id){items=items.filter(function(item){return item.id!==id;});}
     Connections {target:Core.Notifications
         function onArrived(item) {
-            if(toast.locked || Core.Notifications.inSilenzio)return;
+            if(toast.locked || !Core.Notifications.mostraBanner(item))return;
             toast.items=toast.items.filter(function(old){return old.id!==item.id;}).concat([item]).slice(-3);
         }
     }

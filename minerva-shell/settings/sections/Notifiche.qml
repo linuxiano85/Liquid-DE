@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import "../../core/NotificationSchedule.js" as NotificationSchedule
+import "../../core/NotificationSenders.js" as NotificationSenders
 import "../../theme" as Theme
 import "../../core" as Core
 import "../../ui" as Ui
@@ -21,6 +22,10 @@ Page {
 
     property SystemClock orologio: SystemClock { precision: SystemClock.Minutes }
     readonly property bool it: Core.Strings.lang === "it"
+    readonly property var mittenti: Core.Ipc.get("notifications.apps", ({}))
+    readonly property var chiaviMittenti: NotificationSenders.keys(mittenti)
+    property string mittenteScelto: ""
+    readonly property string mittente: mittenti[mittenteScelto] ? mittenteScelto : (chiaviMittenti[0] || "")
     readonly property string mostra: Core.Ipc.get("notifications.bloccoMostra", "numero")
 
     title: page.it ? "Notifiche" : "Notifications"
@@ -125,6 +130,48 @@ Page {
                     {value:"weekdays",label:page.it ? "Giorni feriali" : "Weekdays"},
                     {value:"weekends",label:page.it ? "Fine settimana" : "Weekends"}]
                 onPicked: function(value) { NotificationSchedule.setSchedule(Core.Ipc.get, Core.Ipc.setSetting, "notifications.scheduleDays", value); }
+            }
+        }
+    }
+
+    Card {
+        objectName: "notificheMittentiLiquid"
+        visible: Core.Ipc.get("notifications.apps", undefined) !== undefined
+        heading: page.it ? "Notifiche delle app" : "App notifications"
+        note: page.chiaviMittenti.length === 0
+            ? (page.it ? "Le app appaiono dopo la prima notifica." : "Apps appear after their first notification.") : ""
+        S.SettingRow {
+            visible: page.mittente !== ""
+            width: parent.width
+            label: page.it ? "App" : "App"
+            controlWidth: 260
+            control: S.Tendina {
+                objectName: "notificheAppSceltaLiquid"
+                width: 260
+                value: page.mittente
+                options: page.chiaviMittenti.map(function(key) { return {value:key,label:page.mittenti[key].name}; })
+                onPicked: function(value) { page.mittenteScelto = value; }
+            }
+        }
+        Repeater {
+            model: [{key:"enabled",it:"Ricevi notifiche",en:"Receive notifications"},
+                {key:"banners",it:"Mostra banner",en:"Show banners"},
+                {key:"priority",it:"Consenti con Non disturbare",en:"Allow during do not disturb"}]
+            delegate: S.SettingRow {
+                id: rigaApp
+                required property var modelData
+                visible: page.mittente !== ""
+                width: parent.width
+                label: page.it ? modelData.it : modelData.en
+                controlWidth: 60
+                control: S.ToggleSwitch {
+                    objectName: "notificheAppLiquid-" + rigaApp.modelData.key
+                    Accessible.name: rigaApp.label
+                    enabled: Core.Ipc.get("notifications.enabled", true) &&
+                        (rigaApp.modelData.key === "enabled" || Core.Ipc.get("notifications.apps." + page.mittente + ".enabled", true))
+                    checked: Core.Ipc.get("notifications.apps." + page.mittente + "." + rigaApp.modelData.key, rigaApp.modelData.key !== "priority")
+                    onToggled: function(value) { Core.Ipc.setSetting("notifications.apps." + page.mittente + "." + rigaApp.modelData.key, value); }
+                }
             }
         }
     }

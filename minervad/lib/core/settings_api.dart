@@ -4,6 +4,7 @@ import 'dart:io';
 import 'event_bus.dart';
 import 'minerva_paths.dart';
 import 'desktop_profiles.dart';
+import 'notification_preferences.dart';
 
 /// Gestore delle impostazioni di Minerva.
 /// Carica il file settings.json, lo fonde con i valori predefiniti e ne
@@ -314,6 +315,14 @@ class SettingsApi {
     }
     final segments = path.split('.');
     if (segments.isEmpty || segments.any((s) => s.isEmpty)) return false;
+    if (path.startsWith('notifications.apps.')) {
+      final senders = _settings['notifications']?['apps'];
+      final exists = senders is Map && senders.containsKey(segments[2]);
+      if (!exists && (segments.length != 3 ||
+          (senders is Map && senders.length >= notificationSenderLimit))) {
+        return false;
+      }
+    }
     if (!_esisteDiFabbrica(segments)) {
       print(
         '[MINERVA][CORE][ERRORE] Impostazione inesistente: "$path" '
@@ -374,6 +383,9 @@ class SettingsApi {
   /// fabbrica dice 960. Una lista di fabbrica fatta di nomi vuole nomi; una
   /// lista vuota di fabbrica non dice cosa conterrà, e si accetta.
   static bool _conforme(String percorso, dynamic fabbrica, dynamic valore) {
+    if (percorso == 'notifications.apps' || percorso.startsWith('notifications.apps.')) {
+      return notificationPreference(percorso, valore);
+    }
     if (percorso == 'notifications.scheduleDismissed') {
       return valore is String && (valore.isEmpty ||
           RegExp(r'^([01][0-9]|2[0-3]):[0-5][0-9]\|([01][0-9]|2[0-3]):[0-5][0-9]\|(daily|weekdays|weekends)\|[1-9][0-9]{0,15}$').hasMatch(valore));
@@ -1792,6 +1804,7 @@ class SettingsApi {
     // `services/respiro_service.dart`.
     'memoria': {'respiro': 'delicata'},
     'notifications': {
+      'apps': <String, dynamic>{},
       'enabled': true,
       'banners': true,
       'scheduleEnabled': false,

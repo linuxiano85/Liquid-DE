@@ -5,6 +5,7 @@ import Quickshell.Io
 import Quickshell.Services.Notifications
 import "." as Core
 import "NotificationSchedule.js" as NotificationSchedule
+import "NotificationSenders.js" as NotificationSenders
 
 // Notifications — La coda delle notifiche, unica per tutta la sessione.
 //
@@ -31,6 +32,41 @@ QtObject {
 
     signal arrived(var item)
 
+    property var _nomiAggiornati: ({})
+    function segnaNomeMittente(key, now) {
+        if (_nomiAggiornati[key] === undefined && Object.keys(_nomiAggiornati).length >= 256)
+            _nomiAggiornati = ({});
+        _nomiAggiornati[key] = now;
+    }
+    function registraMittente(sender) {
+        var records = Core.Ipc.get("notifications.apps", undefined);
+        if (records === undefined)
+            return;
+        var existing = records[sender.key];
+        var now = Date.now();
+        if (existing) {
+            // Un client che cambia continuamente nome non deve trasformare
+            // ogni notifica in una scrittura della configurazione.
+            if (existing.name !== sender.name && now - (_nomiAggiornati[sender.key] || 0) >= 60000) {
+                segnaNomeMittente(sender.key, now);
+                Core.Ipc.setSetting("notifications.apps." + sender.key + ".name", sender.name);
+            }
+            return;
+        }
+        // Si registra l'identità una sola volta, senza conservare messaggi.
+        if (Object.keys(records).length < 256) {
+            segnaNomeMittente(sender.key, now);
+            Core.Ipc.setSetting("notifications.apps." + sender.key, {
+                name:sender.name, desktop:sender.desktop, enabled:true, banners:true, priority:false
+            });
+        }
+    }
+
+    function mostraBanner(item) {
+        var key = item.sender || NotificationSenders.identity(item.appName, "").key;
+        return NotificationSenders.banner(Core.Ipc.get, key, notifications.inSilenzio);
+    }
+
     /// Una notifica che non viene da un programma ma da Minerva stessa.
     ///
     /// Nasce per le estensioni che si fermano: prima il demone lo diceva solo
@@ -38,9 +74,14 @@ QtObject {
     function daMinerva(sommario, corpo) {
         if (!notifications.ricezioneAttiva)
             return;
+        var sender = NotificationSenders.identity("Minerva", "");
+        notifications.registraMittente(sender);
+        if (!NotificationSenders.enabled(Core.Ipc.get, sender.key))
+            return;
         var item = {
             "id": "minerva-" + Date.now(),
             "appName": "Minerva",
+            "sender": sender.key,
             "summary": sommario,
             "body": corpo,
             "urgency": 1,
@@ -49,7 +90,7 @@ QtObject {
             "read": false
         };
         notifications._aggiungi(item);
-        if (!notifications.inSilenzio)
+        if (notifications.mostraBanner(item))
             notifications.arrived(item);
     }
 
@@ -345,6 +386,18 @@ QtObject {
                 notif.dismiss();
                 return;
             }
+            var desktop = "";
+            try {
+                desktop = notif.hints ? String(notif.hints["desktop-entry"] || "") : "";
+            } catch (error) {
+                // Alcuni mittenti non espongono suggerimenti.
+            }
+            var sender = NotificationSenders.identity(notif.appName, desktop);
+            notifications.registraMittente(sender);
+            if (!NotificationSenders.enabled(Core.Ipc.get, sender.key)) {
+                notif.dismiss();
+                return;
+            }
             // ── La notifica si TIENE, non se ne copia solo il testo ──────
             //
             // Fino al 2 settembre 2026 qui si costruiva una mappa con sette
@@ -368,6 +421,7 @@ QtObject {
             var item = {
                 "id": notif.id,
                 "appName": notif.appName || "Sistema",
+                "sender": sender.key,
                 "summary": notif.summary || "",
                 "body": notif.body || "",
                 "urgency": notif.urgency || 0,
@@ -386,7 +440,7 @@ QtObject {
 
             notifications._aggiungi(item);
 
-            if (!notifications.inSilenzio)
+            if (notifications.mostraBanner(item))
                 notifications.arrived(item);
         }
     }

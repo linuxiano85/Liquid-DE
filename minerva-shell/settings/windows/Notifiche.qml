@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import "../../core" as Core
 import "../../core/NotificationSchedule.js" as NotificationSchedule
+import "../../core/NotificationSenders.js" as NotificationSenders
 import "../../windows11" as W
 import ".." as S
 
@@ -13,6 +14,40 @@ PaginaWindows {
     readonly property bool ricezione: Core.Ipc.get("notifications.enabled", true)
     readonly property bool schemaCompleto: Core.Ipc.get("notifications.enabled", undefined) !== undefined
         && Core.Ipc.get("notifications.banners", undefined) !== undefined
+    readonly property var mittenti: Core.Ipc.get("notifications.apps", ({}))
+    readonly property var chiaviMittenti: NotificationSenders.keys(mittenti)
+    property ListModel modelloMittenti: ListModel { }
+    property string ordineMittenti: ""
+    function aggiornaMittenti() {
+        var keys = pagina.chiaviMittenti;
+        var signature = keys.join("|");
+        if (signature === pagina.ordineMittenti)
+            return;
+        // Si aggiornano le identità, non si ricreano le righe a ogni checkbox:
+        // una preferenza non deve chiudere la scheda né perdere il focus.
+        for (var old = modelloMittenti.count-1; old >= 0; old--) {
+            if (keys.indexOf(modelloMittenti.get(old).senderKey) < 0)
+                modelloMittenti.remove(old);
+        }
+        for (var i = 0; i < keys.length; i++) {
+            var found = -1;
+            for (var j = i; j < modelloMittenti.count; j++) {
+                if (modelloMittenti.get(j).senderKey === keys[i]) {
+                    found = j;
+                    break;
+                }
+            }
+            if (found < 0)
+                modelloMittenti.insert(i, {senderKey:keys[i]});
+            else if (found !== i)
+                modelloMittenti.move(found, i, 1);
+        }
+        pagina.ordineMittenti = signature;
+    }
+    Connections {
+        target: Core.Ipc
+        function onSettingsChanged() { Qt.callLater(pagina.aggiornaMittenti); }
+    }
     readonly property string privacy: Core.Ipc.get("notifications.bloccoMostra", "numero")
     property SystemClock orologio: SystemClock { precision: SystemClock.Minutes }
     readonly property bool programmaAttivo: NotificationSchedule.scheduledQuiet(orologio.date, Core.Ipc.get)
@@ -22,7 +57,10 @@ PaginaWindows {
     // precedente. Dopo una nuova apertura si riparte dal valore più privato.
     property string ultimaPrivacy: "numero"
     onPrivacyChanged: if (privacy !== "niente") ultimaPrivacy = privacy
-    Component.onCompleted: if (privacy !== "niente") ultimaPrivacy = privacy
+    Component.onCompleted: {
+        if (privacy !== "niente") ultimaPrivacy = privacy;
+        aggiornaMittenti();
+    }
 
     EspansoreImpostazione {
         objectName: "notificheGenerali"
@@ -135,6 +173,71 @@ PaginaWindows {
             color: W.Style.muted
             font.family: W.Style.font
             font.pixelSize: 12
+        }
+    }
+    GruppoImpostazioni {
+        visible: Core.Ipc.get("notifications.apps", undefined) !== undefined
+        testo: W.Style.label("Notifiche da app e da altri mittenti", "Notifications from apps and other senders")
+    }
+    Text {
+        visible: Core.Ipc.get("notifications.apps", undefined) !== undefined && pagina.chiaviMittenti.length === 0
+        width: parent.width
+        wrapMode: Text.Wrap
+        text: W.Style.label("Le app appariranno qui dopo la prima notifica.", "Apps will appear here after their first notification.")
+        color: W.Style.muted
+        font.family: W.Style.font
+        font.pixelSize: 14
+    }
+    Repeater {
+        model: pagina.modelloMittenti
+        delegate: EspansoreImpostazione {
+            id: gruppoApp
+            required property string senderKey
+            readonly property var record: pagina.mittenti[senderKey] || ({})
+            objectName: "notificheApp-" + senderKey
+            titolo: record.name || ""
+            icona: "apps"
+            immagine: record.desktop && Quickshell.hasThemeIcon(record.desktop) ? Quickshell.iconPath(record.desktop) : ""
+            descrizione: !record.enabled ? W.Style.label("Disattivate", "Off")
+                : !record.banners ? W.Style.label("Solo centro notifiche", "Notification center only")
+                : record.priority ? W.Style.label("Priorità", "Priority")
+                : W.Style.label("Banner e centro notifiche", "Banners and notification center")
+            comando: S.ToggleSwitch {
+                objectName: "notificheAppRicezione-" + gruppoApp.senderKey
+                enabled: pagina.ricezione
+                Accessible.name: gruppoApp.titolo
+                checked: gruppoApp.record.enabled === true
+                onToggled: function(value) { Core.Ipc.setSetting("notifications.apps." + gruppoApp.senderKey + ".enabled", value); }
+            }
+            Loader {
+                active: gruppoApp.aperto
+                width: parent.width
+                height: item ? item.implicitHeight : 0
+                sourceComponent: Item {
+                    implicitHeight: opzioniApp.implicitHeight + 32
+                    Column {
+                        id: opzioniApp
+                        x: 16
+                        y: 16
+                        width: parent.width-32
+                        spacing: 16
+                        CasellaWindows {
+                            objectName: "notificheAppBanner-" + gruppoApp.senderKey
+                            testo: W.Style.label("Mostra banner di notifica", "Show notification banners")
+                            enabled: pagina.ricezione && gruppoApp.record.enabled === true
+                            checked: gruppoApp.record.banners === true
+                            onScelta: function(value) { Core.Ipc.setSetting("notifications.apps." + gruppoApp.senderKey + ".banners", value); }
+                        }
+                        CasellaWindows {
+                            objectName: "notificheAppPriorita-" + gruppoApp.senderKey
+                            testo: W.Style.label("Consenti notifiche quando Non disturbare è attivo", "Allow notifications when do not disturb is on")
+                            enabled: pagina.ricezione && gruppoApp.record.enabled === true
+                            checked: gruppoApp.record.priority === true
+                            onScelta: function(value) { Core.Ipc.setSetting("notifications.apps." + gruppoApp.senderKey + ".priority", value); }
+                        }
+                    }
+                }
+            }
         }
     }
     GruppoImpostazioni { testo: "Liquid" }

@@ -70,6 +70,7 @@ Item {
             anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
             text: tendina.etichetta
+            textFormat: Text.PlainText
             elide: Text.ElideRight
             color: tendina.aperta ? Theme.Colors.accent : Theme.Colors.text
             font.family: Theme.Typography.fontDisplay
@@ -188,6 +189,8 @@ Item {
             if (event.key === Qt.Key_Escape) { tendina.chiudi(); event.accepted = true; }
             else if (event.key === Qt.Key_Down) { lista.incrementCurrentIndex(); event.accepted = true; }
             else if (event.key === Qt.Key_Up) { lista.decrementCurrentIndex(); event.accepted = true; }
+            else if (event.key === Qt.Key_Home) { lista.currentIndex = 0; event.accepted = true; }
+            else if (event.key === Qt.Key_End) { lista.currentIndex = lista.count - 1; event.accepted = true; }
             else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
                 tendina.scegli(lista.currentIndex); event.accepted = true;
             }
@@ -221,6 +224,7 @@ Item {
                     anchors.rightMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
                     text: voce.modelData.label
+                    textFormat: Text.PlainText
                     elide: Text.ElideRight
                     color: voce.scelta ? Theme.Colors.accent : Theme.Colors.text
                     font.family: Theme.Typography.fontDisplay
