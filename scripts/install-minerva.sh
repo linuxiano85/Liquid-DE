@@ -52,6 +52,8 @@ PKGS=(
     # `minerva-filemanager1` («Mostra nella cartella» dei browser) parla
     # D-Bus con Gio, dal Python di sistema.
     python-gobject
+    # Stampa CUPS e scanner di rete/USB, con gestione dei driver.
+    cups python-pycups cups-pk-helper system-config-printer sane sane-airscan avahi
     # MTP/PTP sono funzioni del gestore file: GVfs da solo non vede i telefoni.
     gvfs gvfs-mtp gvfs-gphoto2
     # ── I portali, e perché ce ne vogliono due ─────────────────────────
@@ -634,6 +636,13 @@ c_info "per tornare indietro: xdg-mime default <programma>.desktop audio/mpeg"
 # Il PATH qui non conta: è la sessione di Liquid DE a mettere il prefisso in
 # testa (`start-minerva-wayland.sh`), e fuori dalla sessione i comandi
 # `minerva-*` devono restare quelli di Minerva.
+
+# CUPS parte su richiesta tramite il socket locale; la scoperta di rete
+# usa Avahi. Non attiviamo saned: non serve esporre lo scanner sulla rete.
+for servizio in cups.socket avahi-daemon.service; do
+    sudo systemctl enable --now "$servizio" \
+        || c_info "Attiva $servizio per la stampa e la ricerca delle stampanti"
+done
 
 # ── 3a-bis. Priorità di scheduling, dove c'è ananicy ──────────────────────
 #

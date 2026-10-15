@@ -110,6 +110,12 @@ ShellRoot {
         value: Core.Ipc.get("notifications.doNotDisturb", false)
     }
 
+    Binding {
+        target: Core.Printing
+        property: "monitoring"
+        value: Quickshell.env("MINERVA_PROVA") !== "1"
+    }
+
     // ── Il colore di Minerva ─────────────────────────────────────────────
     //
     // Tema, accento e trasparenze si legano QUI e non dentro la palette,

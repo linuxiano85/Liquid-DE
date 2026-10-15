@@ -17,3 +17,5 @@ TitoloWindows 1.0 TitoloWindows.qml
 CategoriaWindows 1.0 CategoriaWindows.qml
 DisplayController 1.0 DisplayController.qml
 PowerController 1.0 PowerController.qml
+PrintingContent 1.0 PrintingContent.qml
+PrintingAction 1.0 PrintingAction.qml

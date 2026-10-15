@@ -80,6 +80,8 @@ QtObject {
     ///
     /// Nasce per le estensioni che si fermano: prima il demone lo diceva solo
     /// al proprio registro, che nessuno legge.
+    property int _localSequence: 0
+
     function daMinerva(sommario, corpo) {
         if (!notifications.ricezioneAttiva)
             return;
@@ -88,7 +90,7 @@ QtObject {
         if (!NotificationSenders.enabled(Core.Ipc.get, sender.key))
             return;
         var item = {
-            "id": "minerva-" + Date.now(),
+            "id": "minerva-" + Date.now() + "-" + (++notifications._localSequence),
             "appName": "Minerva",
             "sender": sender.key,
             "summary": sommario,

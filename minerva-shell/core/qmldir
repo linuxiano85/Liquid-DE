@@ -29,3 +29,4 @@ singleton Anteprime 1.0 Anteprime.qml
 singleton DesktopStyle 1.0 DesktopStyle.qml
 WifiController 1.0 WifiController.qml
 singleton Utente        1.0 Utente.qml
+singleton Printing 1.0 Printing.qml

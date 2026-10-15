@@ -296,7 +296,7 @@ FloatingWindow {
     readonly property var categorieWindows: [
         { "id": "home", "pagina": "w-home", "voci": [] },
         { "id": "sistema", "pagina": "w-sistema", "voci": ["display", "audio", "notifiche", "power", "scorciatoie", "shell"] },
-        { "id": "dispositivi", "voci": ["bluetooth", "input", "controller"] },
+        { "id": "dispositivi", "voci": ["bluetooth", "stampanti", "input", "controller"] },
         { "id": "rete", "voci": ["network"] },
         { "id": "personalizzazione", "pagina": "w-personalizzazione",
           "voci": ["preset", "appearance", "scrivania", "finestre", "dock"] },
@@ -591,6 +591,8 @@ FloatingWindow {
           "cerca": "wifi rete cavo ethernet password connessione" },
         { "id": "bluetooth",  "icon": "bluetooth", "it": "Bluetooth",     "en": "Bluetooth",
           "cerca": "bluetooth accoppiamento cuffie dispositivi" },
+        { "id": "stampanti", "icon": "document", "it": "Stampanti e scanner", "en": "Printers & scanners",
+          "cerca": "stampanti scanner stampa ink inchiostro toner carta coda driver usb rete manutenzione ugelli pulizia printers scanners" },
         { "id": "controller", "icon": "gamepad",   "it": "Controller",    "en": "Game controllers",
           "cerca": "controller pad joystick gamepad giochi dualshock dualsense xbox playstation steam input inputplumber" },
         { "id": "input",      "icon": "keyboard",  "it": "Tastiera e mouse", "en": "Keyboard & mouse",
@@ -632,7 +634,7 @@ FloatingWindow {
         { "id": "g-scrivania", "icon": "image", "it": "Personalizzazione", "en": "Personalization",
           "voci": ["preset", "appearance", "scrivania", "finestre", "dock"] },
         { "id": "g-dispositivi", "icon": "screen", "it": "Dispositivi", "en": "Devices",
-          "voci": ["display", "audio", "input", "bluetooth", "controller"] },
+          "voci": ["display", "audio", "input", "bluetooth", "stampanti", "controller"] },
         { "id": "g-connessioni", "icon": "wifi", "it": "Connessioni", "en": "Connections",
           "voci": ["network", "account"] },
         { "id": "g-app", "icon": "apps", "it": "Applicazioni", "en": "Applications",
@@ -1190,6 +1192,7 @@ FloatingWindow {
             case "audio":    return settings.stileWindows ? "windows/Audio.qml" : "sections/Audio.qml";
             case "network":   return "sections/Network.qml";
             case "bluetooth": return "sections/Bluetooth.qml";
+            case "stampanti": return settings.stileWindows ? "windows/Stampanti.qml" : "sections/Stampanti.qml";
             case "controller": return "sections/Controller.qml";
             case "input":    return "sections/Input.qml";
             case "dataora":  return "sections/DataOra.qml";

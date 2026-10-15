@@ -108,16 +108,18 @@ Item {
                     font.weight: Font.DemiBold
                     Accessible.role: ultima ? Accessible.Heading : Accessible.Link
                     Accessible.name: modelData.testo
-                    activeFocusOnTab: !ultima && modelData.pagina !== undefined
+                    activeFocusOnTab: !ultima && (modelData.pagina !== undefined || modelData.categoria !== undefined)
                     Accessible.onPressAction: attiva()
                     Keys.onReturnPressed: attiva()
                     Keys.onSpacePressed: attiva()
                     function attiva() {
-                        if (ultima || modelData.pagina === undefined)
+                        if (ultima || (modelData.pagina === undefined && modelData.categoria === undefined))
                             return;
                         var destinazione = modelData.pagina;
                         var finestra = pagina.finestra;
-                        if (finestra)
+                        if (finestra && modelData.categoria !== undefined)
+                            finestra.apriCategoria(modelData.categoria);
+                        else if (finestra)
                             finestra.apriWindows(destinazione);
                         else
                             pagina.briciolaChiesta(destinazione);
@@ -136,7 +138,7 @@ Item {
                     MouseArea {
                         id: presa
                         anchors.fill: parent
-                        enabled: !ultima && modelData.pagina !== undefined
+                        enabled: !ultima && (modelData.pagina !== undefined || modelData.categoria !== undefined)
                         hoverEnabled: true
                         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: voce.attiva()
