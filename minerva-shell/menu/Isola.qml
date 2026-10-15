@@ -639,7 +639,7 @@ PanelWindow {
                     topPadding: Theme.Effects.space3
                     bottomPadding: Theme.Effects.space3
                     horizontalAlignment: Text.AlignHCenter
-                    text: Core.Notifications.doNotDisturb
+                    text: Core.Notifications.nonDisturbareEffettivo
                           ? (isola.it ? "Niente notifiche. «Non disturbare» è acceso: arrivano senza farsi vedere."
                                       : "No notifications. “Do not disturb” is on: they arrive without showing up.")
                           : (isola.it ? "Niente notifiche." : "No notifications.")

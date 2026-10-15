@@ -374,6 +374,10 @@ class SettingsApi {
   /// fabbrica dice 960. Una lista di fabbrica fatta di nomi vuole nomi; una
   /// lista vuota di fabbrica non dice cosa conterrà, e si accetta.
   static bool _conforme(String percorso, dynamic fabbrica, dynamic valore) {
+    if (percorso == 'notifications.scheduleDismissed') {
+      return valore is String && (valore.isEmpty ||
+          RegExp(r'^([01][0-9]|2[0-3]):[0-5][0-9]\|([01][0-9]|2[0-3]):[0-5][0-9]\|(daily|weekdays|weekends)\|[1-9][0-9]{0,15}$').hasMatch(valore));
+    }
     if (percorso == 'notifications.scheduleFrom' || percorso == 'notifications.scheduleTo') {
       return valore is String && RegExp(r'^([01][0-9]|2[0-3]):[0-5][0-9]$').hasMatch(valore);
     }
@@ -1794,6 +1798,7 @@ class SettingsApi {
       'scheduleFrom': '22:00',
       'scheduleTo': '07:00',
       'scheduleDays': 'daily',
+      'scheduleDismissed': '',
       'doNotDisturb': false,
       // Cosa si vede sulla schermata di blocco: «numero» (per programma,
       // «Thunderbird · 3 email», come sul telefono), «tutto» (anche il

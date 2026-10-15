@@ -155,7 +155,7 @@ PanelWindow {
         case "wifi":          return Core.SystemState.wifiOn;
         case "bluetooth":     return Core.SystemState.bluetoothOn;
         case "notte":         return Core.Ipc.get("display.nightLight", false) === true;
-        case "nondisturbare": return Core.Notifications.doNotDisturb;
+        case "nondisturbare": return Core.Notifications.nonDisturbareEffettivo;
         case "risparmio":     return !!Core.Compositore.risparmio && Core.Compositore.risparmio.attivo === true;
         case "gioco":         return Core.Gioco.attiva;
         case "trasmetti":     return centro.trasmissioneVerso !== "";
@@ -207,7 +207,7 @@ PanelWindow {
             Core.Ipc.setSetting("display.nightLight", !centro.accesoDi("notte"));
             return;
         case "nondisturbare":
-            Core.Ipc.setSetting("notifications.doNotDisturb", !centro.accesoDi("nondisturbare"));
+            Core.Notifications.impostaNonDisturbare(!centro.accesoDi("nondisturbare"));
             return;
         case "risparmio":
             // Spegnerla deve spegnere. Scriveva sempre «auto» quando era

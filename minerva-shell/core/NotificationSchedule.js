@@ -31,3 +31,59 @@ function isActive(now, from, to, days) {
         return matchesDay(days, day);
     return minute < end && matchesDay(days, (day + 6) % 7);
 }
+
+function intervalEnd(now, from, to, days) {
+    if (!isActive(now, from, to, days))
+        return 0;
+    var start = minuteOfDay(from);
+    var end = minuteOfDay(to);
+    var minute = now.getHours() * 60 + now.getMinutes();
+    var result = new Date(now.getTime());
+    if (start === end) {
+        result.setDate(result.getDate() + 1);
+        result.setHours(0, 0, 0, 0);
+    } else {
+        if (start > end && minute >= start)
+            result.setDate(result.getDate() + 1);
+        result.setHours(Math.floor(end / 60), end % 60, 0, 0);
+    }
+    return result.getTime();
+}
+
+// La sospensione identifica una sola occorrenza, non una preferenza eterna.
+// Include orari/giorni: modificare la regola non eredita un vecchio silenzio.
+function intervalToken(now, get) {
+    if (!get("notifications.scheduleEnabled", false))
+        return "";
+    var from = get("notifications.scheduleFrom", "22:00");
+    var to = get("notifications.scheduleTo", "07:00");
+    var days = get("notifications.scheduleDays", "daily");
+    var end = intervalEnd(now, from, to, days);
+    return end ? [from, to, days, end].join("|") : "";
+}
+
+function isPaused(now, get) {
+    var token = intervalToken(now, get);
+    return token !== "" && token === get("notifications.scheduleDismissed", "");
+}
+
+function scheduledQuiet(now, get) {
+    var token = intervalToken(now, get);
+    return token !== "" && token !== get("notifications.scheduleDismissed", "");
+}
+
+function isQuiet(now, get) {
+    return get("notifications.doNotDisturb", false) || scheduledQuiet(now, get);
+}
+
+function setQuiet(now, get, set, enabled) {
+    set("notifications.doNotDisturb", enabled);
+    if (get("notifications.scheduleDismissed", undefined) !== undefined)
+        set("notifications.scheduleDismissed", enabled ? "" : intervalToken(now, get));
+}
+
+function setSchedule(get, set, path, value) {
+    set(path, value);
+    if (get("notifications.scheduleDismissed", undefined) !== undefined)
+        set("notifications.scheduleDismissed", "");
+}

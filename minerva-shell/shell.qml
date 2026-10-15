@@ -871,8 +871,8 @@ ShellRoot {
         case "blocca":       root.run([root.minervaRoot + "/scripts/minerva-blocca"]); break;
         case "notte":        Core.Ipc.setSetting("display.nightLight",
                                                  !Core.Ipc.get("display.nightLight", false)); break;
-        case "dnd":          Core.Ipc.setSetting("notifications.doNotDisturb",
-                                                 !Core.Notifications.doNotDisturb); break;
+        case "dnd":          Core.Notifications.impostaNonDisturbare(
+                                                 !Core.Notifications.nonDisturbareEffettivo); break;
         case "impostazioni": root.openSettings(); break;
         case "appunti":      root.apriCassetto(); break;
         case "sospendi":

@@ -1,4 +1,6 @@
 import QtQuick
+import Quickshell
+import "../../core/NotificationSchedule.js" as NotificationSchedule
 import "../../theme" as Theme
 import "../../core" as Core
 import "../../ui" as Ui
@@ -17,6 +19,7 @@ import ".." as S
 Page {
     id: page
 
+    property SystemClock orologio: SystemClock { precision: SystemClock.Minutes }
     readonly property bool it: Core.Strings.lang === "it"
     readonly property string mostra: Core.Ipc.get("notifications.bloccoMostra", "numero")
 
@@ -59,9 +62,9 @@ Page {
             searchTerms: "non disturbare silenzio notifiche"
             controlWidth: 60
             control: S.ToggleSwitch {
-                checked: Core.Ipc.get("notifications.doNotDisturb", false)
+                checked: NotificationSchedule.isQuiet(page.orologio.date, Core.Ipc.get)
                 onToggled: function(v) {
-                    Core.Ipc.setSetting("notifications.doNotDisturb", v);
+                    NotificationSchedule.setQuiet(new Date(), Core.Ipc.get, Core.Ipc.setSetting, v);
                 }
             }
         }
@@ -71,8 +74,8 @@ Page {
         visible: Core.Ipc.get("notifications.scheduleEnabled", undefined) !== undefined
         objectName: "notificheRegoleLiquid"
         heading: page.it ? "Non disturbare programmato" : "Scheduled do not disturb"
-        note: page.it ? "Ora locale. I giorni si riferiscono all'inizio dell'intervallo; orari uguali coprono l'intera giornata. La scelta manuale rimane indipendente."
-                      : "Local time. Days refer to the start of the interval; equal times cover the whole day. The manual setting remains independent."
+        note: page.it ? "Ora locale. I giorni si riferiscono all'inizio dell'intervallo; orari uguali coprono l'intera giornata. Disattivare Non disturbare sospende la regola per il solo intervallo attuale."
+                      : "Local time. Days refer to the start of the interval; equal times cover the whole day. Turning Do not disturb off pauses the rule for this interval only."
         S.SettingRow {
             width: parent.width
             label: page.it ? "Durante questi orari" : "During these times"
@@ -80,7 +83,7 @@ Page {
             control: S.ToggleSwitch {
                 objectName: "notificheProgrammaLiquid"
                 checked: Core.Ipc.get("notifications.scheduleEnabled", false)
-                onToggled: function(value) { Core.Ipc.setSetting("notifications.scheduleEnabled", value); }
+                onToggled: function(value) { NotificationSchedule.setSchedule(Core.Ipc.get, Core.Ipc.setSetting, "notifications.scheduleEnabled", value); }
             }
         }
         Repeater {
@@ -107,7 +110,7 @@ Page {
                             result.push({value:value,label:value});
                         return result.sort(function(a,b) { return a.value.localeCompare(b.value); });
                     }
-                    onPicked: function(value) { Core.Ipc.setSetting("notifications." + riga.modelData.key,value); }
+                    onPicked: function(value) { NotificationSchedule.setSchedule(Core.Ipc.get, Core.Ipc.setSetting, "notifications." + riga.modelData.key, value); }
                 }
             }
         }
@@ -121,7 +124,7 @@ Page {
                 options: [{value:"daily",label:page.it ? "Ogni giorno" : "Daily"},
                     {value:"weekdays",label:page.it ? "Giorni feriali" : "Weekdays"},
                     {value:"weekends",label:page.it ? "Fine settimana" : "Weekends"}]
-                onPicked: function(value) { Core.Ipc.setSetting("notifications.scheduleDays",value); }
+                onPicked: function(value) { NotificationSchedule.setSchedule(Core.Ipc.get, Core.Ipc.setSetting, "notifications.scheduleDays", value); }
             }
         }
     }

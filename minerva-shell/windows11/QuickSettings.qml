@@ -31,7 +31,7 @@ FocusScope {
         "icon": "bell",
         "label": Style.label("Non disturbare", "Do not disturb"),
         "available": true,
-        "on": Core.Notifications.doNotDisturb
+        "on": Core.Notifications.nonDisturbareEffettivo
     }, {
         "id": "accessibility",
         "icon": "accessibility",
@@ -83,7 +83,7 @@ FocusScope {
         else if (id === "night")
             Core.Ipc.setSetting("display.nightLight", !Core.Ipc.get("display.nightLight", false));
         else if (id === "dnd")
-            Core.Ipc.setSetting("notifications.doNotDisturb", !Core.Notifications.doNotDisturb);
+            Core.Notifications.impostaNonDisturbare(!Core.Notifications.nonDisturbareEffettivo);
         else if (id === "accessibility")
             panel.settingsRequested("accesso-facile");
         else if (id === "project")

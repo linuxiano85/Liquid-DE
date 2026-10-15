@@ -224,11 +224,11 @@ QtObject {
     readonly property bool ricezioneAttiva: Core.Ipc.get("notifications.enabled", true)
     readonly property bool bannerAttivi: Core.Ipc.get("notifications.banners", true)
     property SystemClock _orologio: SystemClock { precision: SystemClock.Minutes }
-    readonly property bool silenzioProgrammato: Core.Ipc.get("notifications.scheduleEnabled", false)
-        && NotificationSchedule.isActive(_orologio.date,
-            Core.Ipc.get("notifications.scheduleFrom", "22:00"),
-            Core.Ipc.get("notifications.scheduleTo", "07:00"),
-            Core.Ipc.get("notifications.scheduleDays", "daily"))
+    readonly property bool silenzioProgrammato: NotificationSchedule.scheduledQuiet(_orologio.date, Core.Ipc.get)
+    readonly property bool nonDisturbareEffettivo: doNotDisturb || silenzioProgrammato
+    function impostaNonDisturbare(enabled) {
+        NotificationSchedule.setQuiet(new Date(), Core.Ipc.get, Core.Ipc.setSetting, enabled);
+    }
 
     /// Silenzio temporaneo, non un'impostazione.
     ///
