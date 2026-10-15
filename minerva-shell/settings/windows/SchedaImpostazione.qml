@@ -25,6 +25,7 @@ Rectangle {
     property string descrizione: ""
     /// Porta a un'altra pagina: freccia › e clic su tutta la scheda.
     property bool porta: false
+    property bool mostraFreccia: true
     property bool disponibile: true
     /// Il comando c'è ma adesso non si usa (come «Mostra il colore principale
     /// su Start…» in modalità chiara): titolo spento, comando spento, e la
@@ -212,7 +213,7 @@ Rectangle {
 
     W.Glyph {
         id: freccia
-        visible: scheda.porta
+        visible: scheda.porta && scheda.mostraFreccia
         anchors.right: parent.right
         anchors.rightMargin: 16
         anchors.verticalCenter: parent.verticalCenter

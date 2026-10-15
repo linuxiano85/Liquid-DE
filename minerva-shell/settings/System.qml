@@ -1181,7 +1181,7 @@ FloatingWindow {
             case "scrivania": return "sections/Scrivania.qml";
             case "power":    return "sections/Power.qml";
             case "notifiche": return "sections/Notifiche.qml";
-            case "audio":    return "sections/Audio.qml";
+            case "audio":    return settings.stileWindows ? "windows/Audio.qml" : "sections/Audio.qml";
             case "network":   return "sections/Network.qml";
             case "bluetooth": return "sections/Bluetooth.qml";
             case "controller": return "sections/Controller.qml";
