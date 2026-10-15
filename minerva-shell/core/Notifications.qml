@@ -1,8 +1,10 @@
 pragma Singleton
 import QtQuick
+import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Notifications
 import "." as Core
+import "NotificationSchedule.js" as NotificationSchedule
 
 // Notifications — La coda delle notifiche, unica per tutta la sessione.
 //
@@ -221,6 +223,12 @@ QtObject {
     property bool doNotDisturb: false
     readonly property bool ricezioneAttiva: Core.Ipc.get("notifications.enabled", true)
     readonly property bool bannerAttivi: Core.Ipc.get("notifications.banners", true)
+    property SystemClock _orologio: SystemClock { precision: SystemClock.Minutes }
+    readonly property bool silenzioProgrammato: Core.Ipc.get("notifications.scheduleEnabled", false)
+        && NotificationSchedule.isActive(_orologio.date,
+            Core.Ipc.get("notifications.scheduleFrom", "22:00"),
+            Core.Ipc.get("notifications.scheduleTo", "07:00"),
+            Core.Ipc.get("notifications.scheduleDays", "daily"))
 
     /// Silenzio temporaneo, non un'impostazione.
     ///
@@ -236,6 +244,7 @@ QtObject {
     readonly property bool inSilenzio:
         !notifications.ricezioneAttiva || !notifications.bannerAttivi
         || notifications.doNotDisturb || notifications.zittitoDalGioco
+        || notifications.silenzioProgrammato
 
     // ── Le notifiche per la schermata di blocco ──────────────────────────
     //

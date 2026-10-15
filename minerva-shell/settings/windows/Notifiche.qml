@@ -1,5 +1,7 @@
 import QtQuick
+import Quickshell
 import "../../core" as Core
+import "../../core/NotificationSchedule.js" as NotificationSchedule
 import "../../windows11" as W
 import ".." as S
 
@@ -12,6 +14,12 @@ PaginaWindows {
     readonly property bool schemaCompleto: Core.Ipc.get("notifications.enabled", undefined) !== undefined
         && Core.Ipc.get("notifications.banners", undefined) !== undefined
     readonly property string privacy: Core.Ipc.get("notifications.bloccoMostra", "numero")
+    property SystemClock orologio: SystemClock { precision: SystemClock.Minutes }
+    readonly property bool programmaAttivo: Core.Ipc.get("notifications.scheduleEnabled", false)
+        && NotificationSchedule.isActive(orologio.date,
+            Core.Ipc.get("notifications.scheduleFrom", "22:00"),
+            Core.Ipc.get("notifications.scheduleTo", "07:00"),
+            Core.Ipc.get("notifications.scheduleDays", "daily"))
     // Riattivare la vista sul blocco nella stessa pagina conserva la scelta
     // precedente. Dopo una nuova apertura si riparte dal valore più privato.
     property string ultimaPrivacy: "numero"
@@ -66,6 +74,67 @@ PaginaWindows {
             Accessible.name: W.Style.label("Non disturbare", "Do not disturb")
             checked: Core.Ipc.get("notifications.doNotDisturb", false)
             onToggled: function(value) { Core.Ipc.setSetting("notifications.doNotDisturb", value); }
+        }
+    }
+    EspansoreImpostazione {
+        objectName: "notificheRegole"
+        visible: Core.Ipc.get("notifications.scheduleEnabled", undefined) !== undefined
+        titolo: W.Style.label("Attiva Non disturbare automaticamente", "Turn on do not disturb automatically")
+        descrizione: pagina.programmaAttivo
+            ? W.Style.label("Regola oraria attiva", "Time rule active")
+            : W.Style.label("Scegli quando silenziare le notifiche", "Choose when to silence notifications")
+        aperto: true
+        SchedaImpostazione {
+            interna: true
+            titolo: W.Style.label("Durante questi orari", "During these times")
+            S.ToggleSwitch {
+                objectName: "notificheProgramma"
+                enabled: pagina.ricezione
+                Accessible.name: W.Style.label("Durante questi orari", "During these times")
+                checked: Core.Ipc.get("notifications.scheduleEnabled", false)
+                onToggled: function(value) { Core.Ipc.setSetting("notifications.scheduleEnabled", value); }
+            }
+        }
+        Repeater {
+            model: [{key:"scheduleFrom", it:"Ora di inizio", en:"Start time", fallback:"22:00"},
+                {key:"scheduleTo", it:"Ora di fine", en:"End time", fallback:"07:00"}]
+            delegate: SchedaImpostazione {
+                id: rigaOra
+                required property var modelData
+                interna: true
+                titolo: W.Style.label(modelData.it, modelData.en)
+                OraWindows {
+                    objectName: "notificheOra-" + rigaOra.modelData.key
+                    etichetta: rigaOra.titolo
+                    enabled: pagina.ricezione && Core.Ipc.get("notifications.scheduleEnabled", false)
+                    valore: Core.Ipc.get("notifications." + rigaOra.modelData.key, rigaOra.modelData.fallback)
+                    onScelta: function(value) { Core.Ipc.setSetting("notifications." + rigaOra.modelData.key, value); }
+                }
+            }
+        }
+        SchedaImpostazione {
+            interna: true
+            titolo: W.Style.label("Ripeti", "Repeats")
+            TendinaWindows {
+                objectName: "notificheGiorni"
+                width: Math.max(implicitWidth, 180)
+                enabled: pagina.ricezione && Core.Ipc.get("notifications.scheduleEnabled", false)
+                valore: Core.Ipc.get("notifications.scheduleDays", "daily")
+                voci: [{valore:"daily", testo:W.Style.label("Ogni giorno", "Daily")},
+                    {valore:"weekdays", testo:W.Style.label("Giorni feriali", "Weekdays")},
+                    {valore:"weekends", testo:W.Style.label("Fine settimana", "Weekends")}]
+                onScelto: function(value) { Core.Ipc.setSetting("notifications.scheduleDays", value); }
+            }
+        }
+        Text {
+            width: parent.width
+            padding: 16
+            wrapMode: Text.Wrap
+            text: W.Style.label("La regola segue l'ora locale e i giorni in cui inizia l'intervallo. Orari uguali coprono l'intera giornata. Non modifica l'interruttore manuale Non disturbare.",
+                "The rule follows local time and the day the interval starts. Equal times cover the whole day. It does not change the manual Do not disturb switch.")
+            color: W.Style.muted
+            font.family: W.Style.font
+            font.pixelSize: 12
         }
     }
     GruppoImpostazioni { testo: "Liquid" }

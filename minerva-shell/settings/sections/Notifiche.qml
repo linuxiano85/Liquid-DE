@@ -68,6 +68,65 @@ Page {
     }
 
     Card {
+        visible: Core.Ipc.get("notifications.scheduleEnabled", undefined) !== undefined
+        objectName: "notificheRegoleLiquid"
+        heading: page.it ? "Non disturbare programmato" : "Scheduled do not disturb"
+        note: page.it ? "Ora locale. I giorni si riferiscono all'inizio dell'intervallo; orari uguali coprono l'intera giornata. La scelta manuale rimane indipendente."
+                      : "Local time. Days refer to the start of the interval; equal times cover the whole day. The manual setting remains independent."
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "Durante questi orari" : "During these times"
+            controlWidth: 60
+            control: S.ToggleSwitch {
+                objectName: "notificheProgrammaLiquid"
+                checked: Core.Ipc.get("notifications.scheduleEnabled", false)
+                onToggled: function(value) { Core.Ipc.setSetting("notifications.scheduleEnabled", value); }
+            }
+        }
+        Repeater {
+            model: [{key:"scheduleFrom",it:"Dalle",en:"From",fallback:"22:00"},
+                {key:"scheduleTo",it:"Alle",en:"Until",fallback:"07:00"}]
+            delegate: S.SettingRow {
+                id: riga
+                required property var modelData
+                width: parent.width
+                label: page.it ? modelData.it : modelData.en
+                controlWidth: 200
+                control: S.Tendina {
+                    objectName: "notificheOraLiquid-" + riga.modelData.key
+                    width: 200
+                    enabled: Core.Ipc.get("notifications.scheduleEnabled", false)
+                    value: Core.Ipc.get("notifications." + riga.modelData.key,riga.modelData.fallback)
+                    options: {
+                        var result = [];
+                        for (var minute = 0; minute < 1440; minute += 15) {
+                            var text = String(Math.floor(minute/60)).padStart(2,"0") + ":" + String(minute%60).padStart(2,"0");
+                            result.push({value:text,label:text});
+                        }
+                        if (!result.some(function(item) { return item.value === value; }))
+                            result.push({value:value,label:value});
+                        return result.sort(function(a,b) { return a.value.localeCompare(b.value); });
+                    }
+                    onPicked: function(value) { Core.Ipc.setSetting("notifications." + riga.modelData.key,value); }
+                }
+            }
+        }
+        S.SettingRow {
+            width: parent.width
+            label: page.it ? "Ripeti" : "Repeats"
+            controlWidth: 240
+            control: S.ChoicePicker {
+                enabled: Core.Ipc.get("notifications.scheduleEnabled", false)
+                value: Core.Ipc.get("notifications.scheduleDays", "daily")
+                options: [{value:"daily",label:page.it ? "Ogni giorno" : "Daily"},
+                    {value:"weekdays",label:page.it ? "Giorni feriali" : "Weekdays"},
+                    {value:"weekends",label:page.it ? "Fine settimana" : "Weekends"}]
+                onPicked: function(value) { Core.Ipc.setSetting("notifications.scheduleDays",value); }
+            }
+        }
+    }
+
+    Card {
         heading: page.it ? "Sulla schermata di blocco" : "On the lock screen"
         note: page.it
             ? "Quelle arrivate e non ancora viste, nella metà libera della schermata. "
