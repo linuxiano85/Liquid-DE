@@ -141,6 +141,7 @@
 #include "energia.h"
 #include "puntatore.h"
 #include "schermi.h"
+#include "schermi-posizioni.h"
 #include <wlr/backend/headless.h>
 #include "canale.h"
 #include "comandi.h"
@@ -10013,6 +10014,12 @@ static void comando_schermo(struct minerva *m, char *resto, const char *prova,
 		v.posizione_detta = true;
 	}
 
+	// Una variazione delle dimensioni non deve riordinare gli altri monitor
+	// ancora automatici. Anche il rollback deve ritrovare l'intera topologia.
+	if (!minerva_schermi_fissa_posizioni(m->schermi)) {
+		snprintf(risposta, n, "no memoria insufficiente per conservare le posizioni degli schermi");
+		return;
+	}
 	if (prova && !s->prova_timer) {
 		s->prova_timer = wl_event_loop_add_timer(wl_display_get_event_loop(m->display), schermo_ripristina, s);
 		if (!s->prova_timer) { snprintf(risposta, n, "no timer rollback non disponibile"); return; }

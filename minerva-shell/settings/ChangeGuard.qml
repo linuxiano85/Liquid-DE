@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Wayland
 import "../theme" as Theme
 import "../core" as Core
+import "../windows11" as W
 
 // ChangeGuard — «Va bene così?», con il ritorno automatico se nessuno risponde.
 //
@@ -32,6 +33,7 @@ import "../core" as Core
 // questa domanda deve restare visibile.
 PanelWindow {
     id: guard
+    readonly property bool windowsAppearance: Core.DesktopStyle.attuale === "windows"
 
     WlrLayershell.namespace: "quickshell"
     WlrLayershell.layer: WlrLayer.Overlay
@@ -144,10 +146,10 @@ PanelWindow {
 
         width: 460
         height: content.implicitHeight + Theme.Effects.space5 * 2
-        radius: Theme.Effects.radiusLG
-        color: Theme.Colors.membrane
+        radius: guard.windowsAppearance ? 8 : Theme.Effects.radiusLG
+        color: guard.windowsAppearance ? W.Style.surface : Theme.Colors.membrane
         border.width: 1
-        border.color: Theme.Colors.edge
+        border.color: guard.windowsAppearance ? W.Style.edge : Theme.Colors.edge
 
         opacity: guard.armed ? 1 : 0
         scale: guard.armed ? 1 : 0.96
@@ -173,7 +175,7 @@ PanelWindow {
                 text: guard.question
                 wrapMode: Text.WordWrap
                 color: Theme.Colors.text
-                font.family: Theme.Typography.fontDisplay
+                font.family: guard.windowsAppearance ? W.Style.font : Theme.Typography.fontDisplay
                 font.pixelSize: Theme.Typography.sizeLG
                 font.weight: Theme.Typography.weightBold
             }
@@ -184,7 +186,7 @@ PanelWindow {
                 text: guard.detail
                 wrapMode: Text.WordWrap
                 color: Theme.Colors.textMuted
-                font.family: Theme.Typography.fontDisplay
+                font.family: guard.windowsAppearance ? W.Style.font : Theme.Typography.fontDisplay
                 font.weight: Theme.Typography.weightRegular
                 font.pixelSize: Theme.Typography.sizeSM
             }
@@ -196,7 +198,7 @@ PanelWindow {
                       : "With no answer I'll put it back in " + guard.remaining + " s."
                 wrapMode: Text.WordWrap
                 color: Theme.Colors.textFaint
-                font.family: Theme.Typography.fontDisplay
+                font.family: guard.windowsAppearance ? W.Style.font : Theme.Typography.fontDisplay
                 font.weight: Theme.Typography.weightRegular
                 font.pixelSize: Theme.Typography.sizeSM
             }
@@ -250,11 +252,11 @@ PanelWindow {
 
                         width: btnLabel.implicitWidth + Theme.Effects.space5
                         height: 34
-                        radius: Theme.Effects.radiusXS
+                        radius: guard.windowsAppearance ? 4 : Theme.Effects.radiusXS
 
-                        color: btnMouse.containsMouse ? Qt.alpha(tone, 0.18)
-                             : primary ? Qt.alpha(tone, 0.10)
-                             : "transparent"
+                        color: guard.windowsAppearance ? (primary ? W.Style.accent : W.Style.field)
+                             : btnMouse.containsMouse ? Qt.alpha(tone, 0.18)
+                             : primary ? Qt.alpha(tone, 0.10) : "transparent"
                         border.width: primary ? 1 : 0
                         border.color: Qt.alpha(tone, 0.45)
 
@@ -265,8 +267,9 @@ PanelWindow {
                             anchors.centerIn: parent
                             text: btn.primary ? (guard.it ? "Mantieni" : "Keep it")
                                               : (guard.it ? "Ripristina" : "Put it back")
-                            color: btn.primary ? Theme.Colors.text : Theme.Colors.textMuted
-                            font.family: Theme.Typography.fontDisplay
+                            color: guard.windowsAppearance ? (btn.primary ? W.Style.accentForeground : W.Style.text)
+                                 : btn.primary ? Theme.Colors.text : Theme.Colors.textMuted
+                            font.family: guard.windowsAppearance ? W.Style.font : Theme.Typography.fontDisplay
                             font.weight: Theme.Typography.weightRegular
                             font.pixelSize: Theme.Typography.sizeMD
                         }

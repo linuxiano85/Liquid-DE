@@ -1177,7 +1177,7 @@ FloatingWindow {
             switch (settings.section) {
             case "finestre": return "sections/Finestre.qml";
             case "dock":     return "sections/Dock.qml";
-            case "display":  return "sections/Display.qml";
+            case "display":  return settings.stileWindows ? "windows/Schermo.qml" : "sections/Display.qml";
             case "scrivania": return "sections/Scrivania.qml";
             case "power":    return "sections/Power.qml";
             case "notifiche": return "sections/Notifiche.qml";
