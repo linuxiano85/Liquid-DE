@@ -576,7 +576,7 @@ FloatingWindow {
         { "id": "display",    "icon": "screen",    "it": "Schermo",       "en": "Display",
           "cerca": "risoluzione frequenza scala rotazione monitor hdmi estendi solo notebook disposizione luce notturna night light" },
         { "id": "notifiche",  "icon": "bell",      "it": "Notifiche",     "en": "Notifications",
-          "cerca": "notifiche non disturbare silenzio schermata blocco privacy email nascondi contenuto banner ricezione banners reception orari automaticamente schedule" },
+          "cerca": "notifiche non disturbare silenzio schermata blocco privacy email nascondi contenuto banner ricezione banners reception orari automaticamente schedule suoni sounds mittenti senders priorità priority" },
         { "id": "power",      "icon": "battery",   "it": "Alimentazione", "en": "Power",
           "cerca": "batteria energia sospensione coperchio spegnimento blocco inattività" },
         { "id": "audio",      "icon": "volume",    "it": "Audio",         "en": "Sound",

@@ -39,3 +39,10 @@ function banner(get, key, quiet) {
         return false;
     return !quiet || get("notifications.apps." + key + ".priority", false);
 }
+
+// Il suono resta indipendente dal banner: chi nasconde il popup può ancora
+// volere un avviso acustico. Non disturbare e la richiesta dell'app prevalgono.
+function sound(get, key, quiet, suppressed) {
+    return enabled(get, key) && get("notifications.sounds", true)
+        && !suppressed && (!quiet || get("notifications.apps." + key + ".priority", false));
+}

@@ -67,6 +67,13 @@ QtObject {
         return NotificationSenders.banner(Core.Ipc.get, key, notifications.inSilenzio);
     }
 
+    function avvisaConSuono(item, suppressed) {
+        var key = item.sender || NotificationSenders.identity(item.appName, "").key;
+        var quiet = notifications.nonDisturbareEffettivo || notifications.zittitoDalGioco;
+        if (NotificationSenders.sound(Core.Ipc.get, key, quiet, suppressed))
+            Core.Sounds.notification();
+    }
+
     /// Una notifica che non viene da un programma ma da Minerva stessa.
     ///
     /// Nasce per le estensioni che si fermano: prima il demone lo diceva solo
@@ -90,6 +97,7 @@ QtObject {
             "read": false
         };
         notifications._aggiungi(item);
+        notifications.avvisaConSuono(item, false);
         if (notifications.mostraBanner(item))
             notifications.arrived(item);
     }
@@ -439,6 +447,8 @@ QtObject {
             };
 
             notifications._aggiungi(item);
+            var suppressed = notif.hints && notif.hints["suppress-sound"] === true;
+            notifications.avvisaConSuono(item, suppressed);
 
             if (notifications.mostraBanner(item))
                 notifications.arrived(item);

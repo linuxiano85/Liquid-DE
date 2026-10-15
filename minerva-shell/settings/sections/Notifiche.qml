@@ -62,6 +62,19 @@ Page {
         }
         S.SettingRow {
             width: parent.width
+            visible: Core.Ipc.get("notifications.sounds", undefined) !== undefined
+            label: page.it ? "Riproduci suoni" : "Play sounds"
+            controlWidth: 60
+            control: S.ToggleSwitch {
+                objectName: "notificheSuoniLiquid"
+                Accessible.name: page.it ? "Riproduci suoni" : "Play sounds"
+                enabled: Core.Ipc.get("notifications.enabled", true)
+                checked: Core.Ipc.get("notifications.sounds", true)
+                onToggled: function(value) { Core.Ipc.setSetting("notifications.sounds", value); }
+            }
+        }
+        S.SettingRow {
+            width: parent.width
             label: Core.Strings.t("doNotDisturb")
             description: Core.Strings.t("doNotDisturbDesc")
             searchTerms: "non disturbare silenzio notifiche"

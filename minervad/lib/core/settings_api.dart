@@ -1807,6 +1807,7 @@ class SettingsApi {
       'apps': <String, dynamic>{},
       'enabled': true,
       'banners': true,
+      'sounds': true,
       'scheduleEnabled': false,
       'scheduleFrom': '22:00',
       'scheduleTo': '07:00',

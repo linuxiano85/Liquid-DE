@@ -66,6 +66,11 @@ QtObject {
         }
     }
 
+    property SoundEffect notifica: SoundEffect {
+        source: campioni.cartella + "notification.wav"
+        volume: campioni.livello
+    }
+
     property SoundEffect limite: SoundEffect {
         source: campioni.cartella + "volume-limit.wav"
         volume: campioni.livello

@@ -91,6 +91,14 @@ PaginaWindows {
                     onScelta: function(value) { Core.Ipc.setSetting("notifications.banners", value); }
                 }
                 CasellaWindows {
+                    objectName: "notificheSuoni"
+                    visible: Core.Ipc.get("notifications.sounds", undefined) !== undefined
+                    testo: W.Style.label("Consenti alle notifiche di riprodurre suoni", "Allow notifications to play sounds")
+                    enabled: pagina.ricezione
+                    checked: Core.Ipc.get("notifications.sounds", true)
+                    onScelta: function(value) { Core.Ipc.setSetting("notifications.sounds", value); }
+                }
+                CasellaWindows {
                     objectName: "notificheBlocco"
                     testo: W.Style.label("Mostra notifiche nella schermata di blocco", "Show notifications on the lock screen")
                     enabled: pagina.ricezione

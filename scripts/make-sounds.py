@@ -93,6 +93,11 @@ def write(name, samples):
 def main():
     print("Suoni di Minerva →", OUT)
 
+    # Una breve terza maggiore, sintetizzata qui: nessun campione di altri OS.
+    write("notification.wav", mix(
+        tone(659.25, 220, peak=0.16, decay_ms=75),
+        delay(tone(830.61, 280, peak=0.14, decay_ms=95), 110)))
+
     # ── I passi del volume ────────────────────────────────────────────────
     # Pentatonica maggiore di Do, due ottave: 0%, 10%, … 100%.
     root = 523.25  # Do5

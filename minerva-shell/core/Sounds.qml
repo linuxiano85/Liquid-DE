@@ -121,7 +121,7 @@ QtObject {
         onStatusChanged: {
             if (status === Loader.Error) {
                 console.warn("[MINERVA][Suoni] Niente audio: manca «qt6-multimedia». "
-                             + "Il resto funziona; si perdono solo i suoni del volume.");
+                             + "Il resto funziona; si perdono i suoni del volume e delle notifiche.");
                 sounds.enabled = false;
             }
         }
@@ -146,6 +146,24 @@ QtObject {
             return false;
         sounds._lastAt = now;
         return true;
+    }
+
+    signal notificationRequested()
+    property double _lastNotificationAt: 0
+
+    function notification() {
+        // Si accorpano le raffiche senza interferire con il ritorno del volume.
+        var now = Date.now();
+        if (!sounds.enabled || now - sounds._lastNotificationAt < 1000)
+            return;
+        sounds._lastNotificationAt = now;
+        if (!sounds.desti)
+            sounds.desti = true;
+        var c = sounds._campioni.item;
+        if (c) {
+            c.notifica.play();
+            sounds.notificationRequested();
+        }
     }
 
     /// Il passo del volume, con la nota che corrisponde al livello.
