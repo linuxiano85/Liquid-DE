@@ -15,7 +15,7 @@ FocusScope {
     Rectangle {anchors.fill:parent;radius:8;color:Style.pannello;border.color:Style.edge}
     Item {id:notes;x:16;y:16;width:parent.width-32;height:Math.max(80,parent.height-390)
         Text {text:Style.label("Notifiche","Notifications");color:Style.text;font.family:Style.font;font.pixelSize:14;font.weight:Font.DemiBold}
-        Button {anchors.right:parent.right;height:26;text:Style.label("Cancella tutto","Clear all");enabled:Core.Notifications.items.length>0;onClicked:Core.Notifications.clear()}
+        Button {objectName:"windowsNotificationsClear";anchors.right:parent.right;height:26;text:Style.label("Cancella tutto","Clear all");enabled:Core.Notifications.items.length>0;onClicked:Core.Notifications.clear()}
         ListView {id:noteList;y:38;width:parent.width;height:parent.height-38;clip:true;spacing:8;model:Core.Notifications.items.slice().reverse()
             delegate:Rectangle {
                 required property var modelData;required property int index;width:noteList.width;height:86;radius:4;color:Style.card;border.color:Style.cardStroke
@@ -25,7 +25,7 @@ FocusScope {
                     Text {width:parent.width;text:parent.parent.modelData.body || "";textFormat:Text.PlainText;elide:Text.ElideRight;color:Style.muted;font.family:Style.font;font.pixelSize:12}
                 }
                 MouseArea {anchors.fill:parent;onClicked:Core.Notifications.apri(parent.modelData)}
-                Button {anchors.right:parent.right;anchors.top:parent.top;width:30;height:30;icon:"close";tooltip:Style.label("Rimuovi notifica","Dismiss notification");onClicked:Core.Notifications.remove(Core.Notifications.items.length-1-parent.index)}
+                Button {objectName:"windowsNotificationDismiss-"+String(parent.modelData.id);anchors.right:parent.right;anchors.top:parent.top;width:30;height:30;icon:"close";tooltip:Style.label("Rimuovi notifica","Dismiss notification");onClicked:Core.Notifications.remove(Core.Notifications.items.length-1-parent.index)}
             }
         }
         Ui.Scorrimento {

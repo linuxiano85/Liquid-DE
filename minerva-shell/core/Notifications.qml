@@ -31,6 +31,8 @@ QtObject {
     readonly property int capacity: 60
 
     signal arrived(var item)
+    signal aggiornata(var item)
+    signal ritirata(var id)
 
     property var _nomiAggiornati: ({})
     function segnaNomeMittente(key, now) {
@@ -248,7 +250,11 @@ QtObject {
 
     function _aggiungi(item) {
         var copy = notifications.items.slice();
-        copy.push(item);
+        var index = copy.findIndex(function(old) { return String(old.id) === String(item.id); });
+        if (index >= 0)
+            copy[index] = item;
+        else
+            copy.push(item);
         while (copy.length > notifications.capacity)
             notifications._chiudi(copy.shift());
         notifications.items = copy;
@@ -257,6 +263,7 @@ QtObject {
     // Togliere una copia JavaScript non chiude la notifica tracked di DBus.
     function _chiudi(item) {
         if (!item) return;
+        notifications.ritirata(item.id);
         var notif = item.notif;
         item.notif = null;
         item.azioni = [];
@@ -379,6 +386,81 @@ QtObject {
         onTriggered: notifications._scriviPerIlBlocco()
     }
 
+    function _voce(notif, sender) {
+        return {
+            "id": notif.id,
+            "appName": notif.appName || "Sistema",
+            "sender": sender.key,
+            "summary": notif.summary || "",
+            "body": notif.body || "",
+            "urgency": notif.urgency || 0,
+            "timeout": notif.expireTimeout > 0 ? notif.expireTimeout : 5000,
+            "time": Date.now(),
+            "read": false,
+            // L'oggetto vero, per invocare le azioni. Le `actions` non si
+            // copiano in una lista nostra: sono oggetti di Quickshell con
+            // un metodo `invoke()`, e una copia perderebbe proprio quello.
+            "notif": notif,
+            "azioni": notif.actions || [],
+            // Un file che questa notifica riguarda, se lo dice. Vedi
+            // `fileDi()` qui sotto.
+            "file": notifications.fileDi(notif)
+        };
+    }
+
+    function _ritira(id) {
+        notifications.items = notifications.items.filter(function(item) { return String(item.id) !== String(id); });
+        notifications.ritirata(id);
+    }
+
+    function _aggiorna(notif) {
+        var old = notifications.items.find(function(item) { return String(item.id) === String(notif.id); });
+        if (!old)
+            return;
+        var sender = NotificationSenders.identity(notif.appName, notif.desktopEntry);
+        if (!NotificationSenders.enabled(Core.Ipc.get, sender.key)) {
+            notifications._ritira(notif.id);
+            notif.dismiss();
+            return;
+        }
+        notifications.registraMittente(sender);
+        var item = notifications._voce(notif, sender);
+        // Un aggiornamento di avanzamento non è un nuovo messaggio:
+        // conserva posizione e lettura, senza ripetere il suono.
+        item.time = old.time;
+        item.read = old.read;
+        notifications._aggiungi(item);
+        notifications.aggiornata(item);
+    }
+
+    property Instantiator _osservatori: Instantiator {
+        model: notifications._server.trackedNotifications
+        delegate: QtObject {
+            id: osservatore
+            required property var modelData
+            // updateProperties raggruppa più cambiamenti nello stesso giro.
+            // Il timer legge soltanto la versione completa, con le azioni nuove.
+            property Timer aggiorna: Timer {
+                interval: 0
+                onTriggered: if (osservatore.modelData) notifications._aggiorna(osservatore.modelData)
+            }
+            property Connections ascolto: Connections {
+                target: osservatore.modelData
+                function onSummaryChanged() { osservatore.aggiorna.restart(); }
+                function onBodyChanged() { osservatore.aggiorna.restart(); }
+                function onActionsChanged() { osservatore.aggiorna.restart(); }
+                function onAppNameChanged() { osservatore.aggiorna.restart(); }
+                function onHintsChanged() { osservatore.aggiorna.restart(); }
+                function onExpireTimeoutChanged() { osservatore.aggiorna.restart(); }
+                function onUrgencyChanged() { osservatore.aggiorna.restart(); }
+                function onClosed(reason) {
+                    osservatore.aggiorna.stop();
+                    notifications._ritira(osservatore.modelData.id);
+                }
+            }
+        }
+    }
+
     property NotificationServer _server: NotificationServer {
         bodyMarkupSupported: false
         bodyHyperlinksSupported: false
@@ -426,25 +508,7 @@ QtObject {
             // ancora aprire.
             notif.tracked = true;
 
-            var item = {
-                "id": notif.id,
-                "appName": notif.appName || "Sistema",
-                "sender": sender.key,
-                "summary": notif.summary || "",
-                "body": notif.body || "",
-                "urgency": notif.urgency || 0,
-                "timeout": notif.expireTimeout > 0 ? notif.expireTimeout : 5000,
-                "time": Date.now(),
-                "read": false,
-                // L'oggetto vero, per invocare le azioni. Le `actions` non si
-                // copiano in una lista nostra: sono oggetti di Quickshell con
-                // un metodo `invoke()`, e una copia perderebbe proprio quello.
-                "notif": notif,
-                "azioni": notif.actions || [],
-                // Un file che questa notifica riguarda, se lo dice. Vedi
-                // `fileDi()` qui sotto.
-                "file": notifications.fileDi(notif)
-            };
+            var item = notifications._voce(notif, sender);
 
             notifications._aggiungi(item);
             var suppressed = notif.hints && notif.hints["suppress-sound"] === true;

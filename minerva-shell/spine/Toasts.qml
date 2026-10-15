@@ -18,6 +18,7 @@ import "../core" as Core
 // non deve sparire in faccia.
 PanelWindow {
     id: toasts
+    objectName: "liquidToasts"
 
     WlrLayershell.namespace: "quickshell"
     WlrLayershell.layer: WlrLayer.Overlay
@@ -67,13 +68,36 @@ PanelWindow {
     color: "transparent"
 
     // Solo i toast visibili; la cronologia completa vive nel singleton.
-    ListModel { id: toastModel }
+    ListModel { id: toastModel; objectName: "liquidToastModel" }
 
     readonly property int maximumVisible: 4
 
+    function ritira(id) {
+        for (var i = toastModel.count-1; i >= 0; i--) {
+            if (toastModel.get(i).nid === String(id))
+                toastModel.remove(i);
+        }
+    }
+
     Connections {
         target: Core.Notifications
+        function onRitirata(id) { toasts.ritira(id); }
+        function onAggiornata(item) {
+            for (var i = 0; i < toastModel.count; i++) {
+                if (toastModel.get(i).nid !== String(item.id))
+                    continue;
+                if (!Core.Notifications.mostraBanner(item)) {
+                    toastModel.remove(i);
+                    return;
+                }
+                toastModel.set(i, {appName:item.appName, summary:item.summary, body:item.body,
+                    urgency:item.urgency, timeout:Math.max(3000, Math.min(10000, item.timeout)),
+                    nid:String(item.id), apribile:Core.Notifications.siPuoAprire(item)});
+                return;
+            }
+        }
         function onArrived(item) {
+            toasts.ritira(item.id);
             toastModel.insert(0, {
                 "appName": item.appName,
                 "summary": item.summary,

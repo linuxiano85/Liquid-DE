@@ -16,8 +16,18 @@ PanelWindow {
     WlrLayershell.namespace:"liquid-windows-toast"
     WlrLayershell.layer:WlrLayer.Overlay
     WlrLayershell.keyboardFocus:WlrKeyboardFocus.None
-    function remove(id){items=items.filter(function(item){return item.id!==id;});}
+    function remove(id){items=items.filter(function(item){return String(item.id)!==String(id);});}
     Connections {target:Core.Notifications
+        function onRitirata(id) { toast.remove(id); }
+        function onAggiornata(item) {
+            if (!Core.Notifications.mostraBanner(item)) {
+                toast.remove(item.id);
+                return;
+            }
+            // Un toast già scaduto resta nel centro: non riappare a ogni
+            // aggiornamento di un download o di una conversazione.
+            toast.items = toast.items.map(function(old) { return String(old.id) === String(item.id) ? item : old; });
+        }
         function onArrived(item) {
             if(toast.locked || !Core.Notifications.mostraBanner(item))return;
             toast.items=toast.items.filter(function(old){return old.id!==item.id;}).concat([item]).slice(-3);
