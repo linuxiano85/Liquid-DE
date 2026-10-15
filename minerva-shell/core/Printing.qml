@@ -29,7 +29,7 @@ Item {
         lastAction = data.action || "status";
         error = "";
         lastResult = "";
-        command.timeoutMs = data.action === "install-driver" ? 600000 : data.action === "configure" ? 150000 : 30000;
+        command.timeoutMs = data.action === "install-driver" ? 600000 : (data.action === "configure" || data.action === "remove") ? 150000 : (data.action === "discover" || data.action === "drivers") ? 60000 : 30000;
         command.start(["python3", "-I", helper, JSON.stringify(data)]);
         return true;
     }
@@ -62,6 +62,7 @@ Item {
             "device-no-longer-discovered":["Stampante non più rilevata. Accendila e ripeti la ricerca.", "Printer no longer detected. Turn it on and search again."],
             "driver-not-in-catalog":["Driver non più disponibile. Ripeti la ricerca dei driver.", "Driver no longer available. Search for drivers again."],
             "unsupported-maintenance":["Il driver non espone questa funzione di manutenzione.", "The driver does not expose this maintenance function."],
+            "printer-has-active-jobs":["La stampante ha lavori in attesa: attendi che terminino o annullali prima di rimuoverla.", "The printer has pending jobs: wait for completion or cancel them before removal."],
             "unknown-job":["Il lavoro è già terminato oppure non appartiene a questo utente.", "The job has finished or does not belong to this user."],
             "unsupported-color":["Il driver non espone la modalità bianco e nero. La stampa non è stata inviata.", "The driver does not expose monochrome mode. No print job was submitted."]
         };
@@ -89,6 +90,7 @@ Item {
             var supplies = printer.supplies || [];
             for (var i = 0; i < supplies.length; i++) {
                 var supply = supplies[i];
+                if (supply.high) issues.push({key:"waste:" + i, text:supplyLabel(supply) + (it ? ": serbatoio quasi pieno" : ": waste tank almost full")});
                 if (supply.low) issues.push({key:"supply:" + i, text:supplyLabel(supply) + ": " + supply.level + "%"});
             }
             // La percentuale può cambiare senza produrre un avviso per ogni
@@ -118,6 +120,8 @@ Item {
                 if (result.packages !== undefined) printing.packages = result.packages;
                 if (result.packageInstallSupported !== undefined) printing.packageInstallSupported = result.packageInstallSupported;
                 if (result.installedPackage) printing.lastResult = (printing.it ? "Pacchetto installato: " : "Installed package: ") + result.installedPackage;
+                if (result.removedPrinter) printing.lastResult = (printing.it ? "Stampante rimossa: " : "Removed printer: ") + result.removedPrinter;
+                if (result.warning) printing.lastResult += (printing.it ? " · Preferenze personali non ripulite: verificare la stampante predefinita." : " · Personal preferences were not cleared: check the default printer.");
                 if (result.submittedJob) printing.lastResult = (printing.it ? "Lavoro inviato: " : "Submitted job: ") + result.submittedJob;
                 if (printing.monitoring) printing.warn(printing.printers);
             } catch (e) {

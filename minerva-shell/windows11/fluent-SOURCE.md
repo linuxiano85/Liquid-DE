@@ -22,3 +22,5 @@ Cartelle dello Start, 14 ottobre 2026: music_note_2, video e folder_person
 Informazioni sul sistema, 15 ottobre 2026: hard_drive e developer_board
 (24 regular), stesso commit e licenza MIT. Il tracciato ram è originale
 del progetto Liquid DE e segue la licenza del progetto.
+
+Icona `printer`: Print 24 regular, stessa revisione `a347af95478f989038cccbf085978865264c048a`, licenza MIT invariata. Fonte: https://raw.githubusercontent.com/microsoft/fluentui-system-icons/a347af95478f989038cccbf085978865264c048a/assets/Print/SVG/ic_fluent_print_24_regular.svg

@@ -3,10 +3,11 @@ import Quickshell
 import "../core" as Core
 import "../theme" as Theme
 import "../windows11" as W
+import "windows" as Win
 
 Column {
     id: content
-    spacing: 12
+    spacing: windows ? 3 : 12
     readonly property bool it: Core.Strings.lang === "it"
     readonly property bool windows: Core.DesktopStyle.attuale === "windows"
     readonly property color foreground: windows ? W.Style.text : Theme.Colors.text
@@ -15,6 +16,10 @@ Column {
     readonly property color outline: windows ? W.Style.cardStroke : Qt.alpha(foreground, 0.14)
     readonly property real textScale: windows ? W.Style.textScale : Theme.Typography.scala
     property bool showPackages: false
+    property bool showDiscovery: false
+    property string selectedPrinter: ""
+    readonly property bool overview: windows && selectedPrinter === ""
+    signal printerRequested(string name)
     property string confirmation: ""
     property string driverMessage: ""
     property var selectedDevice: null
@@ -41,7 +46,8 @@ Column {
         target: Core.Printing
         function onRefreshed() {
             if (Core.Printing.lastAction === "drivers") revealQueue.restart();
-            if (Core.Printing.lastAction === "configure" && Core.Printing.available) {
+            if (Core.Printing.lastAction === "remove" && Core.Printing.error === "") content.selectedPrinter = "";
+            if (Core.Printing.lastAction === "configure" && Core.Printing.error === "") {
                 content.selectedDevice = null;
                 Core.Printing.drivers = [];
             }
@@ -73,18 +79,86 @@ Column {
         }
     }
     Component.onCompleted: Core.Printing.refresh()
+    Win.SchedaImpostazione {
+        visible: content.overview
+        titolo: content.label("Aggiungi una stampante o uno scanner", "Add a printer or scanner")
+        Win.PulsanteWindows {
+            testo: Core.Printing.busy ? content.label("Ricerca in corso…", "Searching…") : content.label("Aggiungi dispositivo", "Add device")
+            accento: true
+            enabled: !Core.Printing.busy
+            onPremuto: {content.showDiscovery=true;Core.Printing.request({action:"discover"});}
+        }
+    }
+    Repeater {
+        model: content.overview ? Core.Printing.printers : []
+        delegate: Win.SchedaImpostazione {
+            required property var modelData
+            objectName: "stampanteElenco-" + modelData.name
+            titolo: modelData.description
+            descrizione: Core.Printing.stateLabel(modelData) + (modelData.default ? content.label(" · Predefinita", " · Default") : "")
+            icona: "printer"
+            porta: true
+            onAttivata: content.printerRequested(modelData.name)
+        }
+    }
+    PrintLabel {
+        visible: content.overview
+        text: content.label("Preferenze stampante", "Printer preferences")
+        color: content.foreground
+        topPadding: 18
+        font.weight: Font.DemiBold
+    }
+    Win.SchedaImpostazione {
+        visible: content.overview
+        titolo: content.label("Stampante predefinita", "Default printer")
+        descrizione: {
+            var printer=Core.Printing.printers.find(function(p){return p.default;});
+            return printer ? printer.description + content.label(" · Preferenza personale", " · Personal preference") : content.label("Nessuna stampante predefinita", "No default printer");
+        }
+    }
+    PrintLabel {
+        visible: content.overview
+        text: content.label("Impostazioni correlate", "Related settings")
+        color: content.foreground
+        topPadding: 18
+        font.weight: Font.DemiBold
+    }
     PrintLabel {
         width: parent.width
+        visible: !content.windows
         text: content.label("Stampanti installate", "Installed printers")
         color: content.foreground
         font.pixelSize: 20 * content.textScale
         wrapMode: Text.Wrap
     }
+    Win.SchedaImpostazione {
+        visible: content.windows && !content.overview
+        titolo: content.label("Informazioni della stampante", "Printer information")
+        descrizione: content.label("Stato, lavori in coda e ultimi livelli comunicati", "Status, queued jobs and last reported levels")
+        Win.PulsanteWindows { testo: content.label("Aggiorna", "Refresh"); enabled:!Core.Printing.busy; onPremuto:Core.Printing.refresh() }
+    }
+    Win.SchedaImpostazione {
+        visible: content.overview
+        titolo: content.label("Driver aggiuntivi", "Additional drivers")
+        descrizione: content.label("Pacchetti disponibili nei repository configurati", "Packages available in configured repositories")
+        Win.PulsanteWindows {
+            testo: content.showPackages ? content.label("Nascondi", "Hide") : content.label("Visualizza", "View")
+            enabled:!Core.Printing.busy
+            onPremuto:{content.showPackages=!content.showPackages;if(content.showPackages)Core.Printing.request({action:"packages"});}
+        }
+    }
+    Win.SchedaImpostazione {
+        visible: content.overview
+        titolo: content.label("Proprietà server di stampa", "Print server properties")
+        descrizione: content.label("Gestore CUPS e impostazioni avanzate dei driver", "CUPS manager and advanced driver settings")
+        Win.PulsanteWindows { testo:content.label("Apri", "Open");enabled:!manager.busy;onPremuto:content.manage() }
+    }
     Flow {
+        visible: !content.windows
         width: parent.width
         spacing: 8
         PrintingAction { text: Core.Printing.busy ? content.label("Attendi…", "Please wait…") : content.label("Aggiorna", "Refresh"); enabled: !Core.Printing.busy; onClicked: Core.Printing.refresh() }
-        PrintingAction { text: content.label("Cerca USB e rete", "Find USB and network"); enabled: !Core.Printing.busy; onClicked: Core.Printing.request({action:"discover"}) }
+        PrintingAction { visible: !content.windows; text: content.label("Cerca USB e rete", "Find USB and network"); enabled: !Core.Printing.busy; onClicked: {content.showDiscovery=true;Core.Printing.request({action:"discover"});} }
         PrintingAction {
             text: content.label("Driver aggiuntivi", "Additional drivers")
             enabled: !Core.Printing.busy
@@ -151,7 +225,7 @@ Column {
         }
     }
     Repeater {
-        model: Core.Printing.printers
+        model: content.windows ? Core.Printing.printers.filter(function(p){return p.name===content.selectedPrinter;}) : Core.Printing.printers
         delegate: Rectangle {
             id: card
             required property var modelData
@@ -181,51 +255,19 @@ Column {
                     wrapMode: Text.Wrap
                     font.pixelSize: 14 * content.textScale
                 }
-                PrintLabel {
+                PrinterCapabilities {
                     width: parent.width
-                    text: content.label("Inchiostro e toner · ultimi dati comunicati dal driver", "Ink and toner · last data reported by driver")
-                    color: content.foreground
-                    wrapMode: Text.Wrap
-                    font.pixelSize: 14 * content.textScale
+                    printer: card.modelData
                 }
-                Flow {
+                PrinterSupplies {
                     width: parent.width
-                    spacing: 12
-                    Repeater {
-                        model: card.modelData.supplies || []
-                        delegate: Column {
-                            id: supply
-                            required property var modelData
-                            width: Math.min(170, body.width)
-                            spacing: 5
-                            PrintLabel {
-                                width: parent.width
-                                text: Core.Printing.supplyLabel(supply.modelData) + " · " + (supply.modelData.level === null
-                                    ? content.label("non disponibile", "unavailable") : supply.modelData.level + "%")
-                                    + (supply.modelData.low ? " !" : "")
-                                wrapMode: Text.Wrap
-                                color: content.foreground
-                                font.pixelSize: 13 * content.textScale
-                            }
-                            Rectangle {
-                                width: parent.width; height: 8; radius: 4
-                                color: Qt.alpha(content.foreground, 0.13)
-                                Rectangle {
-                                    visible: supply.modelData.level !== null
-                                    width: parent.width * (supply.modelData.level || 0) / 100
-                                    height: parent.height; radius: 4
-                                    color: supply.modelData.color
-                                    border.width: 1; border.color: Qt.alpha(content.foreground, 0.25)
-                                }
-                            }
-                        }
-                    }
+                    items: card.modelData.supplies || []
                 }
                 PrintLabel {
                     width: parent.width
                     text: (card.modelData.supplies || []).length ? content.label("I livelli non verificano la qualità di stampa o lo stato degli ugelli. La quantità di carta è mostrata solo se segnalata dalla stampante.",
                         "Levels do not verify print quality or nozzle condition. Paper quantity is shown only when reported by the printer.")
-                        : content.label("Il driver non comunica i livelli dei consumabili.", "The driver does not report supply levels.")
+                        : content.label("CUPS non ha ancora comunicato i livelli dei consumabili. Dopo una nuova installazione potrebbero non essere subito disponibili.", "CUPS has not reported supply levels yet. They may not be available immediately after a new installation.")
                     color: content.secondary
                     wrapMode: Text.Wrap
                     font.pixelSize: 13 * content.textScale
@@ -233,6 +275,11 @@ Column {
                 Flow {
                     width: parent.width
                     spacing: 8
+                    PrintingAction {
+                        text: content.confirmation === card.modelData.name + ":remove" ? content.label("Conferma rimozione", "Confirm removal") : content.label("Rimuovi stampante", "Remove printer")
+                        enabled: !Core.Printing.busy
+                        onClicked:content.action(card.modelData.name + ":remove", {action:"remove",printer:card.modelData.name})
+                    }
                     PrintingAction {
                         text: content.label("Imposta predefinita", "Set as default")
                         visible: !card.modelData.default
@@ -270,16 +317,17 @@ Column {
     }
     PrintLabel {
         width: parent.width
+        visible: !content.overview
         text: content.label("Coda di stampa · lavori dell’utente corrente", "Print queue · current user's jobs")
         color: content.foreground; font.pixelSize: 18 * content.textScale; wrapMode: Text.Wrap
     }
     PrintLabel {
-        visible: !Core.Printing.jobs.length
+        visible: !content.overview && !Core.Printing.jobs.length
         text: content.label("Nessun documento in attesa.", "No pending documents.")
         color: content.secondary; font.pixelSize: 14 * content.textScale
     }
     Repeater {
-        model: Core.Printing.jobs
+        model: content.overview ? [] : Core.Printing.jobs.filter(function(j){return !content.windows || j.printer===content.selectedPrinter;})
         delegate: Column {
             required property var modelData
             width: content.width
@@ -298,25 +346,31 @@ Column {
     }
     PrintLabel {
         width: parent.width
-        visible: Core.Printing.discovered.length > 0
+        visible: content.showDiscovery && Core.Printing.discovered.length > 0
         text: content.label("Dispositivi rilevati · possono essere già configurati", "Discovered devices · may already be configured")
         color: content.foreground; font.pixelSize: 18 * content.textScale; wrapMode: Text.Wrap
     }
     Repeater {
-        model: Core.Printing.discovered
+        model: content.showDiscovery ? Core.Printing.discovered : []
         delegate: Column {
             required property var modelData
             width: content.width
             spacing: 6
             PrintLabel {
                 width: parent.width
-                text: modelData.description + " · " + (modelData.kind === "usb" ? "USB" : content.label("Rete", "Network")) + "\n" + modelData.model
+                text: modelData.description + " · " + (modelData.kind === "usb" ? "USB" : content.label("Rete", "Network"))
+                    + (modelData.configured ? content.label(" · Già configurata", " · Already configured") : "")
+                    + "\n" + (modelData.connections ? modelData.connections.length + content.label(" collegamenti rilevati", " detected connections") : modelData.model)
                 color: content.secondary; wrapMode: Text.Wrap; font.pixelSize: 14 * content.textScale
             }
             PrintingAction {
-                text: content.label("Configura", "Set up")
+                text: modelData.configured ? content.label("Apri stampante", "Open printer") : content.label("Configura", "Set up")
                 enabled: !Core.Printing.busy
                 onClicked: {
+                    if (modelData.configured && modelData.queues && modelData.queues.length) {
+                        content.printerRequested(modelData.queues[0]);
+                        return;
+                    }
                     content.selectedDevice = modelData;
                     content.driverQuery = modelData.model || modelData.description;
                     queueName.text = String(modelData.description || "Stampante").replace(/[^A-Za-z0-9_-]/g,"-").substring(0,63);
@@ -324,7 +378,7 @@ Column {
                     driverQueryInput.text = content.driverQuery;
                     Qt.callLater(function() { queueName.forceActiveFocus(); revealQueue.restart(); });
                     Core.Printing.drivers = [];
-                    Core.Printing.request({action:"drivers", query:content.driverQuery});
+                    Core.Printing.request({action:"drivers", query:content.driverQuery, uri:content.selectedDevice.uri});
                 }
             }
         }
@@ -390,14 +444,50 @@ Column {
             model: Core.Printing.drivers
             delegate: Column {
                 required property var modelData
+                property bool showOptions: false
                 width: content.width
                 spacing: 4
-                PrintLabel { width:parent.width; text:modelData.model; color:content.foreground; wrapMode:Text.Wrap }
+                PrintLabel {
+                    width: parent.width
+                    text: modelData.model + (modelData.recommended ? content.label(" · Consigliato", " · Recommended") : "")
+                    color: content.foreground
+                    font.weight: modelData.recommended ? Font.DemiBold : Font.Normal
+                }
+                PrintLabel {
+                    text: modelData.fit === "exact-cmd" ? content.label("Modello e linguaggi di stampa corrispondenti al dispositivo.", "Model and print languages match the device.")
+                        : modelData.fit === "exact" ? content.label("Corrispondenza esatta con il modello rilevato.", "Exact match with the detected model.")
+                        : modelData.fit === "close" ? content.label("Modello simile: compatibilità da verificare.", "Similar model: compatibility needs verification.")
+                        : content.label("Selezione manuale: verifica il modello prima di installare.", "Manual selection: verify the model before installing.")
+                    color: content.secondary
+                }
+                PrintLabel {
+                    visible: modelData.details !== undefined && modelData.details.missingFilters.length > 0
+                    text: visible ? content.label("Componenti del driver mancanti: ", "Missing driver components: ") + modelData.details.missingFilters.join(", ") : ""
+                    color: content.secondary
+                }
+                PrintingAction {
+                    visible: modelData.details !== undefined && modelData.details.verified
+                    text: parent.showOptions ? content.label("Nascondi funzioni", "Hide features") : content.label("Funzioni del driver", "Driver features")
+                    onClicked:parent.showOptions=!parent.showOptions
+                }
+                Column {
+                    width: parent.width
+                    visible: parent.showOptions
+                    spacing: 6
+                    Repeater {
+                        model: modelData.details ? modelData.details.options : []
+                        delegate: PrintLabel {
+                            required property var modelData
+                            text: modelData.title + " · " + modelData.choices.map(function(c){return c.label;}).join(" · ")
+                            color: content.secondary
+                        }
+                    }
+                }
                 PrintingAction {
                     text: content.confirmation === "install:" + modelData.id ? content.label("Conferma installazione", "Confirm installation") : content.label("Usa questo driver", "Use this driver")
                     enabled: !Core.Printing.busy
                     onClicked: content.action("install:" + modelData.id, {action:"configure",name:queueName.text,
-                        uri:content.selectedDevice.uri,driver:modelData.id,query:content.driverQuery})
+                        uri:content.selectedDevice.uri,driver:modelData.id,query:content.driverQuery,automatic:modelData.fit !== "manual"})
                 }
             }
         }

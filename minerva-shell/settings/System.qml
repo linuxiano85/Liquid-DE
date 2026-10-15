@@ -377,7 +377,7 @@ FloatingWindow {
             return a.pagina === b.pagina && a.vista === b.vista;
         if (a.categoria || b.categoria)
             return a.categoria === b.categoria;
-        return a.sezione === b.sezione && a.origine === b.origine;
+        return a.sezione === b.sezione && a.origine === b.origine && a.vista === b.vista;
     }
     function registraPercorso(destinazione) {
         var attuale = percorsoAttuale();

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Ponte locale CUPS: richieste JSON, nessuna shell o privilegio aggiuntivo."""
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -10,12 +11,20 @@ import sys
 import tempfile
 from urllib.parse import unquote
 
+# Python -I non importa moduli dalla cartella corrente: carichiamo soltanto
+# il nostro adattatore con percorso derivato da questo file.
+_spec = importlib.util.spec_from_file_location('liquid_print_discovery', Path(__file__).with_name('liquid_print_discovery.py'))
+discovery = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(discovery)
+
 ATTRIBUTES = ['printer-state', 'printer-is-accepting-jobs', 'printer-state-reasons',
               'printer-info', 'printer-location', 'printer-make-and-model',
               'sides-supported', 'media-supported', 'print-color-mode-supported',
               'copies-supported', 'document-format-supported', 'printer-commands',
               'marker-names', 'marker-types', 'marker-colors', 'marker-levels',
-              'marker-low-levels', 'marker-change-time']
+              'marker-low-levels', 'marker-high-levels', 'marker-change-time',
+              'media-default', 'media-ready', 'media-type-supported', 'media-source-supported',
+              'printer-resolution-supported', 'print-quality-supported']
 JOB_ATTRIBUTES = ['job-id', 'job-name', 'job-state', 'job-printer-uri',
                   'job-k-octets', 'job-media-sheets-completed']
 
@@ -36,6 +45,7 @@ def consumables(attrs):
     colors = values(attrs.get('marker-colors'))
     types = values(attrs.get('marker-types'))
     lows = values(attrs.get('marker-low-levels'))
+    highs = values(attrs.get('marker-high-levels'))
     rows = []
     for index in range(max(len(levels), len(names), len(types))):
         def at(items, fallback):
@@ -48,9 +58,12 @@ def consumables(attrs):
         if not isinstance(color, str) or not re.fullmatch(r'#[0-9A-Fa-f]{6}', color):
             color = '#808080'
         threshold = at(lows, None)
+        high = at(highs, None)
+        waste = str(at(types, '')).startswith('waste-')
         rows.append({'name': str(at(names, '')), 'type': str(at(types, '')),
                      'color': color, 'level': level,
-                     'low': level is not None and type(threshold) is int
+                     'high': waste and level is not None and type(high) is int and 0 <= high < 100 and level >= high,
+                     'low': not waste and level is not None and type(threshold) is int
                             and 0 <= threshold <= 100 and level <= threshold})
     return rows
 
@@ -68,6 +81,13 @@ def inventory(connection):
     # getDests comprende anche destinazioni DNS-SD temporanee. Non si devono
     # mostrare come seconde code installate della stessa stampante di rete.
     default = connection.getDefault()
+    # getDefault reports the server default, while lpoptions -d selects a
+    # personal destination. Temporary DNS-SD destinations are not installed.
+    if hasattr(connection, 'getDests'):
+        for (name, instance), destination in connection.getDests().items():
+            if name in configured and destination.is_default:
+                default = name
+                break
     printers = []
     for name, basic in sorted(configured.items(), key=lambda row: row[0].casefold()):
         attrs = connection.getPrinterAttributes(name=name, requested_attributes=ATTRIBUTES)
@@ -77,7 +97,8 @@ def inventory(connection):
             'state': attrs.get('printer-state', 0),
             'accepting': attrs.get('printer-is-accepting-jobs'),
             'reasons': values(attrs.get('printer-state-reasons')),
-            'connection': 'usb' if str(basic.get('device-uri', '')).startswith('usb:') else 'network',
+            'connection': 'usb' if str(basic.get('device-uri', '')).startswith('usb:') else
+                'network' if str(basic.get('device-uri', '')).startswith(('ipp:', 'ipps:', 'dnssd:', 'socket:', 'lpd:')) else 'unknown',
             'default': name == default,
             'media': values(attrs.get('media-supported')),
             'sides': values(attrs.get('sides-supported', ['one-sided'])),
@@ -87,6 +108,12 @@ def inventory(connection):
             'supplies': consumables(attrs),
             'suppliesChanged': attrs.get('marker-change-time'),
             'maintenance': maintenance_commands(attrs),
+            'paperDefault': attrs.get('media-default', ''),
+            'paperReady': values(attrs.get('media-ready')),
+            'paperTypes': values(attrs.get('media-type-supported')),
+            'paperSources': values(attrs.get('media-source-supported')),
+            'resolutions': values(attrs.get('printer-resolution-supported')),
+            'qualities': values(attrs.get('print-quality-supported')),
         })
     jobs = []
     for identifier, attrs in connection.getJobs(which_jobs='not-completed', my_jobs=True,
@@ -209,6 +236,36 @@ def admin_call(method, signature, arguments):
         raise RuntimeError(str(error)) from error
 
 
+def cups_administrator(connection, fallback=admin_call):
+    """Use CUPS permissions first; ask Polkit only for an authorization denial."""
+    import cups
+    # libcups must never prompt on stdin: this process speaks JSON to QML.
+    # Returning None still permits local peer credentials before a password
+    # would be needed. Polkit owns any subsequent interactive authentication.
+    cups.setPasswordCB2(lambda *args: None)
+
+    def dispatch(method, signature, arguments):
+        operations = {
+            'PrinterAdd': ('(sssss)', lambda name, uri, driver, info, location:
+                connection.addPrinter(name, device=uri, ppdname=driver, info=info, location=location)),
+            'PrinterDelete': ('(s)', connection.deletePrinter),
+            'PrinterSetShared': ('(sb)', connection.setPrinterShared),
+            'PrinterSetEnabled': ('(sb)', lambda name, enabled:
+                connection.enablePrinter(name) if enabled else connection.disablePrinter(name)),
+            'PrinterSetAcceptJobs': ('(sbs)', lambda name, accepting, reason:
+                connection.acceptJobs(name) if accepting else connection.rejectJobs(name, reason=reason)),
+        }
+        if method not in operations or signature != operations[method][0]:
+            raise ValueError('unsupported-printer-administration')
+        try:
+            operations[method][1](*arguments)
+        except cups.IPPError as error:
+            if error.args[0] not in (cups.IPP_FORBIDDEN, cups.IPP_NOT_AUTHORIZED):
+                raise
+            fallback(method, signature, arguments)
+    return dispatch
+
+
 def catalog(connection, query):
     if not isinstance(query, str) or not 1 <= len(query.strip()) <= 160:
         raise ValueError('invalid-driver-query')
@@ -234,8 +291,11 @@ def configure(request, connection, state, administrator):
     if driver == 'everywhere':
         if not uri.startswith(('ipp:', 'ipps:')):
             raise ValueError('driverless-requires-ipp')
-    elif not isinstance(driver, str) or driver not in catalog(connection, request.get('query')):
-        raise ValueError('driver-not-in-catalog')
+    else:
+        allowed = ({row['id'] for row in discovery.recommended_drivers(connection, uri)}
+                   if request.get('automatic') is True else catalog(connection, request.get('query')))
+        if not isinstance(driver, str) or driver not in allowed:
+            raise ValueError('driver-not-in-catalog')
     description = str(devices[uri].get('device-info', name))[:160]
     administrator('PrinterAdd', '(sssss)', (name, uri, driver, description, ''))
     administrator('PrinterSetShared', '(sb)', (name, False))
@@ -244,32 +304,51 @@ def configure(request, connection, state, administrator):
     return inventory(connection)
 
 
-def handle(request, connection, runner=subprocess.run, administrator=admin_call):
+def handle(request, connection, runner=subprocess.run, administrator=None):
     if not isinstance(request, dict):
         raise ValueError('invalid-request')
     action = request.get('action', 'status')
-    if action not in ['status', 'default', 'cancel', 'print', 'test-page', 'maintenance', 'discover', 'drivers', 'configure']:
+    if action not in ['status', 'default', 'cancel', 'print', 'test-page', 'maintenance', 'discover', 'drivers', 'configure', 'remove']:
         raise ValueError('unknown-action')
+    if administrator is None and action in ('configure', 'remove'):
+        administrator = cups_administrator(connection)
     state = inventory(connection)
     if action == 'status':
         return state
     if action == 'drivers':
-        drivers = catalog(connection, request.get('query'))
-        state['drivers'] = [{'id': name, 'model': attrs.get('ppd-make-and-model', name)}
-                            for name, attrs in sorted(drivers.items())]
+        uri = request.get('uri')
+        if uri is not None:
+            state['drivers'] = discovery.recommended_drivers(connection, uri)
+        else:
+            drivers = catalog(connection, request.get('query'))
+            state['drivers'] = [{'id': name, 'model': attrs.get('ppd-make-and-model', name),
+                'recommended': False, 'fit': 'manual', 'reason': 'manual-search'}
+                for name, attrs in sorted(drivers.items())]
         return state
     if action == 'configure':
         return configure(request, connection, state, administrator)
+    if action == 'remove':
+        name = request.get('printer')
+        if not isinstance(name, str) or not any(row['name'] == name for row in state['printers']):
+            raise ValueError('unknown-printer')
+        active = connection.getJobs(which_jobs='not-completed', my_jobs=False,
+            requested_attributes=['job-printer-uri'])
+        if any(unquote(attrs.get('job-printer-uri', '').rsplit('/', 1)[-1]) == name for attrs in active.values()):
+            raise ValueError('printer-has-active-jobs')
+        administrator('PrinterDelete', '(s)', (name,))
+        # Si rimuovono solo le preferenze della coda eliminata, mai quelle
+        # di altre stampanti. La vecchia preferenza non deve puntare al vuoto.
+        cleanup = runner(['lpoptions', '-x', name], capture_output=True, text=True, timeout=10, check=False)
+        state = inventory(connection)
+        state['removedPrinter'] = name
+        if cleanup.returncode:
+            state['warning'] = 'personal-printer-options-cleanup-failed'
+        return state
     if action == 'discover':
         # I dettagli dei dispositivi servono al dialogo locale, mai ai log o
         # alla telemetria. Non inviamo indirizzi o identificativi a servizi web.
         found = connection.getDevices(timeout=5)
-        state['discovered'] = [{'uri': uri,
-            'description': attrs.get('device-info', ''),
-            'model': attrs.get('device-make-and-model', ''),
-            'kind': 'usb' if uri.startswith('usb:') else 'network'}
-            for uri, attrs in found.items()
-            if uri.startswith(('usb:', 'ipp:', 'ipps:', 'dnssd:', 'socket:', 'lpd:'))]
+        state['discovered'], state['grouping'] = discovery.group_devices(found, connection.getPrinters())
         return state
     if action == 'cancel':
         identifier = integer(request.get('job'), 1, 2**31-1)

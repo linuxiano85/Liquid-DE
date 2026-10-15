@@ -19,3 +19,5 @@ DisplayController 1.0 DisplayController.qml
 PowerController 1.0 PowerController.qml
 PrintingContent 1.0 PrintingContent.qml
 PrintingAction 1.0 PrintingAction.qml
+PrinterSupplies 1.0 PrinterSupplies.qml
+PrinterCapabilities 1.0 PrinterCapabilities.qml
