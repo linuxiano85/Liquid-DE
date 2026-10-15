@@ -576,7 +576,7 @@ FloatingWindow {
         { "id": "display",    "icon": "screen",    "it": "Schermo",       "en": "Display",
           "cerca": "risoluzione frequenza scala rotazione monitor hdmi estendi solo notebook disposizione luce notturna night light" },
         { "id": "notifiche",  "icon": "bell",      "it": "Notifiche",     "en": "Notifications",
-          "cerca": "notifiche non disturbare silenzio schermata blocco privacy email nascondi contenuto" },
+          "cerca": "notifiche non disturbare silenzio schermata blocco privacy email nascondi contenuto banner ricezione banners reception" },
         { "id": "power",      "icon": "battery",   "it": "Alimentazione", "en": "Power",
           "cerca": "batteria energia sospensione coperchio spegnimento blocco inattività" },
         { "id": "audio",      "icon": "volume",    "it": "Audio",         "en": "Sound",
@@ -1180,7 +1180,7 @@ FloatingWindow {
             case "display":  return settings.stileWindows ? "windows/Schermo.qml" : "sections/Display.qml";
             case "scrivania": return "sections/Scrivania.qml";
             case "power":    return settings.stileWindows ? "windows/Alimentazione.qml" : "sections/Power.qml";
-            case "notifiche": return "sections/Notifiche.qml";
+            case "notifiche": return settings.stileWindows ? "windows/Notifiche.qml" : "sections/Notifiche.qml";
             case "audio":    return settings.stileWindows ? "windows/Audio.qml" : "sections/Audio.qml";
             case "network":   return "sections/Network.qml";
             case "bluetooth": return "sections/Bluetooth.qml";

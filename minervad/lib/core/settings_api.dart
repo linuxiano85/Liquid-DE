@@ -374,6 +374,9 @@ class SettingsApi {
   /// fabbrica dice 960. Una lista di fabbrica fatta di nomi vuole nomi; una
   /// lista vuota di fabbrica non dice cosa conterrà, e si accetta.
   static bool _conforme(String percorso, dynamic fabbrica, dynamic valore) {
+    if (percorso == 'notifications.bloccoMostra') {
+      return const ['numero', 'tutto', 'niente'].contains(valore);
+    }
     if (const {
       'power.ac.screenOffAfter', 'power.ac.suspendAfter',
       'power.battery.screenOffAfter', 'power.battery.suspendAfter',
@@ -1779,6 +1782,8 @@ class SettingsApi {
     // `services/respiro_service.dart`.
     'memoria': {'respiro': 'delicata'},
     'notifications': {
+      'enabled': true,
+      'banners': true,
       'doNotDisturb': false,
       // Cosa si vede sulla schermata di blocco: «numero» (per programma,
       // «Thunderbird · 3 email», come sul telefono), «tutto» (anche il

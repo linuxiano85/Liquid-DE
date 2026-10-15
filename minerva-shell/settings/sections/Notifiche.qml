@@ -29,6 +29,31 @@ Page {
 
         S.SettingRow {
             width: parent.width
+            visible: Core.Ipc.get("notifications.enabled", undefined) !== undefined
+            label: page.it ? "Ricevi notifiche" : "Receive notifications"
+            description: page.it ? "Disattivando, le nuove notifiche non vengono conservate" : "When off, new notifications are not stored"
+            controlWidth: 60
+            control: S.ToggleSwitch {
+                Accessible.name: page.it ? "Ricevi notifiche" : "Receive notifications"
+                checked: Core.Ipc.get("notifications.enabled", true)
+                onToggled: function(value) { Core.Ipc.setSetting("notifications.enabled", value); }
+            }
+        }
+        S.SettingRow {
+            width: parent.width
+            visible: Core.Ipc.get("notifications.banners", undefined) !== undefined
+            label: page.it ? "Mostra banner" : "Show banners"
+            description: page.it ? "Senza banner, le notifiche restano nel centro notifiche" : "Without banners, notifications stay in notification center"
+            controlWidth: 60
+            control: S.ToggleSwitch {
+                Accessible.name: page.it ? "Mostra banner" : "Show banners"
+                enabled: Core.Ipc.get("notifications.enabled", true)
+                checked: Core.Ipc.get("notifications.banners", true)
+                onToggled: function(value) { Core.Ipc.setSetting("notifications.banners", value); }
+            }
+        }
+        S.SettingRow {
+            width: parent.width
             label: Core.Strings.t("doNotDisturb")
             description: Core.Strings.t("doNotDisturbDesc")
             searchTerms: "non disturbare silenzio notifiche"

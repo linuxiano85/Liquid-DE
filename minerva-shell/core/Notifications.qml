@@ -34,6 +34,8 @@ QtObject {
     /// Nasce per le estensioni che si fermano: prima il demone lo diceva solo
     /// al proprio registro, che nessuno legge.
     function daMinerva(sommario, corpo) {
+        if (!notifications.ricezioneAttiva)
+            return;
         var item = {
             "id": "minerva-" + Date.now(),
             "appName": "Minerva",
@@ -217,6 +219,8 @@ QtObject {
     /// ma non compare nessun avviso a schermo. Spegnere del tutto il server
     /// farebbe perdere ciò che è arrivato mentre era attivo.
     property bool doNotDisturb: false
+    readonly property bool ricezioneAttiva: Core.Ipc.get("notifications.enabled", true)
+    readonly property bool bannerAttivi: Core.Ipc.get("notifications.banners", true)
 
     /// Silenzio temporaneo, non un'impostazione.
     ///
@@ -230,7 +234,8 @@ QtObject {
     /// Vero quando una notifica NON deve comparire a schermo. Arriva lo stesso
     /// e finisce nell'elenco: nessuna si perde, solo non interrompono.
     readonly property bool inSilenzio:
-        notifications.doNotDisturb || notifications.zittitoDalGioco
+        !notifications.ricezioneAttiva || !notifications.bannerAttivi
+        || notifications.doNotDisturb || notifications.zittitoDalGioco
 
     // ── Le notifiche per la schermata di blocco ──────────────────────────
     //
@@ -263,7 +268,7 @@ QtObject {
     }
 
     function _perIlBlocco() {
-        var modo = notifications.bloccoMostra;
+        var modo = notifications.ricezioneAttiva ? notifications.bloccoMostra : "niente";
         var nuove = notifications.items.filter(function(item) { return !item.read; });
         if (modo === "niente" || nuove.length === 0)
             return { "modo": modo, "gruppi": [], "voci": [] };
@@ -310,6 +315,7 @@ QtObject {
     onItemsChanged: _riscriviBlocco.restart()
     onUnreadChanged: _riscriviBlocco.restart()
     onBloccoMostraChanged: _riscriviBlocco.restart()
+    onRicezioneAttivaChanged: _riscriviBlocco.restart()
     property Timer _riscriviBlocco: Timer {
         interval: 200
         onTriggered: notifications._scriviPerIlBlocco()
@@ -323,6 +329,13 @@ QtObject {
         keepOnReload: true
 
         onNotification: function(notif) {
+            // Il server resta disponibile sul bus: disabilitare la ricezione
+            // non deve consegnare le notifiche a un altro server né cancellare
+            // la cronologia precedente. Quelle nuove vengono chiuse qui.
+            if (!notifications.ricezioneAttiva) {
+                notif.dismiss();
+                return;
+            }
             // ── La notifica si TIENE, non se ne copia solo il testo ──────
             //
             // Fino al 2 settembre 2026 qui si costruiva una mappa con sette
