@@ -28,7 +28,27 @@ Item {
     // propria pagina senza chiedere al Loader di ricaricare lo stesso URL.
     signal briciolaChiesta(string destinazione)
 
-    function revealSetting(testo) { }
+    function revealSetting(testo) {
+        var query = String(testo || "").trim().toLowerCase();
+        var found = null;
+        function visit(item) {
+            if (item.searchHighlighted !== undefined) {
+                item.searchHighlighted = false;
+                var words = [item.titolo || "", item.descrizione || "", item.searchTerms || ""].join(" ").toLowerCase();
+                if (!found && query && item.visible && words.indexOf(query) >= 0)
+                    found = item;
+            }
+            for (var child of (item.children || []))
+                visit(child);
+        }
+        // Si ripuliscono tutte le righe, anche quelle dopo il primo risultato:
+        // altrimenti una ricerca successiva lascia due destinazioni accese.
+        visit(colonna);
+        if (!found)
+            return;
+        found.searchHighlighted = true;
+        Qt.callLater(function() { pagina.revealItem(found); });
+    }
     // Una colonna dentro Flickable non accompagna da sola il focus da Tab:
     // portiamo il comando a schermo senza cambiare il punto scelto col mouse.
     function revealItem(item) {

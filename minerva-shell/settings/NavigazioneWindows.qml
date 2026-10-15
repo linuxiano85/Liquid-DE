@@ -110,11 +110,9 @@ Item {
                     objectName: "navCerca-" + modelData.id
                     simbolo: modelData.icon
                     testo: nav.it ? modelData.it : modelData.en
-                    scelta: nav.finestra.section === modelData.id && nav.finestra.paginaWindows === ""
+                    scelta: nav.finestra.paginaWindows === modelData.id || (nav.finestra.section === modelData.id && nav.finestra.paginaWindows === "")
                     onAttivata: {
-                        nav.finestra.apriSezione(modelData.id);
-                        var cercato = nav.finestra.ricerca;
-                        Qt.callLater(function () { nav.finestra.mostraRiga(cercato); });
+                        nav.finestra.apriRisultato(modelData.id);
                     }
                 }
             }

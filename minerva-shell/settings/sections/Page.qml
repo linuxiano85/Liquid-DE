@@ -84,10 +84,17 @@ Item {
     }
     function revealSetting(query) {
         var q = String(query || "").trim().toLowerCase();
-        if (!q) return;
+        function clear(item) {
+            if (item.searchHighlighted !== undefined)
+                item.searchHighlighted = false;
+            for (var child of (item.children || []))
+                clear(child);
+        }
+        clear(stack);
+        if (!q)
+            return;
         function walk(item) {
             if (item.searchHighlighted !== undefined) {
-                item.searchHighlighted = false;
                 var text = (item.label + " " + item.description + " " + item.searchTerms).toLowerCase();
                 if (item.visible && text.indexOf(q) >= 0) return item;
             }

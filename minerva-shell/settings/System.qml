@@ -638,6 +638,10 @@ FloatingWindow {
 
     /// Quello che si sta cercando. Vuoto: si vede la colonna normale.
     property string ricerca: ""
+    onRicercaChanged: {
+        if (ricerca.trim() === "")
+            mostraRiga("");
+    }
 
     /// La pagina che corrisponde a un id.
     function paginaPer(id) {
@@ -645,6 +649,32 @@ FloatingWindow {
             if (settings.sections[i].id === id)
                 return settings.sections[i];
         return null;
+    }
+
+    // Le pagine native non appartengono alle vecchie sezioni: senza questo
+    // catalogo la ricerca di Sfondo o Start finiva nella variante Liquid.
+    readonly property var pagineRicercabiliWindows: [
+        {id:"w-sfondo", it:"Sfondo", en:"Background", icon:"image", cerca:"wallpaper immagine picture slideshow presentazione tinta unita"},
+        {id:"w-colori", it:"Colori", en:"Colors", icon:"image", cerca:"accento colore principale accent color trasparenza transparency chiaro scuro light dark"},
+        {id:"w-temi", it:"Temi", en:"Themes", icon:"image", cerca:"tema theme personalizzazione personalization"},
+        {id:"w-start", it:"Start", en:"Start", icon:"apps", cerca:"menu preferiti pinned consigliati recommendations visualizzazione delle app app view cartelle folders"},
+        {id:"w-start-cartelle", it:"Cartelle su Start", en:"Folders on Start", icon:"folder", cerca:"cartelle folders documenti downloads musica music immagini pictures video home"},
+        {id:"w-barra", it:"Barra delle applicazioni", en:"Taskbar", icon:"window", cerca:"barra taskbar cerca search allineamento alignment widget tray"},
+        {id:"w-update", it:"Liquid Update", en:"Liquid Update", icon:"refresh", cerca:"aggiornamenti updates changelog"},
+        {id:"w-giochi", it:"Giochi", en:"Gaming", icon:"apps", cerca:"gaming giochi controller"},
+        {id:"w-privacy", it:"Privacy e sicurezza", en:"Privacy & security", icon:"lock", cerca:"privacy sicurezza security"}
+    ]
+    function apriRisultato(id) {
+        var query = ricerca;
+        if (stileWindows)
+            apriWindows(id);
+        else
+            apriSezione(id);
+        var generation = generazionePercorso;
+        Qt.callLater(function() {
+            if (generation === settings.generazionePercorso)
+                settings.mostraRiga(query);
+        });
     }
 
     /// Le pagine che corrispondono a quello che si cerca. Si guarda il nome
@@ -655,8 +685,10 @@ FloatingWindow {
         if (q === "")
             return [];
         var out = [];
-        for (var i = 0; i < settings.sections.length; i++) {
-            var s = settings.sections[i];
+        var candidates = settings.stileWindows
+            ? settings.pagineRicercabiliWindows.concat(settings.sections) : settings.sections;
+        for (var i = 0; i < candidates.length; i++) {
+            var s = candidates[i];
             var testo = (s.it + " " + s.en + " " + (s.cerca || "")).toLowerCase();
             if (testo.indexOf(q) >= 0)
                 out.push(s);

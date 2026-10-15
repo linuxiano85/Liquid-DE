@@ -19,6 +19,8 @@ Rectangle {
     property string icona: ""
     /// Al posto dell'icona Fluent, un'immagine (le icone a colori).
     property url immagine: ""
+    property bool searchHighlighted: false
+    property string searchTerms: ""
     property string titolo: ""
     property string descrizione: ""
     /// Porta a un'altra pagina: freccia › e clic su tutta la scheda.
@@ -50,8 +52,8 @@ Rectangle {
     color: !scheda.interna && scheda.porta && scheda.disponibile && presa.containsMouse
            ? (presa.pressed ? W.Style.gettoni.cardBackgroundSecondary : W.Style.gettoni.controlFillSecondary)
            : (scheda.interna ? "transparent" : W.Style.card)
-    border.width: scheda.interna ? 0 : 1
-    border.color: W.Style.cardStroke
+    border.width: searchHighlighted ? 2 : scheda.interna ? 0 : 1
+    border.color: searchHighlighted ? W.Style.accent : W.Style.cardStroke
     opacity: scheda.disponibile ? 1 : 0.55
 
     // Anche i lettori di schermo devono riconoscere le funzioni assenti
