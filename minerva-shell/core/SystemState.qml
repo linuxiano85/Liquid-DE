@@ -44,7 +44,9 @@ QtObject {
     // ── Batteria ─────────────────────────────────────────────────────────
     property int batteryPercent: -1        // -1 = nessuna batteria
     property bool batteryCharging: false
+    property var externalPower: null
     readonly property bool hasBattery: batteryPercent >= 0
+    readonly property bool onBattery: hasBattery && (externalPower === null ? !batteryCharging : !externalPower)
 
     // ── Audio ────────────────────────────────────────────────────────────
     //
@@ -152,6 +154,8 @@ QtObject {
             return;
         if (s.batteryPercent !== undefined)   sys.batteryPercent = s.batteryPercent;
         if (s.batteryCharging !== undefined)  sys.batteryCharging = s.batteryCharging;
+        if (s.externalPower !== undefined)
+            sys.externalPower = typeof s.externalPower === "boolean" ? s.externalPower : null;
         if (s.brightness !== undefined)       sys.brightness = s.brightness;
         if (s.networkName !== undefined)      sys.networkName = s.networkName;
         if (s.networkStrength !== undefined)  sys.networkStrength = s.networkStrength;

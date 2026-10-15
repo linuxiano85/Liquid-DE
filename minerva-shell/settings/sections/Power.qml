@@ -1,6 +1,7 @@
 import QtQuick
 import "../../theme" as Theme
 import "../../core" as Core
+import "../../core/PowerPolicy.js" as PowerPolicy
 import "../../ui" as Ui
 import ".." as S
 
@@ -51,8 +52,8 @@ Page {
 
     readonly property int dimAfter:     Core.Ipc.get("power.dimAfter", 5)
     readonly property int lockAfter:    Core.Ipc.get("power.lockAfter", 10)
-    readonly property int screenOffAfter: Core.Ipc.get("power.screenOffAfter", 15)
-    readonly property int suspendAfter: Core.Ipc.get("power.suspendAfter", 30)
+    readonly property int screenOffAfter: PowerPolicy.minutes(Core.Ipc.get, "screenOffAfter", Core.SystemState.onBattery)
+    readonly property int suspendAfter: PowerPolicy.minutes(Core.Ipc.get, "suspendAfter", Core.SystemState.onBattery)
 
     /// Cambiare una soglia è cambiare un'impostazione, e basta.
     ///
@@ -67,7 +68,7 @@ Page {
     /// valore nuovo, lui rimanda l'elenco al compositore. Nessun file, nessun
     /// processo da riavviare, e nessun ritardo da aspettare.
     function setIdle(key, minutes) {
-        Core.Ipc.setSetting("power." + key, minutes);
+        Core.Ipc.setSetting(PowerPolicy.editPath(Core.Ipc.get, key, Core.SystemState.onBattery), minutes);
     }
 
     // ── Aggiornamento ────────────────────────────────────────────────────
@@ -132,9 +133,9 @@ Page {
                 anchors.right: parent.right
                 elide: Text.ElideRight
                 text: {
-                    var s = Core.SystemState.batteryCharging
-                            ? (page.it ? "In carica" : "Charging")
-                            : (page.it ? "A batteria" : "On battery");
+                    var s = Core.SystemState.onBattery
+                            ? (page.it ? "A batteria" : "On battery")
+                            : (page.it ? "Collegato alla rete" : "Plugged in");
                     if (page.batteryTime !== "")
                         s += "  ·  " + page.batteryTime
                              + (Core.SystemState.batteryCharging
@@ -410,11 +411,15 @@ Page {
 
     Card {
         heading: page.it ? "Quando ti allontani" : "When you step away"
-        note: page.it
+        note: (PowerPolicy.supportsSources(Core.Ipc.get)
+              ? (Core.SystemState.onBattery
+                 ? (page.it ? "Schermo e sospensione: alimentazione a batteria. " : "Screen and sleep: on battery power. ")
+                 : (page.it ? "Schermo e sospensione: alimentazione dalla rete. " : "Screen and sleep: plugged in. "))
+              : "") + (page.it
               ? "Trascina tutto a sinistra per non farlo succedere mai. "
                 + "I minuti si contano da quando smetti di toccare tastiera e mouse."
               : "Drag fully left to never do it. Minutes count from the moment you "
-                + "stop touching the keyboard and mouse."
+                + "stop touching the keyboard and mouse.")
 
         Repeater {
             model: [

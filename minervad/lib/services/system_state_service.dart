@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'power_source.dart';
 
 import '../core/event_bus.dart';
 import 'dbus.dart';
@@ -114,6 +115,7 @@ class SystemStateService {
 
   int _batteryPercent = -1; // -1 = nessuna batteria
   bool _batteryCharging = false;
+  bool? _externalPower;
   int _brightness = -1; // -1 = non regolabile
   String _networkName = '';
   int _networkStrength = 0;
@@ -134,6 +136,7 @@ class SystemStateService {
   Map<String, dynamic> get state => {
         'batteryPercent': _batteryPercent,
         'batteryCharging': _batteryCharging,
+        'externalPower': _externalPower,
         'brightness': _brightness,
         'networkName': _networkName,
         'networkStrength': _networkStrength,
@@ -290,6 +293,7 @@ class SystemStateService {
   /// che stanno in due file. Il costo di un dato non è leggerlo, è svegliare
   /// qualcuno perché lo legga al posto tuo.
   Future<void> _leggiBatteria() async {
+    _externalPower = leggiAlimentazioneEsterna();
     final bat = _primaCartella('/sys/class/power_supply', 'BAT');
     if (bat.isEmpty) {
       _batteryPercent = -1;

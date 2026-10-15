@@ -1,5 +1,6 @@
 import QtQuick
 import "../../core" as Core
+import "../../core/PowerPolicy.js" as PowerPolicy
 import "../../windows11" as W
 import ".." as S
 
@@ -21,10 +22,17 @@ PaginaWindows {
         interval: 400
         onTriggered: Core.Compositore.chiediRisparmio()
     }
-    function minuti(key, maximum) {
-        var current = Number(Core.Ipc.get("power." + key, 0));
+    readonly property bool sorgentiSeparate: PowerPolicy.supportsSources(Core.Ipc.get)
+    function valoreTimeout(dato) {
+        return PowerPolicy.minutes(Core.Ipc.get, dato.key, dato.batteria === true);
+    }
+    function percorsoTimeout(dato) {
+        return dato.sorgente ? PowerPolicy.sourcePath(dato.key, dato.batteria === true) : "power." + dato.key;
+    }
+    function minuti(dato) {
+        var current = valoreTimeout(dato);
         return [0,1,2,3,5,10,15,20,30,45,60,90,120,current].filter(function(value,index,list) {
-            return list.indexOf(value) === index && (value <= maximum || value === current);
+            return list.indexOf(value) === index && (value <= dato.max || value === current);
         }).sort(function(a,b) { return a-b; }).map(function(value) {
             return {valore:String(value),testo:value === 0 ? W.Style.label("Mai", "Never")
                 : value + W.Style.label(value === 1 ? " minuto" : " minuti", value === 1 ? " minute" : " minutes")};
@@ -34,8 +42,8 @@ PaginaWindows {
         objectName: "alimentazioneBatteria"
         visible: Core.SystemState.hasBattery
         titolo: Core.SystemState.batteryPercent + "%"
-        descrizione: (Core.SystemState.batteryCharging ? W.Style.label("Collegato alla rete elettrica", "Plugged in")
-                                                      : W.Style.label("Alimentazione a batteria", "On battery"))
+        descrizione: (Core.SystemState.onBattery ? W.Style.label("Alimentazione a batteria", "On battery")
+                                                : W.Style.label("Collegato alla rete elettrica", "Plugged in"))
             + (alimentazione.batteryTime ? " · " + alimentazione.batteryTime : "")
             + (alimentazione.batteryHealth ? " · " + W.Style.label("Capacità ", "Capacity ") + alimentazione.batteryHealth : "")
         Rectangle {
@@ -82,13 +90,27 @@ PaginaWindows {
     EspansoreImpostazione {
         objectName: "alimentazioneTimeout"
         titolo: W.Style.label("Timeout schermo e sospensione", "Screen and sleep timeouts")
-        descrizione: W.Style.label("I tempi valgono sia a batteria sia con alimentazione esterna", "These timeouts apply both on battery and when plugged in")
+        descrizione: pagina.sorgentiSeparate ? "" : W.Style.label("I tempi valgono sia a batteria sia con alimentazione esterna", "These timeouts apply both on battery and when plugged in")
         aperto: true
         Repeater {
-            model: [
+            model: {
+                var comuni = [
                 {key:"screenOffAfter",it:"Disattiva lo schermo dopo",en:"Turn my screen off after",max:120},
                 {key:"suspendAfter",it:"Sospendi il dispositivo dopo",en:"Make my device sleep after",max:120}
-            ]
+                ];
+                if (!pagina.sorgentiSeparate)
+                    return comuni;
+                var righe = [];
+                var fonti = Core.SystemState.hasBattery ? [true, false] : [false];
+                for (var batteria of fonti) {
+                    for (var voce of comuni) {
+                        righe.push({key:voce.key, max:voce.max, sorgente:true, batteria:batteria,
+                            it:(batteria ? "Con alimentazione a batteria: " : "Con alimentazione dalla rete: ") + voce.it.toLowerCase(),
+                            en:(batteria ? "On battery power, " : "When plugged in, ") + voce.en.toLowerCase()});
+                    }
+                }
+                return righe;
+            }
             delegate: Timeout { required property var modelData; dato: modelData }
         }
     }
@@ -160,14 +182,15 @@ PaginaWindows {
     component Timeout: SchedaImpostazione {
         id: timeout
         property var dato: ({})
-        objectName: "alimentazioneVoce-" + dato.key
+        readonly property string suffisso: dato.sorgente ? (dato.batteria ? "-battery" : "-ac") : ""
+        objectName: "alimentazioneVoce-" + dato.key + suffisso
         interna: true
         titolo: W.Style.it ? dato.it : dato.en
         TendinaWindows {
-            objectName: "alimentazioneTempo-" + timeout.dato.key
-            valore: String(Core.Ipc.get("power." + timeout.dato.key,0))
-            voci: pagina.minuti(timeout.dato.key,timeout.dato.max)
-            onScelto: function(value) { Core.Ipc.setSetting("power." + timeout.dato.key,Number(value)); }
+            objectName: "alimentazioneTempo-" + timeout.dato.key + timeout.suffisso
+            valore: String(pagina.valoreTimeout(timeout.dato))
+            voci: pagina.minuti(timeout.dato)
+            onScelto: function(value) { Core.Ipc.setSetting(pagina.percorsoTimeout(timeout.dato),Number(value)); }
         }
     }
 }

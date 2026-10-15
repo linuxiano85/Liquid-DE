@@ -374,6 +374,12 @@ class SettingsApi {
   /// fabbrica dice 960. Una lista di fabbrica fatta di nomi vuole nomi; una
   /// lista vuota di fabbrica non dice cosa conterrà, e si accetta.
   static bool _conforme(String percorso, dynamic fabbrica, dynamic valore) {
+    if (const {
+      'power.ac.screenOffAfter', 'power.ac.suspendAfter',
+      'power.battery.screenOffAfter', 'power.battery.suspendAfter',
+    }.contains(percorso)) {
+      return valore is int && valore >= -1 && valore <= 10080;
+    }
     if (percorso == 'files.disposizione') {
       return const ['auto', 'schede', 'affiancata'].contains(valore);
     }
@@ -1757,6 +1763,10 @@ class SettingsApi {
       // `brightnessctl` non ci arriva.
       'screenOffAfter': 15,
       'suspendAfter': 30,
+      // Eredita i valori esistenti finché l'utente non sceglie una soglia
+      // per la singola sorgente. Zero resta «mai» in entrambi i casi.
+      'ac': {'screenOffAfter': -1, 'suspendAfter': -1},
+      'battery': {'screenOffAfter': -1, 'suspendAfter': -1},
       'lidAction': 'suspend',
       // Il modo risparmio del compositore: «auto» abbassa gli effetti a
       // batteria sotto la soglia (o col profilo «risparmio energetico»),

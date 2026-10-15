@@ -20,6 +20,7 @@ import Quickshell.Io
 
 import "theme" as Theme
 import "core" as Core
+import "core/PowerPolicy.js" as PowerPolicy
 import "switcher"
 import "ui" as Ui
 import "widget" as Widget
@@ -2810,9 +2811,9 @@ ShellRoot {
     /// Lo schermo a riposo: il compositore lo spegne e lo riaccende da sé al
     /// primo tocco. Era il mestiere di `hypridle`, perso quando il conto è
     /// passato al compositore (vedi `riposo_dormi` in `compositore/src/main.c`).
-    readonly property int sogliaSchermo: Core.Ipc.get("power.screenOffAfter", 15) * 60
+    readonly property int sogliaSchermo: PowerPolicy.minutes(Core.Ipc.get, "screenOffAfter", Core.SystemState.onBattery) * 60
     readonly property int sogliaSospensione:
-        Core.Ipc.get("power.suspendAfter", 30) * 60
+        PowerPolicy.minutes(Core.Ipc.get, "suspendAfter", Core.SystemState.onBattery) * 60
 
     /// Se la luce è stata abbassata da noi. Senza, `brightnessctl -r`
     /// partirebbe a ogni ritorno all'attività e rimetterebbe una luminosità

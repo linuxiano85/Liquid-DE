@@ -142,6 +142,7 @@ Item {
         target: Core.SystemState
         function onHasBatteryChanged() { page.refresh(); }
         function onBatteryChargingChanged() { page.refresh(); }
+        function onExternalPowerChanged() { page.refresh(); }
     }
     Timer {
         interval: 20000
