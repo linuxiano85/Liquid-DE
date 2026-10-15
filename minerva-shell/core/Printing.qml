@@ -20,8 +20,11 @@ Item {
     property string lastAction: ""
     property bool available: false
     property var _warnings: ({})
+    property var _deviceReadings: ({})
     readonly property bool busy: command.busy
-    readonly property string helper: decodeURIComponent(Qt.resolvedUrl("../../scripts/liquid-print.py").toString().replace(/^file:\/\//, ""))
+    // A singleton may be cached under qrc:/qs-blackhole by Quickshell.
+    // External programs need a filesystem path, based on the entry point.
+    readonly property string helper: (Quickshell.env("LIQUID_DE") || Quickshell.shellDir + "/..") + "/scripts/liquid-print.py"
     signal refreshed()
 
     function request(data) {
@@ -64,7 +67,13 @@ Item {
             "unsupported-maintenance":["Il driver non espone questa funzione di manutenzione.", "The driver does not expose this maintenance function."],
             "printer-has-active-jobs":["La stampante ha lavori in attesa: attendi che terminino o annullali prima di rimuoverla.", "The printer has pending jobs: wait for completion or cancel them before removal."],
             "unknown-job":["Il lavoro è già terminato oppure non appartiene a questo utente.", "The job has finished or does not belong to this user."],
-            "unsupported-color":["Il driver non espone la modalità bianco e nero. La stampa non è stata inviata.", "The driver does not expose monochrome mode. No print job was submitted."]
+            "unsupported-color":["Il driver non espone la modalità bianco e nero. La stampa non è stata inviata.", "The driver does not expose monochrome mode. No print job was submitted."],
+            "unsupported-device-status":["Questo collegamento non espone una lettura diretta IPP. Restano disponibili i dati comunicati da CUPS.", "This connection does not expose direct IPP status. CUPS data remains available."],
+            "device-status-timeout":["La stampante non ha risposto entro 8 secondi. Gli ultimi dati restano visibili con l’ora di lettura.", "The printer did not respond within 8 seconds. Previous data remains visible with its reading time."],
+            "device-status-unavailable":["Impossibile leggere lo stato del dispositivo. Verifica che sia acceso e raggiungibile.", "Cannot read device status. Check that it is powered on and reachable."],
+            "print-empty-response":["Il servizio di stampa non ha restituito una risposta. Premi Aggiorna e riprova.", "The printing helper returned no response. Refresh and try again."],
+            "print-invalid-response":["Il servizio di stampa ha restituito una risposta non valida. I dettagli tecnici sono nel registro delle Impostazioni.", "The printing helper returned an invalid response. Technical details are in the Settings log."],
+            "print-helper-failed":["Errore interno del servizio di stampa. I dettagli tecnici sono nel registro delle Impostazioni.", "Internal printing helper error. Technical details are in the Settings log."]
         };
         return errors[message] ? errors[message][it ? 0 : 1] : message;
     }
@@ -81,13 +90,29 @@ Item {
             "Magenta ink":["Magenta", "Magenta"], "Yellow ink":["Giallo", "Yellow"]};
         return labels[supply.name] ? labels[supply.name][it ? 0 : 1] : supply.name;
     }
+    function applyPrinters(rows) {
+        var cache = {}, output = [];
+        for (var row of rows) {
+            var key = "printer:" + row.name;
+            var previous = _deviceReadings[key];
+            if (row.deviceReading) cache[key] = {deviceKey:row.deviceKey, reading:row.deviceReading};
+            else if (previous && previous.deviceKey === row.deviceKey) cache[key] = previous;
+            if (cache[key]) row.deviceReading = cache[key].reading;
+            output.push(row);
+        }
+        _deviceReadings = cache;
+        printers = output;
+    }
+    function suppliesFor(printer) {
+        return printer.deviceReading ? printer.deviceReading.supplies || [] : printer.supplies || [];
+    }
     function warn(rows) {
         var next = {};
         for (var printer of rows) {
             var issues = (printer.reasons || []).filter(function(r) {
                 return r !== "none" && r !== "connecting-to-device";
             }).map(function(reason) { return {key:reason, text:printing.labelReason(reason)}; });
-            var supplies = printer.supplies || [];
+            var supplies = suppliesFor(printer);
             for (var i = 0; i < supplies.length; i++) {
                 var supply = supplies[i];
                 if (supply.high) issues.push({key:"waste:" + i, text:supplyLabel(supply) + (it ? ": serbatoio quasi pieno" : ": waste tank almost full")});
@@ -107,11 +132,19 @@ Item {
         id: command
         timeoutMs: 150000
         onCompleted: function(code, out, stderr) {
+            if (code !== 0 || stderr) console.warn("[Liquid][Printing] helper result; action=" + printing.lastAction + "; exitCode=" + code + "; characters=" + out.length + "; stderr=" + stderr);
             try {
-                var result = JSON.parse(out);
-                if (code !== 0 || !result.ok) throw new Error(result.message || stderr);
+                if (code !== 0) throw new Error(stderr || (printing.it ? "Il comando di stampa è terminato con errore " : "Printing command failed with code ") + code);
+                if (!out.trim()) throw new Error("print-empty-response");
+                var result;
+                try { result = JSON.parse(out); }
+                catch (parseError) {
+                    console.warn("[Liquid][Printing] invalid JSON; action=" + printing.lastAction + "; exitCode=" + code + "; characters=" + out.length);
+                    throw new Error("print-invalid-response");
+                }
+                if (!result || !result.ok) throw new Error(result ? result.message || stderr : "print-invalid-response");
                 if (result.printers !== undefined) {
-                    printing.printers = result.printers;
+                    printing.applyPrinters(result.printers);
                     printing.jobs = result.jobs || [];
                     printing.available = true;
                 }

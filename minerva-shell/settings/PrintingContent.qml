@@ -261,11 +261,18 @@ Column {
                 }
                 PrinterSupplies {
                     width: parent.width
-                    items: card.modelData.supplies || []
+                    items: Core.Printing.suppliesFor(card.modelData)
+                }
+                PrintLabel {
+                    visible: !!card.modelData.deviceReading
+                    text: card.modelData.deviceReading ? content.label("Letto direttamente dalla stampante · ", "Read directly from printer · ")
+                        + Qt.formatDateTime(new Date(card.modelData.deviceReading.time * 1000), "dd/MM/yyyy HH:mm:ss") : ""
+                    color: content.secondary
+                    font.pixelSize: 13 * content.textScale
                 }
                 PrintLabel {
                     width: parent.width
-                    text: (card.modelData.supplies || []).length ? content.label("I livelli non verificano la qualità di stampa o lo stato degli ugelli. La quantità di carta è mostrata solo se segnalata dalla stampante.",
+                    text: Core.Printing.suppliesFor(card.modelData).length ? content.label("I livelli non verificano la qualità di stampa o lo stato degli ugelli. La quantità di carta è mostrata solo se segnalata dalla stampante.",
                         "Levels do not verify print quality or nozzle condition. Paper quantity is shown only when reported by the printer.")
                         : content.label("CUPS non ha ancora comunicato i livelli dei consumabili. Dopo una nuova installazione potrebbero non essere subito disponibili.", "CUPS has not reported supply levels yet. They may not be available immediately after a new installation.")
                     color: content.secondary
@@ -275,6 +282,12 @@ Column {
                 Flow {
                     width: parent.width
                     spacing: 8
+                    PrintingAction {
+                        visible: !!card.modelData.directStatusSupported
+                        text: content.label("Leggi stato del dispositivo", "Read device status")
+                        enabled: !Core.Printing.busy
+                        onClicked: Core.Printing.request({action:"device-status",printer:card.modelData.name})
+                    }
                     PrintingAction {
                         text: content.confirmation === card.modelData.name + ":remove" ? content.label("Conferma rimozione", "Confirm removal") : content.label("Rimuovi stampante", "Remove printer")
                         enabled: !Core.Printing.busy
@@ -288,7 +301,7 @@ Column {
                     }
                     PrintingAction {
                         text: content.confirmation === card.modelData.name + ":test" ? content.label("Conferma stampa B/N", "Confirm B/W print") : content.label("Pagina di prova B/N", "B/W test page")
-                        enabled: !Core.Printing.busy && card.modelData.accepting
+                        enabled: !Core.Printing.busy && card.modelData.accepting === true
                         onClicked: content.action(card.modelData.name + ":test", {action:"test-page", printer:card.modelData.name, options:{color:"monochrome"}})
                     }
                     Repeater {
@@ -389,7 +402,7 @@ Column {
         spacing: 10
         PrintLabel {
             width: parent.width
-            text: content.label("Configura la stampante · autorizzazione di sistema richiesta", "Set up printer · system authorization required")
+            text: content.label("Configura la stampante · autorizzazione richiesta se necessaria", "Set up printer · authentication if required")
             color: content.foreground; wrapMode: Text.Wrap; font.pixelSize: 18 * content.textScale
         }
         PrintLabel { text: content.label("Nome della coda (lettere, numeri, trattini)", "Queue name (letters, digits, hyphens)"); color:content.secondary }

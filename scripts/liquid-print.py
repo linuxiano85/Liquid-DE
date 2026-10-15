@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Ponte locale CUPS: richieste JSON, nessuna shell o privilegio aggiuntivo."""
 import importlib.util
+import hashlib
+from contextlib import redirect_stdout
 import json
 import os
 from pathlib import Path
@@ -9,6 +11,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import traceback
 from urllib.parse import unquote
 
 # Python -I non importa moduli dalla cartella corrente: carichiamo soltanto
@@ -16,6 +20,9 @@ from urllib.parse import unquote
 _spec = importlib.util.spec_from_file_location('liquid_print_discovery', Path(__file__).with_name('liquid_print_discovery.py'))
 discovery = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(discovery)
+_status_spec = importlib.util.spec_from_file_location('liquid_print_status', Path(__file__).with_name('liquid_print_status.py'))
+device_status = importlib.util.module_from_spec(_status_spec)
+_status_spec.loader.exec_module(device_status)
 
 ATTRIBUTES = ['printer-state', 'printer-is-accepting-jobs', 'printer-state-reasons',
               'printer-info', 'printer-location', 'printer-make-and-model',
@@ -37,6 +44,15 @@ def values(value):
     if value is None:
         return []
     return value if isinstance(value, (list, tuple)) else [value]
+
+
+def resolution_values(value):
+    rows = values(value)
+    if len(rows) == 3 and all(type(part) is int for part in rows):
+        rows = [rows]
+    return [list(row) for row in rows if isinstance(row, (list, tuple)) and len(row) == 3
+            and all(type(part) is int for part in row)
+            and 0 < row[0] <= 100000 and 0 < row[1] <= 100000 and row[2] in (3, 4)]
 
 
 def consumables(attrs):
@@ -100,6 +116,8 @@ def inventory(connection):
             'connection': 'usb' if str(basic.get('device-uri', '')).startswith('usb:') else
                 'network' if str(basic.get('device-uri', '')).startswith(('ipp:', 'ipps:', 'dnssd:', 'socket:', 'lpd:')) else 'unknown',
             'default': name == default,
+            'deviceKey': hashlib.sha256(str(basic.get('device-uri', '')).encode()).hexdigest(),
+            'directStatusSupported': str(basic.get('device-uri', '')).startswith(('ipp:', 'ipps:', 'dnssd:')),
             'media': values(attrs.get('media-supported')),
             'sides': values(attrs.get('sides-supported', ['one-sided'])),
             'colors': values(attrs.get('print-color-mode-supported')),
@@ -112,7 +130,7 @@ def inventory(connection):
             'paperReady': values(attrs.get('media-ready')),
             'paperTypes': values(attrs.get('media-type-supported')),
             'paperSources': values(attrs.get('media-source-supported')),
-            'resolutions': values(attrs.get('printer-resolution-supported')),
+            'resolutions': resolution_values(attrs.get('printer-resolution-supported')),
             'qualities': values(attrs.get('print-quality-supported')),
         })
     jobs = []
@@ -308,12 +326,29 @@ def handle(request, connection, runner=subprocess.run, administrator=None):
     if not isinstance(request, dict):
         raise ValueError('invalid-request')
     action = request.get('action', 'status')
-    if action not in ['status', 'default', 'cancel', 'print', 'test-page', 'maintenance', 'discover', 'drivers', 'configure', 'remove']:
+    if action not in ['status', 'device-status', 'default', 'cancel', 'print', 'test-page', 'maintenance', 'discover', 'drivers', 'configure', 'remove']:
         raise ValueError('unknown-action')
     if administrator is None and action in ('configure', 'remove'):
         administrator = cups_administrator(connection)
     state = inventory(connection)
     if action == 'status':
+        return state
+    if action == 'device-status':
+        name = request.get('printer')
+        printer = next((row for row in state['printers'] if row['name'] == name), None)
+        if printer is None:
+            raise ValueError('unknown-printer')
+        if not printer['directStatusSupported']:
+            raise ValueError('unsupported-device-status')
+        # Only a configured destination can select the target. No arbitrary URI
+        # from the shell request is used to contact a network host.
+        attrs = device_status.read(connection.getPrinters()[name]['device-uri'])
+        printer['deviceReading'] = {'time': int(time.time()), 'source': 'ipp',
+            'supplies': consumables(attrs), 'state': attrs.get('printer-state'),
+            'reasons': values(attrs.get('printer-state-reasons')),
+            'paperDefault': attrs.get('media-default', ''),
+            'resolutions': resolution_values(attrs.get('printer-resolution-supported')),
+            'qualities': values(attrs.get('print-quality-supported'))}
         return state
     if action == 'drivers':
         uri = request.get('uri')
@@ -430,4 +465,12 @@ def main():
 
 
 if __name__ == '__main__':
-    print(json.dumps(main(), ensure_ascii=False))
+    # Helpers from the printing stack may print diagnostic messages. stdout
+    # is a JSON protocol, so those messages must use stderr, not corrupt it.
+    with redirect_stdout(sys.stderr):
+        try:
+            result = main()
+        except Exception:
+            traceback.print_exc()
+            result = {'ok': False, 'code': 'print-helper-failed', 'message': 'print-helper-failed'}
+    print(json.dumps(result, ensure_ascii=False))

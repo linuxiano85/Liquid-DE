@@ -18,10 +18,12 @@ Column {
     }
     readonly property var rows: [
         {label:it?"Collegamento":"Connection",value:printer.connection==="usb"?"USB":printer.connection==="network"?(it?"Rete":"Network"):(it?"Non comunicato":"Not reported")},
-        {label:it?"Formato predefinito":"Default paper",value:paperName(printer.paperDefault)},
+        {label:it?"Formato predefinito della coda":"Queue default paper",value:paperName(printer.paperDefault)},
+        {label:it?"Formato predefinito del dispositivo":"Device default paper",visible:!!printer.deviceReading,value:printer.deviceReading ? paperName(printer.deviceReading.paperDefault) : ""},
         {label:it?"Fronte-retro automatico":"Automatic two-sided printing",value:(printer.sides||[]).some(function(s){return s.indexOf("two-sided")===0;}) ? (it?"Disponibile":"Available") : (it?"Non esposto dal driver":"Not exposed by driver")},
         {label:it?"Modalità colore":"Color modes",value:(printer.colors||[]).map(function(c){return c==="monochrome"?(features.it?"Bianco e nero":"Monochrome"):c==="color"?(features.it?"Colore":"Color"):c;}).join(" · ")},
         {label:it?"Risoluzioni del driver":"Driver resolutions",value:(printer.resolutions||[]).map(function(r){return r[0]+"×"+r[1]+(r[2]===4?" dpcm":" dpi");}).join(" · ")},
+        {label:it?"Risoluzioni del dispositivo":"Device resolutions",visible:!!printer.deviceReading,value:printer.deviceReading ? (printer.deviceReading.resolutions||[]).map(function(r){return r[0]+"×"+r[1]+(r[2]===4?" dpcm":" dpi");}).join(" · ") : ""},
         {label:it?"Qualità offerte":"Available quality modes",value:(printer.qualities||[]).map(function(q){return q===3?(features.it?"Bozza":"Draft"):q===4?(features.it?"Normale":"Normal"):q===5?(features.it?"Alta":"High"):String(q);}).join(" · ")}
     ]
     Text {
@@ -36,6 +38,7 @@ Column {
         model:features.rows
         delegate: Text {
             required property var modelData
+            visible:modelData.visible !== false
             width:features.width
             text:modelData.label+": "+(modelData.value||(features.it?"Non comunicato":"Not reported"))
             textFormat:Text.PlainText
