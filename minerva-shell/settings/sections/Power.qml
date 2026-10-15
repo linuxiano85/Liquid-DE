@@ -34,121 +34,14 @@ Page {
 
     // ── Profilo energetico ───────────────────────────────────────────────
 
-    property string profile: ""
-    property var profiles: []
-
-    Core.Exec {
-        id: profileQuery
-        onDone: function(out) {
-            // `powerprofilesctl list` marca l'attivo con un asterisco e
-            // rientra le proprietà: si tengono solo le righe che finiscono
-            // con i due punti, che sono i nomi.
-            var found = [];
-            var active = "";
-            var lines = out.split("\n");
-            for (var i = 0; i < lines.length; i++) {
-                var l = lines[i];
-                var m = l.match(/^(\*?)\s*([a-z-]+):\s*$/);
-                if (!m)
-                    continue;
-                found.push(m[2]);
-                if (m[1] === "*")
-                    active = m[2];
-            }
-            page.profiles = found;
-            page.profile = active;
-        }
-    }
-
-    // ── Il profilo si scrive in fila, e poi si rilegge ───────────────────
-    //
-    // Era `fire`, che col comando precedente ancora in corso non lanciava
-    // niente: «Risparmio» e subito «Prestazioni» lasciavano la macchina in
-    // risparmio con la pagina che diceva prestazioni, e nessuno la
-    // rileggeva. Adesso `start` mette in fila, e a ogni comando finito si
-    // chiede a `powerprofilesctl` com'è davvero — anche quando il cambio è
-    // stato rifiutato (30 settembre 2026).
-    Core.Exec {
-        id: setter
-        onCompleted: function(codice, uscita, errore) {
-            if (!setter.busy)
-                profileQuery.start(["powerprofilesctl", "list"]);
-        }
-    }
-
-    function setProfile(name) {
-        page.profile = name;
-        setter.start(["powerprofilesctl", "set", name]);
-    }
-
-    readonly property var profileLabels: ({
-        "power-saver": { "it": "Risparmio",  "en": "Power saver",
-                         "d_it": "Meno consumi, meno prestazioni. La batteria dura di più.",
-                         "d_en": "Less power, less performance. The battery lasts longer." },
-        "balanced":    { "it": "Equilibrato", "en": "Balanced",
-                         "d_it": "Il compromesso di tutti i giorni.",
-                         "d_en": "The everyday compromise." },
-        "performance": { "it": "Prestazioni", "en": "Performance",
-                         "d_it": "Tutto quello che il processore può dare. Scalda e consuma.",
-                         "d_en": "Everything the processor can give. It runs hot and drains." }
-    })
-
-    // ── Batteria ─────────────────────────────────────────────────────────
-
-    property string batteryState: ""
-    property string batteryTime: ""
-    property string batteryHealth: ""
-
-    // ── `upower` risponde in inglese, e con quattro decimali ─────────────
-    //
-    // Quello che scriveva era «5,4 hours di autonomia · salute 78,2517 %»:
-    // mezza frase in inglese in mezzo a una italiana, e una percentuale di
-    // salute della batteria con quattro cifre dopo la virgola, che nessuno
-    // guarda e che cambia da sola ogni venti secondi.
-    //
-    // I numeri li lascia com'è — la virgola è già quella giusta, la mette
-    // upower seguendo la lingua del sistema — e si traduce solo l'unità.
-
-    /// «3,2 hours» → «3,2 ore». Se non riconosce l'unità lascia stare: meglio
-    /// una parola inglese che una frase inventata.
-    function inItaliano(t) {
-        if (!page.it || t === "")
-            return t;
-        var voci = { "hours": "ore", "hour": "ora",
-                     "minutes": "minuti", "minute": "minuto",
-                     "seconds": "secondi", "second": "secondo",
-                     "days": "giorni", "day": "giorno" };
-        for (var k in voci) {
-            if (t.endsWith(k))
-                return t.substring(0, t.length - k.length) + voci[k];
-        }
-        return t;
-    }
-
-    /// «78,2517%» → «78%». La salute di una batteria è un numero intero:
-    /// le altre cifre sono rumore che si muove da solo.
-    function arrotonda(t) {
-        var m = String(t).match(/^\s*(-?[0-9]+)[.,]?([0-9]*)\s*%?\s*$/);
-        if (!m)
-            return t;
-        var n = parseFloat(m[1] + "." + (m[2] === "" ? "0" : m[2]));
-        return Math.round(n) + "%";
-    }
-
-    Core.Exec {
-        id: batteryQuery
-        onDone: function(out) {
-            function field(name) {
-                var m = out.match(new RegExp(name + ":\\s*(.+)"));
-                return m ? m[1].trim() : "";
-            }
-            page.batteryState = field("state");
-            var full = field("time to full");
-            var empty = field("time to empty");
-            page.batteryTime = page.inItaliano(full !== "" ? full : empty);
-            page.batteryHealth = page.arrotonda(field("capacity"));
-        }
-    }
+    S.PowerController { id: alimentazione }
+    readonly property string profile: alimentazione.profile
+    readonly property var profiles: alimentazione.profiles
+    readonly property var profileLabels: alimentazione.profileLabels
+    readonly property string batteryState: alimentazione.batteryState
+    readonly property string batteryTime: alimentazione.batteryTime
+    readonly property string batteryHealth: alimentazione.batteryHealth
+    function setProfile(name) { alimentazione.setProfile(name); }
 
     // ── Inattività ───────────────────────────────────────────────────────
     //
@@ -179,25 +72,13 @@ Page {
 
     // ── Aggiornamento ────────────────────────────────────────────────────
 
-    Component.onCompleted: {
-        refresh();
-        Core.Compositore.chiediRisparmio();
-    }
+    Component.onCompleted: Core.Compositore.chiediRisparmio()
 
-    function refresh() {
-        profileQuery.start(["powerprofilesctl", "list"]);
-        batteryQuery.sh("upower -i \"$(upower -e | grep -m1 BAT)\" 2>/dev/null");
-    }
-
-    Timer {
-        interval: 20000
-        // Solo con le Impostazioni davanti: ridotte o dietro un'altra
-        // finestra non c'è nessuno a guardare. Tornandoci si aggiorna
-        // subito (`triggeredOnStart`).
-        running: Qt.application.state === Qt.ApplicationActive
-        triggeredOnStart: true
-        repeat: true
-        onTriggered: page.refresh()
+    Card {
+        visible: alimentazione.profileError !== ""
+        chiudibile: false
+        heading: page.it ? "Profilo energetico" : "Power profile"
+        note: alimentazione.profileError
     }
 
     // ── Batteria ─────────────────────────────────────────────────────────
@@ -304,6 +185,7 @@ Page {
     // ── Profilo ──────────────────────────────────────────────────────────
 
     Card {
+        objectName: "profiliEnergeticiLiquid"
         heading: page.it ? "Profilo energetico" : "Power profile"
         visible: page.profiles.length > 0
 
@@ -313,6 +195,9 @@ Page {
             delegate: Rectangle {
                 id: prof
                 required property var modelData
+                objectName: "profiloEnergetico-" + modelData
+                enabled: !alimentazione.busy
+                opacity: enabled ? 1 : 0.6
 
                 readonly property bool current: page.profile === modelData
                 readonly property var info: page.profileLabels[modelData]

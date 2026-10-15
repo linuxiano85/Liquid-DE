@@ -1179,7 +1179,7 @@ FloatingWindow {
             case "dock":     return "sections/Dock.qml";
             case "display":  return settings.stileWindows ? "windows/Schermo.qml" : "sections/Display.qml";
             case "scrivania": return "sections/Scrivania.qml";
-            case "power":    return "sections/Power.qml";
+            case "power":    return settings.stileWindows ? "windows/Alimentazione.qml" : "sections/Power.qml";
             case "notifiche": return "sections/Notifiche.qml";
             case "audio":    return settings.stileWindows ? "windows/Audio.qml" : "sections/Audio.qml";
             case "network":   return "sections/Network.qml";

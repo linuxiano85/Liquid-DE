@@ -16,3 +16,4 @@ NavigazioneWindows 1.0 NavigazioneWindows.qml
 TitoloWindows 1.0 TitoloWindows.qml
 CategoriaWindows 1.0 CategoriaWindows.qml
 DisplayController 1.0 DisplayController.qml
+PowerController 1.0 PowerController.qml

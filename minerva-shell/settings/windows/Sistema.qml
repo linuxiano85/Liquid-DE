@@ -27,7 +27,7 @@ PaginaWindows {
         {id:"audio", icon:"volume", it:"Audio", en:"Sound", descIt:"Livelli del volume, output, input, dispositivi audio", descEn:"Volume levels, output, input, sound devices", pagina:"audio"},
         {id:"notifiche", icon:"bell", it:"Notifiche", en:"Notifications", descIt:"Avvisi dalle app e dal sistema, non disturbare", descEn:"App and system alerts, do not disturb", pagina:"notifiche"},
         {id:"concentrazione", icon:"moon", it:"Concentrazione", en:"Focus", descIt:"Consente di ridurre le distrazioni", descEn:"Helps reduce distractions"},
-        {id:"power", icon:"power", it:"Arresta", en:"Power", descIt:"Schermo e sospensione, modalità risparmio energia", descEn:"Screen and sleep, energy saving" , pagina:"power"},
+        {id:"power", icon:"power", it:Core.SystemState.hasBattery ? "Alimentazione e batteria" : "Alimentazione", en:Core.SystemState.hasBattery ? "Power & battery" : "Power", descIt:"Schermo e sospensione, modalità risparmio energia", descEn:"Screen and sleep, energy saving" , pagina:"power"},
         {id:"archiviazione", icon:"folder", it:"Archiviazione", en:"Storage", descIt:"Spazio di archiviazione, unità, regole di configurazione", descEn:"Storage space, drives, configuration rules"},
         {id:"condivisione", icon:"network", it:"Condivisione in prossimità", en:"Nearby sharing", descIt:"Rilevabilità, percorso dei file ricevuti", descEn:"Discoverability, received file location"},
         {id:"multitasking", icon:"restore", it:"Multitasking", en:"Multitasking", descIt:"Ancoraggio finestre, desktop, cambio attività", descEn:"Window snapping, desktops, task switching", pagina:"finestre"},
