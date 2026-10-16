@@ -15,6 +15,11 @@ Window {
     objectName: "selettoreFileWindows"
     property var proprietario: null
     property bool soloCartelle: false
+    // Existing wallpaper callers keep image validation. Other applications
+    // can select documents or choose a destination without decoding it.
+    property string purpose: "image"
+    property string initialName: ""
+    property var allowedExtensions: []
     property string cartella: ""
     property var voci: []
     property var posti: []
@@ -43,6 +48,8 @@ Window {
         return voci.filter(function(v) {
         if (dialogo.soloCartelle && !v.isDir)
             return false;
+        if (!v.isDir && dialogo.allowedExtensions.length && !dialogo.allowedExtensions.some(function(ext){return v.name.toLowerCase().endsWith(ext.toLowerCase());}))
+            return false;
         if (sceltaFiltro === "images" && !v.isDir && !dialogo.immagine(v.name))
             return false;
         return v.name.toLowerCase().indexOf(testoRicerca) >= 0;
@@ -56,7 +63,7 @@ Window {
     signal scelto(string percorso)
     signal annullato()
 
-    title: W.Style.label("Apri", "Open")
+    title: purpose === "save" ? W.Style.label("Salva con nome", "Save As") : W.Style.label("Apri", "Open")
     width: 946
     height: 534
     minimumWidth: 640
@@ -91,7 +98,7 @@ Window {
     }
     function apri(inizio) {
         errore = "";
-        nome.text = "";
+        nome.text = purpose === "save" ? initialName : "";
         ricerca.text = "";
         filtro.valore = "all";
         storia = [];
@@ -99,7 +106,7 @@ Window {
         visible = true;
         var partenza = inizio || ultimaCartella || casa;
         vai(partenza);
-        attesaImmagini = !inizio && ultimaCartella === "";
+        attesaImmagini = purpose === "image" && !inizio && ultimaCartella === "";
         Core.Ipc.fsPlaces();
         nome.forceActiveFocus(Qt.TabFocusReason);
         requestActivate();
@@ -137,7 +144,7 @@ Window {
             storia = storia.slice(0, posizione + 1).concat([cartella]);
             posizione = storia.length - 1;
         }
-        nome.text = "";
+        if (purpose !== "save") nome.text = "";
         ricerca.text = "";
         errore = "";
         voci = [];
@@ -158,6 +165,7 @@ Window {
     }
     function seleziona(v) {
         daValidare = "";
+        if (purpose === "save" && v.isDir) return;
         nome.text = v.name;
     }
     function attiva(v) {
@@ -197,6 +205,14 @@ Window {
             return;
         var percorso = normalizza(testo.startsWith("/") ? testo : cartella + "/" + testo);
         var voce = voci.find(function(v) { return v.path === percorso; });
+        if (purpose === "save" && !soloCartelle && !(voce && voce.isDir)) {
+            var divisione = percorso.lastIndexOf("/");
+            var directory = divisione <= 0 ? "/" : percorso.substring(0, divisione);
+            if (directory === cartella) {
+                termina(percorso.toLowerCase().endsWith(".pdf") ? percorso : percorso + ".pdf");
+                return;
+            }
+        }
         if (voce) {
             if (voce.isDir) {
                 if (soloCartelle)
@@ -206,7 +222,8 @@ Window {
             } else if (!soloCartelle) {
                 // Anche un nome digitato deve esistere nell'elenco ricevuto;
                 // la decodifica conferma che sia davvero un'immagine leggibile.
-                daValidare = voce.path;
+                if (purpose === "image") daValidare = voce.path;
+                else termina(voce.path);
             }
             return;
         }
@@ -257,7 +274,6 @@ Window {
             Core.Ipc.fsSmettiDiGuardare(payload.pane);
             if (!dialogo.visible || payload.pane !== dialogo.richiesta || payload.path !== dialogo.cartella)
                 return;
-            dialogo.caricando = false;
             dialogo.errore = payload.error || "";
             dialogo.voci = (payload.entries || []).slice().sort(function(a, b) {
                 return a.isDir !== b.isDir ? (a.isDir ? -1 : 1) : a.name.localeCompare(b.name);
@@ -265,7 +281,8 @@ Window {
             if (dialogo.errore === "")
                 dialogo.ultimaCartella = dialogo.cartella;
             elenco.currentIndex = -1;
-            nome.text = "";
+            dialogo.caricando = false;
+            if (dialogo.purpose !== "save") nome.text = "";
             if (dialogo.nomeDaTrovare !== "") {
                 nome.text = dialogo.nomeDaTrovare;
                 dialogo.nomeDaTrovare = "";
@@ -626,11 +643,11 @@ Window {
             activeFocusOnTab: true
             onModelChanged: {
                 currentIndex = -1;
-                if (!dialogo.caricando && dialogo.nomeDaTrovare === "")
+                if (dialogo.purpose !== "save" && !dialogo.caricando && dialogo.nomeDaTrovare === "")
                     nome.text = "";
             }
             onCurrentIndexChanged: {
-                if (currentIndex >= 0 && currentIndex < count) {
+                if (!dialogo.caricando && currentIndex >= 0 && currentIndex < count) {
                     dialogo.seleziona(dialogo.mostrate[currentIndex]);
                     positionViewAtIndex(currentIndex, GridView.Contain);
                 }
@@ -781,7 +798,7 @@ Window {
                 spacing: 14
                 Comando {
                     objectName: "fileWindowsConferma"
-                    testo: dialogo.soloCartelle ? W.Style.label("Seleziona cartella", "Select folder") : W.Style.label("Scegli immagine", "Choose picture")
+                    testo: dialogo.soloCartelle ? W.Style.label("Seleziona cartella", "Select folder") : dialogo.purpose === "save" ? W.Style.label("Salva", "Save") : dialogo.purpose === "file" ? W.Style.label("Apri", "Open") : W.Style.label("Scegli immagine", "Choose picture")
                     enabled: !dialogo.caricando && dialogo.daValidare === "" && (dialogo.soloCartelle || nome.text !== "")
                     onPremuto: dialogo.conferma()
                 }

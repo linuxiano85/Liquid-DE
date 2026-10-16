@@ -1,0 +1,17 @@
+#!/bin/sh
+# Una finestra per documento: scansioni e stampa condividono le stesse pagine.
+set -eu
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+MINERVA_DOCUMENT_PATH=""
+if [ "$#" -gt 0 ]; then
+    MINERVA_DOCUMENT_PATH=$(readlink -f -- "$1")
+    if [ ! -f "$MINERVA_DOCUMENT_PATH" ]; then
+        echo "minerva-documenti: file non disponibile" >&2
+        exit 1
+    fi
+fi
+LIQUID_DE="$ROOT"
+export MINERVA_DOCUMENT_PATH LIQUID_DE
+. "$ROOT/scripts/minerva-ambiente-app"
+minerva_avvia_app documenti qs -d -p "$ROOT/minerva-shell/documenti.qml"

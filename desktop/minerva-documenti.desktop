@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Stampa e scansione
+Name[en]=Print and Scan
+GenericName=Documenti
+GenericName[en]=Documents
+Comment=Acquisisci, annota, salva in PDF e stampa i tuoi documenti
+Comment[en]=Scan, annotate, save PDF and print your documents
+Exec=minerva-documenti %f
+Icon=minerva-documenti
+StartupWMClass=minerva-documenti
+Terminal=false
+StartupNotify=false
+Categories=Graphics;Scanning;
+MimeType=application/pdf;image/png;image/jpeg;image/tiff;image/bmp;image/webp;text/plain;
+Keywords=stampante;scanner;scansione;pdf;documenti;print;scan;documents;

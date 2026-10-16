@@ -497,7 +497,7 @@ mkdir -p "$ICONE"
 for app in minerva-files minerva-settings minerva-monitor minerva-viewer \
            minerva-editor minerva-calcolatrice minerva-media minerva-custodia \
            minerva-manutenzione minerva-terminale minerva-fucina \
-           minerva-posta; do
+           minerva-posta minerva-documenti; do
     # Un collegamento alla RADICE INSTALLATA, non ai sorgenti: fino al 4
     # ottobre 2026 puntava al progetto, e spostando il progetto tutti questi
     # comandi sono diventati collegamenti rotti in un colpo solo.

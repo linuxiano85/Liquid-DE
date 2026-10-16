@@ -33,6 +33,14 @@ Window {
     property bool preparing:false
     property int generation:0
     property int jobId:0
+    property bool standalone:false
+    property string mode:"print"
+    property string confirmAction:""
+    property string afterSaveAction:""
+    readonly property var scanPane:scanLoader.item
+    readonly property int modeBarHeight:standalone ? 52 : 0
+    readonly property bool backgroundBusy:worker.busy || !!scanPane && scanPane.busy || Core.Printing.busy
+    signal dismissed()
     readonly property string helper:(Quickshell.env("LIQUID_DE") || Quickshell.shellDir+"/..")+"/scripts/liquid_print_document.py"
     readonly property bool rangesValid: {
         if(!document)return false;
@@ -46,21 +54,58 @@ Window {
         }
         return true;
     }
-    readonly property bool canSubmit:!!document && !!printer && printer.accepting===true && !preparing && !submitting && !submitted && !Core.Printing.busy && copies.acceptableInput && rangesValid
+    readonly property bool canSubmit:!!document && !!printer && printer.accepting===true && !preparing && !submitting && !submitted && !Core.Printing.busy && copies.acceptableInput && rangesValid && (!standalone || !!scanPane && !scanPane.dirty && !scanPane.scanning && !scanPane.building)
     readonly property bool documentBusy:worker.busy
     Native.WindowIdentity {item:root}
-    title:label("Stampa", "Print")
+    title:standalone ? label("Stampa e scansione · Liquid", "Print and Scan · Liquid") : label("Stampa", "Print")
     width:1000
     height:720
     minimumWidth:780
     minimumHeight:540
-    flags:Qt.Dialog | Qt.FramelessWindowHint
-    modality:Qt.WindowModal
+    flags:(standalone ? Qt.Window : Qt.Dialog) | Qt.FramelessWindowHint
+    modality:standalone ? Qt.NonModal : Qt.WindowModal
     color:windows ? W.Style.base : Theme.Colors.window
     visible:false
     onActiveChanged:if(active && visible && !submitting && !submitted)Core.Printing.refresh()
     onClosing:function(event){event.accepted=false;dialog.dismiss();}
     function label(italian,english){return it ? italian : english;}
+    function openUtility(path) {
+        standalone=true;
+        if(path){mode="print";open(path,null);}
+        else {mode="scan";visible=true;Core.Printing.refresh();requestActivate();}
+    }
+    function adoptScans(info) {
+        if(document && document.token!==info.token)send({action:"release",token:document.token});
+        generation++;
+        document=info;sourcePath="";page=1;previewUrl="";preparing=false;submitted=false;jobId=0;problem="";
+        schedulePreview.restart();
+    }
+    function prepareScans() {
+        if(!scanPane || sourcePath!=="")return;
+        if(scanPane.scanning){preparing=true;return;}
+        if(!scanPane.pages.length){
+            if(document)send({action:"release",token:document.token});
+            document=null;previewUrl="";preparing=false;return;
+        }
+        if(scanPane.dirty || !document){preparing=true;scanPane.buildPdf();}
+    }
+    function setMode(value){mode=value;if(value==="print")prepareScans();}
+    function openDocument() {
+        if(submitting || scanPane && scanPane.pages.length)return;
+        filePicker.proprietario=dialog;filePicker.apri(sourcePath ? sourcePath.substring(0,sourcePath.lastIndexOf("/")) : "");
+    }
+    function newDocument() {
+        if(submitting)return;
+        if(scanPane && scanPane.scanning){scanPane.cancel();return;}
+        if(scanPane && scanPane.unsaved){confirmAction="new";return;}
+        clearDocument();
+    }
+    function clearDocument() {
+        if(scanPane && !scanPane.clear())return false;
+        if(document)send({action:"release",token:document.token});
+        generation++;document=null;sourcePath="";previewUrl="";problem="";preparing=false;submitted=false;jobId=0;confirmAction="";
+        return true;
+    }
     function open(path,owner) {
         if(submitting)return;
         if(document)send({action:"release",token:document.token});
@@ -79,9 +124,11 @@ Window {
     }
     function dismiss() {
         if(submitting)return;
-        if(document)send({action:"release",token:document.token});
-        generation++;document=null;previewUrl="";visible=false;
+        if(standalone && scanPane && scanPane.scanning){scanPane.cancel();return;}
+        if(standalone && scanPane && scanPane.unsaved){confirmAction="close";return;}
+        closeNow();
     }
+    function closeNow(){if(clearDocument()){visible=false;dismissed();}}
     function choosePrinter(name) {
         printerName=name;
         if(!printer)return;
@@ -140,6 +187,27 @@ Window {
             settingsScroll.contentY=Math.max(0,Math.min(next,Math.max(0,settingsScroll.contentHeight-settingsScroll.height)));
         }
     }
+    Win.ScegliFileWindows {
+        id:filePicker
+        purpose:"file"
+        allowedExtensions:[".pdf",".png",".jpg",".jpeg",".tif",".tiff",".webp",".bmp",".txt"]
+        onScelto:function(path){dialog.mode="print";dialog.open(path,null);}
+    }
+    Component {
+        id:scanComponent
+        ScanPane {
+            acquiringAllowed:dialog.sourcePath==="" || !dialog.document && !dialog.preparing
+            onDocumentReady:function(info){dialog.adoptScans(info);}
+            onChanged:{dialog.submitted=false;if(dialog.mode==="print")dialog.prepareScans();}
+            onAcquisitionFinished:if(dialog.mode==="print")dialog.prepareScans()
+            onProcessingFailed:function(message){dialog.preparing=false;dialog.problem=message;if(overwritePath==="")dialog.afterSaveAction="";}
+            onSaveCancelled:dialog.afterSaveAction=""
+            onSaved:function(path){
+                var action=dialog.afterSaveAction;dialog.afterSaveAction="";
+                if(action==="close")dialog.closeNow();else if(action==="new")dialog.clearDocument();
+            }
+        }
+    }
     Connections {
         target:Core.Printing
         function onRefreshed() {
@@ -166,18 +234,62 @@ Window {
     Item {
         id:root
         anchors.fill:parent
-        Keys.onEscapePressed:dialog.dismiss()
+        Keys.onEscapePressed:function(event){if(!event.isAutoRepeat)dialog.dismiss();}
         Rectangle {
             id:titleBar
             width:parent.width;height:38;color:dialog.color
-            Label {x:16;width:parent.width-70;anchors.verticalCenter:parent.verticalCenter;text:dialog.title;font.pixelSize:13}
+            Label {x:16;width:parent.width-(dialog.standalone ? 160 : 70);anchors.verticalCenter:parent.verticalCenter;text:dialog.title;font.pixelSize:13}
             DragHandler {target:null;onActiveChanged:if(active)dialog.startSystemMove()}
+            Row {
+                visible:dialog.standalone
+                anchors.right:parent.right;anchors.rightMargin:44
+                S.PrintingAction {objectName:"documentMinimize";width:44;implicitWidth:44;height:38;text:"−";onClicked:dialog.showMinimized()}
+                S.PrintingAction {objectName:"documentMaximize";width:44;implicitWidth:44;height:38;text:dialog.visibility===Window.Maximized ? "❐" : "□";onClicked:dialog.visibility===Window.Maximized ? dialog.showNormal() : dialog.showMaximized()}
+            }
             S.PrintingAction {objectName:"printClose";anchors.right:parent.right;width:44;implicitWidth:44;height:38;text:"×";enabled:!dialog.submitting;onClicked:dialog.dismiss()}
+        }
+        Item {
+            id:modeBar
+            y:titleBar.height;width:parent.width;height:dialog.modeBarHeight;visible:dialog.standalone
+            Rectangle {
+                x:20;y:6;width:260;height:36;radius:6;color:dialog.paperSurface;border.width:1;border.color:Qt.alpha(dialog.ink,0.15)
+                Row {
+                    Repeater {
+                        model:[{value:"print",text:dialog.label("Stampa","Print")},{value:"scan",text:dialog.label("Scansione","Scan")}]
+                        delegate:Rectangle {
+                            required property var modelData
+                            objectName:"documentMode-"+modelData.value
+                            width:130;height:36;radius:6;color:dialog.mode===modelData.value ? Qt.alpha(dialog.ink,0.06) : "transparent"
+                            activeFocusOnTab:true
+                            Accessible.role:Accessible.PageTab
+                            Accessible.name:modelData.text
+                            Accessible.selected:dialog.mode===modelData.value
+                            Keys.onReturnPressed:dialog.setMode(modelData.value)
+                            Label {anchors.centerIn:parent;width:parent.width;text:parent.modelData.text;horizontalAlignment:Text.AlignHCenter;font.weight:dialog.mode===parent.modelData.value ? Font.DemiBold : Font.Normal}
+                            Rectangle {anchors.bottom:parent.bottom;anchors.bottomMargin:2;anchors.horizontalCenter:parent.horizontalCenter;width:36;height:3;radius:1;color:dialog.windows ? W.Style.accent : Theme.Colors.accent;visible:dialog.mode===parent.modelData.value}
+                            MouseArea {anchors.fill:parent;onClicked:dialog.setMode(parent.modelData.value)}
+                        }
+                    }
+                }
+            }
+            Row {
+                anchors.right:parent.right;anchors.rightMargin:20;y:8;spacing:8
+                S.PrintingAction {objectName:"documentNew";text:dialog.label("Nuovo documento","New document");enabled:!dialog.submitting && (!dialog.scanPane || !dialog.scanPane.building);onClicked:dialog.newDocument()}
+                S.PrintingAction {objectName:"documentOpen";text:dialog.label("Apri documento…","Open document…");enabled:!dialog.submitting && (!dialog.scanPane || !dialog.scanPane.pages.length);onClicked:dialog.openDocument()}
+            }
+        }
+        Loader {
+            id:scanLoader
+            active:dialog.standalone
+            sourceComponent:scanComponent
+            x:0;y:titleBar.height+dialog.modeBarHeight;width:parent.width;height:parent.height-y
+            visible:active && dialog.mode==="scan"
         }
         Rectangle {
             id:settings
-            x:0;y:titleBar.height
-            width:320;height:parent.height-titleBar.height-74
+            visible:dialog.mode==="print"
+            x:0;y:titleBar.height+dialog.modeBarHeight
+            width:320;height:parent.height-y-74
             color:dialog.paperSurface
             Flickable {
                 id:settingsScroll
@@ -230,9 +342,10 @@ Window {
             Ui.Scorrimento {id:settingsBar;bersaglio:settingsScroll;anchors.right:settingsScroll.right;anchors.top:settingsScroll.top;anchors.bottom:settingsScroll.bottom}
         }
         Item {
-            x:settings.width+24;y:titleBar.height+20
+            visible:dialog.mode==="print"
+            x:settings.width+24;y:titleBar.height+dialog.modeBarHeight+20
             width:parent.width-x-24;height:parent.height-y-90
-            Label {id:documentTitle;text:dialog.document ? dialog.document.name : dialog.label("Preparazione del documento…", "Preparing document…");font.pixelSize:20;font.weight:Font.DemiBold}
+            Label {id:documentTitle;text:dialog.document ? dialog.document.name : dialog.preparing ? dialog.label("Preparazione del documento…", "Preparing document…") : dialog.label("Nessun documento selezionato","No document selected");font.pixelSize:20;font.weight:Font.DemiBold}
             Rectangle {
                 anchors.top:documentTitle.bottom;anchors.topMargin:18
                 anchors.bottom:pageNavigation.top;anchors.bottomMargin:18
@@ -240,6 +353,7 @@ Window {
                 color:Qt.alpha(dialog.ink,0.06);radius:6
                 Image {objectName:"printPreviewImage";anchors.fill:parent;anchors.margins:16;source:dialog.previewUrl;asynchronous:true;fillMode:Image.PreserveAspectFit;cache:false}
                 Label {anchors.centerIn:parent;text:dialog.preparing ? dialog.label("Preparazione…", "Preparing…") : dialog.problem;visible:dialog.previewUrl==="";horizontalAlignment:Text.AlignHCenter}
+                S.PrintingAction {anchors.centerIn:parent;visible:dialog.standalone && !dialog.document && !dialog.preparing;text:dialog.label("Apri documento…","Open document…");onClicked:dialog.openDocument()}
             }
             Row {
                 id:pageNavigation
@@ -253,6 +367,7 @@ Window {
             Label {id:note;anchors.bottom:parent.bottom;text:dialog.label("Anteprima del documento. L’adattamento al foglio e i margini dipendono dal driver.", "Document preview. Paper fitting and margins depend on the driver.");color:dialog.muted;font.pixelSize:12}
         }
         Rectangle {
+            visible:dialog.mode==="print"
             anchors.left:parent.left;anchors.right:parent.right;anchors.bottom:parent.bottom;height:74;color:dialog.paperSurface
             Label {x:20;anchors.verticalCenter:parent.verticalCenter;width:parent.width-340;text:dialog.submitted ? dialog.label("Lavoro inviato · #", "Job submitted · #")+dialog.jobId : dialog.problem || (dialog.submitting ? dialog.label("Invio alla stampante…", "Sending to printer…") : "");font.pixelSize:13}
             Row {
@@ -260,6 +375,20 @@ Window {
                 S.PrintingAction {objectName:"printCancel";text:dialog.submitted ? dialog.label("Chiudi", "Close") : dialog.label("Annulla", "Cancel");enabled:!dialog.submitting;onClicked:dialog.dismiss()}
                 Win.PulsanteWindows {objectName:"printSubmitWindows";visible:dialog.windows;testo:dialog.label("Stampa", "Print");accento:true;enabled:dialog.canSubmit;onPremuto:dialog.submitPrint()}
                 S.PrintingAction {objectName:"printSubmitLiquid";visible:!dialog.windows;text:dialog.label("Stampa", "Print");enabled:dialog.canSubmit;onClicked:dialog.submitPrint()}
+            }
+        }
+        Rectangle {
+            visible:dialog.confirmAction!=="";anchors.fill:parent;color:"#66000000";z:100
+            MouseArea {anchors.fill:parent}
+            Rectangle {
+                anchors.centerIn:parent;width:480;height:190;radius:dialog.windows ? 8 : 16;color:dialog.paperSurface;border.width:1;border.color:Qt.alpha(dialog.ink,0.2)
+                Label {x:24;y:24;width:parent.width-48;text:dialog.label("Il documento contiene pagine non salvate. Puoi salvarle in PDF oppure scartare questa sessione.","The document contains unsaved pages. Save them as PDF or discard this session.");font.pixelSize:16}
+                Row {
+                    x:24;y:126;spacing:8
+                    S.PrintingAction {objectName:"documentKeepEditing";text:dialog.label("Annulla","Cancel");onClicked:dialog.confirmAction=""}
+                    S.PrintingAction {objectName:"documentSaveBeforeClose";text:dialog.label("Salva PDF…","Save PDF…");onClicked:{dialog.afterSaveAction=dialog.confirmAction;dialog.confirmAction="";dialog.mode="scan";if(dialog.scanPane)dialog.scanPane.savePdf();}}
+                    S.PrintingAction {objectName:"documentDiscard";text:dialog.label("Scarta","Discard");onClicked:{var action=dialog.confirmAction;dialog.confirmAction="";if(action==="close")dialog.closeNow();else dialog.clearDocument();}}
+                }
             }
         }
     }
