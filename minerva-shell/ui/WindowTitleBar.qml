@@ -42,6 +42,8 @@ Item {
 
     /// Il titolo mostrato al centro.
     property string label: ""
+    // Alcune intestazioni integrate riservano questo spazio a Indietro.
+    property bool showAppIcon: true
     // Il corpo può usare un tema locale (File Windows scuro): anche titolo
     // e comandi devono leggerne l'inchiostro, senza cambiare le altre app.
     property alias foreground: titleContent.foreground
@@ -304,7 +306,7 @@ Item {
         id: titleContent
         anchors.fill: parent
         label: bar.label
-        iconPath: bar.iconPath
+        iconPath: bar.showAppIcon ? bar.iconPath : ""
         active: bar.active
         side: bar.side
         stileWindows: Core.DesktopStyle.attuale === "windows"

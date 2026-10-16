@@ -735,6 +735,7 @@ FloatingWindow {
         anchors.right: parent.right
 
         label: settings.stileWindows ? "" : settings.title
+        showAppIcon: !settings.stileWindows
         onCloseRequested: settings.requestClose()
     }
 
