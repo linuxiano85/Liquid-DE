@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import Quickshell
 
 import "../theme" as Theme
@@ -6,6 +7,8 @@ import "../core" as Core
 import "../ui" as Ui
 import "../menu"
 import "../media" as Media
+import "../printing" as Print
+import "../printing/Documents.js" as PrintDocuments
 import Quickshell.Wayland
 
 // Viewer — Minerva Anteprima.
@@ -54,6 +57,13 @@ FloatingWindow {
     // ricostruzione. La decisione sta tutta in `core/TenutaPronta.qml`, qui
     // c'è solo l'interruttore della luce.
     property bool dormiente: false
+    property var printWindow: null
+    Component {id:printComponent;Print.PrintDialog {}}
+    function printFile(path) {
+        if(!PrintDocuments.canPrint(path))return;
+        if(!printWindow)printWindow=printComponent.createObject(viewer);
+        printWindow.open(path,viewer.contentItem.Window.window);
+    }
 
     readonly property bool it: Core.Strings.lang === "it"
 
@@ -1318,6 +1328,7 @@ FloatingWindow {
         var v = [];
         v.push({ "label": viewer.it ? "Apri" : "Open",
                  "icon": "image", "action": "apri-questo" });
+        if(PrintDocuments.canPrint(quale))v.push({label:viewer.it ? "Stampa…" : "Print…",icon:"printer",action:"stampa",shortcut:"Ctrl+P"});
         // La stella: la galleria la disegnava già sulle preferite, ma non
         // c'era modo di metterla (5 ottobre 2026).
         v.push({ "label": viewer.menuPreferito
@@ -1342,6 +1353,7 @@ FloatingWindow {
 
     function voci() {
         var v = [];
+        if(PrintDocuments.canPrint(viewer.bersaglio))v.push({label:viewer.it ? "Stampa…" : "Print…",icon:"printer",action:"stampa",shortcut:"Ctrl+P"});
         v.push({ "label": viewer.it ? "Imposta come sfondo" : "Set as wallpaper",
                  "icon": "image", "action": "sfondo" });
         v.push({ "label": viewer.it ? "Mostra nella cartella" : "Show in folder",
@@ -1440,6 +1452,7 @@ FloatingWindow {
                 return;
             }
             switch (action) {
+            case "stampa": viewer.printFile(viewer.bersaglio); break;
             case "apri-questo": viewer.show(viewer.bersaglio); break;
             case "sfondo":   viewer.comeSfondo(viewer.bersaglio); break;
             case "cartella": viewer.mostraNellaCartella(viewer.bersaglio); break;
@@ -1485,6 +1498,7 @@ FloatingWindow {
 
     // Spazio sulle foto va avanti; su un video lo fa partire e lo ferma,
     // come in ogni lettore. K è la stessa cosa, e J/L saltano di dieci secondi.
+    Shortcut { sequence:"Ctrl+P";enabled:PrintDocuments.canPrint(viewer.percorso);onActivated:viewer.printFile(viewer.percorso) }
     Shortcut { sequence: "Right"; onActivated: viewer.vai(1) }
     Shortcut {
         sequence: "Space"

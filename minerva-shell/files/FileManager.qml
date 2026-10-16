@@ -1,10 +1,13 @@
 import QtQuick
+import QtQuick.Window
 import Quickshell
 import "../theme" as Theme
 import "../core" as Core
 import "../ui" as Ui
 import "../menu"
 import Minerva.WindowIdentity 1.0 as Native
+import "../printing" as Print
+import "../printing/Documents.js" as PrintDocuments
 
 // FileManager — Il gestore file di Minerva.
 //
@@ -20,6 +23,14 @@ import Minerva.WindowIdentity 1.0 as Native
 // significa guardare entrambi e premere un tasto.
 FloatingWindow {
     id: manager
+    property var printWindow: null
+    Component {id:printComponent;Print.PrintDialog {}}
+    function printSelected() {
+        var paths=operands();
+        if(paths.length!==1 || selectedDirectory() || !PrintDocuments.canPrint(paths[0]))return;
+        if(!printWindow)printWindow=printComponent.createObject(manager);
+        printWindow.open(paths[0],manager.contentItem.Window.window);
+    }
     property string activationToken: ""
     Native.WindowIdentity {item:manager.contentItem;activationToken:manager.activationToken}
 
@@ -1948,6 +1959,7 @@ FloatingWindow {
                                        || (fileProps !== null && fileProps.visible)
     readonly property bool busy: manager.typing || manager.dialogOpen
 
+    Shortcut {sequence:"Ctrl+P";enabled:!manager.busy;onActivated:manager.printSelected()}
     Shortcut { sequence: "Ctrl+C"; enabled: !manager.busy; onActivated: manager.doCopy() }
     Shortcut { sequence: "Ctrl+Shift+C"; enabled: !manager.busy; onActivated: manager.doCopyPath() }
     // Maiusc+Canc: la scorciatoia che tutti conoscono, e che qui finora
@@ -2813,6 +2825,8 @@ FloatingWindow {
             if (uno !== "")
                 items.push({ "label": it ? "Apri con…" : "Open with…",
                              "icon": "apps", "action": "openWith" });
+            if(uno && PrintDocuments.canPrint(uno))
+                items.push({label:it ? "Stampa…" : "Print…",icon:"printer",action:"print",shortcut:"Ctrl+P"});
 
             // ── Eseguire ─────────────────────────────────────────────────
             //
@@ -3362,6 +3376,7 @@ FloatingWindow {
                 return;
             }
             switch (action) {
+            case "print":     manager.printSelected(); break;
             case "open":      if (manager.current) manager.current.openCursor(); break;
             case "openWith":  manager.doOpenWith(); break;
             case "esegui":

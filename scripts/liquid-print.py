@@ -23,6 +23,9 @@ _spec.loader.exec_module(discovery)
 _status_spec = importlib.util.spec_from_file_location('liquid_print_status', Path(__file__).with_name('liquid_print_status.py'))
 device_status = importlib.util.module_from_spec(_status_spec)
 _status_spec.loader.exec_module(device_status)
+_document_spec = importlib.util.spec_from_file_location('liquid_print_document', Path(__file__).with_name('liquid_print_document.py'))
+documents = importlib.util.module_from_spec(_document_spec)
+_document_spec.loader.exec_module(documents)
 
 ATTRIBUTES = ['printer-state', 'printer-is-accepting-jobs', 'printer-state-reasons',
               'printer-info', 'printer-location', 'printer-make-and-model',
@@ -326,12 +329,28 @@ def handle(request, connection, runner=subprocess.run, administrator=None):
     if not isinstance(request, dict):
         raise ValueError('invalid-request')
     action = request.get('action', 'status')
-    if action not in ['status', 'device-status', 'default', 'cancel', 'print', 'test-page', 'maintenance', 'discover', 'drivers', 'configure', 'remove']:
+    if action not in ['status', 'device-status', 'default', 'cancel', 'print', 'print-document', 'test-page', 'maintenance', 'discover', 'drivers', 'configure', 'remove']:
         raise ValueError('unknown-action')
     if administrator is None and action in ('configure', 'remove'):
         administrator = cups_administrator(connection)
     state = inventory(connection)
     if action == 'status':
+        return state
+    if action == 'print-document':
+        directory, document = documents.workspace(request.get('token'))
+        options = request.get('options',{})
+        if not isinstance(options,dict):
+            raise ValueError('invalid-options')
+        documents.selected_pages(options.get('pages'),document['pageCount'])
+        name = request.get('printer')
+        printer = next((row for row in state['printers'] if row['name'] == name),None)
+        if printer is None:
+            raise ValueError('unknown-printer')
+        options = print_options(request,printer)
+        # The immutable prepared document is the one previewed by the dialog.
+        identifier = connection.printFile(name,str(directory/'document.pdf'),document['name'][:160],options)
+        state = inventory(connection)
+        state['submittedJob'] = identifier
         return state
     if action == 'device-status':
         name = request.get('printer')

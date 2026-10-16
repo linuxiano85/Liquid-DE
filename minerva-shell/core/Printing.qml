@@ -18,6 +18,7 @@ Item {
     property string error: ""
     property string lastResult: ""
     property string lastAction: ""
+    property int lastSubmittedJob: 0
     property bool available: false
     property var _warnings: ({})
     property var _deviceReadings: ({})
@@ -32,6 +33,7 @@ Item {
         lastAction = data.action || "status";
         error = "";
         lastResult = "";
+        lastSubmittedJob = 0;
         command.timeoutMs = data.action === "install-driver" ? 600000 : (data.action === "configure" || data.action === "remove") ? 150000 : (data.action === "discover" || data.action === "drivers") ? 60000 : 30000;
         command.start(["python3", "-I", helper, JSON.stringify(data)]);
         return true;
@@ -73,7 +75,11 @@ Item {
             "device-status-unavailable":["Impossibile leggere lo stato del dispositivo. Verifica che sia acceso e raggiungibile.", "Cannot read device status. Check that it is powered on and reachable."],
             "print-empty-response":["Il servizio di stampa non ha restituito una risposta. Premi Aggiorna e riprova.", "The printing helper returned no response. Refresh and try again."],
             "print-invalid-response":["Il servizio di stampa ha restituito una risposta non valida. I dettagli tecnici sono nel registro delle Impostazioni.", "The printing helper returned an invalid response. Technical details are in the Settings log."],
-            "print-helper-failed":["Errore interno del servizio di stampa. I dettagli tecnici sono nel registro delle Impostazioni.", "Internal printing helper error. Technical details are in the Settings log."]
+            "print-helper-failed":["Errore interno del servizio di stampa. I dettagli tecnici sono nel registro delle Impostazioni.", "Internal printing helper error. Technical details are in the Settings log."],
+            "print-document-support-missing":["Manca il supporto PDF di Qt per Python. Installa il pacchetto pyside6.", "Qt for Python PDF support is missing. Install the pyside6 package."],
+            "unsupported-or-locked-pdf":["Il PDF non è leggibile oppure richiede una password. Aprilo e salvalo sbloccato prima di stamparlo.", "The PDF cannot be read or requires a password. Open it and save an unlocked copy before printing."],
+            "invalid-pages":["Indica le pagine nel formato 1,3-5.", "Enter pages in the form 1,3-5."],
+            "pages-out-of-range":["L’intervallo indicato non corrisponde alle pagine del documento.", "The range does not match the document pages."]
         };
         return errors[message] ? errors[message][it ? 0 : 1] : message;
     }
@@ -155,7 +161,10 @@ Item {
                 if (result.installedPackage) printing.lastResult = (printing.it ? "Pacchetto installato: " : "Installed package: ") + result.installedPackage;
                 if (result.removedPrinter) printing.lastResult = (printing.it ? "Stampante rimossa: " : "Removed printer: ") + result.removedPrinter;
                 if (result.warning) printing.lastResult += (printing.it ? " · Preferenze personali non ripulite: verificare la stampante predefinita." : " · Personal preferences were not cleared: check the default printer.");
-                if (result.submittedJob) printing.lastResult = (printing.it ? "Lavoro inviato: " : "Submitted job: ") + result.submittedJob;
+                if (result.submittedJob) {
+                    printing.lastSubmittedJob = result.submittedJob;
+                    printing.lastResult = (printing.it ? "Lavoro inviato: " : "Submitted job: ") + result.submittedJob;
+                }
                 if (printing.monitoring) printing.warn(printing.printers);
             } catch (e) {
                 if (printing.lastAction === "status") printing.available = false;

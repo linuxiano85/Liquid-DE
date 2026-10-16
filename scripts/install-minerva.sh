@@ -53,7 +53,7 @@ PKGS=(
     # D-Bus con Gio, dal Python di sistema.
     python-gobject
     # Stampa CUPS e scanner di rete/USB, con gestione dei driver.
-    cups python-pycups cups-pk-helper system-config-printer sane sane-airscan avahi
+    cups python-pycups cups-pk-helper system-config-printer sane sane-airscan avahi pyside6 qt6-imageformats
     # MTP/PTP sono funzioni del gestore file: GVfs da solo non vede i telefoni.
     gvfs gvfs-mtp gvfs-gphoto2
     # ── I portali, e perché ce ne vogliono due ─────────────────────────
