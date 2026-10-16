@@ -17,6 +17,16 @@ PaginaWindows {
             if (Core.Ipc.connected) Core.Ipc.send({action: "liquid_update_subscribe"});
         }
     }
+    SchedaImpostazione {
+        objectName: "systemSummaryError"
+        visible: dispositivo.errore !== ""
+        titolo: W.Style.label("Informazioni non disponibili", "Information unavailable")
+        descrizione: dispositivo.errore
+        icona: "informazioni"
+        porta: true
+        enabled: !dispositivo.busy
+        onAttivata: dispositivo.leggi()
+    }
     IntestazioneDispositivo {
         prefisso: "system"
         dati: dispositivo.dati

@@ -47,6 +47,16 @@ PaginaWindows {
         {key:"license", label:W.Style.label("Licenza", "License"), value:"GPL-3.0"}
     ]
     function copia(righe) { Quickshell.clipboardText = righe.map(function(row) { return row.label + "\t" + row.value; }).join("\n"); }
+    SchedaImpostazione {
+        objectName: "systemSummaryError"
+        visible: dispositivo.errore !== ""
+        titolo: W.Style.label("Informazioni non disponibili", "Information unavailable")
+        descrizione: dispositivo.errore
+        icona: "informazioni"
+        porta: true
+        enabled: !dispositivo.busy
+        onAttivata: dispositivo.leggi()
+    }
     Grid {
         id: riepiloghi
         width: parent.width
