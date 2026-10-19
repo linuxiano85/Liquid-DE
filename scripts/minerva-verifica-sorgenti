@@ -1,0 +1,20 @@
+#!/bin/sh
+# Controllo senza privilegi: un archivio incompleto non deve cambiare il sistema.
+set -eu
+ROOT=$(dirname "$(dirname "$(readlink -f "$0")")")
+errore=0
+for file in minervad/pubspec.yaml minervad/bin/minervad.dart \
+    minervad/bin/terminale.dart posta/daemon/pubspec.yaml \
+    posta/daemon/pubspec.lock posta/daemon/bin/liquid_maild.dart \
+    posta/daemon/lib/liquid_maild.dart compositore/meson.build \
+    compositore/subprojects/wlroots/meson.build minerva-shell/installer.qml \
+    native/quickshell/source.json scripts/minerva-compila-posta; do
+    if [ ! -r "$ROOT/$file" ]; then
+        printf 'Sorgenti incompleti: manca %s\n' "$file" >&2
+        errore=1
+    fi
+done
+if [ "$errore" != 0 ]; then
+    echo 'Scarica nuovamente il progetto completo e riprova. Nessuna modifica eseguita.' >&2
+    exit 1
+fi

@@ -1,0 +1,41 @@
+#!/bin/sh
+# sqlite3 richiede il bundle di dart build cli, non un eseguibile isolato.
+set -eu
+ROOT=$(dirname "$(dirname "$(readlink -f "$0")")")
+"$ROOT/scripts/minerva-verifica-sorgenti"
+cd "$ROOT/posta/daemon"
+mkdir -p build
+exec 9>build/.compilazione.lock
+flock -n 9 || { echo 'Una compilazione di Posta è già in corso.' >&2; exit 1; }
+TEMP=$(mktemp -d "$PWD/build/.posta-XXXXXXXX")
+cleanup() {
+    if [ -n "${PRECEDENTE:-}" ] && [ ! -e build/cli ] && [ -e "$PRECEDENTE" ]; then
+        mv "$PRECEDENTE" build/cli
+    fi
+    rm -rf -- "$TEMP"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+# Non nascondere stdout: dipendenze, hook nativi ed errori finiscono nel log.
+dart pub get --enforce-lockfile
+dart build cli -t bin/liquid_maild.dart -o "$TEMP/cli"
+test -x "$TEMP/cli/bundle/bin/liquid_maild" || {
+    echo 'Il bundle di Posta non contiene liquid_maild.' >&2; exit 1;
+}
+test -r "$TEMP/cli/bundle/lib/libsqlite3.so" || {
+    echo 'Il bundle di Posta non contiene la libreria SQLite.' >&2; exit 1;
+}
+# Conservare il bundle precedente, anche per eventuali processi già avviati.
+# Il processo installato non viene arrestato né sostituito da questo script.
+PRECEDENTE=""
+if [ -e build/cli ] || [ -L build/cli ]; then
+    PRECEDENTE="$PWD/build/cli-precedente-${TEMP##*/}"
+    mv build/cli "$PRECEDENTE"
+fi
+if ! mv "$TEMP/cli" build/cli; then
+    if [ -n "$PRECEDENTE" ]; then mv "$PRECEDENTE" build/cli; fi
+    echo 'Impossibile attivare il bundle compilato di Posta.' >&2
+    exit 1
+fi
+echo 'Posta: bundle compilato e verificato.'

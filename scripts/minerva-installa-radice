@@ -44,6 +44,7 @@ if [ "$SORGENTI" = "$(readlink -f "$RADICE" 2>/dev/null || echo "$RADICE")" ]; t
 fi
 
 for compilato in minervad/build/minervad minervad/build/minerva-terminale-motore \
+                 posta/daemon/build/cli/bundle/bin/liquid_maild \
                  compositore/build-native/minerva-wayland; do
     if [ ! -x "$SORGENTI/$compilato" ]; then
         echo "minerva-installa-radice: manca $compilato." >&2
@@ -54,6 +55,11 @@ for compilato in minervad/build/minervad minervad/build/minerva-terminale-motore
         exit 1
     fi
 done
+
+if [ ! -r "$SORGENTI/posta/daemon/build/cli/bundle/lib/libsqlite3.so" ]; then
+    echo 'minerva-installa-radice: bundle Posta incompleto, manca la libreria SQLite.' >&2
+    exit 1
+fi
 
 if [ ! -f "$SORGENTI/minerva-shell/native/Minerva/WindowIdentity/libminervawindowidentity.so" ]; then
     echo "minerva-installa-radice: manca il modulo nativo delle finestre." >&2

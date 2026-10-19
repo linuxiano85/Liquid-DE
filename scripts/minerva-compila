@@ -12,8 +12,10 @@
 # niente di male: il guardiano (`scripts/minerva-demone`) confronta le date e
 # torna da solo a `dart run`, dicendolo nel registro.
 
+set -eu
 SELF="$(readlink -f "$0")"
 ROOT="$(dirname "$(dirname "$SELF")")"
+"$ROOT/scripts/minerva-verifica-sorgenti"
 
 cd "$ROOT/minervad" || exit 1
 mkdir -p build
@@ -41,25 +43,17 @@ else
     exit 1
 fi
 
-# ── E il motore del Terminale ─────────────────────────────────────────────
-#
-# Uno per finestra, compilato come il demone e per la stessa ragione: da
-# sorgente `dart run` ci mette due secondi a partire, e un terminale che si
-# apre in due secondi non è un terminale. Se manca, `Sessione.qml` ripiega
-# sui sorgenti — lento ma vivo.
+# Posta è un componente richiesto: non dichiarare riuscita una build parziale.
+if [ "${MINERVA_INSTALL_GUI:-0}" = 1 ]; then
+    printf '@@MINERVA_STAGE@@Servizio Posta\n'
+fi
 printf '\033[36m·\033[0m Compilo il servizio della Posta…\n'
-# `dart build cli` e non `dart compile exe`: sqlite3 porta una libreria
-# nativa che solo build cli impacchetta (vedi posta/docs/stato-sviluppo.md).
-# Si costruisce a parte e si sostituisce solo a compilazione riuscita.
-if (cd "$ROOT/posta/daemon" && dart pub get >/dev/null \
-        && rm -rf build/cli.nuovo \
-        && dart build cli -t bin/liquid_maild.dart -o build/cli.nuovo >/dev/null); then
-    rm -rf "$ROOT/posta/daemon/build/cli"
-    mv "$ROOT/posta/daemon/build/cli.nuovo" "$ROOT/posta/daemon/build/cli"
-    printf '\033[32m✓\033[0m posta/daemon/build/cli pronto\n'
-else
-    rm -rf "$ROOT/posta/daemon/build/cli.nuovo"
-    printf '\033[31m✗\033[0m il servizio della Posta non compila: resta quello di prima\n'
+"$ROOT/scripts/minerva-compila-posta" || {
+    echo 'Compilazione Posta fallita. Consulta gli errori qui sopra; la copia installata resta in uso.' >&2
+    exit 1
+}
+if [ "${MINERVA_INSTALL_GUI:-0}" = 1 ]; then
+    printf '@@MINERVA_STAGE@@Motore del Terminale\n'
 fi
 printf '\033[36m·\033[0m Compilo il motore del Terminale…\n'
 if dart compile exe bin/terminale.dart -o build/minerva-terminale-motore.nuovo; then

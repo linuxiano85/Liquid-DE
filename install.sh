@@ -20,6 +20,7 @@ if [[ -z ${WAYLAND_DISPLAY:-} && -z ${DISPLAY:-} ]]; then
     exit 1
 fi
 command -v pacman >/dev/null || { echo 'Questa versione richiede Arch Linux o una derivata con pacman.' >&2; exit 1; }
+"$ROOT/scripts/minerva-verifica-sorgenti"
 
 BOOTSTRAP=(quickshell qt6-base qt6-declarative qt6-wayland qt6-svg zenity)
 ESITO=0

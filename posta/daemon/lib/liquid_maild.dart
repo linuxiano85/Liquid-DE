@@ -1,0 +1,36 @@
+/// API pubblica del daemon di Liquid Mail.
+library;
+
+export 'src/accounts/account_rpc.dart';
+export 'src/accounts/account_service.dart';
+export 'src/accounts/autoconfig.dart';
+export 'src/accounts/provider_config.dart';
+export 'src/accounts/oauth_google.dart';
+export 'src/daemon.dart';
+export 'src/db/database.dart';
+export 'src/db/mail_store.dart';
+export 'src/db/migrations.dart';
+export 'src/filter/ad_features.dart';
+export 'src/filter/ad_filter.dart';
+export 'src/filter/filter_rpc.dart';
+export 'src/filter/filter_store.dart';
+export 'src/db/attachment_store.dart';
+export 'src/mail/composer.dart';
+export 'src/mail/mail_rpc.dart';
+export 'src/mail/mail_service.dart';
+export 'src/mail/message_store.dart';
+export 'src/mail/notifier.dart';
+export 'src/mail/smtp_sender.dart';
+export 'src/mime/message_reader.dart';
+export 'src/rpc/rpc_errors.dart';
+export 'src/rpc/rpc_server.dart';
+export 'src/runtime_files.dart';
+export 'src/secrets/dh_session.dart';
+export 'src/secrets/secret_service_store.dart';
+export 'src/secrets/secret_store.dart';
+export 'src/sync/account_sync.dart';
+export 'src/sync/folder_sync.dart';
+export 'src/sync/sync_manager.dart';
+export 'src/transport/enough_imap_transport.dart';
+export 'src/transport/mail_transport.dart';
+export 'src/transport/retry.dart';

@@ -111,7 +111,14 @@ artifacts/
 /docs/liquid-update-pacchetti.md
 /minervad/test/windows11_fixture.dart
 /minervad/test/files_fixture.dart
-/posta/
+# Posta: pubblicare soltanto i sorgenti necessari alla compilazione.
+/posta/*
+!/posta/daemon/
+/posta/daemon/*
+!/posta/daemon/bin/
+!/posta/daemon/lib/
+!/posta/daemon/pubspec.yaml
+!/posta/daemon/pubspec.lock
 
 # I collegamenti di sviluppo non entrano nei pacchetti pubblici.
 /audit/

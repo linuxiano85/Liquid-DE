@@ -1,0 +1,23 @@
+name: liquid_maild
+description: Daemon di Liquid Mail (sync, indice, API JSON-RPC).
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: ^3.9.0
+# Versioni esatte: il parser e il trasporto dipendono da comportamenti
+# precisi di queste librerie (vedi docs/stato-sviluppo.md). Si aggiornano
+# a mano, rileggendo i test, mai da sole.
+dependencies:
+  enough_mail_plus: 2.2.4
+  sqlite3: 3.7.0
+  path: 1.9.1
+  xml: 7.1.0
+  crypto: 3.0.7
+  pointycastle: 4.0.0
+  dbus: 0.8.0
+  html: 0.15.7
+  ffi: 2.2.0
+dev_dependencies:
+  test: 1.33.0
+  async: 2.13.1
+  lints: 6.1.0

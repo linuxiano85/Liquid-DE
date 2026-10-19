@@ -151,18 +151,19 @@ if [[ ( $ESITO != 0 && $ESITO != 127 ) ||
     exit 1
 fi
 
-# La scansione è priva di effetti e legge l'elenco usato davvero qui sotto.
+if [[ ! -r "$MINERVA_DIR/config/mimeapps/liquidde-mimeapps.list" ]]; then
+    c_err "Manca la configurazione delle applicazioni predefinite di Liquid."
+    exit 1
+fi
+"$MINERVA_DIR/scripts/minerva-verifica-sorgenti"
+
+# Anche la GUI rifiuta un archivio incompleto prima di offrire Installa.
 if [[ ${1:-} == --scan ]]; then
     printf 'total\t%s\n' "${#PKGS[@]}"
     while IFS= read -r pacchetto; do
         [[ -z $pacchetto ]] || printf 'missing\t%s\n' "$pacchetto"
     done <<< "$MANCANTI"
     exit 0
-fi
-
-if [[ ! -r "$MINERVA_DIR/config/mimeapps/liquidde-mimeapps.list" ]]; then
-    c_err "Manca la configurazione delle applicazioni predefinite di Liquid."
-    exit 1
 fi
 
 c_head "Dipendenze"

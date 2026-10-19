@@ -1,4 +1,6 @@
 import QtQuick
+import QtQuick.Window
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 
@@ -101,9 +103,10 @@ ShellRoot {
                     next.push(fields[1]);
                     app.missingPackages = next;
                 }
+                else if (line.trim() !== "") app.errorText += line + "\n";
             }
         }
-        stderr: SplitParser { splitMarker: "\n"; onRead: function(line) { app.errorText = line; } }
+        stderr: SplitParser { splitMarker: "\n"; onRead: function(line) { app.errorText += line + "\n"; } }
         onExited: function(code) {
             console.info("[installer] Controllo dipendenze terminato: codice " + code
                          + ", mancanti " + app.missingPackages.length);
@@ -211,13 +214,20 @@ ShellRoot {
         }
     }
 
-    FloatingWindow {
+    Window {
         id: window
         visible: true
         title: "Liquid DE · Installazione"
-        implicitWidth: 1020
-        implicitHeight: 690
-        minimumSize: Qt.size(720, 520)
+        width: 1020
+        height: 690
+        minimumWidth: 720
+        minimumHeight: 520
+        flags: Qt.Window | Qt.FramelessWindowHint
+        readonly property bool busy: app.step === 2 || app.choosing
+        onClosing: function(event) {
+            event.accepted = !busy;
+            if (!busy) Qt.quit();
+        }
         color: app.paper
 
         // Pigmenti sovrapposti, senza shader: il disegno resta visibile anche
@@ -253,32 +263,60 @@ ShellRoot {
         }
 
         Rectangle {
+            id: titleBar
+            z: 10
+            width: parent.width
+            height: 48
+            color: "#E6101D30"
+            MouseArea {
+                anchors.fill: parent
+                anchors.rightMargin: 112
+                onPressed: window.startSystemMove()
+            }
+            Text {
+                anchors { left: parent.left; leftMargin: 20; verticalCenter: parent.verticalCenter }
+                text: "Liquid DE · Installazione"
+                color: app.ink
+                font.pixelSize: 14
+            }
+            ActionButton {
+                anchors { right: parent.right; rightMargin: 12; verticalCenter: parent.verticalCenter }
+                label: window.busy ? "In corso…" : "Esci"
+                enabled: !window.busy
+                onClicked: window.close()
+            }
+        }
+
+        Rectangle {
             id: brand
+            readonly property bool compact: height < 540
             width: Math.min(315, parent.width * 0.34)
             anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
+            anchors.topMargin: titleBar.height
             color: "#85101D30"
             border.color: app.cardBorder
             border.width: 1
             Rectangle {
                 anchors { left: parent.left; right: parent.right; top: parent.top; margins: 24; topMargin: 30 }
-                height: 250; radius: 25
+                height: brandIntro.implicitHeight + 36; radius: 25
                 color: "#4414253B"
                 border.width: 1
                 border.color: "#7193A8"
             }
             Column {
+                id: brandIntro
                 anchors { left: parent.left; right: parent.right; top: parent.top; margins: 40; topMargin: 48 }
-                spacing: 20
+                spacing: brand.compact ? 12 : 20
                 Image {
                     source: "file://" + app.rootPath + "/assets/marchio/minerva.svg"
-                    width: 86; height: 86
+                    width: brand.compact ? 64 : 86; height: width
                     fillMode: Image.PreserveAspectFit
                 }
                 Text {
                     text: "LIQUID DE"
                     color: app.ink
                     font.family: "Adwaita Sans"
-                    font.pixelSize: 27
+                    font.pixelSize: brand.compact ? 23 : 27
                     font.weight: Font.Bold
                 }
                 Rectangle { width: 70; height: 4; radius: 2; color: app.pigment }
@@ -288,7 +326,7 @@ ShellRoot {
                     wrapMode: Text.WordWrap
                     color: app.mutedInk
                     font.family: "Adwaita Sans"
-                    font.pixelSize: 17
+                    font.pixelSize: brand.compact ? 15 : 17
                     lineHeight: 1.35
                 }
             }
@@ -310,9 +348,11 @@ ShellRoot {
         Flickable {
             id: contentView
             anchors { left: brand.right; right: parent.right; top: parent.top; bottom: parent.bottom; margins: 0 }
+            anchors.topMargin: titleBar.height
             contentWidth: width
             contentHeight: content.implicitHeight + 80
             clip: true
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; active: true }
             Column {
                 id: content
                 x: 46; y: 44
@@ -390,11 +430,12 @@ ShellRoot {
                         color: "#E60C1A2B"; border.color: app.cardBorder; border.width: 1.5
                         Flickable {
                             anchors { fill: parent; margins: 14 }
+                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; active: true }
                             contentWidth: width; contentHeight: packageText.implicitHeight
                             clip: true
                             Text {
                                 id: packageText
-                                width: parent.width
+                                width: parent.width - 12
                                 text: app.scanning ? "Ricerca delle dipendenze…" :
                                       app.missingPackages.length ? app.missingPackages.join("  ·  ") : "Nessun pacchetto mancante"
                                 wrapMode: Text.WordWrap
@@ -424,12 +465,13 @@ ShellRoot {
                         color: "#E60C1A2B"; border.color: app.cardBorder; border.width: 1.5
                         Flickable {
                             id: logView
+                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; active: true }
                             anchors { fill: parent; margins: 14 }
                             contentWidth: width; contentHeight: logLabel.implicitHeight
                             clip: true
                             Text {
                                 id: logLabel
-                                width: parent.width
+                                width: parent.width - 12
                                 text: app.logText || "In attesa del primo passaggio…"
                                 color: app.mutedInk
                                 font.family: "Noto Sans Mono"; font.pixelSize: 12
