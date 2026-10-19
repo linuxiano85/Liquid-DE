@@ -85,6 +85,11 @@ fi
 
 INIZIO=$(date +%s)
 scrivi "schermata sul nostro compositore"
+# The greeter account may have HOME=/; Mesa must receive its writable cache
+# before this compositor starts, not only later in the UI/daemon supervisor.
+# Prepared by minerva-greeter-state.py, owned by greeter, mode 0700. Keep this
+# environment local to the compositor so the fallback login is unchanged.
+XDG_CACHE_HOME="${MINERVA_CONFIG_DIR:-/var/lib/minerva-greeter}/cache" \
 MINERVA_ESCI_COL_FIGLIO=1 MINERVA_GREETER=1 XKB_DEFAULT_LAYOUT="$LAYOUT" \
     "$LIB/minerva-wayland" "$LIB/minerva-greeter-sessione" >> "$REGISTRO" 2>&1
 ESITO=$?

@@ -123,7 +123,7 @@ Rectangle {
 
     // ── Cercare un programma nello store ─────────────────────────────────
     //
-    // il manutentore, 6 ottobre 2026: un collegamento che cerchi nel gestore
+    // Il manutentore, 6 ottobre 2026: un collegamento che cerchi nel gestore
     // pacchetti un programma adatto. Quale store e come gli si passa la
     // ricerca lo sa `scripts/minerva-store`; qui si chiede una volta sola
     // come si chiama e se sa cercare da solo, per scriverlo sulla riga.

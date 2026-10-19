@@ -104,7 +104,7 @@ ShellRoot {
 
             // ── Da qui si esce con Esc ───────────────────────────────────
             //
-            // il manutentore, 6 settembre 2026: «perché non riesco a chiudere
+            // Il manutentore, 6 settembre 2026: «perché non riesco a chiudere
             // anteprima cliccando su esc o altri modi?».
             //
             // Perché non c'era nessun modo, ed è colpa di come è fatta: la

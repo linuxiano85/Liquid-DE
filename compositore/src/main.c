@@ -742,7 +742,7 @@ struct minerva {
 
 	// ── La cornice attorno alla finestra attiva ──────────────────────────
 	//
-	// il manutentore, 3 settembre 2026: «se voglio che il colore intorno diventi tipo
+	// Il manutentore, 3 settembre 2026: «se voglio che il colore intorno diventi tipo
 	// rgb e cambi colore costantemente oppure che giri sempre come una
 	// striscia led?».
 	//
@@ -767,7 +767,7 @@ struct minerva {
 
 	// ── I colori che si alternano ───────────────────────────────────────
 	//
-	// il manutentore, 9 settembre 2026: «vorrei anche l'effetto rgb come una strip
+	// Il manutentore, 9 settembre 2026: «vorrei anche l'effetto rgb come una strip
 	// led e possibilità di scegliere i colori che si alterneranno».
 	//
 	// Zero colori vuol dire lo SPETTRO intero, che è come la cornice è nata e
@@ -824,7 +824,7 @@ struct minerva {
 
 	// ── L'effetto sulle finestre: un corpo solo ─────────────────────────
 	//
-	// il manutentore, 2 settembre 2026: «non abbiamo il blur e ci vorrebbero delle
+	// Il manutentore, 2 settembre 2026: «non abbiamo il blur e ci vorrebbero delle
 	// impostazioni per mettere nessun effetto o blur o vetro [...] e in blur
 	// o vetro dovrebbero far vedere un solo corpo trasparente o blur come un
 	// unico corpo la barra e la finestra senza stacchi».
@@ -2178,7 +2178,7 @@ static void disponi(struct minerva *m, struct wlr_output *out) {
 
 // ── La tastiera ai pannelli che l'hanno chiesta ──────────────────────────
 //
-// il manutentore, 6 settembre 2026: «il nostro polkit o come si chiama, quando fa
+// Il manutentore, 6 settembre 2026: «il nostro polkit o come si chiama, quando fa
 // apparire richiesta di password di root non prende il focus e quindi bisogna
 // spostare il mouse, cliccare sopra e inserire la password».
 //
@@ -2422,7 +2422,7 @@ static void puntatore_ricalcola(struct minerva *m) {
 
 // ── Chi tiene sveglio lo schermo ──────────────────────────────────────────
 //
-// il manutentore, 29 settembre 2026: «la CPU a riposo è sempre sul 4 %». Il
+// Il manutentore, 29 settembre 2026: «la CPU a riposo è sempre sul 4 %». Il
 // compositore presentava 11 fotogrammi al secondo con nessuno che toccava
 // niente, e non c'era modo di sapere CHI li chiedeva: ogni fotogramma nasce
 // da una superficie che manda un aggiornamento, ma il nome di quella
@@ -4114,7 +4114,7 @@ static void finestra_appare(struct finestra *f) {
 
 	// ── Quello che aveva già chiesto prima di comparire ──────────────────
 	//
-	// il manutentore, 5 settembre 2026: «tomb raider installato quando lo avvio non
+	// Il manutentore, 5 settembre 2026: «tomb raider installato quando lo avvio non
 	// si avvia a schermo intero ma ho la dock e la barra in alto».
 	//
 	// Un programma che vuole nascere a schermo intero lo chiede **prima di
@@ -4482,7 +4482,7 @@ static void chiede_ridimensiona(struct wl_listener *l, void *dati) {
 
 // ── I menù ────────────────────────────────────────────────────────────────
 //
-// il manutentore, 6 settembre 2026: «sui browser almeno, e non so se altrove, abbiamo
+// Il manutentore, 6 settembre 2026: «sui browser almeno, e non so se altrove, abbiamo
 // lo stesso problema: se clicco il tasto destro vale come sinistro. Ho testato
 // su chrome e firefox e confermo».
 //
@@ -5658,7 +5658,7 @@ static void aggancia_attiva(struct minerva *m, const char *dove) {
 
 	// ── Dallo schermo intero, prima si esce ──────────────────────────────
 	//
-	// il manutentore, 25 settembre 2026: «quando passo una finestra a schermo
+	// Il manutentore, 25 settembre 2026: «quando passo una finestra a schermo
 	// intero e premo poi Super+freccia giù la finestra perde la barra del
 	// titolo». Super+↓ la RIDUCEVA restando a schermo intero: tornava senza
 	// barra e senza un modo evidente di uscirne. Adesso Super+↓ esce dallo
@@ -7280,7 +7280,7 @@ static bool respiro_avvia(struct finestra *f, int tipo) {
 
 // ── Il respiro della chiusura ────────────────────────────────────────────
 //
-// il manutentore, 27 settembre 2026, vedendo il respiro: «l'animazione in apertura
+// Il manutentore, 27 settembre 2026, vedendo il respiro: «l'animazione in apertura
 // nelle app, ma in chiusura? nulla». Il perché: quando un programma chiude,
 // la sua immagine se ne va con lui, e non c'è niente da animare.
 //
@@ -7618,7 +7618,7 @@ static bool presa_avanti(struct minerva *m) {
 		//
 		// ── E lo stesso per una AGGANCIATA ───────────────────────────
 		//
-		// il manutentore, 7 settembre 2026: «staccala e vedi che si riaggancia da
+		// Il manutentore, 7 settembre 2026: «staccala e vedi che si riaggancia da
 		// sola, e non riesco a ridimensionarla se non la voglio più a metà
 		// schermo: sono costretto a fare un altro snap per rimpicciolirla».
 		//
@@ -7727,7 +7727,7 @@ static bool presa_avanti(struct minerva *m) {
 
 // ── La riva riservata ────────────────────────────────────────────────────
 //
-// il manutentore, 25 settembre 2026: «se ho una app a schermo intero compaiono le
+// Il manutentore, 25 settembre 2026: «se ho una app a schermo intero compaiono le
 // isole passandoci sopra». Con una finestra che riempie lo schermo —
 // ingrandita o a schermo intero — la riva non si muove da sola: angoli,
 // bordi e spinte rispondono solo mentre Super è tenuto giù. È la prima
@@ -8304,7 +8304,7 @@ static void cursore_rilasciato(struct minerva *m,
 			// lasciata la mano, e si spostava solo quando il programma
 			// finiva di ridisegnarsi.
 			//
-			// il manutentore, 7 settembre 2026: «lo snap non è istantaneo, la
+			// Il manutentore, 7 settembre 2026: «lo snap non è istantaneo, la
 			// posizioni come vuoi e lasci e passa più di mezzo secondo e
 			// poi si posiziona come voglio».
 			//
@@ -8741,7 +8741,7 @@ static void cursore_richiesto(struct wl_listener *l, void *dati) {
 //
 // ── Il sintomo, che sembrava tutt'altro ──────────────────────────────────
 //
-// il manutentore, 5 settembre 2026: «il puntatore quando sono su youtube non posso
+// Il manutentore, 5 settembre 2026: «il puntatore quando sono su youtube non posso
 // vederlo se passo su un video, e anche su altre finestre come questo
 // terminale».
 //
@@ -9777,7 +9777,7 @@ static void monitor_transaction_removed(struct minerva *m, struct wlr_output *ou
 //                 piccolo, se ce l'ha; altrimenti tiene il suo e il più
 //                 grande mostra un bordo vuoto a destra e in basso.
 //
-// il manutentore, 22 settembre 2026: «sotto i monitor le opzioni duplica, solo
+// Il manutentore, 22 settembre 2026: «sotto i monitor le opzioni duplica, solo
 // monitor 1 o 2 o solo pc e estendi». La versione precedente aveva lasciato fuori la
 // duplicazione apposta; entra qui con la stessa transazione degli altri due.
 
@@ -10598,7 +10598,8 @@ static void comando_effetto(struct minerva *m, char *resto,
 	if (alfa_t != NULL && strcmp(alfa_t, "-") != 0) {
 		char *fine = NULL;
 		const double v = strtod(alfa_t, &fine);
-		if (fine == alfa_t || *fine != '\0' || v < 0.50 || v > 1.00) {
+		// `!isfinite`: «nan» passa sia `< 0.50` sia `> 1.00`.
+		if (fine == alfa_t || *fine != '\0' || !isfinite(v) || v < 0.50 || v > 1.00) {
 			snprintf(risposta, n, "no l'opacità sta fra 0.50 e 1.00, "
 				"non «%s»", alfa_t);
 			return;
@@ -10705,7 +10706,8 @@ static void comando_cornice(struct minerva *m, char *resto,
 		}
 		char *fine = NULL;
 		const double v = strtod(periodo_t, &fine);
-		if (fine == periodo_t || *fine != '\0' || v < 0.0 || v > 0.60) {
+		// `!isfinite`: «nan» passa sia `< 0.0` sia `> 0.60`.
+		if (fine == periodo_t || *fine != '\0' || !isfinite(v) || v < 0.0 || v > 0.60) {
 			snprintf(risposta, n, "no la velatura delle spente sta fra 0 e "
 				"0.60: sopra, la finestra attiva non si distingue più");
 			return;
@@ -12092,7 +12094,12 @@ void minerva_comando(struct minerva *m, const char *riga,
 		char *fa = NULL, *fb = NULL;
 		const double x = strtod(a, &fa);
 		const double y = b != NULL ? strtod(b, &fb) : 0;
-		if (b == NULL || fa == a || *fa != '\0' || fb == b || *fb != '\0') {
+		// `isfinite`: «dito nan 0» arrivava a `wlr_cursor_warp_closest`, e
+		// wlroots su una coordinata non finita fa `assert(false)`: il
+		// compositore moriva, e con lui la sessione (fuzzing del canale sotto
+		// ASan, 19 ottobre).
+		if (b == NULL || fa == a || *fa != '\0' || fb == b || *fb != '\0'
+				|| !isfinite(x) || !isfinite(y)) {
 			snprintf(risposta, n, "no dito vuole due numeri, non «%s %s»",
 				a, b != NULL ? b : "");
 			return;
@@ -13201,7 +13208,7 @@ int main(int argc, char *argv[]) {
 	//
 	// ── Il colore va PREMOLTIPLICATO ─────────────────────────────────────
 	//
-	// il manutentore, 7 settembre 2026: «quel blu che compare come dimostrazione è
+	// Il manutentore, 7 settembre 2026: «quel blu che compare come dimostrazione è
 	// troppo forte e lo vorrei un pochino più trasparente e meno forte come
 	// intensità».
 	//

@@ -30,7 +30,10 @@ if qs ipc -p "$CONFIG" call media ping >/dev/null 2>&1; then
     if [ -n "$TARGET" ]; then
         exec qs ipc -p "$CONFIG" call media apri "$TARGET" >/dev/null
     fi
-    exec qs ipc -p "$CONFIG" call media apri >/dev/null
+    # `apri` vuole sempre il suo argomento: senza, qs risponde «Too few
+    # arguments» con uscita 0 e la finestra nella barra non tornava mai
+    # (19 ottobre). La stringa vuota vuol dire «portati davanti e basta».
+    exec qs ipc -p "$CONFIG" call media apri "" >/dev/null
 fi
 
 # ── 4. Altrimenti si parte ──────────────────────────────────────────────────

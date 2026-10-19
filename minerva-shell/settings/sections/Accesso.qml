@@ -205,7 +205,7 @@ Page {
 
     // ── Chi ti apre la porta ─────────────────────────────────────────────
     //
-    // il manutentore, 23 agosto 2026: «voglio un'impostazione per impostare il login
+    // Il manutentore, 23 agosto 2026: «voglio un'impostazione per impostare il login
     // manager predefinito, nel caso in cui io voglia quello di kde o cosmic o
     // gnome o altri».
     //
@@ -416,7 +416,7 @@ Page {
             // Qui c'era una casella e basta, con sotto la spiegazione di quali
             // cartelle sono leggibili da tutti — cioè si chiedeva di scrivere
             // `/usr/share/backgrounds/…` a mano SAPENDO già il percorso.
-            // il manutentore, 5 settembre 2026: «ci sono parti delle impostazioni dove
+            // Il manutentore, 5 settembre 2026: «ci sono parti delle impostazioni dove
             // devi incollare il percorso e a me non piace perché voglio
             // semplicità».
             control: S.SceltaPercorso {
@@ -576,8 +576,8 @@ Page {
             width: parent.width
             label: page.it ? "Saluto" : "Greeting"
             description: page.it
-                ? "«Buonasera, utente» al posto del nome"
-                : "“Good evening, user” instead of the name"
+                ? "«Buonasera, Anna» al posto del nome"
+                : "“Good evening, Anna” instead of the name"
             controlWidth: 60
 
             control: S.ToggleSwitch {
@@ -692,7 +692,7 @@ Page {
             // pagina — sfondo, sfocatura, velo, ora — perché `configura`
             // chiama anche `copia_impostazioni`.
             //
-            // il manutentore, 6 settembre 2026: «quando clicco su uno sfondo e clicco
+            // Il manutentore, 6 settembre 2026: «quando clicco su uno sfondo e clicco
             // su anteprima dovrei vederlo giusto? o devo prima cliccare su
             // applica?». La domanda nasce da qui: il pulsante che serviva
             // c'era, e diceva di riguardare un'altra cosa.

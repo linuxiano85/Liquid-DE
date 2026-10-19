@@ -8,7 +8,7 @@ import "../monitor" as Mon
 
 // ── Attività, dentro la shell ────────────────────────────────────────────
 //
-// il manutentore, 28 settembre 2026: il gestore dei processi «molto pesante per
+// Il manutentore, 28 settembre 2026: il gestore dei processi «molto pesante per
 // essere un task manager che dovrebbe essere piccolissimo […] rifacessi il
 // look per liquid e la rendessi fondamentale per il sistema». Fra tre strade
 // ha scelto questa: un pannello della shell, come il Centro. Una finestra Qt

@@ -3,8 +3,18 @@ import 'dart:convert';
 import 'dart:io';
 import 'event_bus.dart';
 import 'minerva_paths.dart';
+import 'linux_files.dart';
 import 'desktop_profiles.dart';
 import 'notification_preferences.dart';
+
+/// File esistente illeggibile: preservarlo per il recupero, senza stampare
+/// il contenuto (FormatException può includere uno stralcio del documento).
+class SettingsReadException implements Exception {
+  const SettingsReadException();
+  @override
+  String toString() => 'Impostazioni non leggibili: file originale conservato; '
+      'correggerlo prima di riprovare';
+}
 
 /// Gestore delle impostazioni di Minerva.
 /// Carica il file settings.json, lo fonde con i valori predefiniti e ne
@@ -14,6 +24,11 @@ class SettingsApi {
   final String _configPath;
   Map<String, dynamic> _settings = {};
   StreamSubscription? _watcherSubscription;
+  Timer? _reloadTimer;
+  bool _closing = false;
+  Future<void>? _initializing;
+  Future<void>? _disposeFuture;
+
   late final _profiles = DesktopProfiles(_fabbrica, (path, value) {
     final segments = path.split('.');
     return _esisteDiFabbrica(segments) &&
@@ -26,34 +41,52 @@ class SettingsApi {
   Map<String, dynamic> get settings => _settings;
 
   /// Inizializza le impostazioni caricando il file e avviando il watcher.
-  Future<void> init() async {
-    final file = File(_configPath);
-    if (!await file.exists()) {
-      await file.parent.create(recursive: true);
-      _settings = defaultSettings();
-      await _write();
-      print(
-        '[MINERVA][CORE][INFO] Creato file impostazioni di default in: $_configPath',
-      );
-    } else {
-      await _loadSettings();
-      // Un file scritto da una versione precedente può non avere le chiavi
-      // nuove: le aggiungiamo senza toccare le scelte già fatte dall'utente.
-      // Prima si pota, poi si riempie: al contrario, una chiave sconosciuta
-      // annidata dentro un gruppo appena creato verrebbe guardata due volte.
-      final potate = _potaSconosciute();
-      if (_fillMissingDefaults() || potate) {
+  Future<void> init() {
+    if (_closing) return Future<void>.error(StateError('Servizio impostazioni chiuso'));
+    return _initializing ??= _initialize().whenComplete(() => _initializing = null);
+  }
+
+  Future<void> _initialize() async {
+    await File(_configPath).parent.create(recursive: true);
+    final lease = await _takeWriteLock();
+    try {
+      final file = File(_configPath);
+      if (!await file.exists()) {
+        _settings = defaultSettings();
         await _write();
         print(
-          '[MINERVA][CORE][INFO] Impostazioni aggiornate con le nuove opzioni.',
+          '[MINERVA][CORE][INFO] Creato file impostazioni di default in: $_configPath',
         );
+      } else {
+        await _loadSettings();
+        // Un file scritto da una versione precedente può non avere le chiavi
+        // nuove: le aggiungiamo senza toccare le scelte già fatte dall'utente.
+        // Prima si pota, poi si riempie: al contrario, una chiave sconosciuta
+        // annidata dentro un gruppo appena creato verrebbe guardata due volte.
+        final potate = _potaSconosciute();
+        if (_fillMissingDefaults() || potate) {
+          await _write();
+          print(
+            '[MINERVA][CORE][INFO] Impostazioni aggiornate con le nuove opzioni.',
+          );
+        }
       }
-    }
 
-    final beforeProfiles = jsonEncode(_settings);
-    _profiles.normalize(_settings);
-    if (beforeProfiles != jsonEncode(_settings)) await _write();
+      final beforeProfiles = jsonEncode(_settings);
+      _profiles.normalize(_settings);
+      if (beforeProfiles != jsonEncode(_settings)) await _write();
+    } finally {
+      lease.release();
+    }
     _startWatcher();
+  }
+
+  Future<LinuxDirectoryLease> _takeWriteLock() async {
+    final logical = File(_configPath);
+    final target = await FileSystemEntity.type(_configPath, followLinks: false)
+            == FileSystemEntityType.link
+        ? File(await logical.resolveSymbolicLinks()) : logical;
+    return LinuxFiles.lockDirectory(target.parent);
   }
 
   Future<void> _loadSettings() async {
@@ -85,11 +118,13 @@ class SettingsApi {
           'La radice di settings.json non è un oggetto',
         );
       }
-    } catch (e) {
-      print(
-        '[MINERVA][CORE][ERRORE] Errore nel caricamento delle impostazioni: $e',
-      );
-      if (_settings.isEmpty) _settings = defaultSettings();
+    } catch (_) {
+      // Non accettare valori di fabbrica come se fossero preferenze lette:
+      // init/normalizzazione o il prossimo set li scriverebbero sul file
+      // danneggiato. In memoria resta l'ultimo stato valido, se esiste.
+      const failure = SettingsReadException();
+      print('[MINERVA][CORE][ERRORE] $failure');
+      throw failure;
     }
   }
 
@@ -103,6 +138,8 @@ class SettingsApi {
   /// Ferma la sorveglianza, se c'è. Azzera **prima** di aspettare: chi arriva
   /// nel frattempo non deve trovare una sottoscrizione che sta morendo.
   Future<void> _stopWatcher() async {
+    _reloadTimer?.cancel();
+    _reloadTimer = null;
     final s = _watcherSubscription;
     _watcherSubscription = null;
     if (s != null) {
@@ -120,11 +157,16 @@ class SettingsApi {
     // perso, ma vivo. Da lì in poi ogni modifica al file veniva letta e
     // annunciata due volte: due `settings_changed`, due ricostruzioni della
     // mappa delle icone, e il numero raddoppiava a ogni coppia successiva.
-    if (_watcherSubscription != null) return;
+    if (_closing || _watcherSubscription != null) return;
 
-    final file = File(_configPath);
     try {
-      _watcherSubscription = file.parent.watch().listen((event) async {
+      // Le preferenze possono vivere in un repository di dotfiles: seguire
+      // il file reale anche per gli aggiornamenti esterni, senza rompere il link.
+      final logical = File(_configPath);
+      final file = FileSystemEntity.typeSync(_configPath, followLinks: false)
+              == FileSystemEntityType.link
+          ? File(logical.resolveSymbolicLinksSync()) : logical;
+      _watcherSubscription = file.parent.watch().listen((event) {
         // Non basta guardare `modify`: chi scrive bene un file di
         // configurazione scrive di fianco e poi sposta (lo facciamo anche noi,
         // vedi `_write`), e allora l'evento è un `move` o un `create`. Con il
@@ -139,22 +181,24 @@ class SettingsApi {
             event.type != FileSystemEvent.move) {
           return;
         }
-        // Breve delay per evitare letture parziali durante il salvataggio
-        await Future.delayed(const Duration(milliseconds: 100));
-        // ── In fila con i salvataggi ─────────────────────────────────────
-        //
-        // `_stopWatcher` ferma gli eventi NUOVI, non un callback già dentro
-        // questa attesa di cento millesimi: fino al 30 settembre 2026 quel
-        // callback poteva ricaricare `_settings` nel mezzo di un salvataggio,
-        // che poi lo sovrascriveva. Nella fila arriva dopo, e legge il file
-        // com'è davvero. E si ripara come all'avvio: chi scrive il file a
-        // mano può sbagliare un tipo quanto chiunque altro.
-        await _inCoda(() async {
-          print(
-            '[MINERVA][CORE][INFO] Rilevata modifica a settings.json. Ricaricamento...',
-          );
-          await _ricarica();
-          _notifyChanged();
+        // Una sola rilettura dopo una raffica, cancellabile all'arresto.
+        // Non lasciare Future.delayed orfani che possano accodare lavoro
+        // dopo dispose o riaprire la sorveglianza di un'istanza chiusa.
+        _reloadTimer?.cancel();
+        _reloadTimer = Timer(const Duration(milliseconds: 100), () {
+          _reloadTimer = null;
+          if (_closing) return;
+          unawaited(_inCoda(() async {
+            if (_closing) return;
+            print('[MINERVA][CORE][INFO] Rilevata modifica a settings.json. Ricaricamento...');
+            try {
+              await _ricarica();
+              if (!_closing) _notifyChanged();
+            } on SettingsReadException {
+              // _loadSettings ha già registrato un errore privo di contenuto.
+              // Conservare lo stato precedente e il file per la riparazione.
+            }
+          }));
         });
       });
       _sorveglianzeAperte++;
@@ -179,7 +223,8 @@ class SettingsApi {
     final style = _settings['stile'] as Map<String, dynamic>;
     final requested = style['attuale'];
     if (beforeStyle is Map && DesktopProfiles.names.contains(beforeStyle['attuale']) &&
-        DesktopProfiles.names.contains(requested) && beforeStyle['attuale'] != requested) {
+        DesktopProfiles.names.contains(requested) && beforeStyle['attuale'] != requested &&
+        !_profiles.hasCurrentProjection(_settings)) {
       // Editing the selector in settings.json has the same semantics as IPC.
       // Explicit desktop edits in that file belong to the destination profile.
       final before = _profiles.snapshot(previous);
@@ -470,6 +515,34 @@ class SettingsApi {
           valore.length <= 50 &&
           valore.every((v) => v is String && RegExp(r'^https://').hasMatch(v));
     }
+    if (percorso == 'media.chiusura') {
+      return const ['chiedi', 'chiudi', 'barra'].contains(valore);
+    }
+    if (percorso == 'media.tvPaese') {
+      return valore is String &&
+          (valore.isEmpty || valore == '★' || RegExp(r'^[A-Z]{2,3}$').hasMatch(valore));
+    }
+    if (percorso == 'media.tvPreferiti') {
+      return valore is List &&
+          valore.length <= 200 &&
+          valore.every((v) =>
+              v is Map &&
+              v['id'] is String &&
+              RegExp(r'^tv-[0-9a-f]{24}$').hasMatch(v['id'] as String) &&
+              v['nome'] is String &&
+              (v['nome'] as String).length <= 512 &&
+              (v['paese'] == null || v['paese'] is String));
+    }
+    if (percorso == 'media.cartelleRecenti') {
+      // Le ultime cartelle aperte in Esplora: percorsi assoluti, pochi.
+      return valore is List &&
+          valore.length <= 8 &&
+          valore.every((v) =>
+              v is String &&
+              v.startsWith('/') &&
+              v.length <= 4096 &&
+              !RegExp(r'[\x00-\x1f]').hasMatch(v));
+    }
     if (percorso == 'media.radioPreferite') {
       // Viene dalla pagina, ma ogni indirizzo finisce in un lettore: solo
       // http e https, e un tetto, perché è un elenco che si salva intero.
@@ -682,40 +755,50 @@ class SettingsApi {
   Future<void> _coda = Future.value();
 
   Future<T> _transazione<T>(T Function() modifica, String logMessage) {
+    // La chiusura rifiuta solo le richieste nuove. Quelle già in coda
+    // devono completare la propria scrittura prima che dispose ritorni.
+    if (_closing) return Future<T>.error(StateError('Servizio impostazioni chiuso'));
     return _inCoda(() async {
-      await _stopWatcher();
-      // ── Chi ha cambiato il file da fuori, prima di noi ───────────────
-      //
-      // Un editor di testo salva `settings.json`, e un istante dopo — prima
-      // che la sorveglianza se ne accorga — un cursore delle Impostazioni
-      // manda `set_setting`. Fino al 30 settembre 2026 questo salvataggio
-      // partiva dalle impostazioni in memoria, quelle di PRIMA, e scriveva
-      // sopra la modifica appena fatta: persa, senza traccia. Il file è di
-      // pochi chilobyte: rileggerlo costa meno di perdere una scelta.
+      // Acquisire prima di fermare il watcher: durante l'attesa gli eventi
+      // restano in coda e un timeout non perde gli aggiornamenti altrui.
+      final lease = await _takeWriteLock();
       try {
+        await _stopWatcher();
+        // Riconciliare gli aggiornamenti esterni prima di ogni salvataggio.
+        // Un errore di lettura o JSON non autorizza a sovrascrivere il file.
         final suDisco = await File(_configPath).readAsString();
-        if (_testoNoto != null && suDisco != _testoNoto) await _ricarica();
-      } catch (_) {
-        // Illeggibile o sparito: si parte da quello che c'è in memoria, e il
-        // salvataggio lo rimette a posto.
-      }
-      final prima = _settings;
-      try {
-        _settings = jsonDecode(jsonEncode(prima)) as Map<String, dynamic>;
-        final risultato = modifica();
-        _profiles.capture(_settings);
-        final candidata = _settings;
-        _settings = prima;
-        if (jsonEncode(candidata) == jsonEncode(prima)) return risultato;
-        await _write(candidata);
-        _settings = candidata;
-        print('[MINERVA][CORE][INFO] $logMessage.');
-        _notifyChanged();
-        return risultato;
-      } catch (_) {
-        _settings = prima;
-        rethrow;
+        var externalChanged = false;
+        if (suDisco != _testoNoto) {
+          final beforeReload = jsonEncode(_settings);
+          await _ricarica();
+          externalChanged = jsonEncode(_settings) != beforeReload;
+        }
+        final prima = _settings;
+        try {
+          _settings = jsonDecode(jsonEncode(prima)) as Map<String, dynamic>;
+          final risultato = modifica();
+          _profiles.capture(_settings);
+          final candidata = _settings;
+          _settings = prima;
+          if (jsonEncode(candidata) == jsonEncode(prima)) {
+            // Il timer esterno è stato cancellato: notificare la rilettura
+            // anche se il comando locale è un no-op o viene rifiutato.
+            if (externalChanged) _notifyChanged();
+            return risultato;
+          }
+          await _write(candidata);
+          _settings = candidata;
+          print('[MINERVA][CORE][INFO] $logMessage.');
+          _notifyChanged();
+          return risultato;
+        } catch (_) {
+          _settings = prima;
+          if (externalChanged) _notifyChanged();
+          rethrow;
+        }
       } finally {
+        lease.release();
+        // Anche una lettura esterna fallita deve riattivare il watcher.
         _startWatcher();
       }
     });
@@ -741,12 +824,41 @@ class SettingsApi {
   /// file di prima, o c'è quello nuovo, mai un terzo caso.
   Future<void> _write([Map<String, dynamic>? valori]) async {
     const encoder = JsonEncoder.withIndent('  ');
-    final finale = File(_configPath);
-    final provvisorio = File('$_configPath.nuovo');
+    final logical = File(_configPath);
+    final finale = await FileSystemEntity.type(_configPath, followLinks: false)
+            == FileSystemEntityType.link
+        ? File(await logical.resolveSymbolicLinks()) : logical;
+    final stat = await finale.stat();
+    if (stat.type != FileSystemEntityType.notFound && stat.type != FileSystemEntityType.file) {
+      throw FileSystemException('Le impostazioni non sono un file regolare', _configPath);
+    }
+    final mode = stat.type == FileSystemEntityType.notFound ? 0x180 : stat.mode & 0x1ff;
+    // Niente nome prevedibile riutilizzato (.nuovo): potrebbe essere un link
+    // o un residuo estraneo. Lo staging nasce 0700 sullo stesso filesystem.
+    final staging = LinuxFiles.privateTemp(finale.parent, '.settings-save-');
+    final provvisorio = File('${staging.path}/settings.json');
     final testo = '${encoder.convert(valori ?? _settings)}\n';
-    await provvisorio.writeAsString(testo, flush: true);
-    await provvisorio.rename(finale.path);
-    _testoNoto = testo;
+    try {
+      await provvisorio.create();
+      LinuxFiles.setPermissions(provvisorio.path, mode);
+      await provvisorio.writeAsString(testo, flush: true);
+      await provvisorio.rename(finale.path);
+      _testoNoto = testo;
+      // Dopo rename il valore è già applicato: non fingere un rollback in
+      // memoria se fallisce solo la conferma di durabilità della directory.
+      try {
+        LinuxFiles.fsyncCartella(finale.parent.path);
+      } catch (e) {
+        print('[MINERVA][CORE][WARN] Impostazioni applicate; sincronizzazione '
+            'della directory non confermata: $e');
+      }
+    } finally {
+      try {
+        await staging.delete(recursive: true);
+      } catch (e) {
+        print('[MINERVA][CORE][WARN] Temporaneo privato non rimosso: $e');
+      }
+    }
   }
 
   /// Toglie dalle impostazioni le chiavi che i valori di fabbrica non conoscono.
@@ -939,7 +1051,7 @@ class SettingsApi {
       'windowOpacity': 0.88,
       // ── Il tasto che riavvia la scrivania ──────────────────────────
       //
-      // il manutentore, 2 settembre 2026: «mettiamo un tasto disattivabile
+      // Il manutentore, 2 settembre 2026: «mettiamo un tasto disattivabile
       // accanto al meteo dove posso riavviare la shell».
       //
       // Acceso di suo: chi sta costruendo Minerva la ricarica dieci volte
@@ -1133,7 +1245,7 @@ class SettingsApi {
       'listaFinestre': false,
       // ── I valori di sistema nella barra ──────────────────────────
       //
-      // il manutentore, 9 settembre 2026: «dei widget sia sulla barra». Gli
+      // Il manutentore, 9 settembre 2026: «dei widget sia sulla barra». Gli
       // stessi tipi della scrivania (`desktop.widgets`), ma qui basta il
       // nome: sulla barra non c'è niente da posizionare né da
       // ridimensionare, c'è solo l'ordine.
@@ -1190,7 +1302,7 @@ class SettingsApi {
       // nulla è il difetto che questo progetto si è messo per iscritto di
       // non commettere — e stava nel nostro pannello.
       //
-      // il manutentore, 2 settembre 2026: «ci vorrebbero delle impostazioni per
+      // Il manutentore, 2 settembre 2026: «ci vorrebbero delle impostazioni per
       // mettere nessun effetto o blur o vetro e queste impostazioni si
       // dovrebbero applicare alle finestre e in blur o vetro dovrebbero
       // far vedere un solo corpo trasparente [...] la barra e la finestra
@@ -1242,7 +1354,7 @@ class SettingsApi {
       'cornice': 'spento',
       // ── Il bordo colorato: spessore, colori, finestre spente ───────
       //
-      // il manutentore, 9 settembre 2026: «voglio poter regolare lo spessore del
+      // Il manutentore, 9 settembre 2026: «voglio poter regolare lo spessore del
       // colore intorno alla finestra attiva [...] e vorrei anche
       // l'effetto rgb come una strip led e possibilità di scegliere i
       // colori che si alterneranno».
@@ -1263,7 +1375,7 @@ class SettingsApi {
       'cornicePeriodo': 8000,
       // ── Quanto tremano le finestre ──────────────────────────────
       //
-      // il manutentore, 10 settembre 2026: «voglio le finestre tremolanti».
+      // Il manutentore, 10 settembre 2026: «voglio le finestre tremolanti».
       //
       // Zero spento, uno normale, tre il massimo. Trascinando, la
       // finestra resta un po' indietro rispetto al dito; al rilascio
@@ -1462,7 +1574,7 @@ class SettingsApi {
       // ordina: 'name', 'type', 'size', 'modified'.
       // ── I widget della scrivania ──────────────────────────────────
       //
-      // il manutentore, 9 settembre 2026: «vorrei avere dei widget sul desktop
+      // Il manutentore, 9 settembre 2026: «vorrei avere dei widget sul desktop
       // per vedere i valori di sistema [...] ridimensionabili
       // direttamente da desktop e possono anche essere bloccati e
       // diventare parte dello sfondo».
@@ -1629,6 +1741,15 @@ class SettingsApi {
       // Le radio salvate nella pagina Radio: `{id, nome, url, paese, tag,
       // codec, bitrate}`, come le dà `RadioService`.
       'radioPreferite': [],
+      'cartelleRecenti': [],
+      // La pagina TV: l'ultima nazione scelta (codice, «★» i preferiti,
+      // vuoto = quella della lingua del sistema) e i canali salvati
+      // `{id, nome, paese}` (l'indirizzo lo dà il catalogo, non si salva).
+      'tvPaese': '',
+      'tvPreferiti': [],
+      // La X di Media mentre suona: 'chiedi', 'chiudi' o 'barra' (resta
+      // nella barra di sistema e la musica continua).
+      'chiusura': 'chiedi',
     },
     // ── Lo stile della scrivania ──────────────────────────────────
     //
@@ -1862,10 +1983,25 @@ class SettingsApi {
     },
   };
 
-  Future<void> dispose() async {
-    // Prima si aspetta che la fila si svuoti: fermarsi con una scrittura a
-    // metà è esattamente il modo in cui si perde il file.
-    await _coda;
+  Future<void> dispose() {
+    _closing = true;
+    return _disposeFuture ??= _close();
+  }
+
+  Future<void> _close() async {
+    // Fermare subito eventi e timer; poi drenare init e scritture accettate.
+    // Ogni finally di una transazione trova _closing e non riapre il watcher.
     await _stopWatcher();
+    final starting = _initializing;
+    if (starting != null) {
+      try {
+        await starting;
+      } catch (e) {
+        // Il Future di init conserva l'errore per il suo chiamante. La pulizia
+        // deve comunque arrivare alla coda, senza stampare payload di errore.
+        print('[MINERVA][CORE][WARN] Arresto dopo inizializzazione fallita (${e.runtimeType}).');
+      }
+    }
+    await _coda;
   }
 }

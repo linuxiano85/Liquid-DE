@@ -46,7 +46,7 @@ import QtQuick
 //
 // Rimettendo `Rajdhani` e `Share Tech Mono` qui sotto, `weightRegular` a 500 e
 // le crenature a 1.6 / 0.9 / 0.5 / 1.2. Sono sei righe: è una scelta di
-// il manutentore, e deve restare facile da disfare.
+// Il manutentore, e deve restare facile da disfare.
 //
 // La scala è più ampia di quella precedente. I 10–12px di prima erano scelti
 // per far stare tutto; il risultato era denso e faticoso. Meglio mostrare meno
@@ -102,7 +102,7 @@ QtObject {
     //
     // ── PERCHÉ IL CORPO DEL TESTO È MEDIUM E NON REGULAR ─────────────────
     //
-    // il manutentore, 10 agosto 2026: «il testo dovrebbe essere più bianco perché
+    // Il manutentore, 10 agosto 2026: «il testo dovrebbe essere più bianco perché
     // allo stato attuale sembra grigio e quindi non ben visibile».
     //
     // Il colore era già giusto, e si può dimostrare: il testo di Minerva sul

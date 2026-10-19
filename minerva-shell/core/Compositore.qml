@@ -326,6 +326,7 @@ Singleton {
         if (quale === "vetrobarra") {
             comp.vetroBarra = String(riga).indexOf("ok si") === 0;
             comp.vetroAcrylic = String(riga).indexOf("ok si acrylic") === 0;
+            comp.vetroBarraNoto = true;
         }
         if (quale === "stato" && String(riga).indexOf("ok {") === 0) {
             try {
@@ -339,6 +340,9 @@ Singleton {
     /// Il compositore ha acceso il vetro dietro la barra Windows (verbo
     /// «vetrobarra»). Lo legge `windows11/Style.qml`.
     property bool vetroBarra: false
+    /// Risposta ricevuta anche quando il compositore non offre il materiale:
+    /// la Shell allora può mostrare il ripiego opaco, senza attendere sempre.
+    property bool vetroBarraNoto: false
     /// E ci stende sopra la ricetta Acrylic di Windows (risposta «ok si
     /// acrylic»): luminosità, tinta e rumore li fa lui.
     property bool vetroAcrylic: false
@@ -741,7 +745,7 @@ Singleton {
     // «Ingrandisci» qui è GEOMETRIA — `Windows.maximize` ridimensiona e
     // sposta, e il plugin fa lo stesso conto. Una finestra nel modo 1 del
     // compositore si prende l'ingresso e lascia le altre disegnate e mute:
-    // il manutentore, 12 agosto 2026, «è diventata una finestra fantasma». Il
+    // Il manutentore, 12 agosto 2026, «è diventata una finestra fantasma». Il
     // colpevole era proprio quel comando, dentro il plugin.
     //
     // Una porta che offre un attrezzo che non va usato è una porta che invita

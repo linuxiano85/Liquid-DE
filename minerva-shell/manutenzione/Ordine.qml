@@ -8,7 +8,7 @@ import "../ui" as Ui
 //
 // ── Da dove nasce ──────────────────────────────────────────────────────────
 //
-// il manutentore, 9 settembre 2026: «la nostra fa pulizia? ma solo pulizia ma anche
+// Il manutentore, 9 settembre 2026: «la nostra fa pulizia? ma solo pulizia ma anche
 // riordino della cartella utente che è sempre una pulizia, file doppi, file
 // sparsi, riordino per data e anno, rinomina nel riordino».
 //

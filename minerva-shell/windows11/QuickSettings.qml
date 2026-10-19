@@ -92,8 +92,124 @@ FocusScope {
 
     objectName: "windowsQuickSettings"
 
+    // ── I comandi multimediali ───────────────────────────────────────────
+    //
+    // In Windows 11 stanno in una scheda a sé SOPRA le impostazioni rapide,
+    // e ci sono solo mentre un'app riproduce qualcosa: icona e nome
+    // dell'app, copertina, titolo e artista, indietro / riproduci / avanti.
+    // Qui li dà MPRIS (`core/Media.qml`): Minerva Media, il browser, Spotify.
+    readonly property real schedaMedia: Core.Media.cQualcosa ? 124 : 0
+
+    Rectangle {
+        objectName: "windowsMediaCard"
+        visible: panel.schedaMedia > 0
+        anchors { left: parent.left; right: parent.right; top: parent.top }
+        height: panel.schedaMedia - 12
+        radius: 8
+        color: Style.pannello
+        border.color: Style.edge
+
+        Row {
+            x: 16; y: 12
+            spacing: 8
+            Glyph { width: 16; height: 16; name: "music"; color: Style.muted }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: Core.Media.attivo ? (Core.Media.attivo.identity || "") : ""
+                textFormat: Text.PlainText
+                color: Style.muted
+                font.family: Style.font
+                font.pixelSize: 12
+            }
+        }
+
+        Rectangle {
+            id: copertinaMedia
+            x: 16; y: 40
+            width: 56; height: 56
+            radius: 4
+            color: Style.field
+            clip: true
+            Glyph {
+                anchors.centerIn: parent
+                width: 24; height: 24
+                visible: immagineMedia.status !== Image.Ready
+                name: "music"
+                color: Style.muted
+            }
+            Image {
+                id: immagineMedia
+                anchors.fill: parent
+                source: Core.Media.copertina
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                sourceSize.width: 112
+                sourceSize.height: 112
+            }
+        }
+
+        Column {
+            anchors { left: copertinaMedia.right; leftMargin: 12
+                      right: comandiMedia.left; rightMargin: 8
+                      verticalCenter: copertinaMedia.verticalCenter }
+            spacing: 2
+            Text {
+                width: parent.width
+                text: Core.Media.titolo
+                textFormat: Text.PlainText
+                elide: Text.ElideRight
+                color: Style.text
+                font.family: Style.font
+                font.pixelSize: 14
+                font.weight: Font.DemiBold
+            }
+            Text {
+                width: parent.width
+                visible: text !== ""
+                text: Core.Media.artista
+                textFormat: Text.PlainText
+                elide: Text.ElideRight
+                color: Style.muted
+                font.family: Style.font
+                font.pixelSize: 12
+            }
+        }
+
+        Row {
+            id: comandiMedia
+            anchors { right: parent.right; rightMargin: 12
+                      verticalCenter: copertinaMedia.verticalCenter }
+            spacing: 4
+            Button {
+                width: 36; height: 36
+                icon: "mediaPrevious"
+                glyphSize: 16
+                enabled: Core.Media.attivo !== null && Core.Media.attivo.canGoPrevious
+                tooltip: Style.label("Precedente", "Previous")
+                onClicked: Core.Media.precedente()
+            }
+            Button {
+                width: 36; height: 36
+                icon: Core.Media.inRiproduzione ? "mediaPause" : "mediaPlay"
+                glyphSize: 18
+                tooltip: Core.Media.inRiproduzione ? Style.label("Pausa", "Pause")
+                                                   : Style.label("Riproduci", "Play")
+                onClicked: Core.Media.riproduci()
+            }
+            Button {
+                width: 36; height: 36
+                icon: "mediaNext"
+                glyphSize: 16
+                enabled: Core.Media.attivo !== null && Core.Media.attivo.canGoNext
+                tooltip: Style.label("Successivo", "Next")
+                onClicked: Core.Media.successivo()
+            }
+        }
+    }
+
     Rectangle {
         anchors.fill: parent
+        anchors.topMargin: panel.schedaMedia
         radius: 8
         color: Style.pannello
         border.color: Style.edge
@@ -103,6 +219,7 @@ FocusScope {
         id: audioLoader
 
         anchors.fill: parent
+        anchors.topMargin: panel.schedaMedia
         active: panel.page === "audio"
 
         sourceComponent: Component {
@@ -117,6 +234,7 @@ FocusScope {
 
     Loader {
         anchors.fill: parent
+        anchors.topMargin: panel.schedaMedia
         active: panel.page === "bluetooth"
         sourceComponent: Component {
             BluetoothDevices {
@@ -128,6 +246,7 @@ FocusScope {
 
     Loader {
         anchors.fill: parent
+        anchors.topMargin: panel.schedaMedia
         active: panel.page === "wifi"
         onLoaded: panel.wifiView = item
         onActiveChanged: if (!active) panel.wifiView = null
@@ -141,6 +260,7 @@ FocusScope {
 
     Item {
         anchors.fill: parent
+        anchors.topMargin: panel.schedaMedia
         visible: panel.page === "main"
 
         Grid {

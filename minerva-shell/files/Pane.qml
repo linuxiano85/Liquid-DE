@@ -340,7 +340,7 @@ Item {
 
     // ── Trascinare ───────────────────────────────────────────────────────
     //
-    // il manutentore, 12 agosto 2026: «voglio poter trascinare qualsiasi cosa come in
+    // Il manutentore, 12 agosto 2026: «voglio poter trascinare qualsiasi cosa come in
     // KDE, e lasciando mi chiede se copiare o spostare».
     //
     // Il trascinamento è quello VERO del sistema (`Drag.Automatic`): esce dalla
@@ -1405,7 +1405,7 @@ Item {
         // modalità amministratore, dentro una cartella non scrivibile, erano
         // veri entrambi.
         //
-        // il manutentore, guardandolo: «viene coperto dalla scritta amministratore e
+        // Il manutentore, guardandolo: «viene coperto dalla scritta amministratore e
         // quindi non si capisce cosa c'è scritto». È la stessa famiglia delle
         // due «cartella vuota» sovrapposte: due oggetti validi, nessun errore
         // da nessuna parte, e si vede solo guardando lo schermo.
@@ -1795,7 +1795,7 @@ Item {
         // toglie la presa del mouse, e quella perdita le arriva come
         // `onCanceled` — cioè uguale a un'interruzione.
         //
-        // il manutentore, 7 settembre 2026: «perché ancora non trascina i file?».
+        // Il manutentore, 7 settembre 2026: «perché ancora non trascina i file?».
         // Il registro diceva, due righe di fila:
         //
         //     [TR] acceso

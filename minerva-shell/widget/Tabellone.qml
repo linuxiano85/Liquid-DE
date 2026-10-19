@@ -7,7 +7,7 @@ import "../ui" as Ui
 //
 // ── Da dove viene ──────────────────────────────────────────────────────────
 //
-// il manutentore, 14 settembre 2026, con l'immagine di un pannello «Monitoraggio
+// Il manutentore, 14 settembre 2026, con l'immagine di un pannello «Monitoraggio
 // batteria» di Windows: «ne vorrei uno simile per il bluetooth con icone
 // eccetera, uno per le prestazioni che si vedano le varie misurazioni».
 //

@@ -143,7 +143,7 @@ class Inventario {
 
   // ── Raccontare mentre si lavora ──────────────────────────────────────────
   //
-  // il manutentore, 8 settembre 2026: «mettiamoci barre di progresso e live log».
+  // Il manutentore, 8 settembre 2026: «mettiamoci barre di progresso e live log».
   //
   // La scansione dura fra mezzo secondo e qualche secondo — `du` su
   // `~/.cache` sono decine di migliaia di file, e su `/var/cache/pacman/pkg`
@@ -416,7 +416,7 @@ class Inventario {
 
     // ── Quanto si può togliere NON è quanto pesa la cartella ────────────
     //
-    // il manutentore, 9 settembre 2026, dopo aver premuto: «perché non è scomparsa
+    // Il manutentore, 9 settembre 2026, dopo aver premuto: «perché non è scomparsa
     // dalle voci?». Il pulsante prometteva 6,97 GB e ne sono usciti 130.
     //
     // Perché `paccache` tiene le ultime due versioni di ogni pacchetto, e su

@@ -86,6 +86,25 @@ class DesktopProfiles {
     return result;
   }
 
+  /// Uno snapshot completo scritto dal demone include già la proiezione
+  /// del profilo attivo. Non interpretarlo come un semplice cambio manuale
+  /// del selettore: si perderebbero i profili aggiornati da un'altra sessione.
+  bool hasCurrentProjection(Map<String, dynamic> settings) {
+    final style = settings['stile'];
+    if (style is! Map || style['profili'] is! Map) return false;
+    final saved = (style['profili'] as Map)[style['attuale']];
+    bool same(dynamic a, dynamic b) {
+      if (a is Map && b is Map) {
+        return a.length == b.length && a.keys.every((k) => b.containsKey(k) && same(a[k], b[k]));
+      }
+      if (a is List && b is List) {
+        return a.length == b.length && List.generate(a.length, (i) => i).every((i) => same(a[i], b[i]));
+      }
+      return a == b;
+    }
+    return same(saved, snapshot(settings));
+  }
+
   Map<String, dynamic> defaults(String name) {
     final p = snapshot(factory);
     p.addAll({

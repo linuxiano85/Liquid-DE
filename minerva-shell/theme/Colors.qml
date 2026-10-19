@@ -78,7 +78,7 @@ QtObject {
 
     // ── Il settimo tema è tuo ────────────────────────────────────────────
     //
-    // il manutentore, 3 settembre 2026: «se voglio il colore delle finestre rosa i
+    // Il manutentore, 3 settembre 2026: «se voglio il colore delle finestre rosa i
     // caratteri viola e altre cose stravaganti?».
     //
     // I sei qui sopra sono scelte fatte da noi: una tinta e un verso che si
@@ -266,9 +266,14 @@ QtObject {
     /// scuro perdona molto di più dello stesso valore al contrario.
     readonly property real windowOpacityMin: palette.scura ? 0.78 : 0.93
 
-    readonly property color window: palette._pr("window",
-        Qt.rgba(palette.base.r, palette.base.g, palette.base.b,
-                Math.max(palette.windowOpacityMin, palette.windowOpacity)))
+    // La presentazione cambia la tinta, non può annullare l'opacità scelta.
+    // Il preset Windows passava qui un fondo pieno: l'acquerello risultava
+    // attivo ma le Impostazioni gli dipingevano sopra un muro opaco.
+    function opacitaFinestra(scura) {
+        return Math.min(1, Math.max(scura ? 0.78 : 0.93, palette.windowOpacity));
+    }
+    readonly property color window: Qt.alpha(palette._pr("window", palette.base),
+                                             palette.opacitaFinestra(palette.scura))
 
     /// Lo scurimento dietro ai pannelli è sempre NERO, anche sui temi chiari:
     /// serve a spingere indietro ciò che copre, e solo il buio lo fa. Su

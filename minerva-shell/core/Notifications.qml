@@ -306,7 +306,7 @@ QtObject {
 
     // ── Le notifiche per la schermata di blocco ──────────────────────────
     //
-    // il manutentore, 23 settembre 2026: «poter nascondere per privacy parte della
+    // Il manutentore, 23 settembre 2026: «poter nascondere per privacy parte della
     // notifica, se mi arrivano mail mi dice solo che ci sono ad esempio 3
     // email, tipo come gli smartphone».
     //

@@ -7,7 +7,7 @@ import "../ui" as Ui
 
 // ── Il Centro di controllo di Liquid DE ──────────────────────────────────
 //
-// il manutentore, 23 settembre 2026: «e se nel caso vogliamo spegnere il pc o
+// Il manutentore, 23 settembre 2026: «e se nel caso vogliamo spegnere il pc o
 // riavviarlo o bloccare lo schermo? e se vogliamo la modalità notte e wifi
 // eccetera? modalità non disturbare e altro dove le mettiamo?». Qui, in un
 // posto solo: scende dall'angolo in alto a destra (la sosta del puntatore,
@@ -62,7 +62,7 @@ PanelWindow {
 
     // ── I riquadri: quali, e in che ordine ──────────────────────────────
     //
-    // il manutentore, 5 ottobre 2026: «la possibilità di personalizzare il menu in
+    // Il manutentore, 5 ottobre 2026: «la possibilità di personalizzare il menu in
     // alto a destra per accesso rapido alle impostazioni, e l'aggiunta ad
     // esempio del pulsante impostazioni e altre voci, l'ordine». Il catalogo
     // sta qui; quali si vedono e in che ordine sta in `centro.voci`, e si

@@ -7,7 +7,7 @@ import "../ui" as Ui
 //
 // ── A che cosa serve ─────────────────────────────────────────────────────
 //
-// il manutentore, 4 settembre 2026: «posso avere la barra come windows con le app
+// Il manutentore, 4 settembre 2026: «posso avere la barra come windows con le app
 // aperte e meteo e tutto simile a windows eccetera». È il pezzo che manca allo
 // stile «Windows»: senza dock, le finestre aperte devono stare da qualche
 // parte, e quella parte è la barra.

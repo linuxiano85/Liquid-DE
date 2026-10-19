@@ -254,7 +254,7 @@ FloatingWindow {
 
     // ── I file aperti da amministratore ──────────────────────────────────
     //
-    // il manutentore, 23 agosto 2026: «inserendo la password posso aprire anche file
+    // Il manutentore, 23 agosto 2026: «inserendo la password posso aprire anche file
     // di configurazione come root con il lettore di testi».
     //
     // Si tiene l'elenco dei percorsi aperti così, per due motivi. Il primo è

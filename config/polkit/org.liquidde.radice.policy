@@ -48,9 +48,12 @@
     <description xml:lang="it">Gestire i file come amministratore</description>
     <message>Authentication is required to manage system files</message>
     <message xml:lang="it">Per lavorare sui file di sistema serve la password di un amministratore</message>
+    <!-- La password si ricorda (keep) solo per la sessione davanti allo
+         schermo, come kio-admin di KDE e systemd: una sessione remota o in
+         secondo piano la chiede ogni volta (19 ottobre). -->
     <defaults>
-      <allow_any>auth_admin_keep</allow_any>
-      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/local/bin/liquid-de-radice</annotate>

@@ -224,7 +224,7 @@ Item {
 
         // ── Le scie verticali ────────────────────────────────────────────
         //
-        // il manutentore, 5 settembre 2026: «l'errore si trova sempre in verticale e
+        // Il manutentore, 5 settembre 2026: «l'errore si trova sempre in verticale e
         // se noti bene e' sempre sulla parte dove c'e' l'effetto glass».
         // Aveva ragione su tutto: e' una SCIA, e va per il verso in cui si
         // scorre.

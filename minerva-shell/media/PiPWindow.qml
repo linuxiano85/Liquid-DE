@@ -1,5 +1,4 @@
 import QtQuick
-import QtMultimedia
 
 import "../theme" as Theme
 import "../ui" as Ui
@@ -7,8 +6,8 @@ import "../ui" as Ui
 // PiPWindow — Il video in miniatura sopra tutto.
 //
 // Quando il filmato si sposta di qui, il riproduttore smette di disegnare
-// nella finestra e comincia a disegnare qui: un `VideoOutput` solo, due
-// superfici, e il passaggio è il cambio di una proprietà.
+// nella finestra e comincia a disegnare qui: una superficie sola, che
+// `PlayerBackend.mostraIn` sposta da un contenitore all'altro.
 //
 // La finestra non ha bordo sistema: si trascina dal video, e i comandi
 // compaiono sotto il puntatore e si ritirano da soli dopo tre secondi di
@@ -17,7 +16,7 @@ Item {
     id: pip
     visible: false
 
-    /// Il MediaPlayer che si sta guardando.
+    /// Il PlayerBackend che si sta guardando.
     property var riproduttore: null
     /// Vera quando il PiP è aperto.
     property bool attivo: false
@@ -80,7 +79,7 @@ Item {
             border.color: Theme.Colors.edgeBright
             clip: true
 
-            VideoOutput {
+            Item {
                 id: uscitaPip
                 anchors.fill: parent
             }
@@ -109,14 +108,16 @@ Item {
                 onPositionChanged: function (m) {
                     if (!superficie.pressed)
                         return;
-                    if (!superficie.trascinando
-                            && Math.abs(m.x - superficie.avvio.x)
-                               + Math.abs(m.y - superficie.avvio.y) > 8)
-                        superficie.trascinando = true;
-                    if (superficie.trascinando) {
-                        finestra.x += m.x - superficie.avvio.x;
-                        finestra.y += m.y - superficie.avvio.y;
-                    }
+                    if (superficie.trascinando
+                            || Math.abs(m.x - superficie.avvio.x)
+                               + Math.abs(m.y - superficie.avvio.y) <= 8)
+                        return;
+                    // Su Wayland una finestra non si sposta scrivendo x e y:
+                    // lo spostamento lo fa il compositore, a richiesta. Come
+                    // `ui/WindowTitleBar.qml`. Scrivendo x/y il PiP restava
+                    // fermo (19 ottobre).
+                    superficie.trascinando = true;
+                    finestra.startSystemMove();
                 }
 
                 onClicked: function (m) {

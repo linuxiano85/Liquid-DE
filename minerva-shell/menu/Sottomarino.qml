@@ -7,7 +7,7 @@ import "../ui" as Ui
 
 // ── Il Sottomarino: il menù delle app di Liquid DE ───────────────────────
 //
-// il manutentore, 23 settembre 2026: «lo farei comparire come un sottomarino
+// Il manutentore, 23 settembre 2026: «lo farei comparire come un sottomarino
 // sfruttando gli angoli attivi, e metterei una ricerca intelligente delle
 // app nella quale io possa sia cercare il nome che la sua funzione, come ad
 // esempio browser o chrome o navigare il web, e possa vedere sia in vista

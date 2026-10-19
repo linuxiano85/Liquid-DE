@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import "../theme" as Theme
 import "../core" as Core
+import "../menu" as Menu
 import "../ui" as Ui
 
 // BarContent — La disposizione della barra.
@@ -256,6 +257,43 @@ Item {
                         font.pixelSize: Theme.Typography.sizeSM
                     }
                 }
+
+                // ── La musica, mentre suona ──
+                //
+                // Accanto all'ora, come nella barra Liquid: l'equalizzatore
+                // che segue il suono vero (`menu/Equalizzatore.qml`) e il
+                // titolo. Sparisce quando la musica si ferma; e se lo spazio
+                // non basta per la data, non c'è nemmeno per lei.
+                Row {
+                    id: musicaBarra
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: Core.Media.cQualcosa && Core.Media.inRiproduzione
+                             && !clockCluster.compatto
+                    width: visible ? implicitWidth : 0
+                    spacing: Theme.Effects.space2
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 1; height: 14
+                        color: Theme.Colors.edge
+                    }
+                    Menu.Equalizzatore {
+                        anchors.verticalCenter: parent.verticalCenter
+                        quante: 10
+                        altezzaMassima: 14
+                        attivo: musicaBarra.visible
+                    }
+                    Text {
+                        textFormat: Text.PlainText
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Math.min(implicitWidth, 180)
+                        elide: Text.ElideRight
+                        text: Core.Media.titolo
+                        color: Theme.Colors.text
+                        font.family: Theme.Typography.fontDisplay
+                        font.pixelSize: Theme.Typography.sizeSM
+                    }
+                }
             }
         }
     }
@@ -341,7 +379,7 @@ Item {
 
         // ── Ricarica la scrivania ────────────────────────────────────
         //
-        // il manutentore, 2 settembre 2026: «mettiamo un tasto disattivabile accanto
+        // Il manutentore, 2 settembre 2026: «mettiamo un tasto disattivabile accanto
         // al meteo dove posso riavviare la shell».
         //
         // ── Ricarica, non riavvia, e la differenza si vede ───────────────

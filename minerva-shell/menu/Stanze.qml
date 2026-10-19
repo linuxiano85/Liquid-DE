@@ -35,7 +35,7 @@ PanelWindow {
 
     // ── Sotto la mano ────────────────────────────────────────────────────
     //
-    // il manutentore, 27 settembre 2026: «vorrei averli sotto il mouse quando li
+    // Il manutentore, 27 settembre 2026: «vorrei averli sotto il mouse quando li
     // trascino e rilascio». La colonna aveva la molla sulla posizione anche
     // mentre la si teneva: inseguiva la mano e restava indietro (51 pixel
     // misurati a mano ferma, `prova-riva-scambio.py`). E al rilascio lo

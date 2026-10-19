@@ -216,7 +216,7 @@ Item {
             // programma ha chiesto che succeda — l'azione predefinita — o si
             // apre il file di cui la notifica parla.
             //
-            // il manutentore, 2 settembre 2026: «e questo per tutte le notifiche»,
+            // Il manutentore, 2 settembre 2026: «e questo per tutte le notifiche»,
             // non solo per l'avviso che compare e sparisce.
             //
             // ── E la X continua a chiudere ───────────────────────────────

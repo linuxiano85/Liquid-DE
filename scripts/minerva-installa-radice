@@ -61,15 +61,33 @@ if [ ! -f "$SORGENTI/minerva-shell/native/Minerva/WindowIdentity/libminervawindo
     exit 1
 fi
 
+# Il lettore di Minerva Media (mpv dentro la finestra, MPRIS, tray). Non è
+# obbligatorio: senza, Media torna a Qt Multimedia e lo scrive nel registro.
+if [ ! -f "$SORGENTI/minerva-shell/native/Liquid/Media/libliquidmedia.so" ]; then
+    echo "minerva-installa-radice: manca il modulo nativo di Media (mpv);" >&2
+    echo "  Media userà Qt Multimedia. Per compilarlo: $SORGENTI/scripts/costruisci-mpv.sh" >&2
+fi
+
 command -v rsync >/dev/null 2>&1 || {
     echo "minerva-installa-radice: serve rsync (pacman -S rsync)." >&2
     exit 1
 }
 
+command -v python3 >/dev/null 2>&1 || {
+    echo "minerva-installa-radice: serve python3." >&2
+    exit 1
+}
+for supporto in liquid-update-version.py minerva-migra-impostazioni.py; do
+    if [ ! -r "$SORGENTI/scripts/$supporto" ]; then
+        echo "minerva-installa-radice: manca scripts/$supporto." >&2
+        exit 1
+    fi
+done
+
 mkdir -p "$RADICE"
-# `--delay-updates`: i file nuovi si mettono al loro posto tutti insieme alla
-# fine. La sessione che sta girando da qui carica i QML quando apre una
-# finestra, e non deve trovare metà file nuovi e metà vecchi.
+# `--delay-updates` rinvia le sostituzioni alla fine, ma le applica in
+# sequenza: NON rende atomico l'aggiornamento dell'intera radice. La sessione
+# attiva può ancora osservare versioni miste (UPD001, da risolvere).
 # `--delete-excluded`: la radice è ESATTAMENTE la parte scelta dei sorgenti;
 # quello che si toglie dall'elenco sparisce anche da qui.
 rsync -a --delete --delete-excluded --delay-updates \
@@ -112,38 +130,8 @@ python3 "$SORGENTI/scripts/liquid-update-version.py" "$SORGENTI" "$RADICE/liquid
 # memoria e, se è acceso, può riscrivere il valore vecchio: questo è solo per
 # lasciare il file pulito.
 IMPOSTAZIONI="$CARTELLA_CONFIG/settings.json"
-if [ -f "$IMPOSTAZIONI" ] && command -v python3 >/dev/null 2>&1; then
-    python3 - "$IMPOSTAZIONI" "$RADICE" <<'PY'
-import json, os, sys
-
-percorso, radice = sys.argv[1], sys.argv[2].rstrip('/')
-segno = '/minerva-shell/assets/'
-
-def sistema(v):
-    if isinstance(v, dict):
-        return {k: sistema(x) for k, x in v.items()}
-    if isinstance(v, list):
-        return [sistema(x) for x in v]
-    if isinstance(v, str) and v.startswith('/') and segno in v \
-            and not v.startswith(radice + '/'):
-        nuovo = radice + v[v.index(segno):]
-        if os.path.exists(nuovo):
-            return nuovo
-    return v
-
-try:
-    with open(percorso) as f:
-        dati = json.load(f)
-except (OSError, ValueError):
-    sys.exit(0)
-nuovi = sistema(dati)
-if nuovi != dati:
-    accanto = percorso + '.nuovo'
-    with open(accanto, 'w') as f:
-        json.dump(nuovi, f, indent=2, ensure_ascii=False)
-    os.replace(accanto, percorso)
-    print('  impostazioni: percorsi portati nella radice')
-PY
+if [ -f "$IMPOSTAZIONI" ]; then
+    python3 "$SORGENTI/scripts/minerva-migra-impostazioni.py" "$IMPOSTAZIONI" "$RADICE"
 fi
 
 echo "Radice installata in $RADICE"

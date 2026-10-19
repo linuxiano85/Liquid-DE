@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 
 /// Una cartella di icone dichiarata in `index.theme`.
 class _IconDir {
@@ -104,6 +105,7 @@ class IconResolver {
   bool setInterfacciaScura(bool scura) {
     if (scura == _interfacciaScura) return false;
     _interfacciaScura = scura;
+    _generazione++;
     // Il giudizio su cosa si vede dipende dal fondo: cambiando fondo va
     // rifatto da capo, o si continuerebbe a servire le icone dell'altro.
     _visibilita.clear();
@@ -286,6 +288,7 @@ class IconResolver {
     final wanted = famiglia(name.trim());
     if (wanted == _chosenTheme) return false;
     _chosenTheme = wanted;
+    _generazione++;
     _cache.clear();
     _chain = null;
     print('[MINERVA][MATRIX][INFO] Tema icone in uso: $activeTheme');
@@ -481,6 +484,69 @@ class IconResolver {
   /// `generic` a false serve a chi vuole sapere se l'icona c'è davvero:
   /// il ripiego su `application-x-executable` è giusto per un programma senza
   /// icona, ed è un ingranaggio a caso al posto di «ordina».
+  // ── Fuori dal ciclo del demone ─────────────────────────────────────────
+  //
+  // `resolve` è sincrono e, per un nome mai visto, prova `existsSync` su ogni
+  // cartella del tema × ogni radice × tre estensioni. Con Papirus e duecento
+  // programmi sono decine di migliaia di accessi al disco: a disco freddo il
+  // ciclo del demone restava fermo 4 s al login (`loop.stall`, 18 ottobre) e
+  // la richiesta di accesso aspettava dietro. Qui il lavoro gira in un
+  // Isolate su una COPIA del risolutore; poi le cache della copia tornano
+  // qui, e le stesse domande sul filo principale trovano la risposta pronta.
+
+  /// Cresce a ogni cambio di tema o di fondo: i risultati di una copia fatta
+  /// prima del cambio non si accolgono.
+  int _generazione = 0;
+
+  /// Esegue [lavoro] su una copia del risolutore in un altro Isolate e ne
+  /// riporta le cache. [lavoro] deve essere una funzione di primo livello (o
+  /// statica): una chiusura dentro un metodo si porterebbe dietro il suo
+  /// `this`, e il server con i suoi socket non si copia.
+  Future<T> fuoriDalCiclo<T>(
+      T Function(IconResolver copia, List<String> nomi) lavoro,
+      [List<String> nomi = const []]) async {
+    final generazione = _generazione;
+    final copia = this;
+    final (risultato, cache, visibilita, temi) = await Isolate.run(() {
+      final r = lavoro(copia, nomi);
+      return (r, copia._cache, copia._visibilita, copia._themes);
+    });
+    if (generazione == _generazione) {
+      _cache.addAll(cache);
+      _visibilita.addAll(visibilita);
+      for (final e in temi.entries) {
+        _themes.putIfAbsent(e.key, () => e.value);
+      }
+    }
+    return risultato;
+  }
+
+  /// I nomi che [resolve] (dimensione e ripiego predefiniti) dovrebbe ancora
+  /// cercare su disco. Vuoto: tutto in cache, nessun Isolate da accendere.
+  List<String> ignoti(Iterable<String> nomi) => [
+        for (final n in nomi)
+          if (n.isNotEmpty && !n.startsWith('/') &&
+              !_cache.containsKey('$_preferredSize/g/${_senzaEstensione(n)}'))
+            n,
+      ];
+
+  static String _senzaEstensione(String iconName) {
+    for (final ext in ['.png', '.svg', '.xpm']) {
+      if (iconName.toLowerCase().endsWith(ext)) {
+        return iconName.substring(0, iconName.length - ext.length);
+      }
+    }
+    return iconName;
+  }
+
+  /// Per [fuoriDalCiclo]: risolve i nomi alla dimensione predefinita.
+  static Object? risolviNomi(IconResolver r, List<String> nomi) {
+    for (final n in nomi) {
+      r.resolve(n);
+    }
+    return null;
+  }
+
   String resolve(String iconName, {int size = _preferredSize, bool generic = true}) {
     if (iconName.isEmpty) return '';
 
@@ -490,13 +556,7 @@ class IconResolver {
     }
 
     // Alcuni file .desktop scrivono "firefox.png" invece di "firefox"
-    var name = iconName;
-    for (final ext in ['.png', '.svg', '.xpm']) {
-      if (name.toLowerCase().endsWith(ext)) {
-        name = name.substring(0, name.length - ext.length);
-        break;
-      }
-    }
+    final name = _senzaEstensione(iconName);
 
     final key = '$size/${generic ? 'g' : 'x'}/$name';
     final cached = _cache[key];
@@ -509,7 +569,7 @@ class IconResolver {
 
   // ── Le nostre app seguono il tema ──────────────────────────────────────
   //
-  // il manutentore, 11 ottobre 2026: cambiando il tema delle icone, le nostre app
+  // Il manutentore, 11 ottobre 2026: cambiando il tema delle icone, le nostre app
   // restavano con le loro. Si chiamano `minerva-files`, `minerva-media`…, e
   // nessun tema ha quei nomi: si trovavano sempre in hicolor, dove le mette
   // l'installatore. Ora per ognuna si chiede prima al tema scelto (e ai temi

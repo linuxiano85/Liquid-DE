@@ -122,3 +122,6 @@ artifacts/
 
 # Runtime ricompilato per Qt locale; non si pubblicano i binari.
 /libexec/quickshell/
+
+native/mpv/build/
+

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'event_bus.dart';
 import 'state_manager.dart';
 import 'minerva_paths.dart';
@@ -98,6 +99,24 @@ class MinervaCore {
 
   /// Avvia tutti i servizi nell'ordine corretto.
   Future<void> start() async {
+    // Opt-in: tempi del percorso reale senza loggare impostazioni, comandi
+    // o credenziali. Stopwatch è monotono e locale a questo avvio del core;
+    // questi valori non misurano da soli autenticazione o presentazione GPU.
+    final traceStartup = Platform.environment['LIQUID_TRACE_STARTUP'] == '1';
+    final startupClock = Stopwatch();
+    if (traceStartup) {
+      startupClock.start();
+      _sorvegliaCiclo(startupClock);
+    }
+    var previousStageUs = 0;
+    void stage(String name) {
+      if (!traceStartup) return;
+      final now = startupClock.elapsedMicroseconds;
+      print('[LIQUID][STARTUP] pid=$pid stage=$name elapsed_us=$now '
+          'delta_us=${now - previousStageUs}');
+      previousStageUs = now;
+    }
+    stage('core.begin');
     print('[MINERVA][CORE][INFO] Inizializzazione di Minerva Core...');
     print('[MINERVA][CORE][INFO] Installazione: ${MinervaPaths.installRoot}');
     print('[MINERVA][CORE][INFO] Preferenze: ${MinervaPaths.configDir}');
@@ -106,11 +125,15 @@ class MinervaCore {
     // copiate, non spostate. Dal secondo avvio questa riga non fa nulla.
     await MinervaPaths.importaDaMinerva('settings.json');
     await MinervaPaths.importaDaMinerva('app_usage.json');
+    stage('preferences.imported');
 
     // 1. Carica Impostazioni e Tracker
     await settingsApi.init();
+    stage('settings.loaded');
     await appUsageTracker.init();
+    stage('usage.loaded');
     await keybindService.init();
+    stage('keybindings.loaded');
 
     // Le scorciatoie spente nelle Impostazioni, applicate da subito: il
     // compositore riceve solo quelle accese.
@@ -126,22 +149,28 @@ class MinervaCore {
     if (!Ambiente.eGreeter) {
       await iconResolver.init();
     }
+    stage(Ambiente.eGreeter ? 'icons.skipped-greeter' : 'icons.initialized');
     await appScanner.scan();
+    stage('applications.scanned');
 
     // Lo stato dell'apparecchio: batteria, luminosità, rete, Bluetooth.
     // Letto qui una volta per tutte e tre le finestre di Minerva — prima
     // ognuna se lo leggeva da sé, e non si parlavano. Vedi
     // `services/system_state_service.dart`.
     await systemState.init();
+    stage('system.initialized');
     await processi.init();
+    stage('processes.initialized');
 
     // 2. Avvia il Provider del Compositor
     await compositorProvider.start();
+    stage('compositor.start-returned');
 
     // Subito dopo, chi racconta lo stato delle finestre. Prima del server
     // WebSocket, perché deve già essere in ascolto quando il primo processo di
     // Minerva si collega: chi si collega riceve lo stato all'istante.
     finestre.avvia();
+    stage('windows.observer-started');
     // Nella schermata di accesso non ci sono app nostre da far respirare.
     if (!Ambiente.eGreeter) respiro.avvia();
 
@@ -192,12 +221,36 @@ class MinervaCore {
     _allineaSegnalibri();
 
     // 4. Avvia il server WebSocket IPC
-    await webSocketServer.start();
+    await webSocketServer.start(traceStartup: traceStartup ? stage : null);
+    // The listener is registered earlier inside start; this marks its return,
+    // including service initialization and work interleaved during awaits.
+    stage('ipc.start.returned');
 
     // 5. Avvia i plugin esterni
     await pluginManager.init();
+    stage('plugins.init-returned');
 
+    stage('core.complete');
     print('[MINERVA][CORE][OK] Minerva Core inizializzato completamente.');
+  }
+
+  /// Solo con `LIQUID_TRACE_STARTUP=1`, solo per i primi dieci secondi: dice
+  /// quando il ciclo degli eventi resta fermo più di 150 ms. Al login fisico
+  /// v23 (18 ottobre 2026) la richiesta di accesso è partita 3,3 s dopo che la
+  /// schermata l'aveva spedita, con greetd che rispondeva in 30 ms: qualcosa
+  /// teneva fermo il demone, e da fuori non si vede che cosa.
+  void _sorvegliaCiclo(Stopwatch orologio) {
+    var ultimo = orologio.elapsedMilliseconds;
+    Timer.periodic(const Duration(milliseconds: 50), (t) {
+      final ora = orologio.elapsedMilliseconds;
+      final buco = ora - ultimo;
+      ultimo = ora;
+      if (buco > 150) {
+        print('[LIQUID][STARTUP] pid=$pid stage=loop.stall gap_ms=$buco '
+            'elapsed_ms=$ora realtime_ms=${DateTime.now().millisecondsSinceEpoch}');
+      }
+      if (ora > 10000) t.cancel();
+    });
   }
 
   final SegnalibriGtk _segnalibriGtk = SegnalibriGtk();
@@ -250,28 +303,84 @@ class MinervaCore {
   /// `--test-start` era abbastanza a tenere in piedi il processo.
   Future<void> stop() async {
     print('[MINERVA][CORE][INFO] Arresto in corso...');
+    final sw = Stopwatch()..start();
 
-    // 1. Chi si sveglia da solo, per primo.
-    await systemState.dispose();
-    processi.dispose();
-    await finestre.ferma();
-    await respiro.ferma();
-    await keybindService.dispose();
-    fileService.dispose();
+    // Nessuna nuova richiesta deve entrare mentre i suoi servizi vengono
+    // distrutti. Le connessioni perdono anche le sottoscrizioni qui.
+    await _fase('ipc.quiesce', webSocketServer.quiesce);
 
-    // 2. Chi ascolta.
-    await _compositorEventSubscription?.cancel();
-    await _keybindSubscription?.cancel();
-    await _settingsSubscription?.cancel();
+    await _fase('systemState', systemState.dispose);
+    await _fase('processi', () async => processi.dispose());
+    await _fase('finestre', finestre.ferma);
+    await _fase('respiro', respiro.ferma);
+    await _fase('keybind', keybindService.dispose);
+    // Copie in corso: staging privato, ma diamo tempo di chiudere bene.
+    await _fase('fileService', fileService.dispose,
+        limite: const Duration(seconds: 8));
 
-    // 3. Chi parla con l'esterno.
-    await pluginManager.dispose();
-    await webSocketServer.stop();
-    await compositorProvider.stop();
-    await settingsApi.dispose();
+    await _fase('sottoscrizioni', () async {
+      await _compositorEventSubscription?.cancel();
+      await _keybindSubscription?.cancel();
+      await _settingsSubscription?.cancel();
+    });
 
-    // 4. E per ultimo il bus, quando non ha più nessuno che ci scriva.
-    await eventBus.dispose();
-    print('[MINERVA][CORE][OK] Minerva Core arrestato.');
+    await _fase('plugin', pluginManager.dispose);
+    await _fase('ipc.stop', webSocketServer.stop);
+    await _fase('compositore', compositorProvider.stop);
+    // Le impostazioni si scrivono qui: il limite più largo di tutti.
+    await _fase('impostazioni', settingsApi.dispose,
+        limite: const Duration(seconds: 10));
+
+    await _fase('eventBus', eventBus.dispose);
+    if (_fasiSforate.isNotEmpty || _fasiFallite.isNotEmpty) {
+      // Tutte le fasi sono state tentate; l'arresto resta «non pulito» come
+      // prima, e chi chiama (`bin/minervad.dart`) esce con 1.
+      throw StateError('arresto in ${sw.elapsedMilliseconds} ms; '
+          'oltre il limite: ${_fasiSforate.join(', ')}; '
+          'fallite: ${_fasiFallite.join(', ')}');
+    }
+    print('[MINERVA][CORE][OK] Minerva Core arrestato in '
+        '${sw.elapsedMilliseconds} ms.');
+  }
+
+  // ── Un limite per fase ─────────────────────────────────────────────────
+  //
+  // Un arresto è durato minuti, fermo prima di `_controller.close()` (18
+  // ottobre), e nessuno sapeva in quale fase. Ora ogni fase ha un tempo
+  // massimo: se lo sfora si scrive QUALE, e si va avanti. Continuare con una
+  // fase ancora viva è meno grave di un demone che non esce mai: la sessione
+  // dopo aspetterebbe il suo posto per sempre.
+
+  final List<String> _fasiSforate = [];
+  final List<String> _fasiFallite = [];
+
+  Future<void> _fase(String nome, Future<void> Function() lavoro,
+      {Duration limite = const Duration(seconds: 3)}) async {
+    final sw = Stopwatch()..start();
+    try {
+      await _provaBlocca(nome, lavoro).timeout(limite);
+    } on TimeoutException {
+      _fasiSforate.add(nome);
+      print('[MINERVA][CORE][WARN] Arresto: la fase «$nome» supera '
+          '${limite.inSeconds} s, si prosegue senza aspettarla.');
+      return;
+    } catch (e) {
+      _fasiFallite.add(nome);
+      print('[MINERVA][CORE][WARN] Arresto: la fase «$nome» è fallita: $e');
+      return;
+    }
+    if (sw.elapsedMilliseconds > 500) {
+      print('[MINERVA][CORE][INFO] Arresto: «$nome» ${sw.elapsedMilliseconds} ms.');
+    }
+  }
+
+  /// Solo nelle prove (`MINERVA_PROVA=1`): `MINERVA_PROVA_ARRESTO_BLOCCA=<fase>`
+  /// fa restare quella fase appesa per sempre, per verificare il limite.
+  static Future<void> _provaBlocca(String nome, Future<void> Function() lavoro) {
+    final env = Platform.environment;
+    if (env['MINERVA_PROVA'] == '1' && env['MINERVA_PROVA_ARRESTO_BLOCCA'] == nome) {
+      return Completer<void>().future;
+    }
+    return lavoro();
   }
 }

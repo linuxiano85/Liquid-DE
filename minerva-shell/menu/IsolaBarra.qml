@@ -42,7 +42,7 @@ PanelWindow {
 
     // ── A scomparsa ──────────────────────────────────────────────────────
     //
-    // il manutentore, 25 settembre 2026: «l'isola alta centrale la vorrei a
+    // Il manutentore, 25 settembre 2026: «l'isola alta centrale la vorrei a
     // scomparsa, e passando sulla parte alta deve ricomparire, così
     // recuperiamo spazio». Di serie sta nascosta oltre il bordo e non
     // riserva la fascia: le finestre arrivano fino in cima. Scende con una
@@ -343,33 +343,14 @@ PanelWindow {
                 Row {
                     spacing: Theme.Effects.space2
                     anchors.verticalCenter: parent.verticalCenter
-                    // Tre barrette che respirano: dice «sta suonando» senza
-                    // parole. Si muovono solo mentre suona.
-                    Row {
+                    // L'equalizzatore: segue il suono vero (lo spettro lo
+                    // calcola il demone), coi colori del disco della musica
+                    // del prototipo. Vedi `Equalizzatore.qml`. Si iscrive
+                    // solo quando si vede: con l'isola nascosta o coperta da
+                    // uno schermo intero il demone non legge l'audio.
+                    Equalizzatore {
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: 2
-                        Repeater {
-                            model: 3
-                            delegate: Rectangle {
-                                id: barretta
-                                required property int index
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 3; radius: 1.5
-                                color: Theme.Colors.accent
-                                height: 6
-                                SequentialAnimation on height {
-                                    // Ferme quando l'isola non si vede o è coperta
-                                    // (uno schermo intero): un'animazione
-                                    // infinita ridisegna la barra sessanta
-                                    // volte al secondo anche se nessuno guarda.
-                                    running: musica.visible && Theme.Motion.liquido
-                                             && isolaBarra.su && !isolaBarra.coperta
-                                    loops: Animation.Infinite
-                                    NumberAnimation { to: 14 - barretta.index * 3; duration: 380 + barretta.index * 90; easing.type: Easing.InOutSine }
-                                    NumberAnimation { to: 5; duration: 420 + barretta.index * 70; easing.type: Easing.InOutSine }
-                                }
-                            }
-                        }
+                        attivo: musica.visible && isolaBarra.su && !isolaBarra.coperta
                     }
                     Text {
                         textFormat: Text.PlainText

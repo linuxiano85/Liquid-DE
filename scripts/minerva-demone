@@ -58,15 +58,48 @@ pausa=1
 # riuscirebbe più a farne partire uno.
 figlio=""
 sentinella=""
+attesa_pausa=""
+possiede_pid=no
+ha_avviato=no
 fermati() {
+    risultato=${1:-0}
+    # Repeated signals must not interrupt wait or run cleanup twice.
+    trap '' TERM INT
     [ -n "$sentinella" ] && kill "$sentinella" 2>/dev/null
+    [ -n "$attesa_pausa" ] && kill "$attesa_pausa" 2>/dev/null
     [ -n "$figlio" ] && kill "$figlio" 2>/dev/null
-    # Il biglietto da visita di questa sessione non deve restare in giro: chi
-    # lo trovasse si collegherebbe a un socket morto credendolo vivo. Il
-    # registro invece resta: serve a capire perché siamo usciti.
-    [ -n "${STATO:-}" ] && rm -f "$STATO/canale" "$PIDFILE" 2>/dev/null
-    exit 0
+    if [ -n "$figlio" ]; then
+        wait "$figlio" 2>/dev/null
+        esito_figlio=$?
+        case "$esito_figlio" in
+            0|143) ;; # A child with default SIGTERM handling exits with 128+15.
+            *)
+                echo "[MINERVA][DEMONE] Arresto del figlio non riuscito (esito $esito_figlio)." >&2
+                risultato=1
+                ;;
+        esac
+    fi
+    [ -n "$attesa_pausa" ] && wait "$attesa_pausa" 2>/dev/null
+    [ -n "$sentinella" ] && wait "$sentinella" 2>/dev/null
+    # Only after the owned children have finished can they no longer publish
+    # late state. Never remove a PID reference now owned by another guardian.
+    if [ "$possiede_pid" = si ] && [ ! -L "$PIDFILE" ] &&
+            [ "$(cat "$PIDFILE" 2>/dev/null)" = "$$" ]; then
+        [ "$ha_avviato" = si ] && rm -f -- "$STATO/canale"
+        rm -f -- "$PIDFILE"
+    fi
+    exit "$risultato"
 }
+
+# PID and log are owned metadata: publish through a private directory rather
+# than truncating a preexisting symlink's target. No recursive cleanup.
+pubblica_file() (
+    umask 077
+    privato=$(mktemp -d "$STATO/.demone-save.XXXXXXXX") || exit 1
+    trap 'rm -f -- "$privato/file"; rmdir -- "$privato"' 0
+    printf '%s' "$2" > "$privato/file" || exit 1
+    mv -fT -- "$privato/file" "$1"
+)
 trap fermati TERM INT
 
 # ── E non si sopravvive alla propria sessione ─────────────────────────────
@@ -235,7 +268,6 @@ ricompila_in_sottofondo() {
 . "$(dirname "$(readlink -f "$0")")/minerva-posti.sh"
 REGISTRO="$STATO/demone.log"
 PIDFILE="$STATO/demone.pid"
-: > "$REGISTRO"
 
 # ── Un guardiano per sessione ─────────────────────────────────────────────
 #
@@ -251,14 +283,36 @@ if [ -f "$PIDFILE" ]; then
         exit 0
     fi
 fi
-echo $$ > "$PIDFILE"
+pubblica_file "$PIDFILE" "$$" || exit 1
+possiede_pid=si
+# An invocation that found an existing guardian must never truncate its log.
+# Il registro di prima diventa `demone.log.1` invece di sparire: lì ci sono
+# le righe dell'arresto del demone precedente («arrestato in N ms», o la fase
+# che ha sforato il limite), e chi le cercava dopo un riavvio non le trovava
+# più (19 ottobre). Il vecchio processo, se scrive ancora, scrive nello
+# stesso file: lo spostamento non cambia il file, solo il nome.
+[ -s "$REGISTRO" ] && mv -f -- "$REGISTRO" "$REGISTRO.1"
+pubblica_file "$REGISTRO" '' || fermati 1
 
 # Fuori da una sessione Wayland — le prove, un avvio a mano — non c'è nessun
 # compositore da guardare, e si tira dritto come prima.
 if COMPOSITORE=$(compositore_della_sessione); then
     IO=$$
     (
-        while kill -0 "$COMPOSITORE" 2>/dev/null; do sleep 5; done
+        attesa=""
+        ferma_sentinella() {
+            trap '' TERM INT
+            [ -n "$attesa" ] && kill "$attesa" 2>/dev/null
+            [ -n "$attesa" ] && wait "$attesa" 2>/dev/null
+            exit 0
+        }
+        trap ferma_sentinella TERM INT
+        while kill -0 "$COMPOSITORE" 2>/dev/null; do
+            sleep 5 &
+            attesa=$!
+            wait "$attesa"
+            attesa=""
+        done
         kill -TERM "$IO" 2>/dev/null
     ) &
     sentinella=$!
@@ -278,6 +332,7 @@ while :; do
         dart run bin/minervad.dart >> "$REGISTRO" 2>&1 &
     fi
     figlio=$!
+    ha_avviato=si
     wait "$figlio"
     esito=$?
     figlio=""
@@ -295,10 +350,14 @@ while :; do
     if [ "$tentativi" -ge "$MAX" ]; then
         echo "[MINERVA][DEMONE] Morto $tentativi volte in meno di $FINESTRA s." | tee -a "$REGISTRO" >&2
         echo "[MINERVA][DEMONE] Non riparte più: il guasto non è passeggero." | tee -a "$REGISTRO" >&2
-        exit 1
+        fermati 1
     fi
 
     echo "[MINERVA][DEMONE] Uscito con esito $esito. Riparte fra $pausa s." | tee -a "$REGISTRO" >&2
-    sleep "$pausa"
+    # A background wait lets the signal trap cancel the backoff immediately.
+    sleep "$pausa" &
+    attesa_pausa=$!
+    wait "$attesa_pausa"
+    attesa_pausa=""
     pausa=$((pausa * 2))
 done

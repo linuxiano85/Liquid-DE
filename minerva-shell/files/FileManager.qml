@@ -978,7 +978,7 @@ FloatingWindow {
     /// e una risposta che si legge invece di un tasto che non fa niente.
     // ── La modalità amministratore ───────────────────────────────────────
     //
-    // il manutentore, 23 agosto 2026: «nel file manager, se entro nelle cartelle di
+    // Il manutentore, 23 agosto 2026: «nel file manager, se entro nelle cartelle di
     // root, non posso usare una modalità amministratore come fa Linux Mint,
     // per poter eliminare qualsiasi file di root come se fossi un utente
     // root».
@@ -1423,7 +1423,7 @@ FloatingWindow {
         var n = manager.current ? manager.current.operands().length : 0;
         // ── Dove non si può scrivere, non si offre di scrivere ───────────
         //
-        // il manutentore, 18 agosto 2026: «se clicco su sistema posso cancellare
+        // Il manutentore, 18 agosto 2026: «se clicco su sistema posso cancellare
         // qualsiasi file di sistema… non c'è nessuna protezione». Cancellare
         // non si poteva davvero, ma «Nuova cartella» e «Nuovo documento»
         // stavano lì a colori pieni sopra `/usr`, e il rifiuto arrivava solo
@@ -1433,7 +1433,7 @@ FloatingWindow {
         // ── E la modalità amministratore riapre quello che i permessi
         //    avevano chiuso ─────────────────────────────────────────────
         //
-        // il manutentore, 2 settembre 2026: «non vedo opzioni come sposta nel cestino
+        // Il manutentore, 2 settembre 2026: «non vedo opzioni come sposta nel cestino
         // o altre cose utili» — parlando della modalità amministratore.
         //
         // La causa non era una voce dimenticata: erano TUTTE le voci di
@@ -1462,7 +1462,7 @@ FloatingWindow {
 
         // ── Dentro il cestino la barra dice un'altra cosa ────────────────
         //
-        // il manutentore, 23 agosto 2026: «entrando nel cestino, un tasto nella barra
+        // Il manutentore, 23 agosto 2026: «entrando nel cestino, un tasto nella barra
         // degli strumenti che compaia quando si è nel cestino per svuotarlo».
         //
         // «Svuota il cestino» c'era solo nel tasto destro, ed è l'unico posto
@@ -2344,7 +2344,9 @@ FloatingWindow {
                         icon: modelData.tipo === "telefono" ? "telefono"
                             : modelData.tipo === "condivisa" ? "network" : "globe"
                         label: modelData.nome
-                        detail: modelData.uri
+                        detail: manager.aperturaInCorso(modelData.uri)
+                            ? (Core.Strings.lang === "it" ? "Apertura in corso…" : "Opening…")
+                            : modelData.uri
                         path: modelData.montato ? (modelData.percorso || "") : ""
                         dimmed: !modelData.montato
                         ejectable: modelData.montato
@@ -2384,6 +2386,14 @@ FloatingWindow {
     property var apertureRemote: ({})
     property int prossimaAperturaRemota: 0
 
+    function aperturaInCorso(uri) {
+        for (var richiesta in apertureRemote) {
+            if (apertureRemote[richiesta].uri === uri)
+                return true;
+        }
+        return false;
+    }
+
     function apriRemoto(dispositivo) {
         if (!manager.current || !Core.Ipc.connected)
             return;
@@ -2392,6 +2402,12 @@ FloatingWindow {
             return;
         }
         if (!dispositivo.uri)
+            return;
+        // Un telefono MTP ci mette secondi ad aprirsi: un altro clic intanto
+        // non deve chiedere un altro montaggio (18 ottobre 2026, otto
+        // `gio mount` insieme e il telefono bloccato). Il demone li unisce
+        // comunque; qui si evita anche di mandarli.
+        if (aperturaInCorso(dispositivo.uri))
             return;
         prossimaAperturaRemota += 1;
         var richiesta = manager.current.paneId + "r" + prossimaAperturaRemota;
@@ -2786,7 +2802,7 @@ FloatingWindow {
         // ── E la modalità amministratore riapre quello che i permessi
         //    avevano chiuso ─────────────────────────────────────────────
         //
-        // il manutentore, 2 settembre 2026: «non vedo opzioni come sposta nel cestino
+        // Il manutentore, 2 settembre 2026: «non vedo opzioni come sposta nel cestino
         // o altre cose utili» — parlando della modalità amministratore.
         //
         // La causa non era una voce dimenticata: erano TUTTE le voci di
@@ -2846,7 +2862,7 @@ FloatingWindow {
         }
         // ── Quello che si fa a qualcosa, e quello che si fa a un posto ──
         //
-        // il manutentore, 16 agosto 2026: «anche se clicco dove non c'è nessun file o
+        // Il manutentore, 16 agosto 2026: «anche se clicco dove non c'è nessun file o
         // cartella esce scritto taglia, copia, e dovrebbe essere presente solo
         // se clicco su file».
         //
@@ -2916,7 +2932,7 @@ FloatingWindow {
             items.push({ "separator": true });
             // ── Le due voci non sono la stessa cosa ─────────────────────
             //
-            // il manutentore, 18 agosto 2026: «per impostare lo sfondo devo copiare
+            // Il manutentore, 18 agosto 2026: «per impostare lo sfondo devo copiare
             // il percorso dal file manager e incollarlo in impostazioni».
             // Aveva ragione, e la voce che c'era non lo tradiva: è lo sfondo
             // di QUESTA cartella, che è una decorazione del gestore file.
@@ -3186,7 +3202,7 @@ FloatingWindow {
 
     // ── Trascinare e lasciare ────────────────────────────────────────────
     //
-    // il manutentore, 12 agosto 2026: «voglio poter trascinare qualsiasi cosa come in
+    // Il manutentore, 12 agosto 2026: «voglio poter trascinare qualsiasi cosa come in
     // KDE, e lasciando mi chiede se copiare o spostare».
     //
     // Si CHIEDE, e non si indovina. Il gesto è lo stesso per due esiti molto

@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'ritratti_leggibili.dart';
+
 /// Una sessione che si può avviare dalla schermata di accesso.
 class Sessione {
   /// Il nome del file senza estensione (`minerva`, `hyprland`, `plasma`).
@@ -107,11 +109,16 @@ class AccessoService {
   /// `~/.face`, che è la convenzione più vecchia e ancora diffusa.
   final String cartellaRitratti;
 
+  /// Chi rende il ritratto apribile con un decoder solo: vedi
+  /// [RitrattiLeggibili]. Le prove gli danno una cartella loro.
+  final RitrattiLeggibili leggibili;
+
   const AccessoService({
     this.cartelleWayland = const ['/usr/share/wayland-sessions'],
     this.cartelleX11 = const ['/usr/share/xsessions'],
     this.filePasswd = '/etc/passwd',
     this.cartellaRitratti = '/var/lib/AccountsService/icons',
+    this.leggibili = const RitrattiLeggibili(),
   });
 
   // ── Chi avvia la sessione ────────────────────────────────────────────────
@@ -370,7 +377,7 @@ class AccessoService {
       // benissimo non essere leggibile, e chiedere se un file esiste dentro
       // una cartella vietata solleva. Vale come «non c'è».
       try {
-        if (await File(p).exists()) return p;
+        if (await File(p).exists()) return await leggibili.pronto(p);
       } catch (_) {}
     }
     return '';

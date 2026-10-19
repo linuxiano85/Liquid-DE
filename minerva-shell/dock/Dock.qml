@@ -687,7 +687,7 @@ PanelWindow {
 
     // ── Rimettere le icone in ordine trascinandole ───────────────────────
     //
-    // il manutentore, 3 agosto: «la dock non mi fa spostare le icone se voglio
+    // Il manutentore, 3 agosto: «la dock non mi fa spostare le icone se voglio
     // cambiare l'ordine». L'ordine c'era già — è `dock.pinned`, e la dock lo
     // rispetta apposta perché la memoria muscolare si formi — ma si poteva
     // cambiare solo togliendo e rimettendo le icone, cioè non si poteva.
@@ -1692,7 +1692,7 @@ PanelWindow {
         // Era `launch`, cioè il comando principale: per un programma a
         // istanza unica — il nostro gestore file — riportava davanti la
         // finestra che c'era già («chiude e riapre la stessa finestra»,
-        // il manutentore, 29 settembre 2026). Il comando giusto lo dichiara il
+        // Il manutentore, 29 settembre 2026). Il comando giusto lo dichiara il
         // programma nell'azione `new-window` del suo .desktop; chi non la
         // dichiara riparte col comando principale, come prima.
         case "nuova":

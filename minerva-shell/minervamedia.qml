@@ -1,4 +1,7 @@
 //@ pragma AppId minerva-media
+// Il menu dell'icona nella barra di sistema (Qt.labs.platform) senza
+// QApplication non ha un'implementazione: «No native Menu implementation».
+//@ pragma UseQApplication
 // minervamedia.qml — Minerva Media, come processo a sé.
 //
 // Come `filemanager.qml`: un secondo programma scritto con gli stessi pezzi
@@ -77,6 +80,7 @@ ShellRoot {
 
         dormiente: pronta.dormiente
         onRequestClose: pronta.chiudi()
+        onMostraRichiesto: pronta.risveglia()
     }
 
     /// Porta la finestra davanti. Il come sta in `core/TenutaPronta.qml`.
@@ -91,6 +95,7 @@ ShellRoot {
 
         /// Un file si ascolta, una cartella si esplora.
         function apri(percorso: string): string {
+            media.nellaBarra = false;
             if (media.dormiente)
                 media.risveglia(percorso);
             else if (percorso && percorso !== "")
@@ -101,6 +106,7 @@ ShellRoot {
 
         /// Un indirizzo di rete: si va dritti alla pagina Download.
         function scarica(indirizzo: string): string {
+            media.nellaBarra = false;
             if (media.dormiente)
                 media.risveglia("");
             media.apriDownload(indirizzo);

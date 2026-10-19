@@ -5,7 +5,7 @@ import "../theme" as Theme
 //
 // ── Perché questo file esiste ────────────────────────────────────────────
 //
-// il manutentore, 4 settembre 2026: «nel file manager manca la barretta laterale che
+// Il manutentore, 4 settembre 2026: «nel file manager manca la barretta laterale che
 // posso trascinare con il mouse per spostare la discesa e slitta più
 // velocemente». Contate quel giorno: in tutta la shell c'erano **tre** barre
 // di scorrimento, ed erano quelle di serie di Qt, senza niente del nostro
@@ -166,7 +166,7 @@ Item {
         // disegnato, e quello che esce è una **scaletta di piccole croci**
         // lungo tutta la barra.
         //
-        // il manutentore, 4 settembre 2026, un'ora dopo che avevo messo le barre
+        // Il manutentore, 4 settembre 2026, un'ora dopo che avevo messo le barre
         // dappertutto: «cosa sono tutti quei segno + in impostazioni?». Erano
         // i pollici delle barre nuove.
         //

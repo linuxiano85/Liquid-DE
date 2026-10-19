@@ -122,7 +122,7 @@ Item {
 
     // ── I bordi: si ridimensiona da tutti e quattro, come una finestra ─────
     //
-    // il manutentore, 14 settembre 2026: «non sono ridimensionabili quando siamo in
+    // Il manutentore, 14 settembre 2026: «non sono ridimensionabili quando siamo in
     // modalità modifica». C'era una maniglia sola, sedici pixel nell'angolo
     // in basso a destra, e non la trovava nessuno: chi vuole allargare una
     // cosa tira il suo bordo, come fa con ogni finestra. La maniglia resta,

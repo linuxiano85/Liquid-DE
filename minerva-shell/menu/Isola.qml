@@ -7,7 +7,7 @@ import "../ui" as Ui
 
 // ── L'Isola ──────────────────────────────────────────────────────────────
 //
-// il manutentore, 24 settembre 2026: «Il meteo?». Nell'Isola: la capsula in mezzo
+// Il manutentore, 24 settembre 2026: «Il meteo?». Nell'Isola: la capsula in mezzo
 // alla barra, con l'ora, la data e il tempo che fa. Toccata, la capsula
 // CRESCE — la stessa forma che si allarga con la molla, non un pannello che
 // compare sotto — e racconta la giornata: che tempo fa adesso, le prossime

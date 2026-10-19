@@ -217,7 +217,7 @@ Page {
 
         // ── Il colore intorno ────────────────────────────────────────────
         //
-        // il manutentore, 3 settembre 2026: «se voglio che il colore intorno diventi
+        // Il manutentore, 3 settembre 2026: «se voglio che il colore intorno diventi
         // tipo rgb e cambi colore costantemente oppure che giri sempre come
         // una striscia led?».
         //
@@ -277,7 +277,7 @@ Page {
 
         // ── Lo spessore ──────────────────────────────────────────────────
         //
-        // il manutentore, 9 settembre 2026: «voglio poter regolare lo spessore del
+        // Il manutentore, 9 settembre 2026: «voglio poter regolare lo spessore del
         // colore intorno alla finestra attiva».
         //
         // Era sei pixel fissi, e non per scelta: era lo STESSO numero della
@@ -506,7 +506,7 @@ Page {
         // i numeri che si mandavano a Hyprland, e sotto minerva-wayland non
         // arrivavano da nessuna parte: si sceglieva, e non cambiava niente.
         //
-        // il manutentore, 2 settembre 2026: «ci vorrebbero delle impostazioni per
+        // Il manutentore, 2 settembre 2026: «ci vorrebbero delle impostazioni per
         // mettere nessun effetto o blur o vetro e queste impostazioni si
         // dovrebbero applicare alle finestre e in blur o vetro dovrebbero far
         // vedere un solo corpo trasparente [...] la barra e la finestra senza

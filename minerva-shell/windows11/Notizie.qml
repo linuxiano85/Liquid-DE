@@ -10,7 +10,7 @@ import "../core" as Core
 // restano qui, e la shell non contatta nessuno — le immagini sono file
 // locali.
 //
-// il manutentore, 11 ottobre 2026: «in meteo si vede solo il meteo e ci vorrebbero
+// Il manutentore, 11 ottobre 2026: «in meteo si vede solo il meteo e ci vorrebbero
 // anche notizie, ma che rispettino la privacy».
 Column {
     id: notizie

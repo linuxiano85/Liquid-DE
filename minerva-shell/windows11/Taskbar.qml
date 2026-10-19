@@ -30,7 +30,7 @@ PanelWindow {
     property real groupCenter:0
     readonly property var registry:({start:true,search:true,control:true,calendar:true,notifications:true,power:true,weather:true,schermata:true,screenshot:true,minimized:true,overview:true})
     readonly property var panelSpec: {
-        var size={start:[640,726,"center"],search:[640,726,"center"],calendar:[360,640,"right"],control:[360,380,"right"],windows:[Math.min(760,(renderedGroup ? renderedGroup.windows.length:1)*220),204,"group"],appmenu:[360,160,"group"],power:[320,276,"right"],weather:[760,height-72,"left"],screenshot:[360,200,"right"],tray:[176,Math.ceil(trayIcons.entries.length/4)*40+24,"group"],overview:[width-48,height-104,"center"]};
+        var size={start:[640,726,"center"],search:[640,726,"center"],calendar:[360,640,"right"],control:[360,380+(Core.Media.cQualcosa ? 124 : 0),"right"],windows:[Math.min(760,(renderedGroup ? renderedGroup.windows.length:1)*220),204,"group"],appmenu:[360,160,"group"],power:[320,276,"right"],weather:[760,height-72,"left"],screenshot:[360,200,"right"],tray:[176,Math.ceil(trayIcons.entries.length/4)*40+24,"group"],overview:[width-48,height-104,"center"]};
         if (Core.Ipc.get("windows11.startExperience", "modern") === "modern")
             size.start = [768, 780, "center"];
         return size[renderedPanel] || size.control;

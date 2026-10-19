@@ -10,7 +10,9 @@ QtObject {
     readonly property bool windows: Core.DesktopStyle.attuale === "windows"
     readonly property bool dark: Windows.Style.dark
     readonly property string font: windows ? Windows.Style.font : Theme.Typography.fontDisplay
-    readonly property color window: windows ? Windows.Style.base : Theme.Colors.window
+    readonly property color window: windows
+        ? Qt.alpha(Windows.Style.base, Theme.Colors.opacitaFinestra(dark))
+        : Theme.Colors.window
     readonly property color lettura: windows ? (dark ? "#191919" : "#ffffff") : Theme.Colors.lettura
     readonly property color base: windows ? lettura : Theme.Colors.base
     readonly property color panel: windows ? Windows.Style.field : Theme.Colors.panel

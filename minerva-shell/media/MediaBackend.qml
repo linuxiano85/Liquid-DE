@@ -25,6 +25,8 @@ Item {
     /// Un messaggio di stato durante un download.
     signal downloadStatus(string messaggio)
     signal downloadFinished(string percorso, string titolo)
+    /// Gli altri file di un lavoro con più brani (una playlist): `quanti` è il totale.
+    signal altriScaricati(var percorsi, string titolo, int quanti)
     signal downloadError(string messaggio)
     /// `percorso` è il PNG dell'onda, `durata` i secondi del file.
     signal waveformReady(string percorso, real durata)
@@ -41,139 +43,150 @@ Item {
     /// L'ultimo errore di stderr, per i messaggi da mostrare.
     property string ultimoErrore: ""
 
-    readonly property bool cercando: ricercaProc.running
-    readonly property bool scaricando: scaricaProc.running
+    property bool cercando: false
+    readonly property bool scaricando: lavori.some(function(l) { return l.stato === "in_coda" || l.stato === "in_corso"; })
     readonly property bool lavorando: ondaProc.running
                                       || tagliaProc.running
-                                      || elencoProc.running
+                                      || backend._leggendoPlaylist
                                       || listaProc.running
 
-    // ── Ricerca ───────────────────────────────────────────────────────────
-
-    function cerca(testo, quante) {
-        var q = String(testo || "").trim();
-        if (q === "")
-            return;
-        // Un intero, non «quello che è arrivato»: `n` finisce DENTRO la riga
-        // di shell (`ytsearchN:`), ed è l'unico valore di questo file che ci
-        // finisce senza essere un argomento.
-        var n = String(Math.max(1, Math.min(50, Math.round(quante) || 5)));
-        ricercaProc.command = ["sh", "-c",
-            'yt-dlp -q --no-warnings --flat-playlist --dump-json '
-            + '-- "ytsearch' + n + ':$1"',
-            "sh", q];
-        ricercaProc.running = true;
+    property var lavori: []
+    property var elencoMedia: ({})
+    property bool _aggiungiPagina: false
+    function altriElementi() {
+        if(cercando || !elencoMedia.paginaPiena || !elencoMedia.url) return;
+        _aggiungiPagina=true;
+        _ricercaId=Core.Ipc.mediaRichiesta("media_cerca",{"testo":elencoMedia.url,"inizio":elencoMedia.prossimo});
+        cercando=_ricercaId!=="";
     }
+    function scaricaSelezione(indici, video, formato, altezza) {
+        if(!indici.length || elencoMedia.tipo!=="playlist") return;
+        _scarica(elencoMedia.url,!video,true,formato,altezza,indici);
+    }
+    property string _ricercaId: ""
+    property string _libreriaId: ""
+    property bool _playlistPending: false
+    property bool _leggendoPlaylist: false
+    property var _richiesteDownload: ({})
+    property var _annunciati: ({})
+    readonly property bool _italiano: Core.Strings.lang === "it"
 
-    function _risultatiDa(uscita) {
-        var out = [];
-        var righe = String(uscita || "").split("\n");
-        for (var i = 0; i < righe.length; i++) {
-            var riga = righe[i].trim();
-            if (!riga)
-                continue;
-            var j;
-            try {
-                j = JSON.parse(riga);
-            } catch (e) {
-                continue;
+    function _errore(code) {
+        var pairs = {
+            "missing-ytdlp":["Installa yt-dlp per cercare e scaricare.","Install yt-dlp to search and download."],
+            "search-busy":["Ci sono già due ricerche in corso.","Two searches are already running."],
+            "search-timeout":["La ricerca ha impiegato troppo tempo.","The search took too long."],
+            "search-output-limit":["La risposta della ricerca è troppo grande.","The search response is too large."],
+            "invalid-request":["Richiesta non valida.","Invalid request."],
+            "media-storage-error":["La cartella di destinazione non è disponibile.","The destination folder is unavailable."]
+        };
+        var text = pairs[code];
+        return text ? text[backend._italiano ? 0:1] :
+            (backend._italiano ? "Operazione Media non riuscita. Riprova." : "Media operation failed. Try again.");
+    }
+    function cerca(testo, quante, playlist) {
+        if (!String(testo || "").trim()) return;
+        backend._aggiungiPagina=false;
+        backend._ricercaId = Core.Ipc.mediaRichiesta("media_cerca",{"testo":String(testo),"quanti":Math.max(1,Math.min(50,Math.round(quante)||20)),"playlist":playlist===true});
+        backend.cercando = backend._ricercaId !== "";
+        if (!backend.cercando) backend.resultsReady([]);
+    }
+    function scaricaAudio(url, playlist, formato) {
+        backend._scarica(url,true,playlist === true,formato || "mp3",0);
+    }
+    function scaricaVideo(url, playlist, altezza) {
+        backend._scarica(url,false,playlist === true,"mp3",altezza || 0);
+    }
+    function _scarica(url,audio,playlist,formato,altezza,selezione) {
+        var id = Core.Ipc.mediaRichiesta("media_scarica",{
+            "url":String(url || "").trim(),"audio":audio,"playlist":playlist,
+            "formato":formato,"altezza":altezza,"selezione":selezione===undefined ? null : selezione
+        });
+        if (!id) { backend.downloadError(backend._italiano ? "Demone non connesso." : "Daemon disconnected."); return; }
+        var pending = Object.assign({},backend._richiesteDownload); pending[id]=true;
+        backend._richiesteDownload=pending;
+        backend.downloadStatus(backend._italiano ? "Download in coda…" : "Download queued…");
+    }
+    function annulla(id) { Core.Ipc.mediaRichiesta("media_annulla",{"job":id}); }
+    function pulisciLavori() { Core.Ipc.mediaRichiesta("media_pulisci",{}); }
+    function aggiornaLavori() { Core.Ipc.mediaRichiesta("media_lavori",{}); }
+    function _lavoro(job, announce) {
+        var items=backend.lavori.slice(), found=false;
+        for(var i=0;i<items.length;i++) if(items[i].id===job.id) { items[i]=job;found=true;break; }
+        if(!found) items.push(job);
+        backend.lavori=items;
+        if (!announce || backend._annunciati[job.id]) return;
+        if(job.stato === "fatto" || job.stato === "parziale" || job.stato === "errore" || job.stato === "annullato") {
+            var done=Object.assign({},backend._annunciati);done[job.id]=true;backend._annunciati=done;
+            if(job.stato === "errore") backend.downloadError(job.errore || backend._errore("download-failed"));
+            else if(job.fatti && job.fatti.length) {
+                // Una playlist finisce con tanti file: arrivava solo il primo,
+                // e nella scaletta del Player compariva un brano su otto
+                // (19 ottobre). Gli altri arrivano dopo, tutti insieme.
+                backend.downloadFinished(job.fatti[0],job.titolo || job.corrente);
+                if(job.fatti.length>1) backend.altriScaricati(job.fatti.slice(1),job.titolo || "",job.fatti.length);
             }
-            if (!j || !j.title)
-                continue;
-            out.push({
-                id: j.id || "",
-                titolo: String(j.title),
-                durata: Number(j.duration || 0),
-                canale: String(j.channel || ""),
-                url: String(j.url || j.webpage_url || ""),
-                miniatura: j.id
-                            ? "https://img.youtube.com/vi/" + j.id + "/mqdefault.jpg"
-                            : ""
-            });
-        }
-        backend.resultsReady(out);
-    }
-
-    Process {
-        id: ricercaProc
-        stdout: StdioCollector {
-            onStreamFinished: backend._risultatiDa(text)
-        }
-        stderr: StdioCollector {
-            onStreamFinished: backend.ultimoErrore = text.trim()
-        }
-        onExited: function (code) {
-            if (code !== 0)
-                backend.resultsReady([]);
+        } else if(job.stato === "in_corso") {
+            var progress=job.totale>0 ? Math.min(100,Math.round(100*job.scaricati/job.totale))+"%" : "…";
+            backend.downloadStatus((job.corrente || job.titolo || (backend._italiano?"Scaricamento":"Downloading"))+" · "+progress);
         }
     }
-
-    // ── Download ──────────────────────────────────────────────────────────
-
-    /// Audio soltanto: mp3 a 192 kbps. È il formato dei telefoni.
-    function scaricaAudio(url) {
-        backend._scarica(
-            'yt-dlp -q --no-progress -x --audio-format mp3 '
-            + '--audio-quality 192 --no-playlist --no-warnings '
-            + '--print "%(title)s" --print "after_move:filepath" '
-            + '-o "$HOME/Musica/Minerva_YT/%(title)s.%(ext)s" -- "$1"',
-            url, "Scarico l'audio…");
-    }
-
-    /// Il video migliore con audio, in mp4.
-    function scaricaVideo(url) {
-        backend._scarica(
-            'yt-dlp -q --no-progress '
-            + '-f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" '
-            + '--merge-output-format mp4 --no-playlist --no-warnings '
-            + '--print "%(title)s" --print "after_move:filepath" '
-            + '-o "$HOME/Musica/Minerva_YT/%(title)s.%(ext)s" -- "$1"',
-            url, "Scarico il video…");
-    }
-
-    function _scarica(riga, url, stato) {
-        if (backend.scaricando)
-            return;
-        var u = String(url || "").trim();
-        if (u === "") {
-            backend.downloadError("Nessun indirizzo da scaricare.");
-            return;
+    Connections {
+        target:Core.Ipc
+        function onMediaRisposta(payload) {
+            if(payload.azione === "media_libreria" && payload.request===backend._libreriaId) {
+                backend._leggendoPlaylist=false;
+                if(payload.error) backend.elencoError(backend._errore(payload.error));
+                else backend.elencoPronto(payload.files || [],true);
+            }
+            if(payload.azione === "media_cerca" && payload.request===backend._ricercaId) {
+                backend.cercando=false;
+                backend.ultimoErrore=payload.error ? backend._errore(payload.error):"";
+                if(payload.error && backend._aggiungiPagina) return;
+                var previous=backend._aggiungiPagina ? (backend.elencoMedia.voci || []) : [];
+                var merged=previous.slice(), seen=({});
+                for(var j=0;j<merged.length;j++) seen[merged[j].indice]=true;
+                var incoming=payload.voci || [];
+                for(var k=0;k<incoming.length;k++) {
+                    if(!backend._aggiungiPagina || !seen[incoming[k].indice]) merged.push(incoming[k]);
+                }
+                // A watch URL with list=... must keep its playlist identity.
+                var info=Object.assign({},payload,{"voci":merged});
+                if(info.tipo==="playlist" && !info.url) info.url=backend.elencoMedia.url || "";
+                backend.elencoMedia=info;
+                backend.resultsReady(merged);
+            }
+            if(backend._richiesteDownload[payload.request]) {
+                var pending=Object.assign({},backend._richiesteDownload);delete pending[payload.request];backend._richiesteDownload=pending;
+                if(payload.error) backend.downloadError(backend._errore(payload.error));
+            }
+            if(payload.lavori) {
+                for(var i=0;i<payload.lavori.length;i++) backend._lavoro(payload.lavori[i],false);
+            }
         }
-        backend.ultimoErrore = "";
-        backend._downloadOk = false;
-        backend.downloadStatus(stato);
-        scaricaProc.command = ["sh", "-c", riga, "sh", u];
-        scaricaProc.running = true;
-    }
-
-    property bool _downloadOk: false
-
-    function _downloadFinito(uscita) {
-        var righe = String(uscita || "").split("\n");
-        var titolo = (righe[0] || "").trim();
-        var percorso = (righe[righe.length - 1] || "").trim();
-        if (!percorso)
-            return;
-        backend._downloadOk = true;
-        backend.downloadFinished(percorso, titolo);
-    }
-
-    Process {
-        id: scaricaProc
-        stdout: StdioCollector {
-            onStreamFinished: backend._downloadFinito(text)
+        function onMediaLavoro(payload) {
+            if(payload.tipo==="elenco") backend.lavori=payload.lavori || [];
+            else if(payload.lavoro) backend._lavoro(payload.lavoro,true);
         }
-        stderr: StdioCollector {
-            onStreamFinished: backend.ultimoErrore = text.trim()
-        }
-        onExited: function (code) {
-            if (code !== 0)
-                backend.downloadError(
-                    backend.ultimoErrore || "Il download è fallito.");
-            else if (!backend._downloadOk)
-                backend.downloadError("Il download è fallito.");
+        function onConnectedChanged() {
+            if(Core.Ipc.connected) {
+                backend.aggiornaLavori();
+                if(backend._playlistPending)backend.elencoPlaylist();
+                return;
+            }
+            backend.cercando=false;
+            backend._playlistPending = backend._playlistPending || backend._leggendoPlaylist;
+            backend._leggendoPlaylist=false;
+            backend._ricercaId="";
+            var jobs=backend.lavori.map(function(job){return Object.assign({},job,{"stale":true});});
+            backend.lavori=jobs;
+            if(Object.keys(backend._richiesteDownload).length) {
+                backend._richiesteDownload=({});
+                backend.downloadError(backend._italiano ? "Connessione interrotta: verifica la coda dopo la riconnessione." : "Connection lost: check the queue after reconnecting.");
+            }
         }
     }
+    Component.onCompleted: if(Core.Ipc.connected)backend.aggiornaLavori()
 
     // ── L'onda e la durata ────────────────────────────────────────────────
 
@@ -319,15 +332,9 @@ Item {
 
     /// I file della cartella dei download, con il percorso intero.
     function elencoPlaylist() {
-        backend._perLaPlaylist = true;
-        elencoProc.command = ["sh", "-c",
-            'mkdir -p "$HOME/Musica/Minerva_YT" '
-            + '&& for f in "$HOME/Musica/Minerva_YT"/*; do '
-            + '[ -f "$f" ] || continue; '
-            + 'case "$f" in "$HOME/Musica/Minerva_YT"/.*) continue;; esac; '
-            + 'printf "%s\\n" "$f"; done',
-            "sh"];
-        elencoProc.running = true;
+        backend._libreriaId=Core.Ipc.mediaRichiesta("media_libreria",{});
+        backend._playlistPending=backend._libreriaId === "";
+        backend._leggendoPlaylist=!backend._playlistPending;
     }
 
     /// I file di una cartella qualunque, per la pagina Esplora.
@@ -357,19 +364,6 @@ Item {
         backend.elencoPronto(out, backend._perLaPlaylist);
     }
 
-    Process {
-        id: elencoProc
-        stdout: StdioCollector {
-            onStreamFinished: backend._elencoFinito(text)
-        }
-        stderr: StdioCollector {
-            onStreamFinished: backend.ultimoErrore = text.trim()
-        }
-        onExited: function (code) {
-            if (code !== 0)
-                backend.elencoError(backend.ultimoErrore || "");
-        }
-    }
 
     Process {
         id: listaProc

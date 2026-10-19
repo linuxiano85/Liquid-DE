@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:io';
+
+import '../core/linux_files.dart';
 
 import '../ipc/websocket_server.dart' show WebSocketServer;
 import 'app_scanner.dart';
@@ -40,6 +43,26 @@ class MimeService {
   /// Il database dei tipi di `shared-mime-info`. Si può imporre dalle prove.
   final MimeDatabase _db;
 
+  bool _closing = false;
+  Future<void>? _disposeFuture;
+  final Set<Future<Map<String, dynamic>>> _writes = {};
+
+  /// Close admission synchronously, before IPC starts destroying dependencies.
+  /// Previously accepted writes retain their completion/error contract.
+  void quiesce() => _closing = true;
+
+  Future<void> dispose() {
+    quiesce();
+    return _disposeFuture ??= Future.wait(_writes.toList()).then<void>((results) {
+      final failed = results.where((result) => result['ok'] != true).length;
+      if (failed != 0) {
+        // IPC has already disconnected the clients. Preserve a visible failure
+        // without logging MIME values, application IDs or exception payloads.
+        print('[MINERVA][MIME][WARN] Arresto: $failed salvataggi non riusciti');
+      }
+    });
+  }
+
   String get _home => Platform.environment['HOME'] ?? '';
 
   String get _configHome {
@@ -76,11 +99,29 @@ class MimeService {
   /// che risponde vince: è la regola della specifica, ed è anche l'unica che
   /// permetta a una scelta dell'utente di battere una scelta della
   /// distribuzione.
-  List<String> get _mimeAppsChain => [
-        userMimeApps,
-        for (final d in _configDirs) '$d/mimeapps.list',
-        for (final d in _dataDirs) '$d/applications/mimeapps.list',
-      ];
+  List<String> get _mimeAppsChain {
+    // XDG names are tried in order, ASCII-lowercased. They are file-name
+    // components, never paths supplied by the environment.
+    final desktops = <String>{};
+    for (final name in
+        (Platform.environment['XDG_CURRENT_DESKTOP'] ?? '').split(':')) {
+      if (name.isEmpty || name.contains('/') || name.contains('\u0000')) continue;
+      desktops.add(name.replaceAllMapped(
+          RegExp('[A-Z]'), (match) => match[0]!.toLowerCase()));
+    }
+    Iterable<String> at(String directory) sync* {
+      for (final desktop in desktops) {
+        yield '$directory/$desktop-mimeapps.list';
+      }
+      yield '$directory/mimeapps.list';
+    }
+
+    return [
+      ...at(_configHome),
+      for (final directory in _configDirs) ...at(directory),
+      for (final directory in _dataDirs) ...at('$directory/applications'),
+    ];
+  }
 
   // ── Che cos'è questo file ──────────────────────────────────────────────
 
@@ -856,6 +897,27 @@ class MimeService {
   Future<Map<String, dynamic>> setDefault(String mime, String appId) =>
       setDefaults([mime], appId);
 
+  // Restricted MIME name syntax (RFC 6838 §4.2); also accepts desktop
+  // pseudo-types such as inode/directory and x-scheme-handler/http.
+  static final _mimeName = RegExp(
+      r'^[A-Za-z0-9][A-Za-z0-9!#$&^_.+\-]{0,126}/[A-Za-z0-9][A-Za-z0-9!#$&^_.+\-]{0,126}$');
+  static final _controls = RegExp(r'[\x00-\x1f\x7f-\x9f\u2028\u2029]');
+  static final _desktopSeparators = RegExp(r'[/;\\]');
+
+  static String? _mimeKey(String value) {
+    if (_controls.hasMatch(value)) return null;
+    final key = value.trim().toLowerCase();
+    final match = _mimeName.firstMatch(key);
+    return match != null && match.end == key.length ? key : null;
+  }
+
+  // Preserve legacy IDs with spaces/Unicode. They must still be one INI
+  // list item and a desktop-file ID, rather than an absolute/relative path.
+  static bool _validDesktopId(String id) =>
+      id.length > '.desktop'.length && id.endsWith('.desktop') &&
+      id.trim() == id && !_controls.hasMatch(id) &&
+      !_desktopSeparators.hasMatch(id);
+
   /// Come sopra, ma per più tipi in una sola riscrittura.
   ///
   /// Chiamare `setDefault` nove volte di fila darebbe lo stesso file e nove
@@ -863,10 +925,12 @@ class MimeService {
   /// qualcosa va storto nel mezzo. Un gruppo si scrive tutto o niente.
   Future<Map<String, dynamic>> setDefaults(
       List<String> mimes, String appId) async {
-    final wanted = mimes.where((m) => m.trim().isNotEmpty).toSet();
-    if (wanted.isEmpty || appId.isEmpty) {
-      return {'ok': false, 'error': 'Tipo o applicazione mancante'};
+    final keys = mimes.map(_mimeKey).toList();
+    if (keys.isEmpty || keys.any((key) => key == null) ||
+        !_validDesktopId(appId)) {
+      return {'ok': false, 'error': 'Tipo di file o identificativo applicazione non valido'};
     }
+    final wanted = keys.cast<String>().toSet();
     return _riscrivi(
       tocca: wanted,
       cambia: (sezione, mime, righe) {
@@ -896,16 +960,17 @@ class MimeService {
   /// un'altra cosa — «quel programma non deve nemmeno comparire fra le
   /// scelte» — e non è quello che chiede chi preme «Non ricordare più».
   Future<Map<String, dynamic>> forgetDefault(String mime) async {
-    if (mime.trim().isEmpty) {
-      return {'ok': false, 'error': 'Tipo mancante'};
+    final key = _mimeKey(mime);
+    if (key == null) {
+      return {'ok': false, 'error': 'Tipo di file non valido'};
     }
     return _riscrivi(
-      tocca: {mime.trim()},
+      tocca: {key},
       // Vuoto vuol dire «togli»; `null` vuol dire «lascia com'era». Le altre
       // sezioni non si toccano: è esattamente il difetto che c'era prima.
       cambia: (sezione, m, righe) =>
           sezione == 'Default Applications' ? '' : null,
-      risposta: {'mimes': [mime.trim()], 'appId': ''},
+      risposta: {'mimes': [key], 'appId': ''},
     );
   }
 
@@ -941,10 +1006,61 @@ class MimeService {
     required String? Function(String sezione, String mime, List<String> valori)
         cambia,
     required Map<String, dynamic> risposta,
+  }) {
+    if (_closing) {
+      return Future.value({'ok': false, 'error': 'Servizio associazioni in chiusura'});
+    }
+    final write = _riscriviFile(tocca: tocca, cambia: cambia, risposta: risposta);
+    _writes.add(write);
+    // Observe completion without replacing the Future returned to the caller.
+    // Keep unexpected errors available both to the caller and to dispose().
+    unawaited(write.then<void>((_) {
+      _writes.remove(write);
+    }, onError: (Object error, StackTrace stack) {
+      _writes.remove(write);
+    }));
+    return write;
+  }
+
+  Future<Map<String, dynamic>> _riscriviFile({
+    required Set<String> tocca,
+    required String? Function(String sezione, String mime, List<String> valori)
+        cambia,
+    required Map<String, dynamic> risposta,
   }) async {
-    final file = File(userMimeApps);
+    final logical = File(userMimeApps);
+    LinuxDirectoryLease? lease;
+    Directory? staging;
     try {
-      await file.parent.create(recursive: true);
+      await logical.parent.create(recursive: true);
+      Future<String> destination() async {
+        if (await FileSystemEntity.type(logical.path, followLinks: false) ==
+            FileSystemEntityType.link) {
+          return logical.resolveSymbolicLinks();
+        }
+        return '${await logical.parent.resolveSymbolicLinks()}/mimeapps.list';
+      }
+
+      final file = File(await destination());
+      lease = await LinuxFiles.lockDirectory(file.parent);
+      if (await destination() != file.path) {
+        throw FileSystemException('Il collegamento delle associazioni è cambiato');
+      }
+      final parentVersion = LinuxFiles.version(file.parent.path);
+      final exists = LinuxFiles.entryExists(file.path);
+      LinuxFileVersion? original;
+      var mode = 0x180; // 0600 for a newly created user configuration.
+      List<String> content = [];
+      if (exists) {
+        final source = LinuxFiles.pinRegularSource(file.path);
+        try {
+          original = source.version;
+          mode = (await File(source.descriptorPath).stat()).mode & 0x1ff;
+          content = await File(source.descriptorPath).readAsLines();
+        } finally {
+          source.close();
+        }
+      }
 
       // Si conserva TUTTO: intestazione, commenti, righe vuote, ordine.
       final testa = <String>[];
@@ -953,8 +1069,8 @@ class MimeService {
       final valori = <String, Map<String, List<String>>>{};
       var corrente = '';
 
-      if (await file.exists()) {
-        for (final grezza in await file.readAsLines()) {
+      if (exists) {
+        for (final grezza in content) {
           final riga = grezza.trim();
           if (riga.startsWith('[') && riga.endsWith(']')) {
             corrente = riga.substring(1, riga.length - 1);
@@ -1021,16 +1137,54 @@ class MimeService {
         buffer.writeln();
       }
 
-      // Scrittura in due tempi: chi legge il file trova o quello di prima o
-      // quello nuovo, mai mezzo.
-      final tmp = File('$userMimeApps.nuovo');
+      // The historical predictable .nuovo name may be a foreign symlink.
+      // Hold the writer lock through read/modify/publish and use private staging.
+      staging = LinuxFiles.privateTemp(file.parent, '.mimeapps-save-');
+      final tmp = File('${staging.path}/mimeapps.list');
       await tmp.writeAsString(buffer.toString(), flush: true);
-      await tmp.rename(userMimeApps);
+      LinuxFiles.setPermissions(tmp.path, mode);
+      // Flush the permission change as well as the content before rename.
+      final output = await tmp.open(mode: FileMode.append);
+      try {
+        await output.flush();
+      } finally {
+        await output.close();
+      }
+      final stillExists = LinuxFiles.entryExists(file.path);
+      if (await destination() != file.path ||
+          LinuxFiles.version(file.parent.path).node != parentVersion.node ||
+          (original == null
+              ? stillExists
+              : !stillExists || !original.sameAs(LinuxFiles.version(file.path)))) {
+        throw FileSystemException('Associazioni cambiate durante il salvataggio');
+      }
+      await tmp.rename(file.path);
       _dimentica();
-
-      return {'ok': true, 'error': '', ...risposta};
+      var warning = '';
+      try {
+        LinuxFiles.fsyncCartella(file.parent.path);
+      } catch (_) {
+        // Publication already succeeded. Do not report a failed operation
+        // that could induce the user to retry under false assumptions.
+        warning = 'Scelta applicata; sincronizzazione della cartella non confermata';
+        print('[MINERVA][MIME][WARN] $warning');
+      }
+      return {'ok': true, 'error': '', if (warning.isNotEmpty) 'warning': warning,
+        ...risposta};
     } catch (e) {
       return {'ok': false, 'error': '$e'};
+    } finally {
+      try {
+        if (staging != null) {
+          try {
+            await staging.delete(recursive: true);
+          } catch (_) {
+            print('[MINERVA][MIME][WARN] Temporaneo privato non rimosso');
+          }
+        }
+      } finally {
+        lease?.release();
+      }
     }
   }
 

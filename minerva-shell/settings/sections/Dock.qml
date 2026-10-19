@@ -304,7 +304,7 @@ Page {
 
         // ── Un attrezzo da officina, e si può riporre ────────────────────
         //
-        // il manutentore, 2 settembre 2026: «mettiamo un tasto disattivabile accanto
+        // Il manutentore, 2 settembre 2026: «mettiamo un tasto disattivabile accanto
         // al meteo dove posso riavviare la shell».
         //
         // Sta fra le voci della barra e non fra quelle degli sviluppatori

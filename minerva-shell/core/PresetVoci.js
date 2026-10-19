@@ -5,7 +5,7 @@
 // giorno, in una delle copie, perderebbe un preset). Vuoto vuol dire «tutti»;
 // il preset «libero» vede comunque tutto (`settings/sections/Card.qml`).
 //
-// il manutentore, 11 ottobre 2026: «impostazioni per ogni preset grafica come
+// Il manutentore, 11 ottobre 2026: «impostazioni per ogni preset grafica come
 // Windows». Col preset Windows la pagina «Barra e dock» mostrava la dock,
 // l'Isola, la Riva e la molla di Liquid, che lì non esistono.
 .pragma library

@@ -95,8 +95,23 @@ QtObject {
     /// scarto — «la barra è staccata dalla finestra e la linea rosa è un
     /// pochino storta», parole del manutentore mentre guardava.
     readonly property bool impostazioniArrivate: ipc._settingsNote
+    /// La Shell può offrire un recupero senza disegnare un preset fittizio.
+    /// La scadenza segnala ritardo, non dimostra che il demone sia guasto.
+    readonly property bool avvioInRitardo: !ipc._settingsNote && ipc._troppoTempo
 
     property bool _settingsNote: false
+
+    /// Solo con `LIQUID_TRACE_STARTUP=1` e solo nei primi 15 s del processo:
+    /// tappe fisse con l'ora, mai contenuti. Serve a capire dove si perdono
+    /// i secondi di schermo nero dopo l'accesso (18 ottobre 2026).
+    readonly property double _natoA: Date.now()
+    function tracciaAvvio(stage) {
+        if (Quickshell.env("LIQUID_TRACE_STARTUP") !== "1") return;
+        if (Date.now() - ipc._natoA > 15000) return;
+        console.log("[LIQUID][SHELL-STARTUP] stage=" + stage
+                    + " clock=realtime timestamp_ms=" + Date.now()
+                    + " since_ms=" + (Date.now() - ipc._natoA));
+    }
 
     /// Vero dopo la PRIMA connessione riuscita. Distingue «non è ancora
     /// partito» da «se n'è andato»: vedi `onStatusChanged`.
@@ -218,6 +233,10 @@ QtObject {
     /// Solo CPU, memoria e temperatura, senza l'elenco dei processi: per chi
     /// mostra tre numeri e non deve pagare la lettura di tutto `/proc`.
     signal machineStateReceived(var macchina)
+    /// L'equalizzatore della barra: sedici numeri da 0 a 100, dai bassi agli
+    /// acuti. `disponibile` falso: il demone non può leggere l'audio (manca
+    /// `parec`), e la barra torna alle barrette animate.
+    signal spettroRicevuto(var bande, bool disponibile)
 
     function machineState() { return send({ "action": "machine_state" }); }
     signal processKilled(int pid, bool ok, bool force)
@@ -562,6 +581,19 @@ QtObject {
 
     function disiscriviMacchina() {
         return send({ "action": "unsubscribe_machine" });
+    }
+
+    // ── Lo spettro dell'audio, per l'equalizzatore della barra Liquid ────
+    //
+    // Stesso patto delle altre iscrizioni: il demone legge l'uscita audio
+    // (`parec`, il monitor delle casse) solo mentre qualcuno è iscritto.
+    // Vedi `minervad/lib/services/spettro_service.dart`.
+    function iscriviSpettro() {
+        return send({ "action": "subscribe_spettro" });
+    }
+
+    function disiscriviSpettro() {
+        return send({ "action": "unsubscribe_spettro" });
     }
 
     // ── L'audio di sistema, solo mentre la pagina Audio è aperta ────────
@@ -1100,6 +1132,17 @@ QtObject {
     /// `testo` e `paese` dicono a quale ricerca si risponde.
     signal radioStazioni(var payload)
 
+    signal mediaRisposta(var payload)
+    signal mediaLavoro(var payload)
+    property int _mediaSequence: 0
+    function mediaRichiesta(action, values) {
+        if (!ipc.connected) return "";
+        var id = "media-" + Date.now() + "-" + (++ipc._mediaSequence);
+        var payload = Object.assign({},values || ({}),{"action":action,"request":id});
+        return ipc.send(payload) ? id : "";
+    }
+
+
     /// Le notizie della bacheca Widget: `{articoli, error, fonti}`. Ogni
     /// articolo è `{titolo, fonte, link, data, interesse, immagine}`, con
     /// `immagine` un file locale (la scarica il demone).
@@ -1255,6 +1298,9 @@ QtObject {
     signal volumesReceived(var volumes)
     /// Cartelle di rete e telefoni: `{luoghi, mancano, protocolli, error}`.
     signal remotiReceived(var payload)
+    /// Un telefono o una chiavetta attaccati adesso che non si aprono:
+    /// `{nome, errore}`. Lo mostra solo la shell, come notifica.
+    signal dispositivoAvviso(var payload)
     /// Risposta a `fsConnetti`: `{ok, uri, percorso, error, serveAccesso,
     /// sbagliate, dominio, domanda, manca, richiesta}`.
     signal connessoReceived(var result)
@@ -2303,6 +2349,7 @@ QtObject {
                     // nuovo: qui si riarma l'annuncio.
                     ipc._perditaDetta = false;
                     console.log("[MINERVA][IPC] Connesso al demone.");
+                    ipc.tracciaAvvio("ipc.ciao");
                     reconnectTimer.stop();
                     // Riagganciato: il prossimo distacco riparte fitto come il
                     // primo, invece di ereditare l'attesa lunga di prima.
@@ -2314,7 +2361,15 @@ QtObject {
                     // sessione, la shell si riavvia molte volte, e un programma
                     // installato nel frattempo non comparirebbe mai. Costa una
                     // scansione di quattro cartelle, una volta.
-                    ipc.rescanApps();
+                    //
+                    // Non nella schermata di accesso, che non mostra programmi:
+                    // al login fisico v24 (18 ottobre 2026) la mappa delle
+                    // icone costruita per quell'elenco ha tenuto fermo il demone
+                    // 4 s a disco freddo, e la richiesta a greetd aspettava
+                    // dietro. Era tutto il ritardo del campo password.
+                    var greetd = Quickshell.env("GREETD_SOCK");
+                    if (greetd === null || greetd === undefined || String(greetd) === "")
+                        ipc.rescanApps();
                     ipc._eraConnesso = true;
                 } else {
                     // Il segreto che avevamo in mano non vale più: quasi
@@ -2336,8 +2391,14 @@ QtObject {
                     ipc.settings = ipc._conScrittureInVolo(msg.payload.settings);
                     // Da qui in poi i colori sono quelli veri: chi aspettava
                     // per non dipingere sbagliato può partire.
+                    ipc.tracciaAvvio("ipc.init_state");
                     ipc._settingsNote = true;
+                    // I legami che aspettavano le impostazioni sono scattati
+                    // (scrivania, sfondo, desktop, widget): da qui in poi è
+                    // chi ascolta `settingsReceived` (STA-002).
+                    ipc.tracciaAvvio("ipc.settings_note.bindings");
                     ipc.settingsReceived(ipc.settings);
+                    ipc.tracciaAvvio("ipc.init_state.applied");
                 }
                 if (msg.payload.keybindings) {
                     ipc.keybindings = msg.payload.keybindings;
@@ -2353,6 +2414,10 @@ QtObject {
                 break;
             case "machine_state":
                 ipc.machineStateReceived(msg.payload || ({}));
+                break;
+            case "spettro":
+                ipc.spettroRicevuto((msg.payload && msg.payload.bande) || [],
+                                    !msg.payload || msg.payload.disponibile !== false);
                 break;
             case "process_killed":
                 ipc.processKilled(msg.payload.pid || 0,
@@ -2593,6 +2658,9 @@ QtObject {
             case "fs_remoti":
                 ipc.remotiReceived(msg.payload || ({}));
                 break;
+            case "dispositivo_avviso":
+                ipc.dispositivoAvviso(msg.payload || ({}));
+                break;
             case "fs_connesso":
                 ipc.connessoReceived(msg.payload || ({}));
                 break;
@@ -2763,6 +2831,12 @@ QtObject {
                 break;
             case "notizie_fonti":
                 ipc.fontiNotizieRicevute(msg.payload || ({}));
+                break;
+            case "media_risposta":
+                ipc.mediaRisposta(msg.payload || ({}));
+                break;
+            case "media_job":
+                ipc.mediaLavoro(msg.payload || ({}));
                 break;
             case "radio_stazioni":
                 ipc.radioStazioni(msg.payload || ({}));

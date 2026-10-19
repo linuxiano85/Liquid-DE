@@ -1,5 +1,6 @@
 import QtQuick
-import QtMultimedia
+import QtQuick.Effects
+import Qt.labs.platform as Piattaforma
 import Quickshell
 
 import "../theme" as Theme
@@ -15,16 +16,23 @@ import "../ui" as Ui
 //
 // Il riproduttore è uno solo e vale per tutto: l'audio disegna il suo
 // visualizzatore, il video la sua superficie — e quando il video va in PiP
-// cambia solo la proprietà `videoOutput`, la musica non se ne accorge.
+// sposta solo la sua superficie (`PlayerBackend.mostraIn`), la musica non
+// se ne accorge.
 FloatingWindow {
     id: finestra
 
-    visible: Core.Ipc.prontoADipingere && !finestra.dormiente
+    /// Il lettore unico (PlayerBackend): per la tray, MPRIS e le prove.
+    readonly property alias riproduttore: player
+
+    visible: Core.Ipc.prontoADipingere && !finestra.dormiente && !finestra.nellaBarra
 
     // ── Accesa e nascosta ────────────────────────────────────────────────
     property bool dormiente: false
     signal requestClose()
-    onClosed: finestra.requestClose()
+    /// La finestra torna dalla barra di sistema: chi la ospita la porta
+    /// davanti (in `minervamedia.qml`, `TenutaPronta.risveglia`).
+    signal mostraRichiesto()
+    onClosed: finestra.chiudiRichiesto()
 
     /// Il percorso con cui siamo stati lanciati (da `MINERVA_MEDIA_APRI`).
     property string initialPath: ""
@@ -59,13 +67,21 @@ FloatingWindow {
         id: backend
 
         onResultsReady: function (r) {
+            // L'ultima ricerca si tiene da parte: dalla playlist aperta si
+            // torna ai risultati senza rifare la ricerca.
+            if (backend.elencoMedia.tipo !== "playlist")
+                finestra._ultimaRicerca = backend.elencoMedia;
+            if (finestra._ascoltaAppenaAperta && backend.elencoMedia.tipo === "playlist") {
+                finestra._ascoltaAppenaAperta = false;
+                finestra.riproduciWeb(r, 0);
+            }
             risultati.clear();
             for (var i = 0; i < r.length; i++)
                 risultati.append(r[i]);
-            finestra._statoRicerca = r.length === 0
+            finestra._statoRicerca = backend.ultimoErrore || (r.length === 0
                 ? (Core.Strings.lang === "it" ? "Nessun risultato."
                                               : "No results.")
-                : "";
+                : "");
         }
 
         onDownloadStatus: function (m) {
@@ -79,7 +95,17 @@ FloatingWindow {
                                       + (titolo || "");
             finestra._downloadErrato = false;
             finestra._aggiungiAllaPlaylist(percorso, titolo);
-            finestra.riproduciFile(percorso, titolo);
+            if (!finestra.dormiente && !player.playing)
+                finestra.riproduciFile(percorso, titolo);
+        }
+
+        onAltriScaricati: function (percorsi, titolo, quanti) {
+            for (var i = 0; i < percorsi.length; i++)
+                finestra._aggiungiAllaPlaylist(percorsi[i]);
+            finestra._statoDownload = (Core.Strings.lang === "it"
+                                       ? "Scaricati " + quanti + " brani"
+                                       : "Downloaded " + quanti + " songs")
+                                      + (titolo ? ": " + titolo : "");
         }
 
         onDownloadError: function (m) {
@@ -127,12 +153,198 @@ FloatingWindow {
         }
     }
 
+    // ── Nel sistema: barra, tasti e barre ────────────────────────────────
+    //
+    // Richiesta del manutentore, 18 ottobre 2026: «icona in tray per continuare ad
+    // ascoltare musica e controlli integrati nelle nostre barre».
+    //
+    // · MPRIS (modulo nativo `Liquid.Media`, `native/mpv/mpris.cpp`): Media
+    //   dice al sistema cosa suona. La shell lo ascoltava già
+    //   (`core/Media.qml`): tasti multimediali, Centro, isola della barra.
+    //   Si annuncia solo quando c'è qualcosa nel lettore.
+    // · L'icona nella barra di sistema, col suo menu.
+    // · «Riduci» con la musica in corso porta Media nella barra; la X chiede
+    //   se chiudere o tenerlo lì, e può ricordare la risposta.
+
+    readonly property bool haQualcosa: String(player.source) !== ""
+    property bool nellaBarra: false
+
+    readonly property bool _scaletta: finestra.radioInOnda === "" && finestra.tvInOnda === ""
+                                      && finestra._percorsoCorrente !== ""
+    readonly property string _sottotitolo: finestra.tvInOnda !== "" ? "TV"
+        : finestra.radioInOnda !== "" ? "Radio" : finestra.webInOnda ? "YouTube" : ""
+    /// Avanti e indietro hanno senso: una scaletta di file o una coda YouTube.
+    readonly property bool _puoAvanti: finestra.webInOnda
+        ? finestra._webIndice + 1 < finestra._codaWeb.length
+        : finestra._scaletta && playlist.count > 1
+    readonly property bool _puoIndietro: finestra.webInOnda
+        ? finestra._webIndice > 0
+        : finestra._scaletta && playlist.count > 1
+
+    function mettiNellaBarra() {
+        if (!finestra.haQualcosa) {
+            finestra.requestClose();
+            return;
+        }
+        if (pip.attivo)
+            finestra.chiudiPip();
+        finestra.nellaBarra = true;
+    }
+
+    function mostraDallaBarra() {
+        finestra.nellaBarra = false;
+        finestra.mostraRichiesto();
+    }
+
+    function esci() {
+        finestra.nellaBarra = false;
+        player.stop();
+        finestra.requestClose();
+    }
+
+    /// La X. Con la musica ferma chiude e basta; mentre suona fa quello che
+    /// si è scelto («media.chiusura»), o lo chiede.
+    function chiudiRichiesto() {
+        if (!finestra.haQualcosa || !player.playing) {
+            finestra.requestClose();
+            return;
+        }
+        var scelta = Core.Ipc.get("media.chiusura", "chiedi");
+        if (scelta === "barra")
+            finestra.mettiNellaBarra();
+        else if (scelta === "chiudi")
+            finestra.esci();
+        else
+            domandaChiusura.visible = true;
+    }
+
+    property var _mpris: null
+    function _creaMpris() {
+        try {
+            finestra._mpris = Qt.createQmlObject(
+                "import Liquid.Media 1.0; MprisServer {}", finestra, "MediaWindow.mpris");
+        } catch (e) {
+            console.log("[Media] MPRIS non disponibile:", e);
+            return;
+        }
+        var m = finestra._mpris;
+        m.active = Qt.binding(function () { return finestra.haQualcosa; });
+        m.hasMedia = Qt.binding(function () { return finestra.haQualcosa; });
+        m.title = Qt.binding(function () { return finestra._titoloCorrente; });
+        m.artist = Qt.binding(function () { return finestra._sottotitolo; });
+        m.playing = Qt.binding(function () { return player.playing; });
+        m.length = Qt.binding(function () { return finestra._scaletta || finestra.webInOnda ? player.duration : 0; });
+        m.position = Qt.binding(function () { return player.position; });
+        m.canSeek = Qt.binding(function () { return (finestra._scaletta || finestra.webInOnda) && player.duration > 0; });
+        m.canGoNext = Qt.binding(function () { return finestra._puoAvanti; });
+        m.canGoPrevious = Qt.binding(function () { return finestra._puoIndietro; });
+        m.volume = Qt.binding(function () { return finestra.volume / 100; });
+        m.playPauseRequested.connect(finestra.alternaRiproduzione);
+        m.playRequested.connect(function () { player.play(); });
+        m.pauseRequested.connect(function () { player.pause(); });
+        m.stopRequested.connect(function () { player.stop(); });
+        m.nextRequested.connect(finestra.successivo);
+        m.previousRequested.connect(finestra.precedente);
+        m.seekRequested.connect(function (scarto) {
+            player.seek(player.position + scarto);
+            m.seeked(player.position + scarto);
+        });
+        m.positionRequested.connect(function (dove) { player.seek(dove); m.seeked(dove); });
+        m.volumeRequested.connect(function (v) { finestra.volume = Math.round(v * 100); });
+        m.raiseRequested.connect(finestra.mostraDallaBarra);
+        m.quitRequested.connect(finestra.esci);
+        m.openRequested.connect(function (u) { finestra.apriPercorso(u); finestra.mostraDallaBarra(); });
+    }
+
+    Piattaforma.SystemTrayIcon {
+        id: iconaBarra
+        visible: finestra.haQualcosa || finestra.nellaBarra
+        icon.name: "minerva-media"
+        icon.source: Qt.resolvedUrl("../../assets/icons/minerva-media.svg")
+        tooltip: finestra._titoloCorrente !== ""
+                 ? "Minerva Media — " + finestra._titoloCorrente : "Minerva Media"
+        onActivated: function (motivo) {
+            if (motivo === Piattaforma.SystemTrayIcon.Trigger
+                    || motivo === Piattaforma.SystemTrayIcon.DoubleClick) {
+                if (finestra.nellaBarra)
+                    finestra.mostraDallaBarra();
+                else
+                    finestra.mettiNellaBarra();
+            }
+        }
+        menu: Piattaforma.Menu {
+            Piattaforma.MenuItem {
+                text: finestra._titoloCorrente
+                visible: finestra._titoloCorrente !== ""
+                enabled: false
+            }
+            Piattaforma.MenuSeparator { visible: finestra._titoloCorrente !== "" }
+            Piattaforma.MenuItem {
+                text: player.playing ? (Core.Strings.lang === "it" ? "Pausa" : "Pause")
+                                     : (Core.Strings.lang === "it" ? "Riproduci" : "Play")
+                onTriggered: finestra.alternaRiproduzione()
+            }
+            Piattaforma.MenuItem {
+                text: Core.Strings.lang === "it" ? "Precedente" : "Previous"
+                visible: finestra._puoIndietro
+                onTriggered: finestra.precedente()
+            }
+            Piattaforma.MenuItem {
+                text: Core.Strings.lang === "it" ? "Successivo" : "Next"
+                visible: finestra._puoAvanti
+                onTriggered: finestra.successivo()
+            }
+            Piattaforma.MenuSeparator { }
+            // Le tre scelte stanno nel menu principale, sotto un'intestazione,
+            // e non in un sottomenu: con un `Menu` dentro il menu dell'icona
+            // (anche nascosto) Qt 6.12 va in crash alla prima GetLayout della
+            // barra, cioè appena l'icona compare (19 ottobre, canale TV).
+            Piattaforma.MenuItem {
+                text: Core.Strings.lang === "it" ? "Se chiudo mentre suona" : "When closed while playing"
+                enabled: false
+            }
+            Piattaforma.MenuItemGroup { id: gruppoChiusura }
+            Piattaforma.MenuItem {
+                text: Core.Strings.lang === "it" ? "Chiedi" : "Ask"
+                checkable: true
+                group: gruppoChiusura
+                checked: Core.Ipc.get("media.chiusura", "chiedi") === "chiedi"
+                onTriggered: Core.Ipc.setSetting("media.chiusura", "chiedi")
+            }
+            Piattaforma.MenuItem {
+                text: Core.Strings.lang === "it" ? "Tieni nella barra" : "Keep in tray"
+                checkable: true
+                group: gruppoChiusura
+                checked: Core.Ipc.get("media.chiusura", "chiedi") === "barra"
+                onTriggered: Core.Ipc.setSetting("media.chiusura", "barra")
+            }
+            Piattaforma.MenuItem {
+                text: Core.Strings.lang === "it" ? "Chiudi Media" : "Close Media"
+                checkable: true
+                group: gruppoChiusura
+                checked: Core.Ipc.get("media.chiusura", "chiedi") === "chiudi"
+                onTriggered: Core.Ipc.setSetting("media.chiusura", "chiudi")
+            }
+            Piattaforma.MenuSeparator { }
+            Piattaforma.MenuItem {
+                text: finestra.nellaBarra
+                      ? (Core.Strings.lang === "it" ? "Mostra Media" : "Show Media")
+                      : (Core.Strings.lang === "it" ? "Metti nella barra" : "Keep in tray")
+                onTriggered: finestra.nellaBarra ? finestra.mostraDallaBarra()
+                                                 : finestra.mettiNellaBarra()
+            }
+            Piattaforma.MenuItem {
+                text: Core.Strings.lang === "it" ? "Esci da Media" : "Quit Media"
+                onTriggered: finestra.esci()
+            }
+        }
+    }
+
     PiPWindow {
         id: pip
         riproduttore: player
-        onChiuso: function () {
-            player.videoOutput = videoPrincipale;
-        }
+        // Dove va il video lo decide `postoVideo`, che guarda `pip.attivo`.
+        onChiuso: function () {}
         onSuccessivoRichiesto: function () {
             finestra.successivo();
         }
@@ -150,7 +362,7 @@ FloatingWindow {
     // stesso per il file da tagliare. Il nostro selettore esisteva già —
     // `ui/Scegli.qml`, quello della Custodia — e non lo usava nessuno.
     //
-    // il manutentore, 4 settembre 2026: «rendi tutti i passaggi a portata di click».
+    // Il manutentore, 4 settembre 2026: «rendi tutti i passaggi a portata di click».
     property string _scopoScelta: ""
 
     function scegli(scopo, titolo, daDove) {
@@ -195,22 +407,18 @@ FloatingWindow {
     // due cose diverse, e il primo che si spostava era quello che aveva
     // ragione. Spostandolo non se ne ricordava niente: al riavvio si tornava
     // alla stessa bugia.
-    AudioOutput {
-        id: uscitaAudio
-        volume: finestra.muto ? 0 : finestra.volume / 100
-    }
-
-    MediaPlayer {
+    PlayerBackend {
         id: player
-        audioOutput: uscitaAudio
-        videoOutput: videoPrincipale
+        volume: finestra.volume / 100
+        muted: finestra.muto
+        audioOnly: !finestra.haVideo
         onPositionChanged: {
             if (!finestra.cercando)
                 finestra.progresso = player.position;
         }
         onDurationChanged: finestra.durata = player.duration
-        onMediaStatusChanged: function (stato) {
-            if (stato === MediaPlayer.EndOfMedia && !spiaAnteprima.running)
+        onFinito: {
+            if (!spiaAnteprima.running)
                 finestra._finito();
         }
     }
@@ -337,7 +545,7 @@ FloatingWindow {
     }
 
     function alternaRiproduzione() {
-        if (!finestra._percorsoCorrente)
+        if (!finestra.haQualcosa)
             return;
         if (player.playing)
             player.pause();
@@ -356,7 +564,7 @@ FloatingWindow {
             return;
         var t = Math.max(0, Math.min(finestra.durata,
                                      player.position + quanti * 1000));
-        player.position = t;
+        player.seek(t);
         finestra.progresso = t;
     }
 
@@ -367,7 +575,18 @@ FloatingWindow {
     property real progresso: 0
     property bool cercando: false
 
-    readonly property bool haVideo: finestra._video(finestra._percorsoCorrente)
+    readonly property bool haVideo: finestra.tvInOnda !== ""
+                                    || finestra._video(finestra._percorsoCorrente)
+    // Dalla TV o da un video si passa a una radio o a un brano: senza video
+    // il PiP resterebbe un riquadro vuoto col nome sopra (19 ottobre).
+    onHaVideoChanged: if (!finestra.haVideo && pip.attivo) finestra.chiudiPip()
+
+    /// Dove si vede il video: nel PiP, sullo schermo della pagina TV mentre
+    /// la si guarda lì, altrimenti nella pagina Player.
+    readonly property Item postoVideo: pip.attivo ? pip.uscita
+        : finestra.tvInOnda !== "" && finestra.pagina === 5 ? paginaTv.schermo
+        : videoPrincipale
+    onPostoVideoChanged: player.mostraIn(finestra.postoVideo)
 
     /// Il palco — video o disegno dell'audio — occupa tutta la finestra.
     ///
@@ -425,9 +644,40 @@ FloatingWindow {
     property bool _downloadErrato: false
     property string _statoRicerca: ""
     property bool _tipoVideo: false
+    property string _formatoAudio: "mp3"
+    property int _altezzaVideo: 0
+    property bool _playlistDownload: false
+    property bool _cercaPlaylist: false
 
     // Esplora.
     property string cartellaEsplorata: ""
+    /// Le ultime cartelle aperte qui, la più recente prima.
+    readonly property var cartelleRecenti: Core.Ipc.get("media.cartelleRecenti", [])
+
+    function _ricordaCartella(d) {
+        d = String(d || "");
+        if (d.length < 2 || d[0] !== "/")
+            return;
+        if (d.length > 1 && d[d.length - 1] === "/")
+            d = d.slice(0, -1);
+        var nuove = [d];
+        var vecchie = finestra.cartelleRecenti || [];
+        for (var i = 0; i < vecchie.length && nuove.length < 8; i++)
+            if (vecchie[i] !== d)
+                nuove.push(vecchie[i]);
+        Core.Ipc.setSetting("media.cartelleRecenti", nuove);
+    }
+
+    function _dimenticaCartella(d) {
+        var vecchie = finestra.cartelleRecenti || [];
+        Core.Ipc.setSetting("media.cartelleRecenti",
+                            vecchie.filter(function (x) { return x !== d; }));
+    }
+
+    function apriCartellaRecente(d) {
+        campoCartella.text = d;
+        finestra._apriCartella();
+    }
     property string _statoEsplora: ""
 
     // ── Strumenti ────────────────────────────────────────────────────────
@@ -480,6 +730,8 @@ FloatingWindow {
         if (!p)
             return;
         finestra.radioInOnda = "";
+        finestra.tvInOnda = "";
+        finestra._codaWeb = [];
         finestra._percorsoCorrente = p;
         finestra._titoloCorrente = titolo || finestra._basename(p);
         player.source = "file://" + p;
@@ -494,6 +746,11 @@ FloatingWindow {
     }
 
     function successivo() {
+        if (finestra.webInOnda) {
+            if (finestra._webIndice + 1 < finestra._codaWeb.length)
+                finestra._suonaWeb(finestra._webIndice + 1);
+            return;
+        }
         if (playlist.count === 0)
             return;
 
@@ -528,20 +785,158 @@ FloatingWindow {
             return;
         finestra._percorsoCorrente = "";
         finestra._titoloCorrente = stazione.nome;
+        finestra.tvInOnda = "";
+        finestra._codaWeb = [];
         finestra.radioInOnda = stazione.id;
         player.source = stazione.url;
         player.play();
     }
 
+    // ── YouTube senza scaricare ──────────────────────────────────────────
+    //
+    // Si ascolta un risultato della ricerca, o una playlist intera, senza
+    // salvare niente: mpv apre l'indirizzo con yt-dlp e prende solo l'audio.
+    // `_codaWeb` è la coda `[{url, titolo}]`, `_webIndice` il brano in onda;
+    // avanti e indietro la percorrono, e a fine brano si passa al successivo.
+
+    property var _codaWeb: []
+    property int _webIndice: 0
+    readonly property bool webInOnda: finestra._codaWeb.length > 0
+
+    function riproduciWeb(lista, i) {
+        var coda = (lista || []).filter(function (v) {
+            return v && /^https:\/\//.test(String(v.url)) && v.tipo !== "playlist";
+        }).map(function (v) { return { url: String(v.url), titolo: String(v.titolo || "") }; });
+        if (coda.length === 0)
+            return;
+        // `i` conta sulla lista ricevuta: si ritrova la stessa voce nella coda filtrata.
+        var scelto = lista[Math.max(0, Math.min(i || 0, lista.length - 1))];
+        var dove = 0;
+        for (var k = 0; k < coda.length; k++)
+            if (scelto && coda[k].url === String(scelto.url)) { dove = k; break; }
+        finestra.radioInOnda = "";
+        finestra.tvInOnda = "";
+        finestra._percorsoCorrente = "";
+        finestra._codaWeb = coda;
+        finestra._suonaWeb(dove);
+    }
+
+    function _suonaWeb(i, riprova) {
+        if (i < 0 || i >= finestra._codaWeb.length)
+            return;
+        if (!riprova)
+            finestra._webTentativi = 0;
+        finestra._webIndice = i;
+        finestra._titoloCorrente = finestra._codaWeb[i].titolo;
+        player.source = finestra._codaWeb[i].url;
+        player.play();
+    }
+
+    // YouTube a volte rifiuta (403) il flusso appena ottenuto: in una prova
+    // su cinque il brano restava fermo con «no audio or video data played»
+    // (19 ottobre). Ogni tentativo chiede a yt-dlp un indirizzo nuovo: due
+    // tentativi, poi si passa al brano dopo. La sorgente passa dal vuoto
+    // perché rimettere lo stesso indirizzo non è un cambiamento.
+    property int _webTentativi: 0
+    function _webRecupera() {
+        if (!finestra.webInOnda || player.errorString === "")
+            return;
+        if (finestra._webTentativi < 2) {
+            finestra._webTentativi++;
+            player.source = "";
+            finestra._suonaWeb(finestra._webIndice, true);
+        } else if (finestra._webIndice + 1 < finestra._codaWeb.length) {
+            finestra._suonaWeb(finestra._webIndice + 1);
+        }
+    }
+
+    /// Una playlist dei risultati: la si apre, e appena arrivano i brani si
+    /// comincia dal primo.
+    property bool _ascoltaAppenaAperta: false
+    function ascoltaPlaylist(url) {
+        finestra._ascoltaAppenaAperta = true;
+        finestra.apriPlaylist(url);
+    }
+
+    // ── La TV ────────────────────────────────────────────────────────────
+    //
+    // Come la radio: un canale è un brano senza fine. Ogni canale del
+    // catalogo può avere più sorgenti (fino a otto): se una non trasmette si
+    // passa da sola alla successiva, e solo quando sono finite lo si dice.
+
+    property string tvInOnda: ""
+    property var _tvSorgenti: []
+    property int _tvSorgente: 0
+
+    function riproduciTv(canale) {
+        if (!canale)
+            return;
+        var lista = (canale.sorgenti && canale.sorgenti.length ? canale.sorgenti : [canale.url])
+            .filter(function (u) { return /^https?:\/\//.test(String(u)); });
+        if (lista.length === 0)
+            return;
+        finestra._percorsoCorrente = "";
+        finestra.radioInOnda = "";
+        finestra._codaWeb = [];
+        finestra._titoloCorrente = canale.nome;
+        finestra.tvInOnda = canale.id;
+        finestra._tvSorgenti = lista;
+        finestra._tvSorgente = 0;
+        player.source = lista[0];
+        player.play();
+    }
+
+    Connections {
+        target: player
+        function onErrorStringChanged() {
+            if (finestra.webInOnda && player.errorString !== "") {
+                Qt.callLater(finestra._webRecupera);
+                return;
+            }
+            if (finestra.tvInOnda === "" || player.errorString === "")
+                return;
+            if (finestra._tvSorgente + 1 >= finestra._tvSorgenti.length)
+                return;
+            // Dopo, non qui: cambiare sorgente dentro la notifica dell'errore
+            // azzera l'errore mentre QML sta ancora consegnando quello vecchio,
+            // e il legame `errorString` restava fermo su «loading failed»
+            // anche col canale in onda.
+            Qt.callLater(finestra._tvProssimaSorgente);
+        }
+    }
+
+    function _tvProssimaSorgente() {
+        if (finestra.tvInOnda === "" || player.errorString === ""
+                || finestra._tvSorgente + 1 >= finestra._tvSorgenti.length)
+            return;
+        finestra._tvSorgente++;
+        player.source = finestra._tvSorgenti[finestra._tvSorgente];
+        player.play();
+    }
+
     /// Il brano è finito da sé. Qui «ripeti uno» conta.
     function _finito() {
+        // Un canale TV che «finisce» è uno stream caduto: niente scaletta.
+        if (finestra.tvInOnda !== "")
+            return;
         // Una radio «finisce» quando lo stream cade: passare al brano
         // successivo della scaletta farebbe partire la musica di qualcun
         // altro al posto della radio. Ci si ferma, e la pagina Radio lo dice.
         if (finestra.radioInOnda !== "")
             return;
+        if (finestra.webInOnda) {
+            if (finestra.ripeti === "uno") {
+                player.seek(0);
+                player.play();
+            } else if (finestra._webIndice + 1 < finestra._codaWeb.length) {
+                finestra._suonaWeb(finestra._webIndice + 1);
+            } else if (finestra.ripeti === "tutto") {
+                finestra._suonaWeb(0);
+            }
+            return;
+        }
         if (finestra.ripeti === "uno" && finestra._percorsoCorrente !== "") {
-            player.position = 0;
+            player.seek(0);
             player.play();
             return;
         }
@@ -567,6 +962,11 @@ FloatingWindow {
     }
 
     function precedente() {
+        if (finestra.webInOnda) {
+            if (finestra._webIndice > 0)
+                finestra._suonaWeb(finestra._webIndice - 1);
+            return;
+        }
         var i = finestra._indiceInPlaylist(finestra._percorsoCorrente);
         if (i > 0)
             finestra.riproduciFile(playlist.get(i - 1).percorso,
@@ -577,12 +977,10 @@ FloatingWindow {
         if (!finestra.haVideo || pip.attivo)
             return;
         pip.attivo = true;
-        player.videoOutput = pip.uscita;
     }
 
     function chiudiPip() {
         pip.attivo = false;
-        player.videoOutput = videoPrincipale;
     }
 
     function condividiFile(percorso) {
@@ -611,6 +1009,8 @@ FloatingWindow {
     }
 
     function _riempiEsplora(file) {
+        // La cartella si è aperta: è una di quelle da ritrovare.
+        finestra._ricordaCartella(finestra.cartellaEsplorata);
         esplora.clear();
         for (var i = 0; i < file.length; i++) {
             var p = file[i];
@@ -640,6 +1040,7 @@ FloatingWindow {
             finestra.pagina = 0;
         } else {
             finestra.cartellaEsplorata = p;
+            campoCartella.text = p;
             finestra.pagina = 3;
             backend.elencoCartella(p);
         }
@@ -654,8 +1055,10 @@ FloatingWindow {
 
     /// Chiusa, mette via le sue cose: la musica si ferma e si riparte puliti.
     function addormenta() {
+        finestra.nellaBarra = false;
         player.stop();
         player.source = "";
+        finestra.tvInOnda = "";
         finestra._percorsoCorrente = "";
         finestra._titoloCorrente = "";
         finestra._ondaPercorso = "";
@@ -672,6 +1075,8 @@ FloatingWindow {
     }
 
     Component.onCompleted: {
+        player.mostraIn(finestra.postoVideo);
+        finestra._creaMpris();
         backend.elencoPlaylist();
         if (finestra.initialPath)
             finestra.apriPercorso(finestra.initialPath);
@@ -740,7 +1145,7 @@ FloatingWindow {
         if (!p || !finestra._accettabile(p))
             return;
         player.source = "file://" + p;
-        player.position = Math.round(finestra._secondiDaPx(finestra._inizioPx) * 1000);
+        player.seek(Math.round(finestra._secondiDaPx(finestra._inizioPx) * 1000));
         player.play();
         spiaAnteprima.restart();
     }
@@ -789,7 +1194,11 @@ FloatingWindow {
         anchors.left: parent.left
         anchors.right: parent.right
         label: finestra.title
-        onCloseRequested: finestra.requestClose()
+        onCloseRequested: finestra.chiudiRichiesto()
+        // Con qualcosa nel lettore «riduci» porta Media nella barra di
+        // sistema e la musica continua; senza, è un riduci come gli altri.
+        minimizzaDaSe: finestra.haQualcosa
+        onMinimizzaRichiesto: finestra.mettiNellaBarra()
     }
 
     // ── La colonna di sinistra ───────────────────────────────────────────
@@ -837,6 +1246,7 @@ FloatingWindow {
             VoceLaterale { icona: "download"; testo: "Download"; pagina: 2 }
             VoceLaterale { icona: "folder"; testo: "Esplora"; pagina: 3 }
             VoceLaterale { icona: "radio"; testo: "Radio"; pagina: 4 }
+            VoceLaterale { icona: "screen"; testo: "TV"; pagina: 5 }
         }
     }
 
@@ -874,10 +1284,26 @@ FloatingWindow {
                 color: Theme.Colors.sunken
                 clip: true
 
-                VideoOutput {
+                Item {
                     id: videoPrincipale
                     anchors.fill: parent
                     visible: finestra.haVideo && !pip.attivo
+                    // Gli angoli tondi della zona: `clip` taglia solo a
+                    // rettangolo, e il video li copriva.
+                    layer.enabled: visible && zonaVideo.radius > 0
+                    layer.effect: MultiEffect {
+                        maskEnabled: true
+                        maskSource: mascheraVideo
+                        maskThresholdMin: 0.5
+                        maskSpreadAtMin: 1.0
+                    }
+                }
+                Item {
+                    id: mascheraVideo
+                    anchors.fill: parent
+                    visible: false
+                    layer.enabled: true
+                    Rectangle { anchors.fill: parent; radius: zonaVideo.radius; color: "black" }
                 }
 
                 // ── A schermo intero i comandi erano SPARITI ─────────────
@@ -1013,7 +1439,7 @@ FloatingWindow {
                             onMoved: function (v) { finestra.cercando = true; }
                             onReleased: function (v) {
                                 finestra.cercando = false;
-                                player.position = v;
+                                player.seek(v);
                                 finestra.progresso = v;
                             }
                         }
@@ -1053,7 +1479,7 @@ FloatingWindow {
                 // Il vuoto: nessun file ancora.
                 Item {
                     anchors.centerIn: parent
-                    visible: finestra._percorsoCorrente === ""
+                    visible: !finestra.haQualcosa
                     width: 240
                     height: 90
                     Ui.Icon {
@@ -1255,7 +1681,7 @@ FloatingWindow {
                     }
                     onReleased: function (v) {
                         finestra.cercando = false;
-                        player.position = v;
+                        player.seek(v);
                         finestra.progresso = v;
                     }
                 }
@@ -1286,7 +1712,7 @@ FloatingWindow {
                 TastoPlay {
                     suonando: player.playing
                     onPremuto: {
-                        if (!finestra._percorsoCorrente)
+                        if (!finestra.haQualcosa)
                             return;
                         if (player.playing)
                             player.pause();
@@ -1803,27 +2229,37 @@ FloatingWindow {
 
                     Ui.Campo {
                         id: campoUrl
-                        width: parent.width - 120
+                        width: parent.width - openListButton.width - startDownloadButton.width - parent.spacing * 2
+                        // Non solo YouTube: yt-dlp riconosce migliaia di siti
+                        // e prova un estrattore generico sugli altri. Provati il
+                        // 18 ottobre: archive.org, SoundCloud, BitChute sì;
+                        // Vimeo ormai chiede di entrare con un account.
                         segnaposto: Core.Strings.lang === "it"
-                                    ? "Indirizzo del video…"
-                                    : "Video address…"
+                                    ? "Indirizzo di un video o di un brano, da qualunque sito…"
+                                    : "Address of a video or song, from any site…"
                         onAccettato: finestra._scaricaDaCampo()
                     }
                     TastoTesto {
+                        id: openListButton
+                        testo: Core.Strings.lang === "it" ? "Apri elenco" : "View items"
+                        attivo: !backend.cercando
+                        onPremuto: finestra.apriPlaylist(campoUrl.text)
+                    }
+                    TastoTesto {
+                        id: startDownloadButton
                         testo: Core.Strings.lang === "it" ? "Scarica" : "Download"
                         accento: true
-                        attivo: !backend.scaricando
                         onPremuto: finestra._scaricaDaCampo()
                     }
                 }
 
-                // La scelta del formato.
-                Row {
+                // La scelta del formato si adatta anche alla larghezza minima.
+                Flow {
                     width: parent.width
                     spacing: Theme.Effects.space2
 
                     TastoTesto {
-                        testo: "Audio MP3"
+                        testo: "Audio"
                         accento: !finestra._tipoVideo
                         onPremuto: finestra._tipoVideo = false
                     }
@@ -1832,12 +2268,31 @@ FloatingWindow {
                         accento: finestra._tipoVideo
                         onPremuto: finestra._tipoVideo = true
                     }
+                    Repeater {
+                        model: finestra._tipoVideo ? [(Core.Strings.lang === "it" ? "Massima" : "Best"),"1080p","720p","480p"] : ["mp3","m4a","opus"]
+                        delegate: TastoTesto {
+                            required property string modelData
+                            testo: modelData.toUpperCase()
+                            accento: finestra._tipoVideo ? finestra._altezzaVideo === (parseInt(modelData) || 0) : finestra._formatoAudio === modelData
+                            onPremuto: {
+                                if(finestra._tipoVideo) finestra._altezzaVideo=parseInt(modelData) || 0;
+                                else finestra._formatoAudio=modelData;
+                            }
+                        }
+                    }
+                    TastoTesto {
+                        testo: Core.Strings.lang === "it" ? "Playlist intera" : "Entire playlist"
+                        accento: finestra._playlistDownload
+                        onPremuto: finestra._playlistDownload = !finestra._playlistDownload
+                    }
+
                 }
 
                 Text {
                     width: parent.width
                     visible: finestra._statoDownload !== ""
                     text: finestra._statoDownload
+                    textFormat: Text.PlainText
                     elide: Text.ElideRight
                     font { family: Theme.Typography.fontDisplay
                            ; pixelSize: Theme.Typography.sizeSM }
@@ -1846,20 +2301,34 @@ FloatingWindow {
                 }
             }
 
+            DownloadJobs {
+                id: queuePanel
+                anchors {left:parent.left;right:parent.right;top:colonnaIndirizzo.bottom;topMargin:8}
+                height:implicitHeight
+                jobs:backend.lavori
+                onCancelRequested:function(jobId) {backend.annulla(jobId);}
+                onClearRequested:backend.pulisciLavori()
+            }
+
             // La ricerca.
             Row {
                 id: rigaRicerca
                 anchors { left: parent.left; right: parent.right
-                           top: colonnaIndirizzo.bottom; topMargin: Theme.Effects.space5 }
+                           top: queuePanel.bottom; topMargin: Theme.Effects.space5 }
                 spacing: Theme.Effects.space2
 
                 Ui.Campo {
                     id: campoRicerca
-                    width: parent.width - 120
+                    width: parent.width - 220
                     segnaposto: Core.Strings.lang === "it"
                                 ? "Cerca su YouTube…"
                                 : "Search YouTube…"
                     onAccettato: finestra._cerca()
+                }
+                TastoTesto {
+                    testo: finestra._cercaPlaylist ? "Playlist" : "Video"
+                    accento: finestra._cercaPlaylist
+                    onPremuto: finestra._cercaPlaylist=!finestra._cercaPlaylist
                 }
                 TastoTesto {
                     testo: Core.Strings.lang === "it" ? "Cerca" : "Search"
@@ -1873,13 +2342,38 @@ FloatingWindow {
                            top: rigaRicerca.bottom; topMargin: Theme.Effects.space2 }
                 visible: finestra._statoRicerca !== ""
                 text: finestra._statoRicerca
+                textFormat: Text.PlainText
                 font { family: Theme.Typography.fontDisplay
                        ; pixelSize: Theme.Typography.sizeSM }
                 color: Theme.Colors.textFaint
             }
 
+            PlaylistPicker {
+                anchors {left:parent.left;right:parent.right;top:rigaRicerca.bottom;topMargin:32;bottom:parent.bottom}
+                visible: backend.elencoMedia.tipo === "playlist"
+                info: backend.elencoMedia
+                errorText: backend.ultimoErrore
+                busy: backend.cercando
+                onMoreRequested: backend.altriElementi()
+                onDownloadRequested: function(indices) {
+                    backend.scaricaSelezione(indices,finestra._tipoVideo,finestra._formatoAudio,finestra._altezzaVideo);
+                }
+                canGoBack: finestra._ultimaRicerca !== null
+                onBackRequested: finestra.tornaAiRisultati()
+                onListenRequested: function(voci, i) { finestra.riproduciWeb(voci, i); }
+                onDownloadAllRequested: {
+                    var u = backend.elencoMedia.url || "";
+                    if (u === "")
+                        return;
+                    if (finestra._tipoVideo)
+                        backend.scaricaVideo(u, true, finestra._altezzaVideo);
+                    else
+                        backend.scaricaAudio(u, true, finestra._formatoAudio);
+                }
+            }
             // I risultati della ricerca.
             Ui.Scorrimento {
+                visible: elencoRisultati.visible
                 bersaglio: elencoRisultati
                 anchors {
                     right: elencoRisultati.right
@@ -1890,6 +2384,7 @@ FloatingWindow {
 
             ListView {
                 id: elencoRisultati
+                visible: backend.elencoMedia.tipo !== "playlist"
                 cacheBuffer: 400
                 anchors { left: parent.left; right: parent.right
                            top: rigaRicerca.bottom; topMargin: 56
@@ -1904,10 +2399,43 @@ FloatingWindow {
                     durata: model.durata
                     miniatura: model.miniatura
                     url: model.url
-                    onScaricaAudio: backend.scaricaAudio(model.url)
-                    onScaricaVideo: backend.scaricaVideo(model.url)
+                    playlistResult: model.tipo === "playlist"
+                    onApriPlaylist: finestra.apriPlaylist(model.url)
+                    onAscolta: {
+                        if (model.tipo === "playlist") {
+                            finestra.ascoltaPlaylist(model.url);
+                            return;
+                        }
+                        // Come YouTube: dopo questo, i risultati che seguono.
+                        var lista = [];
+                        for (var i = 0; i < risultati.count; i++)
+                            lista.push(risultati.get(i));
+                        finestra.riproduciWeb(lista, index);
+                    }
+                    onScaricaAudio: backend.scaricaAudio(model.url,model.tipo === "playlist",finestra._formatoAudio)
+                    onScaricaVideo: backend.scaricaVideo(model.url,model.tipo === "playlist",finestra._altezzaVideo)
                 }
             }
+        }
+
+        PaginaTv {
+            id: paginaTv
+            objectName: "mediaPaginaTv"
+            anchors.fill: parent
+            visible: finestra.pagina === 5
+            inOnda: finestra.tvInOnda
+            suona: finestra.tvInOnda !== "" && player.playing && player.position > 0
+            erroreLettore: finestra.tvInOnda !== "" && player.errorString !== ""
+                           && finestra._tvSorgente + 1 >= finestra._tvSorgenti.length
+                           ? player.errorString : ""
+            pieno: finestra.palcoPieno
+            inPip: pip.attivo
+            sorgente: finestra._tvSorgente + 1
+            sorgenti: finestra._tvSorgenti.length
+            onGuarda: function (canale) { finestra.riproduciTv(canale); }
+            onPienoRichiesto: finestra.alternaPalcoPieno()
+            onPipRichiesto: pip.attivo ? finestra.chiudiPip() : finestra.apriPip()
+            onPausaRichiesta: finestra.alternaRiproduzione()
         }
 
         PaginaRadio {
@@ -1916,8 +2444,8 @@ FloatingWindow {
             visible: finestra.pagina === 4
             inOnda: finestra.radioInOnda
             suona: finestra.radioInOnda !== ""
-                   && player.playbackState === MediaPlayer.PlayingState
-            erroreLettore: finestra.radioInOnda !== "" && player.error !== MediaPlayer.NoError
+                   && player.playing
+            erroreLettore: finestra.radioInOnda !== "" && player.errorString !== ""
                            ? player.errorString : ""
             onAscolta: function (stazione) { finestra.riproduciRadio(stazione); }
             onFerma: player.stop()
@@ -1935,13 +2463,17 @@ FloatingWindow {
 
                 Ui.Campo {
                     id: campoCartella
-                    width: parent.width - 120
+                    // Era `parent.width - 120`: due tasti non ci stanno in 120
+                    // pixel, e «Apri» finiva fuori dalla finestra.
+                    width: parent.width - tastoSfoglia.width - tastoApri.width
+                           - parent.spacing * 2
                     segnaposto: Core.Strings.lang === "it"
                                 ? "Percorso di una cartella…"
                                 : "Folder path…"
                     onAccettato: finestra._apriCartella()
                 }
                 TastoTesto {
+                    id: tastoSfoglia
                     testo: Core.Strings.lang === "it" ? "Sfoglia…" : "Browse…"
                     onPremuto: finestra.scegli(
                         "cartella",
@@ -1950,14 +2482,106 @@ FloatingWindow {
                         campoCartella.text)
                 }
                 TastoTesto {
+                    id: tastoApri
                     testo: Core.Strings.lang === "it" ? "Apri" : "Open"
                     onPremuto: finestra._apriCartella()
                 }
             }
 
-            Text {
+            // Le ultime cartelle aperte: un clic e si torna lì.
+            Flow {
+                id: rigaRecenti
                 anchors { left: parent.left; right: parent.right
                            top: rigaCartella.bottom; topMargin: Theme.Effects.space2 }
+                spacing: Theme.Effects.space1
+                visible: finestra.cartelleRecenti.length > 0
+                height: visible ? implicitHeight : 0
+
+                Text {
+                    height: 30
+                    verticalAlignment: Text.AlignVCenter
+                    text: Core.Strings.lang === "it" ? "Recenti" : "Recent"
+                    rightPadding: Theme.Effects.space1
+                    font { family: Theme.Typography.fontDisplay
+                           ; pixelSize: Theme.Typography.sizeSM
+                           ; weight: Theme.Typography.weightSemiBold }
+                    color: Theme.Colors.textFaint
+                }
+
+                Repeater {
+                    model: finestra.cartelleRecenti
+                    delegate: Rectangle {
+                        id: chip
+                        required property string modelData
+                        readonly property bool aperta: modelData === finestra.cartellaEsplorata
+                        height: 30
+                        width: Math.min(260, rigaChip.implicitWidth + Theme.Effects.space2 * 2)
+                        radius: height / 2
+                        color: chip.aperta ? Qt.alpha(Theme.Colors.accent, 0.30)
+                             : presaChip.pressed ? Theme.Colors.pressed
+                             : presaChip.containsMouse ? Theme.Colors.hover
+                             : Theme.Colors.raised
+                        border.width: chip.aperta ? 1 : 0
+                        border.color: Theme.Colors.accent
+
+                        MouseArea {
+                            id: presaChip
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: finestra.apriCartellaRecente(chip.modelData)
+                        }
+                        Row {
+                            id: rigaChip
+                            anchors.centerIn: parent
+                            spacing: 6
+                            Ui.Icon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 14; height: 14
+                                name: "folder"
+                                color: Theme.Colors.textMuted
+                            }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: Math.min(implicitWidth, 190)
+                                elide: Text.ElideMiddle
+                                text: finestra._basename(chip.modelData) || chip.modelData
+                                font { family: Theme.Typography.fontDisplay
+                                       ; pixelSize: Theme.Typography.sizeSM }
+                                color: Theme.Colors.text
+                            }
+                            // Toglie la cartella dall'elenco, non dal disco.
+                            Item {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 16; height: 16
+                                visible: presaChip.containsMouse || presaVia.containsMouse
+                                Ui.Icon {
+                                    anchors.centerIn: parent
+                                    width: 10; height: 10
+                                    name: "close"
+                                    color: presaVia.containsMouse ? Theme.Colors.text
+                                                                  : Theme.Colors.textFaint
+                                }
+                                MouseArea {
+                                    id: presaVia
+                                    anchors.fill: parent
+                                    anchors.margins: -4
+                                    hoverEnabled: true
+                                    onClicked: finestra._dimenticaCartella(chip.modelData)
+                                }
+                            }
+                        }
+                        Ui.ToolTipHint {
+                            shown: presaChip.containsMouse
+                            text: chip.modelData
+                        }
+                    }
+                }
+            }
+
+            Text {
+                id: testoStatoEsplora
+                anchors { left: parent.left; right: parent.right
+                           top: rigaRecenti.bottom; topMargin: Theme.Effects.space2 }
                 visible: finestra._statoEsplora !== ""
                 text: finestra._statoEsplora
                 font { family: Theme.Typography.fontDisplay
@@ -1979,7 +2603,7 @@ FloatingWindow {
                 id: elencoEsplora
                 cacheBuffer: 400
                 anchors { left: parent.left; right: parent.right
-                           top: rigaCartella.bottom; topMargin: 40
+                           top: rigaRecenti.bottom; topMargin: 40
                            bottom: parent.bottom }
                 clip: true
                 spacing: Theme.Effects.space1
@@ -2003,14 +2627,33 @@ FloatingWindow {
 
     // ── Le azioni delle pagine ───────────────────────────────────────────
 
+    function apriPlaylist(url) { backend.cerca(url,20); }
+
+    property var _ultimaRicerca: null
+    function tornaAiRisultati() {
+        finestra._ascoltaAppenaAperta = false;
+        var r = finestra._ultimaRicerca;
+        backend.elencoMedia = r || ({});
+        risultati.clear();
+        var voci = r && r.voci ? r.voci : [];
+        for (var i = 0; i < voci.length; i++)
+            risultati.append(voci[i]);
+    }
+
     function _scaricaDaCampo() {
         var u = String(campoUrl.text || "").trim();
         if (u === "")
             return;
+        // --no-playlist alone does not restrict a pure playlist URL in yt-dlp.
+        // Show its items unless the user explicitly chose the entire playlist.
+        if (!finestra._playlistDownload && /https:\/\/(www\.)?youtube\.com\/playlist\?/.test(u)) {
+            finestra.apriPlaylist(u);
+            return;
+        }
         if (finestra._tipoVideo)
-            backend.scaricaVideo(u);
+            backend.scaricaVideo(u,finestra._playlistDownload,finestra._altezzaVideo);
         else
-            backend.scaricaAudio(u);
+            backend.scaricaAudio(u,finestra._playlistDownload,finestra._formatoAudio);
     }
 
     function _cerca() {
@@ -2019,7 +2662,7 @@ FloatingWindow {
             return;
         finestra._statoRicerca = Core.Strings.lang === "it"
                                  ? "Cerco…" : "Searching…";
-        backend.cerca(q, 6);
+        backend.cerca(q, 20, finestra._cercaPlaylist);
     }
 
     function _apriCartella() {
@@ -2040,8 +2683,8 @@ FloatingWindow {
             var fine = finestra._secondiDaPx(finestra._finePx) * 1000;
             if (player.position >= fine) {
                 player.pause();
-                player.position = Math.round(
-                    finestra._secondiDaPx(finestra._inizioPx) * 1000);
+                player.seek(Math.round(
+                    finestra._secondiDaPx(finestra._inizioPx) * 1000));
                 spiaAnteprima.stop();
             }
         }
@@ -2102,6 +2745,124 @@ FloatingWindow {
     }
 
     /// Un pulsante con un'etichetta.
+    // ── La X mentre suona ────────────────────────────────────────────────
+
+    Rectangle {
+        id: domandaChiusura
+        visible: false
+        anchors.fill: parent
+        z: 1000
+        color: Qt.rgba(0, 0, 0, 0.55)
+        property bool ricorda: false
+
+        // Il velo prende i clic: dietro non si tocca niente.
+        MouseArea { anchors.fill: parent; onClicked: domandaChiusura.visible = false }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(440, parent.width - 48)
+            height: colonnaDomanda.implicitHeight + Theme.Effects.space5 * 2
+            radius: Theme.Effects.radiusLG
+            // Pieno: `raised` è un velo, e dietro il video si leggeva fra le righe.
+            color: Theme.Colors.window
+            border.color: Theme.Colors.edgeBright
+            MouseArea { anchors.fill: parent }
+
+            Column {
+                id: colonnaDomanda
+                anchors { left: parent.left; right: parent.right; top: parent.top
+                          margins: Theme.Effects.space5 }
+                spacing: Theme.Effects.space3
+
+                Text {
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    text: Core.Strings.lang === "it" ? "Media sta suonando" : "Media is playing"
+                    font { family: Theme.Typography.fontDisplay; pixelSize: Theme.Typography.sizeLG
+                           ; weight: Theme.Typography.weightSemiBold }
+                    color: Theme.Colors.text
+                }
+                Text {
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    text: Core.Strings.lang === "it"
+                          ? "Puoi chiuderlo, oppure tenerlo nella barra di sistema: la musica continua e la ritrovi dall'icona."
+                          : "You can close it, or keep it in the system tray: the music goes on and the icon brings it back."
+                    font { family: Theme.Typography.fontDisplay; pixelSize: Theme.Typography.sizeSM }
+                    color: Theme.Colors.textMuted
+                }
+                Item {
+                    // La presa sta fuori dalla Row: dentro, una MouseArea larga
+                    // quanto la Row la faceva ricalcolare all'infinito.
+                    width: rigaRicorda.width
+                    height: rigaRicorda.height
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.margins: -4
+                        onClicked: domandaChiusura.ricorda = !domandaChiusura.ricorda
+                    }
+                Row {
+                    id: rigaRicorda
+                    spacing: Theme.Effects.space2
+                    Rectangle {
+                        width: 18; height: 18; radius: 5
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: domandaChiusura.ricorda ? Theme.Colors.accent : "transparent"
+                        border.width: 1
+                        border.color: domandaChiusura.ricorda ? Theme.Colors.accent : Theme.Colors.textFaint
+                        Ui.Icon {
+                            anchors.centerIn: parent
+                            width: 12; height: 12
+                            visible: domandaChiusura.ricorda
+                            name: "check"
+                            color: Theme.Colors.textOnAccent
+                        }
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: Core.Strings.lang === "it" ? "Ricorda la scelta" : "Remember my choice"
+                        font { family: Theme.Typography.fontDisplay; pixelSize: Theme.Typography.sizeSM }
+                        color: Theme.Colors.text
+                    }
+                }
+                }
+                Text {
+                    width: parent.width
+                    wrapMode: Text.WordWrap
+                    visible: domandaChiusura.ricorda
+                    text: Core.Strings.lang === "it"
+                          ? "Si cambia dal menu dell'icona di Media nella barra di sistema."
+                          : "You can change it from Media's tray icon menu."
+                    font { family: Theme.Typography.fontDisplay; pixelSize: Theme.Typography.sizeXS }
+                    color: Theme.Colors.textFaint
+                }
+                Row {
+                    anchors.right: parent.right
+                    spacing: Theme.Effects.space2
+                    TastoTesto {
+                        testo: Core.Strings.lang === "it" ? "Chiudi Media" : "Close Media"
+                        onPremuto: {
+                            if (domandaChiusura.ricorda)
+                                Core.Ipc.setSetting("media.chiusura", "chiudi");
+                            domandaChiusura.visible = false;
+                            finestra.esci();
+                        }
+                    }
+                    TastoTesto {
+                        accento: true
+                        testo: Core.Strings.lang === "it" ? "Tieni nella barra" : "Keep in tray"
+                        onPremuto: {
+                            if (domandaChiusura.ricorda)
+                                Core.Ipc.setSetting("media.chiusura", "barra");
+                            domandaChiusura.visible = false;
+                            finestra.mettiNellaBarra();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     component TastoTesto: Item {
         property string testo: ""
         property bool accento: false
@@ -2113,6 +2874,8 @@ FloatingWindow {
         Rectangle {
             anchors.fill: parent
             radius: Theme.Effects.radiusSM
+            border.width: parent.accento ? 1 : 0
+            border.color: Theme.Colors.accent
             color: parent.accento
                    ? Qt.alpha(Theme.Colors.accent,
                               presaTasto.pressed ? 0.55 : 0.35)
@@ -2129,8 +2892,9 @@ FloatingWindow {
                    ; weight: Theme.Typography.weightSemiBold
                    ; capitalization: Font.AllUppercase }
             font.letterSpacing: Theme.Typography.trackingLabel
-            color: parent.accento
-                   ? Theme.Colors.textOnAccent : Theme.Colors.text
+            // The button uses a translucent accent over the window, so its
+            // foreground follows the window contrast, not an opaque accent.
+            color: Theme.Colors.text
         }
         MouseArea {
             id: presaTasto
@@ -2312,6 +3076,9 @@ FloatingWindow {
         property real durata: 0
         property string miniatura: ""
         property string url: ""
+        property bool playlistResult: false
+        signal apriPlaylist()
+        signal ascolta()
         signal scaricaAudio()
         signal scaricaVideo()
         width: parent ? parent.width : 0
@@ -2323,10 +3090,13 @@ FloatingWindow {
             color: presaRisultato.containsMouse ? Theme.Colors.hover : "transparent"
         }
 
+        // Doppio clic: una playlist si apre con tutti i suoi brani da
+        // scegliere, un video si ascolta.
         MouseArea {
             id: presaRisultato
             anchors.fill: parent
             hoverEnabled: true
+            onDoubleClicked: parent.playlistResult ? parent.apriPlaylist() : parent.ascolta()
         }
 
         Row {
@@ -2363,11 +3133,27 @@ FloatingWindow {
                     name: "music"
                     color: Theme.Colors.textFaint
                 }
+                // Il testo grigio «Playlist» sotto il titolo non si notava:
+                // l'etichetta sta sulla miniatura, nel colore d'accento.
+                Rectangle {
+                    objectName: "mediaEtichettaPlaylist"
+                    visible: parent.parent.parent.playlistResult
+                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                    height: 16
+                    color: Theme.Colors.accent
+                    Text {
+                        anchors.centerIn: parent
+                        text: "PLAYLIST"
+                        color: Theme.Colors.textOnAccent
+                        font { family: Theme.Typography.fontDisplay; pixelSize: 9
+                               ; weight: Theme.Typography.weightMedium; letterSpacing: 1 }
+                    }
+                }
             }
 
             Column {
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - 80 - 110 - Theme.Effects.space3 * 3
+                width: parent.width - 80 - 220 - Theme.Effects.space3 * 3
                 spacing: Theme.Effects.space1
 
                 Text {
@@ -2382,9 +3168,13 @@ FloatingWindow {
                 }
                 Text {
                     width: parent.width
-                    text: (parent.parent.parent.canale
-                           ? parent.parent.parent.canale + " · " : "")
-                          + finestra._tempo(parent.parent.parent.durata * 1000)
+                    // Una playlist non ha una durata: «0:00» la faceva
+                    // sembrare un brano vuoto (19 ottobre).
+                    readonly property var voce: parent.parent.parent
+                    text: (voce.playlistResult ? "Playlist" : "")
+                          + (voce.canale ? (voce.playlistResult ? " · " : "") + voce.canale : "")
+                          + (!voce.playlistResult && voce.durata > 0
+                             ? (voce.canale ? " · " : "") + finestra._tempo(voce.durata * 1000) : "")
                     elide: Text.ElideRight
                     font { family: Theme.Typography.fontMono
                            ; pixelSize: Theme.Typography.sizeXS }
@@ -2397,6 +3187,16 @@ FloatingWindow {
             anchors { right: parent.right; rightMargin: Theme.Effects.space2
                        verticalCenter: parent.verticalCenter }
             spacing: Theme.Effects.space1
+            TastoTesto {
+                visible: parent.parent.playlistResult
+                testo: Core.Strings.lang === "it" ? "Apri" : "Open"
+                onPremuto: parent.parent.apriPlaylist()
+            }
+            TastoRiga {
+                objectName: "mediaAscoltaRisultato"
+                icona: "play"
+                onPremuto: parent.parent.ascolta()
+            }
             TastoRiga {
                 icona: "music"
                 onPremuto: parent.parent.scaricaAudio()

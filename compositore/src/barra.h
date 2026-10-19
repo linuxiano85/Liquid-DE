@@ -2,7 +2,7 @@
 //
 // ── Perché è nata questa ─────────────────────────────────────────────────
 //
-// il manutentore, 19 agosto 2026, guardando la scrivania dentro minerva-wayland:
+// Il manutentore, 19 agosto 2026, guardando la scrivania dentro minerva-wayland:
 // «non vedo la barra del titolo o sbaglio?».
 //
 // Non sbagliava. Minerva sapeva disegnarla in due modi, e nessuno dei due

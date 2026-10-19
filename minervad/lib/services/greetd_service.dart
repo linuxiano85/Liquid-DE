@@ -114,6 +114,72 @@ class GreetdService {
   bool _closed = false;
   void Function()? onDisconnect;
 
+  // Static, bounded startup stages only. Never observe a supplied response,
+  // username, PAM text, socket path or command. Includes informational-message
+  // acknowledgements, and stops at the first interactive prompt or failure.
+  Stopwatch? _startupTraceClock;
+  bool _startupTraceUsed = false, _startupTraceStopped = false;
+  int _startupTraceRemaining = 64, _startupTraceExchange = 0;
+  String _startupTraceAttempt = 'unknown';
+  void Function(String)? _pendingStartupTrace;
+  Timer? _startupTraceHeartbeat;
+
+  void _stopStartupTrace() {
+    _startupTraceStopped = true;
+    _startupTraceHeartbeat?.cancel();
+  }
+
+  void Function(String)? _traceStartupRequest(Map<String, dynamic> message) {
+    if (Platform.environment['LIQUID_TRACE_STARTUP'] != '1' ||
+        socketDaUsare == null || _startupTraceStopped) {
+      return null;
+    }
+    final type = message['type'];
+    if (!_startupTraceUsed) {
+      if (type != 'create_session') return null;
+      _startupTraceUsed = true;
+      _startupTraceClock = Stopwatch()..start();
+      final attempt = Platform.environment['LIQUID_GREETER_ATTEMPT'] ?? '';
+      if (RegExp(r'^[0-9]+-[0-9]+$').hasMatch(attempt)) {
+        _startupTraceAttempt = attempt;
+      }
+    }
+    final String operation;
+    if (type == 'create_session') {
+      operation = 'create';
+    } else if (type == 'post_auth_message_response' &&
+        !message.containsKey('response')) {
+      operation = 'ack';
+    } else {
+      _stopStartupTrace();
+      return null;
+    }
+    final exchange = ++_startupTraceExchange;
+    return (stage) {
+      if (_startupTraceStopped || _startupTraceRemaining == 0) return;
+      _startupTraceRemaining--;
+      if (_startupTraceRemaining == 0) _startupTraceHeartbeat?.cancel();
+      try {
+        print('[LIQUID][GREETER-STARTUP] component=auth '
+            'attempt=$_startupTraceAttempt stage=auth.$operation.$stage '
+            'clock=realtime timestamp_ms=${DateTime.now().millisecondsSinceEpoch} '
+            'exchange=$exchange elapsed_clock=monotonic elapsed_us=${_startupTraceClock!.elapsedMicroseconds}');
+      } catch (_) {
+        // A failed diagnostic destination must not affect authentication.
+        _stopStartupTrace();
+      }
+    };
+  }
+
+  void _finishStartupTrace(Map<String, dynamic> reply) {
+    // Only informational messages can precede an input prompt without any
+    // credentials being supplied. Stop before the caller can enter input.
+    if (reply['type'] != 'auth_message' ||
+        !['info', 'error'].contains(reply['auth_message_type'])) {
+      _stopStartupTrace();
+    }
+  }
+
   static String? get percorsoSocket {
     final p = Platform.environment['GREETD_SOCK'];
     return p == null || p.isEmpty ? null : p;
@@ -132,18 +198,36 @@ class GreetdService {
     final pending = Completer<Map<String, dynamic>>();
     _pending = pending;
     final generation = _generation;
+    final trace = _traceStartupRequest(message);
+    _pendingStartupTrace = trace;
+    trace?.call('request.begin');
+    if (trace != null && !_startupTraceStopped && _startupTraceHeartbeat == null) {
+      // Sample only this isolate's pre-input responsiveness, never PAM data.
+      // Fifty ticks at most; stop even if the peer never answers. The overall
+      // diagnostic budget also includes these ticks and remains 64 records.
+      var ticks = 0;
+      _startupTraceHeartbeat = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+        if (_startupTraceStopped) { timer.cancel(); return; }
+        _pendingStartupTrace?.call('loop.tick');
+        if (++ticks >= 50) timer.cancel();
+      });
+    }
     final timer = Timer(responseTimeout, () => _fail('Tempo di risposta greetd scaduto'));
     // _send gestisce anche connect/flush falliti; nessun Future dimenticato.
-    unawaited(_send(message, pending, generation));
+    unawaited(_send(message, pending, generation, trace));
     try {
-      return await pending.future;
+      final reply = await pending.future;
+      trace?.call('request.settled');
+      if (trace != null) _finishStartupTrace(reply);
+      return reply;
     } finally {
       timer.cancel();
     }
   }
 
   Future<void> _send(Map<String, dynamic> message,
-      Completer<Map<String, dynamic>> pending, int generation) async {
+      Completer<Map<String, dynamic>> pending, int generation,
+      void Function(String)? trace) async {
     try {
       var socket = _socket;
       if (socket == null) {
@@ -160,6 +244,7 @@ class GreetdService {
           return;
         }
         _socket = socket;
+        trace?.call('socket.connected');
         // Il buffer appartiene al socket: i byte parziali muoiono con esso.
         final framer = GreetdFramer();
         final current = socket;
@@ -178,6 +263,8 @@ class GreetdService {
               return;
             }
             final waiting = _pending!;
+            _pendingStartupTrace?.call('reply.decoded');
+            _pendingStartupTrace = null;
             _pending = null;
             waiting.complete(reply);
           } catch (_) {
@@ -191,7 +278,9 @@ class GreetdService {
       }
       if (_closed || generation != _generation || !identical(_pending, pending)) return;
       socket.add(GreetdFramer.encode(message));
+      trace?.call('request.enqueued');
       await socket.flush();
+      trace?.call('request.flushed');
     } catch (_) {
       if (generation == _generation && identical(_pending, pending)) {
         _fail('Impossibile comunicare con greetd');
@@ -205,6 +294,7 @@ class GreetdService {
     _socket = null;
     socket?.destroy();
     final waiting = _pending;
+    _pendingStartupTrace = null;
     _pending = null;
     if (waiting != null && !waiting.isCompleted) waiting.complete(failure(description));
     onDisconnect?.call();
@@ -213,6 +303,7 @@ class GreetdService {
   Future<void> chiudi() async {
     if (_closed) return;
     _closed = true;
+    _stopStartupTrace();
     onDisconnect = null;
     _fail('Canale greetd chiuso');
   }

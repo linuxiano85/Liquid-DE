@@ -148,7 +148,7 @@ FloatingWindow {
 
     // ── Ritorno alla galleria ────────────────────────────────────────────
     //
-    // il manutentore, 6 ottobre 2026: aperta una foto, «cliccando su home» si deve
+    // Il manutentore, 6 ottobre 2026: aperta una foto, «cliccando su home» si deve
     // tornare alla panoramica di tutto il catalogo, e non c'era modo. Adesso
     // c'è il pulsante «Galleria» (Alt+Home), e Esc riporta indietro se alla
     // foto si era arrivati dalla galleria.

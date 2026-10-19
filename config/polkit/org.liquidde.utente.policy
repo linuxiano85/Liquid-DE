@@ -52,8 +52,8 @@
     <message>Authentication is required to change your password</message>
     <message xml:lang="it">Per cambiare la password serve quella attuale</message>
     <defaults>
-      <allow_any>auth_self_keep</allow_any>
-      <allow_inactive>auth_self_keep</allow_inactive>
+      <allow_any>auth_self</allow_any>
+      <allow_inactive>auth_self</allow_inactive>
       <allow_active>auth_self_keep</allow_active>
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/local/bin/liquid-de-utente</annotate>

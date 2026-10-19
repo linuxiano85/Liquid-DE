@@ -50,7 +50,7 @@ QtObject {
 
     // ── Le animazioni della SHELL, che l'interruttore non toccava ────────
     //
-    // il manutentore, 19 agosto 2026: spegnere le animazioni «non porta a nessun
+    // Il manutentore, 19 agosto 2026: spegnere le animazioni «non porta a nessun
     // cambiamento». Era vero: `Compositore.animazioni()` spegne quelle del
     // COMPOSITORE — finestre che si aprono, cambio scrivania — mentre i
     // pannelli, la dock e i menu li anima la shell con le durate di

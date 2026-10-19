@@ -57,6 +57,8 @@ class FinestreService {
   int _clienti = 0;
   bool _inLettura = false;
   bool _daRileggere = false;
+  bool _fermo = false;
+  Future<void>? _arresto;
 
   /// Vero quando l'ultima lettura non ha trovato nessuna finestra.
   bool _nessunaFinestra = false;
@@ -142,6 +144,7 @@ class FinestreService {
   /// collega qualcuno: un demone senza finestre di Minerva aperte non ha
   /// nessuno a cui raccontare dove sono le altre.
   void avvia() {
+    if (_fermo || _ascolto != null) return;
     _ascolto = _compositore.events.listen((e) {
       switch (e.type) {
         case CompositorEventType.windowOpened:
@@ -171,12 +174,14 @@ class FinestreService {
   /// un'ottimizzazione da poco: senza questo, un demone acceso a scrivania
   /// vuota interrogherebbe il compositore per sempre.
   void clienti(int quanti) {
+    if (_fermo) return;
     final prima = _clienti;
     _clienti = quanti;
 
     if (quanti > 0 && prima == 0) {
       _riprendi();
     } else if (quanti == 0) {
+      _daRileggere = false;
       _passo?.cancel();
       _passo = null;
       _calma?.cancel();
@@ -191,6 +196,7 @@ class FinestreService {
   /// delle finestre SUBITO, non al prossimo evento del compositore — e se sta
   /// aperto da solo su una scrivania ferma, il prossimo evento non arriva.
   Future<void> spingiTutto() async {
+    if (_fermo || _clienti == 0) return;
     _ultimeFinestre = '';
     _ultimiMonitor = '';
     _nessunaFinestra = false; // da riscoprire con la lettura qui sotto
@@ -199,13 +205,14 @@ class FinestreService {
   }
 
   void _prestoMa() {
+    if (_fermo || _clienti == 0) return;
     _attesa?.cancel();
     _attesa = Timer(const Duration(milliseconds: _attesaMs), spingiFinestre);
   }
 
   /// Interroga il compositore e manda il risultato se è diverso da prima.
   Future<void> spingiFinestre() async {
-    if (_clienti == 0) return;
+    if (_fermo || _clienti == 0) return;
 
     // Due letture che si accavallano direbbero la stessa cosa due volte, e
     // nell'ordine sbagliato: la seconda partita può rispondere prima.
@@ -232,6 +239,9 @@ class FinestreService {
     } finally {
       _inLettura = false;
     }
+    // Il compositore può rispondere dopo l'uscita dell'ultimo client o dopo
+    // ferma(): non pubblicare su stream chiusi né riarmare i timer.
+    if (_fermo || _clienti == 0) return;
     if (_daRileggere) {
       _daRileggere = false;
       scheduleMicrotask(spingiFinestre);
@@ -303,14 +313,16 @@ class FinestreService {
       json.replaceAll(_titoli, '"titolo": ""');
 
   Future<void> spingiMonitor() async {
-    if (_clienti == 0) return;
+    if (_fermo || _clienti == 0) return;
     final json = await _compositore.getMonitorsRaw();
+    if (_fermo || _clienti == 0) return;
     if (json.isEmpty || json == _ultimiMonitor) return;
     _ultimiMonitor = json;
     _monitor.add(json);
   }
 
   void _acceleraEAspetta() {
+    if (_fermo || _clienti == 0) return;
     if (!_veloce) {
       _veloce = true;
       _riprendi();
@@ -324,17 +336,28 @@ class FinestreService {
 
   void _riprendi() {
     _passo?.cancel();
-    if (_clienti == 0 || _nessunaFinestra) return;
+    if (_fermo || _clienti == 0 || _nessunaFinestra) return;
     _passo = Timer.periodic(
       Duration(milliseconds: _veloce ? _velocitaMs : _riposoMs),
       (_) => spingiFinestre(),
     );
   }
 
-  Future<void> ferma() async {
+  Future<void> ferma() {
+    // Chiusura terminale e sincrona delle ammissioni. Le letture già partite
+    // possono terminare, ma al ritorno scartano la risposta. Per riavviare il
+    // servizio serve una nuova istanza, come per i suoi stream.
+    if (_arresto != null) return _arresto!;
+    _fermo = true;
+    _clienti = 0;
+    _daRileggere = false;
     _attesa?.cancel();
     _passo?.cancel();
     _calma?.cancel();
+    return _arresto = _chiudiFlussi();
+  }
+
+  Future<void> _chiudiFlussi() async {
     await _ascolto?.cancel();
     await _finestre.close();
     await _monitor.close();

@@ -130,6 +130,22 @@ QtObject {
     onCorniceSpenteChanged: applySoon.restart()
     Component.onCompleted: applySoon.restart()
 
+    // Il primo snapshot è già coerente: non aspettare il debounce delle
+    // manopole e non inviare i valori provvisori prima di averlo ricevuto.
+    property Connections _inizioImpostazioni: Connections {
+        target:Ipc
+        function onImpostazioniArrivateChanged() {
+            if (Ipc.impostazioniArrivate) Qt.callLater(rules.write);
+        }
+    }
+    property Connections _inizioCompositore: Connections {
+        target:Compositore
+        function onCanaleApertoChanged() {
+            if (Compositore.canaleAperto && Ipc.impostazioniArrivate)
+                Qt.callLater(rules.write);
+        }
+    }
+
     property Timer _applySoon: Timer {
         id: applySoon
         // Le impostazioni arrivano dal demone una alla volta: si aspetta che
@@ -149,7 +165,7 @@ QtObject {
         //
         // Le regole restano LEGGIBILI da tutti: quello che si limita è chi
         // le SCRIVE.
-        if (!Compositore.scrivania)
+        if (!Compositore.scrivania || !Ipc.impostazioniArrivate)
             return;
         Compositore._nostro("focus-style",[focusBorder ? "1":"0",rgbaEsa(Theme.Colors.accent,1).substring(5,11),inactiveGray ? "1":"0"]);
         Compositore.coloriBordo(rules.borderActive);

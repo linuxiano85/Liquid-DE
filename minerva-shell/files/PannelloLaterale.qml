@@ -5,7 +5,7 @@ import "../ui" as Ui
 
 // PannelloLaterale — il riquadro dei dettagli e dell'anteprima, a destra.
 //
-// il manutentore, 11 ottobre 2026: il gestore file in modalità Windows deve avere
+// Il manutentore, 11 ottobre 2026: il gestore file in modalità Windows deve avere
 // il pannello che ha Esplora file di Windows 11 (Visualizza → Mostra →
 // Riquadro dettagli, Alt+Maiusc+P; Riquadro di anteprima, Alt+P).
 //

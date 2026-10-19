@@ -9,7 +9,7 @@ import ".." as S
 
 // Notifiche — Non disturbare, e cosa si vede sulla schermata di blocco.
 //
-// il manutentore, 23 settembre 2026: «ovviamente può essere personalizzabile e poter
+// Il manutentore, 23 settembre 2026: «ovviamente può essere personalizzabile e poter
 // nascondere per privacy parte della notifica, se mi arrivano mail mi dice
 // solo che ci sono ad esempio 3 email, tipo come gli smartphone, e dobbiamo
 // aggiungere la personalizzazione nelle impostazioni».

@@ -13,6 +13,27 @@ set -u
 MINERVA_DIR="${MINERVA_ROOT:?minerva-dentro-wayland: manca MINERVA_ROOT}"
 . "$MINERVA_DIR/scripts/minerva-cartelle.sh"
 
+# Traccia essenziale del percorso d'avvio; solo etichette statiche e clock
+# di boot, mai argomenti, impostazioni o credenziali. 0 la disabilita.
+# /proc/uptime include la sospensione e ha risoluzione di 10 ms: non va
+# sottratto direttamente ai timestamp CLOCK_MONOTONIC di altri registri.
+LIQUID_TRACE_STARTUP="${LIQUID_TRACE_STARTUP:-1}"
+export LIQUID_TRACE_STARTUP
+traccia_avvio() {
+    [ "$LIQUID_TRACE_STARTUP" = 1 ] || return 0
+    if IFS=' ' read -r _liquid_uptime _liquid_idle < /proc/uptime 2>/dev/null; then
+        case "$_liquid_uptime" in
+            ''|*[!0-9.]*|.*|*.|*.*.*) _liquid_uptime=unavailable ;;
+        esac
+    else
+        _liquid_uptime=unavailable
+    fi
+    # Questo processo eredita il registro del compositore, non la console.
+    printf '[LIQUID][SESSION-STARTUP] component=dentro pid=%s stage=%s clock=boottime resolution_ms=10 uptime_s=%s\n' \
+        "$$" "$1" "$_liquid_uptime" >&2
+}
+traccia_avvio inside.begin
+
 # ── PRIMA di ogni altra cosa: dire a D-Bus dove siamo ────────────────────
 #
 # I servizi che partono su richiesta — i portali, l'agente delle password, la
@@ -35,6 +56,7 @@ MINERVA_DIR="${MINERVA_ROOT:?minerva-dentro-wayland: manca MINERVA_ROOT}"
 # vera li perde senza un messaggio. Il controllo di `MINERVA_PROVA` stava più
 # sotto, dopo questa riga (trovato il 29 settembre 2026 preparando il giro di
 # prove sul PC di prova).
+traccia_avvio environment.begin
 if [ "${MINERVA_PROVA:-}" != "1" ]; then
     dbus-update-activation-environment --systemd \
         WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE PATH \
@@ -46,6 +68,7 @@ if [ "${MINERVA_PROVA:-}" != "1" ]; then
         XDG_DATA_DIRS XDG_DATA_HOME XDG_CONFIG_HOME \
         >/dev/null 2>&1
 fi
+traccia_avvio environment.end
 # `MINERVA_SESSIONE` e `XDG_SESSION_ID` dicono a chi parte da D-Bus a quale
 # demone parlare: senza, il gestore file avviato da «Mostra nella cartella» di
 # Chrome cercava il canale della sessione «unica», non trovava nessuno e
@@ -140,6 +163,7 @@ DI_PROVA="${MINERVA_PROVA:-}"
 # `start-minerva-wayland.sh`, la stessa trappola non ce l'ha: prova prima il
 # percorso che conosce e solo dopo chiede al PATH. Qui si fa uguale.
 mkdir -p "$CARTELLA_RUNTIME" 2>/dev/null
+traccia_avvio polkit.begin
 REGISTRO_PERMESSI="$CARTELLA_RUNTIME/permessi.log"
 AGENTE="$CARTELLA_BIN/minerva-polkit"
 [ -x "$AGENTE" ] || AGENTE="$(command -v minerva-polkit 2>/dev/null)"
@@ -171,6 +195,7 @@ if [ -z "${POLKIT_PID:-}" ] || ! kill -0 "$POLKIT_PID" 2>/dev/null; then
 fi
 
 # ── Il portachiavi, che nessuno avviava ───────────────────────────────────
+traccia_avvio polkit.end
 #
 # il manutentore, 8 settembre 2026, chiedendo di sincronizzare con GitHub dalla
 # Custodia: il gettone non si poteva nemmeno salvare. `secret-tool` rispondeva
@@ -198,6 +223,7 @@ fi
 # lo faceva nessuno, quindi quel processo restava appeso e se ne avviava un
 # secondo — due portachiavi in memoria, e il portafoglio che chiede la
 # password invece di aprirsi con quella dell'accesso (5 ottobre 2026).
+traccia_avvio secrets.begin
 if [ -n "${PAM_KWALLET5_LOGIN:-}" ] && [ -x /usr/lib/pam_kwallet_init ]; then
     /usr/lib/pam_kwallet_init >/dev/null 2>&1
     # Il nome sul bus lo prende appena ha letto l'ambiente: si aspetta al più
@@ -224,6 +250,7 @@ if ! busctl --user status org.freedesktop.secrets >/dev/null 2>&1; then
 fi
 
 # La storia degli appunti.
+traccia_avvio secrets.end
 wl-paste --watch cliphist store >/dev/null 2>&1 &
 
 # ── Il demone e la scrivania, coi loro guardiani ─────────────────────────
@@ -233,12 +260,16 @@ wl-paste --watch cliphist store >/dev/null 2>&1 &
 # shell, sparisce la scrivania. Tutti e due sono già successi.
 # Gli adattatori opzionali si attivano al nuovo accesso, prima della scansione
 # delle app. Una prova privata non modifica mai i launcher della sessione vera.
+traccia_avvio app_adapters.begin
 if [ "$DI_PROVA" != "1" ] && [ -f "$MINERVA_DIR/lib/minerva/libminervatiledheaders.so" ]; then
     python3 "$MINERVA_DIR/scripts/minerva-installa-app-tiling.py" || \
         echo "minerva: adattatori app non attivati; restano i launcher precedenti." >&2
 fi
+traccia_avvio app_adapters.end
+traccia_avvio guards.begin
 "$MINERVA_DIR/scripts/minerva-demone" >/dev/null 2>&1 &
 "$MINERVA_DIR/scripts/minerva-interfaccia" >/dev/null 2>&1 &
+traccia_avvio guards.dispatched
 
 # I programmi che l'utente ha chiesto all'avvio. Non in una prova: sarebbero
 # finestre che spuntano sulla scrivania di chi sta lavorando.
@@ -249,9 +280,12 @@ if [ "$DI_PROVA" != "1" ]; then
     # a niente. Se non è stato compilato, lo script esce senza fare danni.
     "$MINERVA_DIR/scripts/minerva-posta-demone" >/dev/null 2>&1 &
 fi
+traccia_avvio autostart.dispatched
 
 # Il gestore file tenuto pronto: 70 ms invece di 674 alla prima apertura.
 MINERVA_FILES_DORMIENTE=1 "$MINERVA_DIR/scripts/minerva-files" >/dev/null 2>&1 &
+traccia_avvio files.dispatched
+traccia_avvio startup.dispatched
 
 # ── E poi si resta ────────────────────────────────────────────────────────
 #

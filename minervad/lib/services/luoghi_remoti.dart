@@ -207,6 +207,20 @@ class LuoghiRemoti {
       final m = rigaMount.firstMatch(riga);
       if (m != null) {
         final uri = m.group(2)!;
+        final nome = m.group(1)!;
+        // gvfs elenca lo stesso telefono due volte: il montaggio del suo
+        // volume («Redmi Note 12 Pro+ 5G») e lo stesso visto dal demone di
+        // gvfs, che si chiama solo «mtp». Nella barra laterale erano due voci
+        // per un telefono (18 ottobre 2026). Una per indirizzo, col nome vero.
+        final doppione = montati.indexWhere(
+            (x) => _stessoLuogo(x['uri'] as String, uri));
+        if (doppione >= 0) {
+          if (_nomeDelloSchema(montati[doppione]['nome'] as String, uri) &&
+              !_nomeDelloSchema(nome, uri)) {
+            montati[doppione]['nome'] = nome;
+          }
+          continue;
+        }
         if (!uri.startsWith('file:')) {
           montati.add({
             'nome': m.group(1)!,
@@ -239,6 +253,11 @@ class LuoghiRemoti {
     }
     return fuori;
   }
+
+  /// «mtp» per `mtp://…`: il nome di ripiego di gvfs, non quello del
+  /// dispositivo.
+  static bool _nomeDelloSchema(String nome, String uri) =>
+      uri.startsWith('$nome:') || nome.isEmpty;
 
   static bool _stessoLuogo(String a, String b) {
     String senzaBarra(String s) =>
@@ -297,6 +316,45 @@ class LuoghiRemoti {
     String password = '',
     bool anonimo = false,
     bool fidati = false,
+  }) {
+    // ── Un collegamento alla volta per luogo ──────────────────────────
+    //
+    // Un telefono MTP ci mette secondi ad aprirsi, e nel frattempo la barra
+    // laterale non cambiava: si ricliccava. Ogni clic era un altro
+    // `gio mount`, e ogni `gio mount` un altro gvfsd-mtp che si contendeva
+    // lo stesso USB — «device is busy», reset del dispositivo, e il telefono
+    // non si apriva più finché non lo si staccava (18 ottobre 2026, otto
+    // montaggi insieme dello stesso realme). Chi chiede lo stesso luogo
+    // mentre è già in corso riceve la stessa risposta.
+    final chiave = '${normalizza(scritto) ?? scritto}\u0000$utente\u0000'
+        '$dominio\u0000$password\u0000$anonimo\u0000$fidati';
+    final inCorso = _collegamentiInCorso[chiave];
+    if (inCorso != null) return inCorso;
+    final nuovo = _collega(
+      scritto,
+      utente: utente,
+      dominio: dominio,
+      password: password,
+      anonimo: anonimo,
+      fidati: fidati,
+    ).whenComplete(() {
+      // Con la freccia `remove` restituirebbe questo stesso Future, e
+      // `whenComplete` lo aspetterebbe: non finirebbe mai.
+      _collegamentiInCorso.remove(chiave);
+    });
+    _collegamentiInCorso[chiave] = nuovo;
+    return nuovo;
+  }
+
+  final Map<String, Future<Map<String, dynamic>>> _collegamentiInCorso = {};
+
+  Future<Map<String, dynamic>> _collega(
+    String scritto, {
+    required String utente,
+    required String dominio,
+    required String password,
+    required bool anonimo,
+    required bool fidati,
   }) async {
     final uri = normalizza(scritto);
     if (uri == null) {
@@ -423,9 +481,15 @@ class LuoghiRemoti {
     try {
       codice = await p.exitCode.timeout(_attesaCollega);
     } on TimeoutException {
+      // Un telefono che non risponde non è un server lento: quasi sempre è
+      // bloccato, o aspetta che qualcuno tocchi «Consenti» sul suo schermo.
       ferma({
-        'error':
-            'Il server non ha risposto in ${_attesaCollega.inSeconds} secondi.',
+        'error': tipoDi(uri) == 'telefono'
+            ? 'Il telefono non ha risposto in ${_attesaCollega.inSeconds} '
+                  'secondi. Sbloccalo, scegli «Trasferimento file» e, se lo '
+                  'chiede, consenti l\'accesso ai dati. Se non basta, '
+                  'staccalo e riattaccalo.'
+            : 'Il server non ha risposto in ${_attesaCollega.inSeconds} secondi.',
       });
       codice = await p.exitCode;
     }

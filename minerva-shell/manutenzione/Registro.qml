@@ -7,7 +7,7 @@ import "../ui" as Ui
 //
 // ── Perché non basta una rotella che gira ──────────────────────────────────
 //
-// il manutentore, 8 settembre 2026: «mettiamoci barre di progresso e live log».
+// Il manutentore, 8 settembre 2026: «mettiamoci barre di progresso e live log».
 //
 // Una rotella dice «aspetta» e non dice altro: non dice a che punto è, non
 // dice cosa sta guardando, e soprattutto non dice niente **dopo**. Il

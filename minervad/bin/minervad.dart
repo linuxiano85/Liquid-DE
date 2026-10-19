@@ -14,9 +14,11 @@ import 'package:minervad/core/minerva_core.dart';
 /// niente**. Timer vivi, socket aperti, il file delle impostazioni magari a
 /// metà scrittura.
 ///
-/// Ora i gestori ci sono dal primo istante, e sanno distinguere i due casi:
-/// se l'avvio non è finito non si prova a fermare quello che non è ancora
-/// partito.
+/// I gestori vengono registrati prima dell'avvio. Un segnale attende che
+/// l'avvio termini prima di fermare i servizi, senza sovrapporre start/stop
+/// o dichiarare pronto il demone dopo che ne è stata chiesta la chiusura.
+/// Se l'avvio fallisce, l'uscita resta diversa da zero; il recupero delle
+/// risorse parzialmente inizializzate appartiene al contratto del Core.
 /// ── L'ultima rete, e perché non ingoia tutto ────────────────────────────────
 ///
 /// Il 31 agosto 2026 il demone è uscito con 255 quattro volte in quattro
@@ -65,37 +67,56 @@ Future<void> _avvia(List<String> arguments) async {
   }
 
   final core = MinervaCore();
-  var avviato = false;
+  final avvioTerminato = Completer<void>();
+  var avvioFallito = false;
   var inChiusura = false;
+  Future<void>? arresto;
+
+  // Signals and --test-start must share one stop operation, including errors.
+  Future<void> fermaUnaVolta() => arresto ??= core.stop();
 
   Future<void> chiudi(String segnale) async {
     if (inChiusura) return;
     inChiusura = true;
-    print('\n[MINERVA][DAEMON][INFO] Ricevuto $segnale. Arresto pulito...');
+    print('\n[MINERVA][DAEMON][INFO] Ricevuto $segnale. Arresto richiesto...');
+    await avvioTerminato.future;
+    if (avvioFallito) exit(1);
+    var risultato = 0;
     try {
-      if (avviato) {
-        await core.stop();
-      } else {
-        print('[MINERVA][DAEMON][INFO] L\'avvio non era finito: niente da '
-            'fermare.');
-      }
+      await fermaUnaVolta();
     } catch (e) {
       print('[MINERVA][DAEMON][ERRORE] Arresto non pulito: $e');
+      risultato = 1;
     }
-    exit(0);
+    exit(risultato);
   }
 
   ProcessSignal.sigint.watch().listen((_) => chiudi('SIGINT'));
   ProcessSignal.sigterm.watch().listen((_) => chiudi('SIGTERM'));
 
-  // Un test di avvio rapido: parte, respira, si ferma. Serve a sapere se il
-  // demone è sano senza lasciarlo acceso.
+  // One startup path for the session and the self-test. The completion signal
+  // never completes with an error: startup failures are logged and represented
+  // by avvioFallito, avoiding an unobserved Future error without a signal.
+  try {
+    await core.start();
+  } catch (e, dove) {
+    avvioFallito = true;
+    print('[MINERVA][DAEMON][ERRORE] minervad non è riuscito a partire: $e');
+    print(dove);
+  } finally {
+    avvioTerminato.complete();
+  }
+  if (avvioFallito) exit(1);
+  if (inChiusura) return;
+
+  // A real quick startup/shutdown check. A signal during the observation
+  // interval or stop takes ownership of exit and uses the same stop Future.
   if (arguments.contains('--test-start')) {
     try {
-      await core.start();
-      avviato = true;
-      await Future.delayed(const Duration(milliseconds: 100));
-      await core.stop();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (inChiusura) return;
+      await fermaUnaVolta();
+      if (inChiusura) return;
       print('[MINERVA][DAEMON][OK] minervad avviato in modalità test di '
           'autodiagnosi.');
       exit(0);
@@ -104,22 +125,6 @@ Future<void> _avvia(List<String> arguments) async {
       print(dove);
       exit(1);
     }
-  }
-
-  // ── Un guasto in avvio si dice, non si stampa e basta ────────────────────
-  //
-  // Senza questo, un errore usciva come «Unhandled exception» più venti righe
-  // di traccia: chi legge il registro vede un muro e non la frase che gli
-  // serve. La causa che capita davvero è una sola — la porta occupata — e il
-  // servizio la nomina già (vedi `WebSocketServer.start`). Qui si aggiunge
-  // solo l'uscita diversa da zero, che è quello che il guardiano guarda.
-  try {
-    await core.start();
-    avviato = true;
-  } catch (e, dove) {
-    print('[MINERVA][DAEMON][ERRORE] minervad non è riuscito a partire: $e');
-    print(dove);
-    exit(1);
   }
 
   print('[MINERVA][DAEMON][OK] minervad in esecuzione. Premi Ctrl+C per fermare.');

@@ -4,7 +4,7 @@ import "../core" as Core
 
 // Bluetooth — Il tabellone degli apparecchi accoppiati, con la loro batteria.
 //
-// il manutentore, 14 settembre 2026: «ne vorrei uno simile per il bluetooth con
+// Il manutentore, 14 settembre 2026: «ne vorrei uno simile per il bluetooth con
 // icone eccetera». In cima se il Bluetooth è acceso e quanti apparecchi sono
 // collegati; poi un apparecchio per riga — il simbolo della sua classe, il
 // nome, la batteria se la dice, e una parola.

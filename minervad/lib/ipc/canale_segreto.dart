@@ -208,6 +208,11 @@ class CanaleSegreto {
   /// senza quella riga il file nascerebbe leggibile da tutti — cioè il buco
   /// resterebbe aperto con un passaggio in più.
   static Future<String> scriviNuovo(
+      {String? percorsoFile, required String socket}) async =>
+      (await pubblicaNuovo(percorsoFile: percorsoFile, socket: socket)).segreto;
+
+  /// Per-instance publication ownership. scrittoIn remains diagnostic only.
+  static Future<PubblicazioneCanale> pubblicaNuovo(
       {String? percorsoFile, required String socket}) async {
     final lista = percorsoFile != null ? [percorsoFile] : candidati();
     if (lista.isEmpty) {
@@ -218,9 +223,9 @@ class CanaleSegreto {
     Object? ultimoGuaio;
     for (final path in lista) {
       try {
-        final segreto = await _scriviIn(path, socket);
+        final pubblicazione = await _scriviIn(path, socket);
         scrittoIn = path;
-        return segreto;
+        return pubblicazione;
       } catch (e) {
         // Si prova il posto dopo. Capita davvero dentro la schermata di
         // accesso: l'utente `greeter` può avere `XDG_RUNTIME_DIR` impostato su
@@ -302,15 +307,18 @@ class CanaleSegreto {
         'sessione tua con MINERVA_SESSIONE.');
   }
 
-  static Future<String> _scriviIn(String path, String socket) async {
+  static Future<bool> _directorySimboliche(Directory directory) async {
+    for (var d = directory.absolute; ; d = d.parent) {
+      if (await FileSystemEntity.type(d.path, followLinks: false) == FileSystemEntityType.link) return true;
+      if (d.path == d.parent.path) return false;
+    }
+  }
+
+  static Future<PubblicazioneCanale> _scriviIn(String path, String socket) async {
     final file = File(path);
     final cartella = file.parent;
-    // Non seguire né il nome del segreto né directory simboliche.
-    for (var d = cartella.absolute; ; d = d.parent) {
-      if (await FileSystemEntity.type(d.path, followLinks: false) == FileSystemEntityType.link) {
-        throw FileSystemException('Directory simbolica non ammessa per il segreto', d.path);
-      }
-      if (d.path == d.parent.path) break;
+    if (await _directorySimboliche(cartella)) {
+      throw FileSystemException('Directory simbolica non ammessa per il segreto', cartella.path);
     }
     final tipo = await FileSystemEntity.type(path, followLinks: false);
     if (tipo != FileSystemEntityType.notFound && tipo != FileSystemEntityType.file) {
@@ -327,20 +335,43 @@ class CanaleSegreto {
         ((await cartella.stat()).mode & 0x12) != 0) {
       throw FileSystemException('Il segreto richiede una directory privata del nostro utente', cartella.path);
     }
-    await _nonRubareIlPosto(path, socket);
-    final segreto = generaSegreto();
-    final staging = LinuxFiles.privateTemp(cartella, '.minerva-segreto-');
+    final directoryVersion = LinuxFiles.version(cartella.path);
+    final lease = await LinuxFiles.lockDirectory(cartella);
     try {
-      final pronto = File('${staging.path}/canale');
-      await pronto.writeAsString('');
-      await _permessi('600', pronto.path);
-      await pronto.writeAsString('socket=$socket\nsegreto=$segreto\n', flush: true);
-      // rename sostituisce il nome, non apre il suo eventuale bersaglio.
-      await pronto.rename(path);
+      if (await _directorySimboliche(cartella) ||
+          !directoryVersion.sameDirectoryAfterRemoval(LinuxFiles.version(cartella.path))) {
+        throw FileSystemException('Directory del canale cambiata', cartella.path);
+      }
+      final currentType = await FileSystemEntity.type(path, followLinks: false);
+      if (currentType != FileSystemEntityType.notFound && currentType != FileSystemEntityType.file) {
+        throw FileSystemException('Il segreto non è un file regolare', path);
+      }
+      await _nonRubareIlPosto(path, socket);
+      final segreto = generaSegreto();
+      final staging = LinuxFiles.privateTemp(cartella, '.minerva-segreto-');
+      try {
+        final pronto = File('${staging.path}/canale');
+        await pronto.writeAsString('');
+        await _permessi('600', pronto.path);
+        await pronto.writeAsString('socket=$socket\nsegreto=$segreto\n', flush: true);
+        await pronto.rename(path);
+        final version = LinuxFiles.version(path);
+        if (version.kind != 0x8000) {
+          throw FileSystemException('Pubblicazione del canale sostituita', path);
+        }
+        return PubblicazioneCanale._(path, socket, segreto, version, directoryVersion);
+      } finally {
+        try {
+          await staging.delete(recursive: true);
+        } catch (_) {
+          // A cleanup error must not turn a committed publication into a
+          // fallback publication at another path or hide the original failure.
+          print('[MINERVA][IPC][WARN] Temporaneo privato del canale non rimosso');
+        }
+      }
     } finally {
-      await staging.delete(recursive: true);
+      lease.release();
     }
-    return segreto;
   }
 
   /// Legge il file e ne tira fuori le coppie `chiave=valore`.
@@ -386,5 +417,60 @@ class CanaleSegreto {
       differenza |= a[i] ^ b[i];
     }
     return differenza == 0;
+  }
+}
+
+
+/// A lease for exactly one published file, not a global "last written" path.
+/// Writer/revoker coordinate on the parent-directory flock. External writers
+/// that ignore that lock are not covered by an atomic compare-and-unlink claim.
+final class PubblicazioneCanale {
+  PubblicazioneCanale._(this.percorso, this.socket, this.segreto,
+      this._version, this._directoryVersion);
+  final String percorso;
+  final String socket;
+  final String segreto;
+  final LinuxFileVersion _version;
+  final LinuxFileVersion _directoryVersion;
+  Future<bool>? _revocation;
+
+  Future<bool> revoca() => _revocation ??= _revoca();
+
+  Future<bool> _revoca() async {
+    final file = File(percorso);
+    final directory = file.parent;
+    if (await CanaleSegreto._directorySimboliche(directory) ||
+        !LinuxFiles.entryExists(directory.path) ||
+        !_directoryVersion.sameDirectoryAfterRemoval(LinuxFiles.version(directory.path))) {
+      return false;
+    }
+    final lease = await LinuxFiles.lockDirectory(directory);
+    try {
+      if (await CanaleSegreto._directorySimboliche(directory) ||
+          !_directoryVersion.sameDirectoryAfterRemoval(LinuxFiles.version(directory.path)) ||
+          !LinuxFiles.entryExists(percorso)) {
+        return false;
+      }
+      final current = LinuxFiles.version(percorso);
+      if (current.kind != 0x8000 || !_version.sameAs(current)) return false;
+      final source = LinuxFiles.pinRegularSource(percorso);
+      try {
+        if (!_version.sameAs(source.version)) return false;
+        final content = await File(source.descriptorPath).readAsString();
+        if (content != 'socket=$socket\nsegreto=$segreto\n') return false;
+      } finally {
+        source.close();
+      }
+      if (!_version.sameAs(LinuxFiles.version(percorso))) return false;
+      await file.delete();
+      try {
+        LinuxFiles.fsyncCartella(directory.path);
+      } catch (_) {
+        print('[MINERVA][IPC][WARN] Canale revocato; sincronizzazione directory non confermata');
+      }
+      return true;
+    } finally {
+      lease.release();
+    }
   }
 }

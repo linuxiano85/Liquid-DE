@@ -3402,8 +3402,26 @@ size_t wlr_minerva_lista_descrivi(struct wlr_scene_output *so, char *buf, size_t
 	size_t o = 0;
 	if (len == 0) return 0;
 	buf[0] = '\0';
-	struct render_list_entry *voci = so->render_list.data;
-	size_t n = so->render_list.size / sizeof(*voci);
+	// Una lista NUOVA, costruita adesso come la costruisce il disegno, e non
+	// `so->render_list`: quella è dell'ultimo fotogramma e tiene puntatori
+	// grezzi ai nodi. Un nodo distrutto fra un fotogramma e l'altro (il
+	// cartello) restava lì, e leggerlo era un use-after-free: il fuzzing del
+	// canale sotto ASan lo ha preso due volte su tre (19 ottobre).
+	int larghezza = 0, altezza = 0;
+	wlr_output_effective_resolution(so->output, &larghezza, &altezza);
+	struct wl_array lista;
+	wl_array_init(&lista);
+	struct render_list_constructor_data con = {
+		.box = { .x = so->x, .y = so->y, .width = larghezza, .height = altezza },
+		.render_list = &lista,
+		.calculate_visibility = so->scene->calculate_visibility,
+		.highlight_transparent_region = so->scene->highlight_transparent_region,
+		.fractional_scale = floor(so->output->scale) != so->output->scale,
+	};
+	scene_nodes_in_box(&so->scene->tree.node, &con.box,
+		construct_render_list_iterator, &con);
+	struct render_list_entry *voci = lista.data;
+	size_t n = lista.size / sizeof(*voci);
 	for (size_t i = 0; i < n && o + 1 < len; i++) {
 		struct wlr_scene_node *node = voci[i].node;
 		int w = 0, h = 0;
@@ -3427,5 +3445,6 @@ size_t wlr_minerva_lista_descrivi(struct wlr_scene_output *so, char *buf, size_t
 		if (k < 0) break;
 		o += (size_t)k < len - o ? (size_t)k : len - o - 1;
 	}
+	wl_array_release(&lista);
 	return o;
 }

@@ -142,28 +142,47 @@ Canvas {
             { f: 9, fase: 1.7, vel: 2.3, amp: 0.55, col: vis.tintaBassa, spessore: 2, alone: 2 },
             { f: 15, fase: 3.1, vel: 3.7, amp: 0.3, col: vis.tinta, spessore: 1.2, alone: 1 }
         ];
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
         for (var k = 0; k < strati.length; k++) {
             var s = strati[k];
-            ctx.beginPath();
-            // Un punto ogni cinque pixel invece che ogni tre: su una curva
-            // che oscilla quattro volte in tutta la larghezza, la differenza
-            // non si vede — e sono due punti su cinque in meno da unire.
-            for (var x = 0; x <= w; x += 5) {
-                var t = x / w;
-                var inv = 1 - Math.abs(t * 2 - 1);
-                var y = h / 2
-                        + Math.sin(t * Math.PI * s.f + vis.fase * s.vel + s.fase)
-                          * inv * amp * s.amp;
-                if (x === 0)
-                    ctx.moveTo(x, y);
-                else
-                    ctx.lineTo(x, y);
+            // L'inviluppo era un triangolo, `1 - |2t - 1|`: a metà larghezza
+            // l'onda più ampia (la celeste) faceva una punta invece di una
+            // pancia. Il seno sale e scende senza spigoli.
+            var punti = [];
+            for (var x = 0; x <= w + 4; x += 5) {
+                var xx = Math.min(x, w);
+                var t = xx / w;
+                var inv = Math.sin(Math.PI * t);
+                punti.push({ x: xx, y: h / 2
+                             + Math.sin(t * Math.PI * s.f + vis.fase * s.vel + s.fase)
+                               * inv * amp * s.amp });
+                if (xx === w)
+                    break;
             }
+            vis._curva(ctx, punti);
             vis._ripassa(ctx, s.col, s.spessore, s.alone);
             ctx.lineWidth = s.spessore;
             ctx.strokeStyle = Qt.alpha(s.col, 0.9 - k * 0.25);
             ctx.stroke();
         }
+    }
+
+    /// Una curva liscia per [punti]: si va da un punto medio al successivo
+    /// usando il punto vero come guida. Segmenti dritti fra punti a cinque
+    /// pixel facevano gomiti visibili sulle creste più alte.
+    function _curva(ctx, punti) {
+        ctx.beginPath();
+        if (punti.length === 0)
+            return;
+        ctx.moveTo(punti[0].x, punti[0].y);
+        for (var i = 1; i < punti.length - 1; i++) {
+            var mx = (punti[i].x + punti[i + 1].x) / 2;
+            var my = (punti[i].y + punti[i + 1].y) / 2;
+            ctx.quadraticCurveTo(punti[i].x, punti[i].y, mx, my);
+        }
+        var u = punti[punti.length - 1];
+        ctx.lineTo(u.x, u.y);
     }
 
     // ── Radiale: raggi intorno a un centro ────────────────────────────────

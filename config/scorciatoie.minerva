@@ -35,7 +35,8 @@
 #
 #  Tolte: Super Spazio, Super / e F1 (doppioni: F1 torna ai programmi),
 #  Super W, Super M, Super H, Super Maiusc C, Super Ctrl + frecce per
-#  ridimensionare (si trascina il bordo), Super S, Super Maiusc Q (uscire
+#  ridimensionare (si trascina il bordo; Super Ctrl ↑/↓ ora ingrandiscono e
+#  ripristinano il riquadro in tiling), Super S, Super Maiusc Q (uscire
 #  solo dal Centro, tenendo premuto), Super Maiusc E, Super Maiusc R,
 #  Super T (il gestore attività è Ctrl Maiusc Esc), Super Maiusc P.
 # ═══════════════════════════════════════════════════════════════════════════
@@ -335,10 +336,14 @@ $mod CTRL SHIFT up -> tiling-sposta: u
 @ Tiling | Scambia la finestra con quella sotto
 $mod CTRL SHIFT down -> tiling-sposta: d
 
+# Con Super davanti: Ctrl+↑ e Ctrl+↓ da soli sono degli editor (scorrere,
+# saltare di paragrafo) e in tiling li prendeva il compositore (19 ottobre).
+# Super+Ctrl+frecce era libera da quando il ridimensionamento a tastiera è
+# stato tolto (vedi in cima).
 @ Tiling | Ingrandisci la finestra
-CTRL up -> tiling-ingrandisci: si
+$mod CTRL up -> tiling-ingrandisci: si
 @ Tiling | Ripristina il riquadro
-CTRL down -> tiling-ingrandisci: no
+$mod CTRL down -> tiling-ingrandisci: no
 @ Tiling | Scambia con la finestra a sinistra
 $mod CTRL SHIFT left -> tiling-sposta: l
 @ Tiling | Scambia con la finestra a destra

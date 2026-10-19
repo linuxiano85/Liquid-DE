@@ -193,7 +193,7 @@ String famigliaDi(String nome, String? percorso) {
 
 // ── Le scorte ───────────────────────────────────────────────────────────
 //
-// il manutentore, 30 settembre 2026: il kernel deve tenere «solamente i moduli ad
+// Il manutentore, 30 settembre 2026: il kernel deve tenere «solamente i moduli ad
 // esempio per leggere tutti i vari file system disponibili, controller di
 // gioco».
 //
@@ -656,7 +656,7 @@ const List<Impostazione> ltoNessuno = [
 
 // ── Su misura dentro il kernel ──────────────────────────────────────────
 //
-// il manutentore, 1° ottobre 2026: «kernel mai visti prima per precisione di
+// Il manutentore, 1° ottobre 2026: «kernel mai visti prima per precisione di
 // personalizzazione su misura del PC». `localmodconfig` lavora solo sui
 // moduli; queste regole toccano quello che sta DENTRO il kernel, e ognuna
 // viene da una misura fatta sulla macchina nel rilievo.

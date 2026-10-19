@@ -6,7 +6,7 @@ import "../ui" as Ui
 // Cerca, come l'ultima Windows 11 (aggiornamento di settembre 2026,
 // KB5120998 → Patch Tuesday dell'8 settembre: «Refined Windows Search»).
 //
-// il manutentore, 11 ottobre 2026: «quando la premo si vede una lampadina e un
+// Il manutentore, 11 ottobre 2026: «quando la premo si vede una lampadina e un
 // ingranaggio in basso e sono per metà fuori dalla scheda cerca e non sono
 // cliccabili, e si deve vedere se è coerente con Windows». Non lo era più:
 // Windows ha tolto dalla pagina iniziale le app principali e le ricerche

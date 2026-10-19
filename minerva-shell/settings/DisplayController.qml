@@ -298,7 +298,7 @@ Item {
 
     // ── Gli schermi, come si vedono ──────────────────────────────────────
     //
-    // il manutentore, 22 settembre 2026: «se ho collegati uno o più monitor esterni
+    // Il manutentore, 22 settembre 2026: «se ho collegati uno o più monitor esterni
     // la pagina diventa molto lunga, quindi vorrei come KDE dei monitor in
     // alto e cliccando su quel monitor vedere tutte le sue opzioni». Prima
     // c'era un riquadro per schermo, uno sotto l'altro, con tutte le

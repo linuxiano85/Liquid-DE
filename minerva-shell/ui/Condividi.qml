@@ -5,7 +5,7 @@ import "." as Ui
 
 // Condividi — «mandalo fuori di qui»: Bluetooth, posta, e quel che verrà.
 //
-// il manutentore, 18 agosto 2026: «prima di continuare implementa la condivisione
+// Il manutentore, 18 agosto 2026: «prima di continuare implementa la condivisione
 // via mail bluetooth e altri nel file manager».
 //
 // La regola sta nel demone (`minervad/lib/services/condivisione_service.dart`)

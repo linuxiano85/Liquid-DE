@@ -1,0 +1,24 @@
+# Liquid session defaults. User choices in XDG_CONFIG_HOME take precedence.
+# Only Default Applications is allowed in a desktop-specific MIME file.
+[Default Applications]
+image/png=minerva-viewer.desktop;
+image/jpeg=minerva-viewer.desktop;
+image/gif=minerva-viewer.desktop;
+image/bmp=minerva-viewer.desktop;
+image/webp=minerva-viewer.desktop;
+image/tiff=minerva-viewer.desktop;
+video/mp4=minerva-viewer.desktop;
+video/webm=minerva-viewer.desktop;
+video/x-matroska=minerva-viewer.desktop;
+video/quicktime=minerva-viewer.desktop;
+video/x-msvideo=minerva-viewer.desktop;
+video/mpeg=minerva-viewer.desktop;
+video/ogg=minerva-viewer.desktop;
+video/3gpp=minerva-viewer.desktop;
+audio/mpeg=minerva-media.desktop;
+audio/x-wav=minerva-media.desktop;
+audio/wav=minerva-media.desktop;
+audio/mp4=minerva-media.desktop;
+audio/aac=minerva-media.desktop;
+audio/flac=minerva-media.desktop;
+audio/ogg=minerva-media.desktop;

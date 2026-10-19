@@ -62,6 +62,32 @@ Item {
 
     readonly property bool it: Core.Strings.lang === "it"
 
+    // Static stages only, never usernames, PAM messages, responses or paths.
+    // Realtime milliseconds correlate with the supervisor; clock adjustments
+    // can invalidate deltas, and these events do not prove GPU presentation.
+    function tracciaAvvio(stage) {
+        if (Quickshell.env("LIQUID_TRACE_STARTUP") !== "1") return;
+        var attempt = Quickshell.env("LIQUID_GREETER_ATTEMPT") || "";
+        if (!/^[0-9]+-[0-9]+$/.test(attempt)) attempt = "unknown";
+        console.log("[LIQUID][GREETER-STARTUP] component=ui attempt=" + attempt
+                    + " stage=" + stage + " clock=realtime timestamp_ms=" + Date.now());
+    }
+
+    // Bounded event-loop probe: only before the first interactive PAM prompt.
+    // No input, PAM text, usernames or image paths are observed.
+    property bool _tracePromptObserved: false
+    property int _traceTicks: 0
+    Timer {
+        interval: 100
+        repeat: true
+        running: Quickshell.env("LIQUID_TRACE_STARTUP") === "1"
+                 && !greeter._tracePromptObserved && greeter._traceTicks < 50
+        onTriggered: {
+            greeter._traceTicks += 1;
+            greeter.tracciaAvvio("ui.tick");
+        }
+    }
+
     // ── Quello che sappiamo ──────────────────────────────────────────────
 
     property var utenti: []
@@ -107,7 +133,7 @@ Item {
     /// un posto: le impostazioni del meteo le porta qui `minerva-greetd`.
     readonly property bool conMeteo: Core.Ipc.get("greeter.meteo", true)
                                      && Core.Meteo.attivo
-    /// «Buonasera, il manutentore» al posto del nome secco.
+    /// «Buonasera, Anna» al posto del nome secco.
     readonly property bool conSaluto: Core.Ipc.get("greeter.saluto", true)
     /// Batteria e tastiera nell'angolo in alto.
     readonly property bool conStato: Core.Ipc.get("greeter.stato", true)
@@ -265,6 +291,8 @@ Item {
         }
         if (!Core.Ipc.greeterCreateSession(greeter.utente.nome))
             greeter.perdiCanale();
+        else
+            greeter.tracciaAvvio("auth.create.dispatched");
     }
 
     function rispondi(testo) {
@@ -507,6 +535,7 @@ Item {
         }
 
         function onGreeterInfoReceived(info) {
+            greeter.tracciaAvvio("catalogue.received");
             greeter.informato = true;
             greeter.utenti = info.utenti || [];
             greeter.sessioni = info.sessioni || [];
@@ -551,6 +580,8 @@ Item {
             case "auth_message":
                 var tipo = m.auth_message_type;
                 if (tipo === "secret" || tipo === "visible") {
+                    greeter._tracePromptObserved = true;
+                    greeter.tracciaAvvio("auth.prompt.received");
                     // Si è tornati a parlare: il conto degli errori riparte.
                     greeter.erroriDiFila = 0;
                     greeter.domanda = (m.auth_message || "").trim();
@@ -666,7 +697,10 @@ Item {
             greeter.perdiCanale();
     }
 
-    Component.onCompleted: Core.Ipc.greeterInfo()
+    Component.onCompleted: {
+        greeter.tracciaAvvio("component.completed");
+        Core.Ipc.greeterInfo();
+    }
 
     // ── Lo sfondo ────────────────────────────────────────────────────────
     //
@@ -889,14 +923,39 @@ Item {
             Image {
                 // Il doppio della misura a cui si vede: nitido, senza decodificare
                 // una fotografia da dodici megapixel per un cerchio.
+                // Entrambi i lati: con la sola larghezza il provider `image://icon`
+                // di Quickshell 0.3.2 restituisce un'immagine 2×2 con stato
+                // Ready, cioè un cerchio vuoto (login fisico v23, 18 ottobre).
                 sourceSize.width: Math.max(64, Math.round(width * 2))
+                sourceSize.height: Math.max(64, Math.round(height * 2))
                 id: ritratto
+                onStatusChanged: {
+                    if (status === Image.Loading) greeter.tracciaAvvio("avatar.loading");
+                    else if (status === Image.Ready) greeter.tracciaAvvio("avatar.ready");
+                    else if (status === Image.Error) greeter.tracciaAvvio("avatar.error");
+                }
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 visible: status === Image.Ready
-                source: (greeter.utente && greeter.utente.ritratto)
-                        ? "file://" + greeter.utente.ritratto : ""
+                // Non `file://`: in Qt 6.12 la prima Image da file locale fa
+                // caricare a QQuickPixmapReader TUTTI i plugin immagine (34,
+                // 83 librerie). Dopo l'accensione, a cache fredda, l'avatar
+                // arrivava così dopo due-tre secondi (18 ottobre 2026: 2059 ms
+                // contro 8 dal provider). Il provider di Quickshell apre il
+                // file con QPixmap, che a un'estensione nota risponde con il
+                // decoder giusto e basta. La copia con l'estensione e il nome
+                // impronta la prepara il demone (`ritratti_leggibili.dart`);
+                // per tutto il resto si resta su `file://`, come prima.
+                source: {
+                    var r = greeter.utente ? greeter.utente.ritratto : "";
+                    if (!r) return "";
+                    var i = r.lastIndexOf("/");
+                    var nome = r.substring(i + 1);
+                    if (i > 0 && /^[0-9a-f]{64}\.(png|jpg|webp|gif)$/.test(nome))
+                        return "image://icon/" + nome + "?path=" + r.substring(0, i);
+                    return "file://" + r;
+                }
                 layer.enabled: visible
                 layer.effect: MultiEffect { maskEnabled: true; maskSource: maschera }
             }
@@ -960,7 +1019,7 @@ Item {
                 if (!greeter.conSaluto)
                     return intero;
                 // Il nome di battesimo, non quello intero: «Buonasera,
-                // il manutentore Rossi» è un modulo, «Buonasera, il manutentore» è un
+                // il manutentore Rossi» è un modulo, «Buonasera, Anna» è un
                 // saluto.
                 var primo = String(intero).split(" ")[0];
                 // Senza nome completo resta quello d'accesso, che è minuscolo:
@@ -1023,6 +1082,8 @@ Item {
 
             TextInput {
                 id: campo
+                onEnabledChanged: if (enabled) greeter.tracciaAvvio("prompt.enabled");
+                onActiveFocusChanged: if (activeFocus && enabled) greeter.tracciaAvvio("prompt.focused");
                 anchors.fill: parent
                 anchors.leftMargin: Theme.Effects.space4
                 anchors.rightMargin: 44

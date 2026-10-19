@@ -1,68 +1,120 @@
-#!/bin/sh
-# minerva-greeter-sessione — Quello che gira DENTRO il compositore della
-# schermata di accesso: il demone, e la schermata.
-#
-# ── Perché esiste ──────────────────────────────────────────────────────────
-#
-# Fino al 23 settembre 2026 la schermata di accesso era l'ultimo posto in cui
-# girava Hyprland: un Hyprland ridotto all'osso, con due righe `exec-once`
-# (il demone, la schermata) scritte in un file di configurazione suo. Adesso
-# la disegna il nostro compositore, che non legge file di configurazione: si
-# lancia con UN programma da avviare, e con `MINERVA_ESCI_COL_FIGLIO=1` si
-# chiude quando quel programma finisce. Questo è quel programma.
-#
-# L'ordine conta, ed è quello di prima: il demone per primo (la schermata gli
-# chiede chi può entrare e in cosa), poi la schermata. Quando la schermata
-# esce — cioè quando greetd ha detto di sì — si ferma il demone e si esce: la
-# sessione vera parte SOLO dopo che tutto il greeter è terminato.
-#
-# Lo installa `minerva-greetd` in /usr/local/lib/minerva, di proprietà di
-# root: è codice che gira prima di qualunque accesso, e nessun utente deve
-# poterlo riscrivere (vedi il blocco «Leggibile da tutti, scrivibile solo da
-# root» in `minerva-greetd`).
-set -u
+#!/usr/bin/python3 -I
+"""Supervise the two direct children of the pre-login Liquid session.
 
-DEST="${MINERVA_ROOT:-/usr/local/share/minerva}"
-STATO="${MINERVA_CONFIG_DIR:-/var/lib/minerva-greeter}"
-REGISTRI="${MINERVA_REGISTRI:-/var/log/minerva-greeter}"
-DEMONE="${MINERVA_DEMONE:-/usr/local/lib/minerva/minervad}"
+Installed root-owned by minerva-greetd. Authentication remains in greetd/PAM.
+No process groups or unrelated user processes are signalled.
+"""
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
 
-export MINERVA_ROOT="$DEST"
-export MINERVA_CONFIG_DIR="$STATO"
-# Un nome suo: il greeter non è una sessione di logind come le altre, e
-# senza un nome ricadrebbe su «unica», cioè sullo stesso posto in cui scrive
-# la sessione dell'utente. Vedi scripts/minerva-posti.sh.
-export MINERVA_SESSIONE=greeter
-# La porta del canale fra demone e shell DENTRO il greeter, diversa da quella
-# della sessione: i due Minerva possono essere accesi insieme (durante una
-# prova, e al cambio di sessione), e con un indirizzo solo la schermata di
-# accesso si collegherebbe al demone dell'utente — che di greetd non sa niente.
-# Per esteso e in «$STATO», non dedotta: l'utente «greeter» può avere un
-# XDG_RUNTIME_DIR che non esiste (10 agosto 2026). Sotto i 100 caratteri, o
-# «sun_path» la taglia: vedi socketDa() nel demone.
-export MINERVA_IPC_SOCKET="$STATO/canale.sock"
-export XDG_CURRENT_DESKTOP=MinervaWayland:Minerva
-# L'utente «greeter» non ha una casa: senza, Qt prova a scrivere la cache
-# degli shader in «//.cache», si arrende, e l'aurora si ricompila a ogni
-# accesso — la schermata resta scura qualche decimo di secondo in più proprio
-# quando la si guarda per la prima volta.
-export XDG_CACHE_HOME="$STATO/cache"
-export QS_NO_RELOAD_POPUP=1
-export QT_QPA_PLATFORM=wayland
-# La schermata disegna con la scheda video: l'aurora è uno shader e la foto
-# sfocata un MultiEffect, e col renderer del processore tutti e due NON danno
-# errore — spariscono, e resta il nero. La scrivania usa il renderer software
-# apposta (vedi «Peso delle app»), e se quella scelta arrivasse fin qui per
-# una variabile ereditata, la schermata di accesso sarebbe nera. Visto in
-# prova il 23 settembre 2026.
-unset QT_QUICK_BACKEND
+# Grace periods are teardown policy, not a normal login delay. Validate on
+# physical login before deploying this candidate to the display manager.
+GRACE_SECONDS = 3.0
+KILL_WAIT_SECONDS = 1.0
 
-"$DEMONE" >> "$REGISTRI/demone.log" 2>&1 &
-DEMONE_PID=$!
 
-qs -p "$DEST/minerva-shell/greeter.qml" >> "$REGISTRI/schermata.log" 2>&1
-ESITO=$?
+def diagnostic(stage):
+    # Static labels only: never print PAM data, argv, paths or exceptions.
+    print('[LIQUID][GREETER-LIFECYCLE] stage=' + stage, file=sys.stderr,
+          flush=True)
 
-kill "$DEMONE_PID" 2>/dev/null
-wait "$DEMONE_PID" 2>/dev/null
-exit "$ESITO"
+
+def stop_child(child, label):
+    if child is None or child.poll() is not None:
+        return True
+    # This single thread exclusively owns wait/reaping for these Popen objects.
+    # An exited, unreaped child keeps its PID; never retain a delayed PID-only
+    # watchdog after the child has been reaped.
+    child.terminate()
+    try:
+        child.wait(timeout=GRACE_SECONDS)
+        return True
+    except subprocess.TimeoutExpired:
+        diagnostic(label + '.term-timeout')
+    child.kill()
+    try:
+        child.wait(timeout=KILL_WAIT_SECONDS)
+        diagnostic(label + '.killed')
+        return True
+    except subprocess.TimeoutExpired:
+        # SIGKILL cannot make uninterruptible kernel I/O finish. Report this
+        # limitation rather than promise an absolute bound or successful reap.
+        diagnostic(label + '.unreaped')
+        return False
+
+
+def main():
+    dest = os.environ.get('MINERVA_ROOT', '/usr/local/share/minerva')
+    state = os.environ.get('MINERVA_CONFIG_DIR', '/var/lib/minerva-greeter')
+    logs = Path(os.environ.get('MINERVA_REGISTRI', '/var/log/minerva-greeter'))
+    daemon_path = os.environ.get('MINERVA_DEMONE', '/usr/local/lib/minerva/minervad')
+    env = dict(os.environ, MINERVA_ROOT=dest, MINERVA_CONFIG_DIR=state,
+               MINERVA_SESSIONE='greeter', MINERVA_IPC_SOCKET=state + '/canale.sock',
+               XDG_CURRENT_DESKTOP='MinervaWayland:Minerva',
+               XDG_CACHE_HOME=state + '/cache', QS_NO_RELOAD_POPUP='1',
+               QT_QPA_PLATFORM='wayland')
+    env.pop('QT_QUICK_BACKEND', None)
+    env.setdefault('LIQUID_TRACE_STARTUP', '1')
+    attempt = str(os.getpid()) + '-' + str(time.monotonic_ns())
+    env['LIQUID_GREETER_ATTEMPT'] = attempt
+
+    def trace_startup(stage):
+        if env['LIQUID_TRACE_STARTUP'] == '1':
+            print('[LIQUID][GREETER-STARTUP] component=supervisor '
+                  f'attempt={attempt} stage={stage} clock=realtime '
+                  f'timestamp_ms={time.time_ns() // 1_000_000}',
+                  file=sys.stderr, flush=True)
+
+    trace_startup('supervisor.begin')
+    requested_signal = 0
+
+    def request_stop(number, _frame):
+        nonlocal requested_signal
+        if not requested_signal:
+            requested_signal = number
+
+    for number in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(number, request_stop)
+    daemon = ui = None
+    result = 1
+    try:
+        # Open both destinations before starting children: a logging failure
+        # must not strand a daemon or place its output on the greeter console.
+        with (logs / 'demone.log').open('ab', buffering=0) as daemon_log, \
+                (logs / 'schermata.log').open('ab', buffering=0) as ui_log:
+            if requested_signal:
+                return 128 + requested_signal
+            daemon = subprocess.Popen([daemon_path], env=env,
+                                      stdout=daemon_log, stderr=subprocess.STDOUT)
+            trace_startup('daemon.spawned')
+            if not requested_signal:
+                ui = subprocess.Popen(['qs', '-p', dest + '/minerva-shell/greeter.qml'],
+                                      env=env, stdout=ui_log, stderr=subprocess.STDOUT)
+                trace_startup('ui.spawned')
+            if ui is not None:
+                while not requested_signal:
+                    try:
+                        result = ui.wait(timeout=0.25)
+                        break
+                    except subprocess.TimeoutExpired:
+                        continue
+            if requested_signal:
+                result = 128 + requested_signal
+    except OSError:
+        diagnostic('launch-failed')
+        result = 1
+    finally:
+        # Repeated signals only set a flag and cannot interrupt child cleanup.
+        ui_clean = stop_child(ui, 'ui')
+        daemon_clean = stop_child(daemon, 'daemon')
+        if not ui_clean or not daemon_clean:
+            result = 1
+    return 128 - result if result < 0 else result
+
+
+if __name__ == '__main__':
+    sys.exit(main())

@@ -608,7 +608,7 @@ Page {
 
     // ── Trasmetti a schermo: la prima connessione ────────────────────────
     //
-    // il manutentore, 30 agosto 2026: «se serve anche in impostazioni per la prima
+    // Il manutentore, 30 agosto 2026: «se serve anche in impostazioni per la prima
     // connessione». Serve, ma per una ragione diversa da quella che
     // pensavamo: non è il televisore a chiedere di essere accoppiato — è il
     // FIREWALL di questo computer a respingerlo.

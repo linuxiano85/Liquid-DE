@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import '../core/linux_files.dart';
 
 import 'archive_service.dart';
 import 'image_dims.dart';
 import 'processo_limitato.dart';
+import 'transfer_source.dart';
+import 'staged_replacement.dart';
 import '../core/minerva_paths.dart';
 
 /// Servizio file di Minerva: elenca cartelle ed esegue i trasferimenti.
@@ -27,9 +30,11 @@ class FileService {
   /// proprio «svuota». Nessuna prova deve poter cancellare la roba di
   /// qualcuno. `Platform.environment` in Dart è di sola lettura, quindi non
   /// basta cambiare `XDG_DATA_HOME`: serve un parametro.
-  FileService({this.cestinoDiProva});
+  FileService({this.cestinoDiProva,
+    this.replacement = const StagedReplacement()});
 
   final String? cestinoDiProva;
+  final StagedReplacement replacement;
 
   // ── L'aspetto di una cartella ──────────────────────────────────────────
   //
@@ -92,6 +97,9 @@ class FileService {
   }
 
   final Map<String, TransferJob> _jobs = {};
+  final Map<String, Future<void>> _transfers = {};
+  bool _closing = false;
+  Future<void>? _disposeFuture;
   int _counter = 0;
 
   /// Notificato a ogni cambio di stato o avanzamento di un lavoro.
@@ -174,7 +182,7 @@ class FileService {
       'ordinatoAlContrario': false,
       // ── Se questa cartella si può cambiare ──────────────────────────
       //
-      // il manutentore, 18 agosto 2026: «se clicco su sistema posso cancellare
+      // Il manutentore, 18 agosto 2026: «se clicco su sistema posso cancellare
       // qualsiasi file di sistema come se fossero nella mia home, non c'è
       // nessuna protezione dalla cancellazione».
       //
@@ -735,7 +743,7 @@ class FileService {
   /// chi ha spostato i propri Documenti altrove sta anche peggio. Il file
   /// `user-dirs.dirs` è lo standard freedesktop che risponde a questa
   /// domanda, e lo scrivono tutti gli ambienti.
-  Future<Map<String, dynamic>> places() async {
+  Future<Map<String, dynamic>> places({bool includeMissingUserDirs = false}) async {
     final home = Platform.environment['HOME'] ?? '';
     // ── Quelle nella barra, e quelle che servono solo per l'icona ────────
     //
@@ -791,7 +799,7 @@ class FileService {
     for (final entry in wanted.entries) {
       final path = resolved[entry.key];
       if (path == null || path.isEmpty || path == home) continue;
-      if (!await Directory(path).exists()) continue;
+      if (!includeMissingUserDirs && !await Directory(path).exists()) continue;
       found.add({
         'kind': entry.value,
         'path': path,
@@ -1554,6 +1562,7 @@ class FileService {
     required bool move,
     String conflitto = 'entrambi',
   }) async {
+    if (_closing) throw StateError('Servizio file in arresto');
     final id = 'job${++_counter}';
     final job = TransferJob(
       id: id,
@@ -1565,11 +1574,16 @@ class FileService {
     _jobs[id] = job;
 
     // Non si attende: il lavoro procede in sottofondo e si annuncia da solo.
-    unawaited(_run(job));
+    final task = _run(job).whenComplete(() {
+      _transfers.remove(id);
+    });
+    _transfers[id] = task;
+    unawaited(task);
     return id;
   }
 
   void pause(String id) {
+    if (_closing) return;
     final j = _jobs[id];
     if (j == null || j.state != 'running') return;
     j.state = 'paused';
@@ -1577,6 +1591,7 @@ class FileService {
   }
 
   void resume(String id) {
+    if (_closing) return;
     final j = _jobs[id];
     if (j == null || j.state != 'paused') return;
     j.state = 'running';
@@ -1618,6 +1633,10 @@ class FileService {
 
   Future<void> _run(TransferJob job) async {
     Directory? staging;
+    var conservaStaging = false;
+    var finale = 'done';
+    var fase = 'Preparazione';
+    String? copiaPubblicata;
     try {
       if (!['entrambi', 'salta', 'sostituisci'].contains(job.conflitto)) {
         throw const FileSystemException('Politica di conflitto non valida');
@@ -1625,6 +1644,8 @@ class FileService {
       final destination = await Directory(job.destination).resolveSymbolicLinks();
       // Validare TUTTO il lotto prima di misurare o creare copie.
       for (final s in job.sources) {
+        if (job.state == 'cancelling') break;
+
         if (await FileSystemEntity.type(s, followLinks: false) == FileSystemEntityType.directory) {
           final source = await Directory(s).resolveSymbolicLinks();
           if (destination == source || destination.startsWith('$source/')) {
@@ -1637,13 +1658,17 @@ class FileService {
       }
       // 1. Quanto c'è da spostare
       for (final s in job.sources) {
-        job.bytesTotal += await _measure(s);
+        if (job.state == 'cancelling') break;
+        job.bytesTotal += await _measure(s, job: job);
       }
       _emit(job);
 
       // 2. Trasferimento
       for (final s in job.sources) {
+        await job.waitIfPaused();
         if (job.state == 'cancelling') break;
+        copiaPubblicata = null;
+        fase = 'Controllo dei percorsi';
         final name = s.split(Platform.pathSeparator).last;
         if (name.isEmpty || name == '.' || name == '..') {
           throw FileSystemException('Nome sorgente non valido', s);
@@ -1662,7 +1687,55 @@ class FileService {
             ? _uniqueTarget(voluto)
             : voluto;
 
+        // Pausa e annullamento possono essere arrivati durante stat o
+        // risoluzione dei percorsi. Anche rename, che non copia blocchi,
+        // deve rispettarli prima della modifica visibile.
+        await job.waitIfPaused();
+        if (job.state == 'cancelling') break;
+
+        if (job.move && occupato && job.conflitto == 'sostituisci') {
+          fase = 'Spostamento con sostituzione';
+          staging = LinuxFiles.privateTemp(Directory(destination), '.minerva-transfer-');
+          try {
+            if (replacement.publish(s, target, staging)) {
+              copiaPubblicata = target;
+              // Il file sorgente è già al nome definitivo. Non copiare i
+              // metadati dal vecchio nome: potrebbe ora essere un altro file.
+              fase = 'Persistenza dello spostamento';
+              try {
+                LinuxFiles.fsyncCartella(staging.path);
+                LinuxFiles.fsyncCartella(destination);
+                LinuxFiles.fsyncCartella(_genitoreDi(s));
+              } catch (_) {
+                conservaStaging = true;
+                rethrow;
+              }
+              fase = 'Pulizia dei temporanei';
+              await _togliPreparazione(staging.path, verifica: true);
+              staging = null;
+              job.fatti.add({'da': s, 'a': target, 'sostituito': true});
+              job.bytesDone += await _measureQuiet(target);
+              job.currentFile = name;
+              _emit(job);
+              copiaPubblicata = null;
+              continue;
+            }
+          } on OriginalRecoveryRequired catch (e) {
+            conservaStaging = true;
+            job.recoveryPaths.addAll(e.paths);
+            job.recoveryErrorCode = e.recoveryErrorCode;
+            rethrow;
+          }
+          // EXDEV: lo staging è vuoto, nessun originale acquisito.
+          // La copia fra filesystem conserva i controlli di versione.
+          if (!await _siPuoCambiare(_genitoreDi(s))) {
+            throw FileSystemException(motivo(name,
+                const FileSystemException('', '', OSError('', _eacces))), s);
+          }
+        }
+
         if (job.move && !(occupato && job.conflitto == 'sostituisci')) {
+          fase = 'Spostamento';
           // Sullo stesso filesystem lo spostamento è istantaneo: non c'è
           // niente da copiare, solo un nome da cambiare.
           try {
@@ -1699,59 +1772,119 @@ class FileService {
 
         // Directory temporanea privata sul filesystem di destinazione.
         // Nessun contenuto parziale è pubblicato sotto il nome definitivo.
-        staging = LinuxFiles.privateTemp(Directory(destination), '.minerva-transfer-');
+        staging ??= LinuxFiles.privateTemp(Directory(destination), '.minerva-transfer-');
         final prepared = '${staging.path}/contenuto';
-        await _copyTree(s, prepared, job, metadatiDellaCimaDopo: true);
+        fase = 'Copia';
+        final sourceVersion = TransferSource();
+        await _copyTree(s, prepared, job, metadatiDellaCimaDopo: true,
+            sourceVersion: sourceVersion);
+        // Un file vuoto non attraversa il ciclo dei blocchi della copia.
+        await job.waitIfPaused();
         if (job.state == 'cancelling') break;
+        // Il contenuto è sul disco prima di avere il suo nome vero: è la
+        // garanzia che prima davano gli fsync di ogni file.
+        fase = 'Scrittura sul disco';
+        await _sincronizzaDisco(staging.path);
+        fase = 'Verifica della sorgente';
+        await sourceVersion.verify(s);
+        fase = 'Pubblicazione';
         if (occupato && job.conflitto == 'sostituisci') {
           LinuxFiles.exchange(prepared, target);
         } else {
           target = _rinominaSenzaSovrascrivere(
               prepared, target, voluto, job.conflitto == 'entrambi');
         }
+        copiaPubblicata = target;
         // Da qui target è una copia COMPLETA: non eliminarla mai nel rollback,
         // nemmeno se la successiva rimozione della sorgente fallisce a metà.
+        fase = 'Metadati';
         await _metadatiDellaCima(s, target);
-        await _togliPreparazione(staging.path);
+        fase = 'Pulizia dei temporanei';
+        await _togliPreparazione(staging.path, verifica: true);
         staging = null;
+        if (job.move) {
+          await job.waitIfPaused();
+          if (job.state == 'cancelling') {
+            job.preservedCopies.add(target);
+            break;
+          }
+          // Anche il nuovo nome è sul disco prima che l'originale sparisca.
+          fase = 'Scrittura sul disco';
+          await _sincronizzaDisco(target);
+          fase = 'Verifica della sorgente prima della rimozione';
+          await sourceVersion.verify(s);
+          fase = 'Rimozione della sorgente';
+          await sourceVersion.remove();
+        }
         // Uno sostituito non si annulla: il vecchio contenuto non c'è più.
+        // Uno spostamento è completato solo dopo aver tolto la sorgente.
         job.fatti.add({
           'da': s,
           'a': target,
           if (occupato && job.conflitto == 'sostituisci') 'sostituito': true,
         });
-        if (job.move) {
-          try {
-            await _deletePath(s);
-          } catch (e) {
-            throw FileSystemException('Copia completa conservata in $target; '
-                'rimozione della sorgente incompleta: ${motivo(name, e)}', s);
-          }
-        }
+        copiaPubblicata = null;
       }
 
       if (job.state == 'cancelling') {
         // Solo lo staging corrente è parziale. I file già pubblicati restano.
-        job.state = 'cancelled';
+        finale = 'cancelled';
       } else {
-        job.state = 'done';
         job.bytesDone = job.bytesTotal;
       }
     } catch (e) {
-      job.state = 'failed';
-      // `motivo` è già stato applicato dove si sapeva di quale file si
-      // trattava; qui si toglie solo l'involucro dell'eccezione.
-      job.error = e is FileSystemException ? e.message : '$e';
+      finale = 'failed';
+      job.errorCode = _codiceErrore(e);
+      final dettaglio = e is OriginalRecoveryRequired ? e.message
+          : e is FileSystemException && e.osError != null
+          ? motivo(job.currentFile.isEmpty ? job.destination : job.currentFile, e)
+          : e is FileSystemException ? e.message : '$e';
+      job.error = '$fase: $dettaglio';
+      if (copiaPubblicata != null) {
+        job.preservedCopies.add(copiaPubblicata);
+        job.error = 'Copia completa conservata in $copiaPubblicata. ${job.error}';
+      }
     } finally {
-      if (staging != null) await _togliPreparazione(staging.path);
+      if (staging != null && conservaStaging) {
+        job.cleanupPending.add(staging.path);
+        finale = 'failed';
+        job.error += '\nDati di recupero conservati in ${staging.path}.';
+      } else if (staging != null) {
+        try {
+          await _togliPreparazione(staging.path, verifica: true);
+        } catch (e) {
+          finale = 'failed';
+          job.cleanupErrorCode = _codiceErrore(e);
+          job.errorCode ??= job.cleanupErrorCode;
+          job.cleanupPending.add(staging.path);
+          final detail = 'Pulizia dei temporanei non riuscita: ${staging.path}. '
+              '${motivo(staging.path.split('/').last, e)}';
+          job.error = job.error.isEmpty ? detail : '${job.error}\n$detail';
+        }
+      }
     }
 
+    // Il lavoro resta attivo anche durante la pulizia asincrona: chi chiede
+    // jobsJson non deve credere che sia già tutto fermo e cancellare la
+    // destinazione mentre la preparazione viene ancora rimossa.
+    job.state = finale;
     job.finishedAt = DateTime.now();
+    if (finale == 'failed') {
+      // JSON mantiene i percorsi su una sola riga anche con nomi contenenti
+      // a-capo. Nessun contenuto dei file o eccezione arbitraria nel log.
+      print('[MINERVA][FILES][ERRORE] Trasferimento non completato: '
+          '${jsonEncode({'job': job.id, 'phase': fase, 'errno': job.errorCode,
+            'cleanupErrno': job.cleanupErrorCode, 'preservedCopies': job.preservedCopies,
+            'cleanupPending': job.cleanupPending,
+            'recoveryErrno': job.recoveryErrorCode,
+            'recoveryPaths': job.recoveryPaths})}');
+    }
     _emit(job);
     _prune();
   }
 
-  Future<int> _measure(String path) async {
+  Future<int> _measure(String path, {TransferJob? job}) async {
+    if (job?.state == 'cancelling') return 0;
     final type = await FileSystemEntity.type(path, followLinks: false);
     if (type == FileSystemEntityType.file) {
       return (await File(path).stat()).size;
@@ -1761,6 +1894,7 @@ class FileService {
     var total = 0;
     try {
       await for (final e in Directory(path).list(recursive: true, followLinks: false)) {
+        if (job?.state == 'cancelling') break;
         if (e is File) {
           try {
             total += (await e.stat()).size;
@@ -1813,7 +1947,8 @@ class FileService {
   /// cancellare. Provato da utente normale. E la rinomina stessa cambia la
   /// data della cartella: anche quella va rimessa dopo.
   Future<void> _copyTree(String from, String to, TransferJob? job,
-      {bool metadatiDellaCimaDopo = false}) async {
+      {bool metadatiDellaCimaDopo = false, TransferSource? sourceVersion}) async {
+    sourceVersion?.record(from);
     final type = await FileSystemEntity.type(from, followLinks: false);
 
     if (type == FileSystemEntityType.directory) {
@@ -1821,18 +1956,20 @@ class FileService {
       await for (final e in Directory(from).list(followLinks: false)) {
         if (job?.state == 'cancelling') return;
         final name = e.path.split(Platform.pathSeparator).last;
-        await _copyTree(e.path, '$to/$name', job);
+        await _copyTree(e.path, '$to/$name', job, sourceVersion: sourceVersion);
       }
       if (!metadatiDellaCimaDopo) {
         await _copiaData(from, to);
         await _copyMode(from, to);
       }
+      sourceVersion?.verifyEntry(from);
       return;
     }
 
     if (type == FileSystemEntityType.link) {
       final target = await Link(from).target();
       await Link(to).create(target);
+      sourceVersion?.verifyEntry(from);
       return;
     }
 
@@ -1844,9 +1981,13 @@ class FileService {
     final dst = File(to);
     job?.currentFile = from.split(Platform.pathSeparator).last;
 
-    final input = src.openRead();
-    final output = await dst.open(mode: FileMode.write);
+    final pinned = LinuxFiles.pinRegularSource(src.path);
+    RandomAccessFile? output;
     try {
+      sourceVersion?.verifyVersion(from, pinned.version);
+      final input = pinned.openRead();
+      output = await dst.open(mode: FileMode.write);
+      var daScrivere = 0;
       await for (final chunk in input) {
         if (job != null) {
           if (job.state == 'cancelling') break;
@@ -1854,6 +1995,15 @@ class FileService {
           if (job.state == 'cancelling') break;
         }
         await output.writeFrom(chunk);
+        // Ogni 32 MB si aspetta il disco. Senza, il kernel accetta fino a
+        // ~256 MB in memoria: la barra corre e poi si ferma, e «Rimuovi in
+        // sicurezza» aspetta minuti. Così la barra segue la chiavetta vera
+        // e alla fine resta poco da scrivere (18 ottobre 2026).
+        daScrivere += chunk.length;
+        if (daScrivere >= _scritturaOnesta) {
+          daScrivere = 0;
+          await output.flush();
+        }
         if (job != null) {
           job.bytesDone += chunk.length;
           // Si annuncia ogni 64 blocchi circa: notificare a ogni blocco
@@ -1865,21 +2015,39 @@ class FileService {
           }
         }
       }
-      await output.flush();
+      // Niente fsync per ogni file: la copia sincronizza il disco UNA volta
+      // prima di pubblicare (`_sincronizzaDisco`). Un fsync a file, su una
+      // chiavetta, era un'attesa del disco per ogni foto.
     } finally {
-      await output.close();
+      try {
+        await output?.close();
+      } finally {
+        pinned.close();
+      }
     }
 
     await _copiaData(from, to);
     await _copyMode(from, to);
+    sourceVersion?.verifyEntry(from);
   }
+
+  /// Ogni quanti byte di un file la copia aspetta che il disco li abbia.
+  static const int _scritturaOnesta = 32 * 1024 * 1024;
+
+  /// `syncfs` del filesystem di [percorso], in un isolate: su una chiavetta
+  /// lenta dura secondi, e il demone ha un filo solo.
+  static Future<void> _sincronizzaDisco(String percorso) =>
+      Isolate.run(() => LinuxFiles.syncfs(percorso));
 
   Future<void> _copyMode(String from, String to) async {
     final st = await FileStat.stat(from);
-    final octal = (st.mode & 0x1FF).toRadixString(8).padLeft(3, '0');
-    final r = await eseguiLimitato('chmod', [octal, '--', to],
-        limite: const Duration(seconds: 2));
-    if (!r.ok) throw FileSystemException('Permessi non conservati: ${r.stderr}', to);
+    // Nativo e non `chmod`: un processo per ogni file copiato costava più
+    // dei dati — 2000 foto da 20 KB, 15 s di soli processi (18 ottobre 2026).
+    try {
+      LinuxFiles.setPermissions(to, st.mode & 0x1FF);
+    } on FileSystemException catch (e) {
+      throw FileSystemException('Permessi non conservati: ${e.osError?.message ?? ''}', to);
+    }
   }
 
   /// La data di modifica dell'originale, rimessa sulla copia.
@@ -1902,12 +2070,8 @@ class FileService {
         return;
       }
       // `File.setLastModified` rifiuta le cartelle («Is a directory»): per
-      // loro c'è `touch`, con la data in secondi dall'epoca.
-      final us = st.modified.microsecondsSinceEpoch;
-      final quando =
-          '@${us ~/ 1000000}.${(us % 1000000).toString().padLeft(6, '0')}';
-      await eseguiLimitato('touch', ['-m', '-d', quando, '--', to],
-          limite: const Duration(seconds: 2));
+      // loro `utimensat`, senza un `touch` per ogni cartella.
+      LinuxFiles.setModificationTime(to, st.modified);
     } catch (_) {}
   }
 
@@ -1929,12 +2093,20 @@ class FileService {
   /// o il vecchio bersaglio di una sostituzione già decisa. Senza il `u+w`,
   /// una cartella di sola lettura copiata a metà restava nella destinazione
   /// per sempre (30 settembre 2026).
-  Future<void> _togliPreparazione(String percorso) async {
+  Future<void> _togliPreparazione(String percorso, {bool verifica = false}) async {
     try {
       await eseguiLimitato('chmod', ['-R', 'u+w', '--', percorso],
           limite: const Duration(seconds: 30));
     } catch (_) {}
-    await _deletePathQuiet(percorso);
+    if (verifica) {
+      try {
+        await Directory(percorso).delete(recursive: true);
+      } on FileSystemException catch (e) {
+        if (e.osError?.errorCode != 2) rethrow; // Già rimosso: nessun residuo.
+      }
+    } else {
+      await _deletePathQuiet(percorso);
+    }
   }
 
   /// La cartella che contiene `percorso`.
@@ -2032,9 +2204,11 @@ class FileService {
   // avanzo. Su una cartella di sistema sarebbero stati gigabyte copiati nella
   // home per un'operazione che non poteva riuscire.
   static const int _eperm = 1;   // operazione non permessa (bit sticky)
+  static const int _eio = 5;    // errore di I/O
   static const int _eacces = 13; // permesso negato
   static const int _eexist = 17; // il nome è già preso
   static const int _exdev = 18;  // sono due dischi diversi: QUESTO si copia
+  static const int _enospc = 28; // spazio esaurito
   static const int _erofs = 30;  // il disco è montato in sola lettura
 
   static int? _codiceErrore(Object e) =>
@@ -2049,9 +2223,12 @@ class FileService {
     switch (_codiceErrore(e)) {
       case _eacces:
       case _eperm:
-        return '«$nome» non si può togliere da dov\'è: la cartella che lo '
-            'contiene non è tua. I file di sistema si cambiano solo da '
-            'amministratore.';
+        return 'Permesso negato per «$nome». Controlla i permessi della '
+            'cartella o del supporto.';
+      case _enospc:
+        return 'Spazio insufficiente sul disco per «$nome».';
+      case _eio:
+        return 'Errore di lettura o scrittura sul dispositivo per «$nome».';
       case _erofs:
         return '«$nome» sta su un disco montato in sola lettura.';
       default:
@@ -2097,8 +2274,10 @@ class FileService {
     try {
       final prepared = '${staging.path}/contenuto';
       await _copyTree(da, prepared, null, metadatiDellaCimaDopo: true);
+      await _sincronizzaDisco(staging.path);
       LinuxFiles.renameNoReplace(prepared, a);
       await _metadatiDellaCima(da, a);
+      await _sincronizzaDisco(a);
       try {
         await _deletePath(da);
       } catch (_) {
@@ -2121,13 +2300,25 @@ class FileService {
   /// copia e non togliendo l'originale. Vedi la prova nel gruppo «i
   /// collegamenti simbolici».
   Future<void> _deletePath(String path) async {
-    final type = await FileSystemEntity.type(path, followLinks: false);
-    if (type == FileSystemEntityType.link) {
-      await Link(path).delete();
-    } else if (type == FileSystemEntityType.directory) {
-      await Directory(path).delete(recursive: true);
-    } else if (type != FileSystemEntityType.notFound) {
-      await File(path).delete();
+    // La sonda nativa è in sola lettura e serve solo a disambiguare gli
+    // errori: non aggiungere un secondo unlink che potrebbe colpire un file
+    // creato nel frattempo. Il percorso normale resta su I/O asincrono.
+    try {
+      final type = await FileSystemEntity.type(path, followLinks: false);
+      if (type == FileSystemEntityType.link) {
+        await Link(path).delete();
+      } else if (type == FileSystemEntityType.directory) {
+        await Directory(path).delete(recursive: true);
+      } else if (type != FileSystemEntityType.notFound) {
+        await File(path).delete();
+      } else if (LinuxFiles.entryExists(path)) {
+        throw FileSystemException('Tipo dell’elemento non verificabile', path);
+      }
+    } on FileSystemException catch (e) {
+      if (e.osError?.errorCode != 2) rethrow;
+      if (LinuxFiles.entryExists(path)) {
+        throw FileSystemException('Elemento ancora presente dopo la rimozione', path);
+      }
     }
   }
 
@@ -2137,8 +2328,23 @@ class FileService {
     } catch (_) {}
   }
 
-  void dispose() {
-    _progress.close();
+  Future<void> dispose() {
+    if (_disposeFuture != null) return _disposeFuture!;
+    _closing = true;
+    for (final id in _transfers.keys.toList()) {
+      cancel(id); // Risveglia anche chi attende «riprendi».
+    }
+    return _disposeFuture = _finishTransfers();
+  }
+
+  Future<void> _finishTransfers() async {
+    try {
+      await Future.wait(_transfers.values.toList());
+    } finally {
+      // Ultimi stati e pulizia completati prima di dichiarare chiuso il
+      // servizio. Non basta chiudere il flusso mentre le copie continuano.
+      await _progress.close();
+    }
   }
 }
 
@@ -2166,6 +2372,12 @@ class TransferJob {
   int sinceEmit = 0;
   String currentFile = '';
   String error = '';
+  int? errorCode;
+  int? cleanupErrorCode;
+  int? recoveryErrorCode;
+  final List<String> cleanupPending = [];
+  final List<String> preservedCopies = [];
+  final List<String> recoveryPaths = [];
   DateTime? finishedAt;
 
   /// Quello che è stato fatto davvero, voce per voce: da dove a dove, col
@@ -2204,6 +2416,12 @@ class TransferJob {
         'bytesDone': bytesDone,
         'currentFile': currentFile,
         'error': error,
+        if (errorCode != null) 'errorCode': errorCode,
+        if (cleanupErrorCode != null) 'cleanupErrorCode': cleanupErrorCode,
+        if (recoveryErrorCode != null) 'recoveryErrorCode': recoveryErrorCode,
+        if (cleanupPending.isNotEmpty) 'cleanupPending': List<String>.from(cleanupPending),
+        if (preservedCopies.isNotEmpty) 'preservedCopies': List<String>.from(preservedCopies),
+        if (recoveryPaths.isNotEmpty) 'recoveryPaths': List<String>.from(recoveryPaths),
         if (isFinished) 'fatti': fatti,
       };
 }

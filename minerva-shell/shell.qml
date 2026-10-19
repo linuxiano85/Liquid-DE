@@ -32,6 +32,22 @@ import "windows11" as Windows11
 ShellRoot {
     id: root
 
+    // Il materiale è opzionale: attendere la risposta evita un primo frame
+    // incoerente, ma un canale bloccato non deve nascondere la barra.
+    // La scadenza è un limite al guasto, non un ritardo nel percorso normale.
+    property bool _materialeAvvioScaduto: false
+    Timer {
+        interval:1500
+        running:Core.Ipc.impostazioniArrivate && root.barraWindows
+                && windowRules.vetroBarra && Core.Compositore.nostro
+                && !Core.Compositore.vetroBarraNoto && !root._materialeAvvioScaduto
+        onTriggered: {
+            root._materialeAvvioScaduto = true;
+            console.warn("[MINERVA][AVVIO][MATERIALE] Nessuna risposta del compositore: barra con ripiego opaco; canale="
+                         + (Core.Compositore.canaleAperto ? "connesso":"disconnesso"));
+        }
+    }
+
     // ── Ricaricamento a caldo: spento ────────────────────────────────────
     //
     // Quickshell sorveglia i file QML e si ricarica da solo appena ne cambia
@@ -46,7 +62,21 @@ ShellRoot {
     //     qs ipc --pid <pid> call minerva reload
     //
     // Chi sviluppa lo riaccende dalle Impostazioni, ed è l'unico che lo vuole.
+    // Sonda del ciclo grafico: solo con LIQUID_TRACE_STARTUP=1, 100 tick da
+    // 100 ms. Un buco fra due tick è la shell ferma, non il demone.
+    property int _traceTicks: 0
+    Timer {
+        interval: 100
+        repeat: true
+        running: Quickshell.env("LIQUID_TRACE_STARTUP") === "1" && root._traceTicks < 100
+        onTriggered: {
+            root._traceTicks += 1;
+            Core.Ipc.tracciaAvvio("ui.tick");
+        }
+    }
+
     Component.onCompleted: {
+        Core.Ipc.tracciaAvvio("shell.completed");
         Quickshell.watchFiles = false;
         // I pad: vedi `onControllerState` più sotto.
         if (Core.Ipc.connected)
@@ -139,7 +169,7 @@ ShellRoot {
 
     // ── Le animazioni della SHELL, che l'interruttore non toccava ────────
     //
-    // il manutentore, 19 agosto 2026: spegnere le animazioni «non porta a nessun
+    // Il manutentore, 19 agosto 2026: spegnere le animazioni «non porta a nessun
     // cambiamento». Era vero: `Compositore.animazioni()` spegne quelle del
     // COMPOSITORE — finestre che si aprono, cambio scrivania — mentre i
     // pannelli, la dock e i menu li anima la shell con le durate di
@@ -475,6 +505,32 @@ ShellRoot {
                  + (Core.Wallpaper.rotateRandom ? " a-caso" : " in-ordine");
         }
 
+        /// Diagnostica dei materiali, senza cambiare preferenze o superfici.
+        function materiali(): string {
+            return JSON.stringify({preset:Core.DesktopStyle.attuale,
+                settingsReady:Core.Ipc.impostazioniArrivate,
+                settingsConnected:Core.Ipc.connected,
+                startupRecovery:Core.Ipc.avvioInRitardo,
+                materialTimeout:root._materialeAvvioScaduto,
+                desktopSurfaces:Object.keys(root.scrivanie).map(function(name) {
+                    var s=root.scrivanie[name];
+                    return {output:name,bar:!!(s.barra && s.barra.visible),
+                        dock:!!(s.dock && s.dock.visible),
+                        island:!!(s.isolaBarra && s.isolaBarra.visible),
+                        windows:!!(s.windows && s.windows.visible)};
+                }),
+                theme:Windows11.Style.dark ? "dark":"light",
+                requestedAcrylic:Core.Ipc.get("windows11.acrylic",true),
+                acknowledged:Core.Compositore.vetroBarra,
+                nativeAcrylic:Core.Compositore.vetroAcrylic,
+                acrylic:Windows11.Style.acrylic,
+                barAlpha:Windows11.Style.barra.a,
+                panelAlpha:Windows11.Style.pannello.a,
+                effectRequested:Core.Vetro.effettoChiesto,
+                effectEffective:Core.Vetro.effetto,
+                saving:Core.Vetro.inRisparmio});
+        }
+
         function status(): string {
             return "pannello=" + (!root.spine || root.spine.activePanel === ""
                                   ? "-" : root.spine.activePanel)
@@ -678,7 +734,12 @@ ShellRoot {
                               attivita, windowsBar) {
         if (!nome || root.outputNames.indexOf(nome)<0)
             return;
-        var m = root.scrivanie;
+        // Un nuovo oggetto notifica i binding (spine, dock, scorciatoie).
+        // Mutare la stessa mappa lasciava spine legata alla barra classica
+        // quando il LazyLoader Windows registrava il proprio item più tardi.
+        var m = {};
+        for (var key in root.scrivanie)
+            m[key] = root.scrivanie[key];
         m[nome] = { "barra": barra, "dock": dock, "sottomarino": sottomarino,
                     "centro": centro, "cassetto": cassetto, "isola": isola,
                     "isolaBarra": isolaBarra, "stanze": stanze, "attivita": attivita, "windows": windowsBar };
@@ -697,8 +758,10 @@ ShellRoot {
             return;
         if (barra !== undefined && root.scrivanie[nome].barra !== barra)
             return;
-        var m = root.scrivanie;
-        delete m[nome];
+        var m = {};
+        for (var key in root.scrivanie)
+            if (key !== nome)
+                m[key] = root.scrivanie[key];
         root.scrivanie = m;
         root.scrivanieCambiate();
     }
@@ -783,7 +846,7 @@ ShellRoot {
 
     // ── La riva riservata ────────────────────────────────────────────────
     //
-    // il manutentore, 25 settembre 2026: «se ho una app a schermo intero compaiono
+    // Il manutentore, 25 settembre 2026: «se ho una app a schermo intero compaiono
     // le isole passandoci sopra [...] per abilitarli magari possiamo usare
     // un tasto per dargli il consenso a comparire tenendo premuto». Con una
     // finestra che riempie lo schermo (ingrandita o a schermo intero, nella
@@ -959,6 +1022,17 @@ ShellRoot {
         return s ? s.dock : null;
     }
 
+    // Con il demone assente non si inventa il preset di fabbrica: si offre
+    // un recupero separato che sparisce appena arrivano le preferenze vere.
+    Variants {
+        model: Core.Ipc.avvioInRitardo ? Quickshell.screens : []
+        Ui.RecuperoAvvio {
+            required property var modelData
+            screen:modelData
+            onRetryRequested:Quickshell.reload(true)
+        }
+    }
+
     // ── Dock e barra: una coppia per schermo ─────────────────────────────
     //
     // Stanno insieme in un `Scope` perché si conoscono: la barra deve sapere
@@ -972,7 +1046,9 @@ ShellRoot {
     // quando lo schermo se ne va: è così che le scorciatoie sanno su quale
     // barra agire.
     Variants {
-        model: Quickshell.screens
+        // Le superfici dipendono dal preset persistito: non creare l'Isola
+        // o la dock coi valori provvisori mentre il demone sta rispondendo.
+        model: Core.Ipc.impostazioniArrivate ? Quickshell.screens : []
 
         Scope {
             id: scrivania
@@ -1100,7 +1176,10 @@ ShellRoot {
 
             LazyLoader {
                 id: windowsBar
-                active: root.barraWindows
+                // La ricetta va applicata prima del primo frame della barra.
+                // Una risposta negativa abilita comunque il ripiego opaco.
+                active: root.barraWindows && (!windowRules.vetroBarra || !Core.Compositore.nostro
+                                             || Core.Compositore.vetroBarraNoto || root._materialeAvvioScaduto)
                 onItemChanged: scrivania.registra()
                 Windows11.Taskbar {
                     screen: scrivania.modelData
@@ -1406,7 +1485,13 @@ ShellRoot {
                                       isolaBarra, stanzeLato, attivitaPannello,
                                       windowsBar.item);
             }
-            Component.onCompleted: registra()
+            Component.onCompleted: {
+                registra();
+                // STA-002: al primo login la shell resta ferma 3,4 s mentre
+                // applica le impostazioni. Con la traccia (primi 15 s) questo e
+                // i marcatori di sfondo, desktop e widget dicono chi li prende.
+                Core.Ipc.tracciaAvvio("scrivania.created");
+            }
             Component.onDestruction: {
                 scrivania.leaving = true;
                 root.cancellaScrivania(scrivania.registeredName, spine);
@@ -1721,18 +1806,20 @@ ShellRoot {
     // copia stessa: è il modo in cui QML sa che quella proprietà la riempie il
     // modello e non un valore di partenza.
     Variants {
-        model: Quickshell.screens
+        model: Core.Ipc.impostazioniArrivate ? Quickshell.screens : []
         WallpaperLayer {
             required property var modelData
             screen: modelData
+            Component.onCompleted: Core.Ipc.tracciaAvvio("wallpaper.created")
         }
     }
 
     Variants {
-        model: Quickshell.screens
+        model: Core.Ipc.impostazioniArrivate ? Quickshell.screens : []
         DesktopLayer {
             required property var modelData
             screen: modelData
+            Component.onCompleted: Core.Ipc.tracciaAvvio("desktop.created")
             cartella: root.desktopPath
             hintVisible:!root.barraWindows && Core.Ipc.get("general.beginnerMode",true)
             onRightClicked: function(x, y) {
@@ -1801,10 +1888,11 @@ ShellRoot {
     // due copie dello stesso processore, e spostarne uno non muoverebbe
     // l'altro.
     Variants {
-        model: Quickshell.screens
+        model: Core.Ipc.impostazioniArrivate ? Quickshell.screens : []
         Widget.WidgetLayer {
             required property var modelData
             screen: modelData
+            Component.onCompleted: Core.Ipc.tracciaAvvio("widgets.created")
 
             Widget.Widgets {
                 anchors.fill: parent
@@ -2089,7 +2177,7 @@ ShellRoot {
 
         // ── «Lascia perdere» vale per un po' ─────────────────────────────
         //
-        // il manutentore, 11 ottobre 2026: dalla pagina di Minecraft, Chrome chiede
+        // Il manutentore, 11 ottobre 2026: dalla pagina di Minecraft, Chrome chiede
         // di aprire un link `minecraft:`; nessuno lo sa aprire, «Lascia
         // perdere» chiude, e Chrome lo richiede subito: la finestrella
         // sembrava non chiudersi, e per toglierla bisognava chiudere Chrome.
@@ -2910,6 +2998,30 @@ ShellRoot {
         }
     }
 
+    // ── Un dispositivo attaccato che non si apre si DICE ─────────────────
+    //
+    // Quando si apre, la finestra del gestore file è già la risposta. Quando
+    // no, senza una parola sembrerebbe che il computer non l'abbia visto.
+    Connections {
+        target: Core.Ipc
+        function onMediaLavoro(payload) {
+            var job=payload.lavoro;
+            if(!job || ["fatto","parziale","errore"].indexOf(job.stato)<0) return;
+            var it=Core.Strings.lang === "it";
+            var title=job.stato === "errore" ? (it?"Download non riuscito":"Download failed")
+                : job.stato === "parziale" ? (it?"Playlist completata in parte":"Playlist partially completed")
+                : (it?"Download completato":"Download completed");
+            Core.Notifications.daMinerva(title,job.titolo || job.corrente || "Media");
+        }
+        function onDispositivoAvviso(payload) {
+            var it = Core.Strings.lang === "it";
+            Core.Notifications.daMinerva(
+                (payload.nome || (it ? "Dispositivo USB" : "USB device"))
+                    + (it ? " non si apre" : " does not open"),
+                payload.errore || "");
+        }
+    }
+
     // ── Un pad pronto si DICE ────────────────────────────────────────────
     //
     // Il demone affida da solo a InputPlumber ogni pad che si accende
@@ -3372,7 +3484,7 @@ ShellRoot {
     // funzionava, ed è per questo che sembrava a intermittenza: funziona
     // finché non esci.
     //
-    // il manutentore, 7 settembre 2026: «ho disconnesso la sessione e al nuovo
+    // Il manutentore, 7 settembre 2026: «ho disconnesso la sessione e al nuovo
     // accesso non lo fa ancora, nemmeno ingrandire il puntatore». Misurato:
     // `cursorSize` 32 nelle impostazioni, 22 pixel chiari di puntatore sullo
     // schermo — cioè il 24 di ripiego.

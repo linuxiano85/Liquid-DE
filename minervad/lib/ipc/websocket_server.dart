@@ -4,6 +4,7 @@ import 'dart:async';
 import '../core/event_bus.dart';
 import '../core/state_manager.dart';
 import '../core/ricorda_un_po.dart';
+import '../services/arrivo_dispositivi.dart';
 import '../services/manutenzione/inventario.dart';
 import '../services/manutenzione/pulitore.dart';
 import '../services/manutenzione/quaderno.dart';
@@ -45,6 +46,10 @@ import '../services/data_ora_service.dart';
 import '../services/lingua_service.dart';
 import '../services/meteo_service.dart';
 import '../services/radio_service.dart';
+import '../services/tv_service.dart';
+import '../services/spettro_service.dart';
+import '../services/media/yt_dlp.dart';
+import '../services/media/scaricatore.dart';
 import '../services/notizie_service.dart';
 import '../services/ricerca_service.dart';
 import '../services/system_audio_service.dart';
@@ -190,6 +195,11 @@ class WebSocketServer {
 
   /// Cartelle di rete e telefoni, attraverso gvfs.
   final LuoghiRemoti _luoghiRemoti = LuoghiRemoti();
+
+  /// Un telefono o una chiavetta attaccati adesso: vedi la testa di
+  /// `arrivo_dispositivi.dart`.
+  final ArrivoDispositivi _arrivo = ArrivoDispositivi();
+  StreamSubscription<void>? _arrivoSub;
 
   /// La galleria. Non tiene stato fra una richiesta e l'altra tranne il
   /// catalogo, che è esattamente il punto: caricarlo una volta e riusarlo.
@@ -386,8 +396,161 @@ class WebSocketServer {
   /// vedi la testa di `meteo_service.dart` per che cosa esce da qui.
   final MeteoService _meteo = MeteoService();
 
+  /// Parte solo con `LIQUID_TRACE_STARTUP=1`: delimita i primi dieci secondi
+  /// in cui si registrano le azioni ricevute (vedi `_handleClientMessage`).
+  final Stopwatch _tracciaAzioni = Stopwatch();
+
   /// Le radio di Minerva Media: vedi la testa di `radio_service.dart`.
   final RadioService _radio = RadioService();
+  final TvService _tv = TvService(cartellaCache:'${MinervaPaths.cache()}/media/tv');
+
+  /// L'equalizzatore della barra Liquid: legge l'uscita audio solo finché
+  /// qualcuno è iscritto. Vedi la testa di `spettro_service.dart`.
+  final SpettroService _spettro = SpettroService();
+  final Set<WebSocketClientConnection> _iscrittiSpettro = {};
+  StreamSubscription<List<int>>? _subSpettro;
+
+  void _spettroIscrivi(WebSocketClientConnection client) {
+    _subSpettro ??= _spettro.livelli.listen((bande) {
+      for (final c in _iscrittiSpettro.toList()) {
+        if (_clients.contains(c)) c.send({'event': 'spettro', 'payload': {'bande': bande}});
+      }
+    });
+    if (_iscrittiSpettro.add(client)) _spettro.iscrivi();
+    // Senza `parec` la barra lo deve sapere subito, per tornare alle barrette.
+    Timer(const Duration(milliseconds: 300), () {
+      if (_iscrittiSpettro.contains(client) && !_spettro.disponibile && _clients.contains(client)) {
+        client.send({'event': 'spettro', 'payload': {'bande': <int>[], 'disponibile': false}});
+      }
+    });
+  }
+
+  void _spettroLascia(WebSocketClientConnection client) {
+    if (_iscrittiSpettro.remove(client)) _spettro.disiscrivi();
+  }
+  final YtDlp _mediaYt = YtDlp();
+  Scaricatore? _mediaDownloads;
+  StreamSubscription<Map<String,dynamic>>? _mediaSub;
+
+  Future<String> _cartellaMedia(String kind) async {
+    final data = await _fileService.places(includeMissingUserDirs:true);
+    for(final place in (data['places'] as List? ?? const [])) {
+      if(place is Map && place['kind'] == kind && place['path'] is String &&
+          (place['path'] as String).startsWith('/')) { return place['path'] as String; }
+    }
+    throw StateError('Cartella XDG non disponibile');
+  }
+
+  Scaricatore _scaricatoreMedia() {
+    if (_mediaDownloads != null) return _mediaDownloads!;
+    final queue = Scaricatore(ytdlp:_mediaYt,
+      cartellaMusica:()=>_cartellaMedia('music'),
+      cartellaVideo:()=>_cartellaMedia('videos'),
+      cartellaStato:'${MinervaPaths.stato()}/media',
+      cartellaLavoro:'${MinervaPaths.cache()}/media');
+    _mediaSub = queue.cambi.listen((state) {
+      _aTutti({'event':'media_job','payload':state},
+          solo:(client)=>client.isSubscribed('media_job'));
+    });
+    return _mediaDownloads = queue;
+  }
+
+  Future<Map<String,dynamic>> _libreriaMedia() async {
+    final roots=<String>{};
+    final places=await _fileService.places(includeMissingUserDirs:true);
+    for(final place in (places['places'] as List? ?? const [])) {
+      if(place is Map && ['music','videos'].contains(place['kind']) &&
+          place['path'] is String && (place['path'] as String).startsWith('/')) {
+        roots.add(place['path'] as String);
+      }
+    }
+    final home=Platform.environment['HOME'];
+    if(home != null && home.startsWith('/')) roots.add('$home/Musica/Minerva_YT');
+    const formats={'mp3','m4a','m4b','opus','ogg','oga','flac','wav','mp4','mkv','webm','mov','avi','aac'};
+    final paths=<String>{};var visited=0;var truncated=false;
+    for(final root in roots) {
+      try {
+        if(!await Directory(root).exists()) continue;
+        await for(final entry in Directory(root).list(recursive:true,followLinks:false)) {
+          if(++visited>10000 || paths.length>=1000) {truncated=true;break;}
+          if(entry is! File) continue;
+          final relative=entry.path.substring(root.length).split('/');
+          if(relative.any((name)=>name.startsWith('.'))) continue;
+          if(formats.contains(entry.path.split('.').last.toLowerCase())) paths.add(entry.path);
+        }
+      } on FileSystemException { truncated=true; }
+      if(visited>10000 || paths.length>=1000) break;
+    }
+    return {'files':paths.toList()..sort(),'truncated':truncated,'error':''};
+  }
+
+  Future<void> _richiestaMedia(WebSocketClientConnection client, String action, Map msg) async {
+    final request = msg['request'];
+    if (request is! String || request.length > 80) return;
+    var result = <String,dynamic>{};
+    if (Ambiente.eGreeter) {
+      result = {'error':'unavailable-in-greeter'};
+    } else {
+      try {
+        switch(action) {
+          case 'media_tv':
+            if ((msg['testo'] != null && msg['testo'] is! String) ||
+                (msg['paese'] != null && msg['paese'] is! String) ||
+                (msg['inizio'] != null && msg['inizio'] is! int) ||
+                (msg['limite'] != null && msg['limite'] is! int) ||
+                (msg['aggiorna'] != null && msg['aggiorna'] is! bool)) {
+              throw ArgumentError('catalogo TV');
+            }
+            result = await _tv.cerca(testo:msg['testo'] as String? ?? '',
+              paese:msg['paese'] as String? ?? '',inizio:msg['inizio'] as int? ?? 0,
+              limite:msg['limite'] as int? ?? 100,aggiorna:msg['aggiorna'] as bool? ?? false);
+          case 'media_tv_canale':
+            if (msg['canale'] is! String || (msg['canale'] as String).length > 80) {
+              throw ArgumentError('canale TV');
+            }
+            final channel = await _tv.canale(msg['canale'] as String);
+            result = {'canale':channel,'error':channel==null ? 'tv-channel-unavailable' : ''};
+          case 'media_cerca':
+            final text = msg['testo'];
+            if (text is! String || text.length > 2048) { throw ArgumentError('testo'); }
+            if ((msg['playlist'] != null && msg['playlist'] is! bool) ||
+                (msg['inizio'] != null && msg['inizio'] is! int)) { throw ArgumentError('ricerca'); }
+            result = await _mediaYt.cerca(text, quanti:msg['quanti'] is int ? msg['quanti'] as int : 20,
+              playlist:msg['playlist'] as bool? ?? false, inizio:msg['inizio'] as int? ?? 1);
+          case 'media_scarica':
+            if(msg['url'] is! String || msg['audio'] is! bool || msg['playlist'] is! bool ||
+                (msg['titolo'] != null && (msg['titolo'] is! String || (msg['titolo'] as String).length > 1024)) ||
+                (msg['formato'] != null && msg['formato'] is! String) ||
+                (msg['altezza'] != null && msg['altezza'] is! int)) { throw ArgumentError('download'); }
+            final selected = msg['selezione'];
+            if (selected != null && (selected is! List || selected.length > 10000 ||
+                selected.any((i) => i is! int))) { throw ArgumentError('selezione'); }
+            final id = _scaricatoreMedia().aggiungi(indirizzo:msg['url'] as String,
+              audio:msg['audio'] as bool,playlist:msg['playlist'] as bool,
+              titolo:msg['titolo'] as String? ?? '',formatoAudio:msg['formato'] as String? ?? 'mp3',
+              altezzaMassima:msg['altezza'] as int? ?? 0,
+              indici: selected == null ? null : (selected as List).cast<int>());
+            result = {'job':id,'lavori':_scaricatoreMedia().elenco(),'error':''};
+          case 'media_annulla':
+            if(msg['job'] is! String || (msg['job'] as String).length > 80) { throw ArgumentError('job'); }
+            await _scaricatoreMedia().annulla(msg['job'] as String);
+            result = {'error':''};
+          case 'media_pulisci':
+            _scaricatoreMedia().pulisci();
+            result = {'error':''};
+          case 'media_libreria':
+            result = await _libreriaMedia();
+          case 'media_lavori':
+            result = {'lavori':_scaricatoreMedia().elenco(),'error':''};
+        }
+      } on ArgumentError { result = {'error':'invalid-request'};
+      } on StateError { result = {'error':'media-not-ready'};
+      } on FileSystemException { result = {'error':'media-storage-error'}; }
+    }
+    if(_clients.contains(client)) { client.send({'event':'media_risposta',
+      'payload':{'request':request,'azione':action,...result}}); }
+  }
+
 
   /// Le notizie della bacheca Widget: vedi la testa di `notizie_service.dart`.
   final NotizieService _notizie = NotizieService();
@@ -423,6 +586,91 @@ class WebSocketServer {
   final _categorieRicordate = RicordaUnPo<List<dynamic>>(
     const Duration(seconds: 30),
   );
+
+  /// gvfs ha visto comparire o sparire qualcosa.
+  ///
+  /// Prima si dice a tutti i gestori file com'è adesso (la barra laterale
+  /// non aspetta il suo giro da otto secondi), poi si apre quello che è
+  /// appena arrivato: montato una volta, e una finestra sulla sua cartella.
+  /// Se non si apre, lo si dice con una notifica e col motivo.
+  Future<void> _dispositiviCambiati() async {
+    final String testo;
+    try {
+      final r = await Process.run(_arrivo.gio, ['mount', '-l', '-i'],
+          environment: const {'LC_ALL': 'C', 'LANG': 'C'})
+          .timeout(const Duration(seconds: 10));
+      testo = '${r.stdout}';
+    } catch (_) {
+      return;
+    }
+    final nuovi = _arrivo.nuovi(ArrivoDispositivi.leggiVolumi(testo));
+    if (_clients.isNotEmpty) {
+      _aTutti({'event': 'fs_remoti', 'payload': await _luoghiRemoti.elenco()});
+      _aTutti({'event': 'fs_volumes', 'payload': await _fileService.volumes()});
+    }
+    for (final gruppo in ArrivoDispositivi.perDisco(nuovi)) {
+      unawaited(_apriArrivato(gruppo));
+    }
+  }
+
+  /// Monta tutti i volumi di un disco (o il telefono) e apre UNA finestra,
+  /// sulla partizione più grande che si è aperta. Se nessuno si apre, una
+  /// notifica sola col motivo del primo.
+  Future<void> _apriArrivato(List<VolumeArrivato> gruppo) async {
+    final aperti = <(VolumeArrivato, String)>[];
+    VolumeArrivato? primoFallito;
+    String errore = '';
+    for (final v in gruppo) {
+      print('[MINERVA][DISPOSITIVI][INFO] Collegato: ${v.nome} '
+          '(${v.telefono ? 'telefono' : 'disco esterno'})');
+      final r = v.telefono
+          ? await _luoghiRemoti.collega(v.radice)
+          : await _fileService.mountVolume(v.dispositivo);
+      final percorso = '${r[v.telefono ? 'percorso' : 'mountPoint'] ?? ''}';
+      if (r['ok'] == true && percorso.isNotEmpty) {
+        aperti.add((v, percorso));
+      } else if (primoFallito == null) {
+        primoFallito = v;
+        errore = '${r['error'] ?? ''}';
+      }
+    }
+    if (_clients.isNotEmpty) {
+      _aTutti({'event': 'fs_remoti', 'payload': await _luoghiRemoti.elenco()});
+      _aTutti({'event': 'fs_volumes', 'payload': await _fileService.volumes()});
+    }
+    if (aperti.isNotEmpty) {
+      aperti.sort((a, b) => ArrivoDispositivi.settori(b.$1.dispositivo)
+          .compareTo(ArrivoDispositivi.settori(a.$1.dispositivo)));
+      try {
+        await Process.start('minerva-files', ['--nuova-finestra', aperti.first.$2],
+            mode: ProcessStartMode.detached);
+      } on ProcessException catch (e) {
+        print('[MINERVA][DISPOSITIVI][WARN] Gestore file non avviato: ${e.message}');
+      }
+      return;
+    }
+    final v = primoFallito;
+    if (v == null) return;
+    if (await lineaUsbDisturbata()) {
+      errore = 'Il collegamento USB è disturbato: il computer riceve dati '
+          'rovinati. Prova un altro cavo, o una porta sul retro del computer.';
+    } else if (v.telefono && !errore.contains('Sbloccalo')) {
+      // L'errore di gvfs («Impossibile aprire il dispositivo MTP "001,013"»)
+      // dice cosa è andato storto, non cosa fare. Per un telefono le cause
+      // sono quasi sempre queste, in quest'ordine.
+      errore = 'Sblocca il telefono, scegli «Trasferimento file» e, se lo '
+          'chiede, consenti l\'accesso ai dati; poi staccalo e riattaccalo. '
+          'Se continua, prova un altro cavo o un\'altra porta USB.';
+    }
+    print('[MINERVA][DISPOSITIVI][WARN] ${v.nome} non si apre: $errore');
+    _aTutti({
+      'event': 'dispositivo_avviso',
+      'payload': {
+        'nome': v.nome,
+        'errore': errore.isEmpty ? 'Non si apre.' : errore,
+      },
+    });
+  }
 
   Future<void> _greetdRichiesta(
     WebSocketClientConnection client,
@@ -535,12 +783,19 @@ class WebSocketServer {
   }
 
   ServerSocket? _server;
+  bool _closing = false;
+  Future<void>? _listenerClosed;
+  Future<void>? _stopFuture;
 
   /// La parola d'ordine del canale, nuova a ogni avvio. Vedi
   /// `canale_segreto.dart` per che cosa garantisce e che cosa no.
   String _segreto = '';
+  PubblicazioneCanale? _pubblicazioneCanale;
 
   final List<WebSocketClientConnection> _clients = [];
+  // Il limite vale solo mentre si attende il saluto. Non trattenere client
+  // e callback fino alla scadenza dopo autenticazione, uscita o arresto.
+  final Map<WebSocketClientConnection, Timer> _salutiInAttesa = {};
   StreamSubscription? _eventBusSubscription;
   StreamSubscription? _transferSubscription;
   StreamSubscription? _statoFinestreSub;
@@ -556,7 +811,7 @@ class WebSocketServer {
 
   /// Rilegge le icone dal tema attivo. Va chiamata ogni volta che il tema
   /// cambia, altrimenti si continuano a mandare i percorsi di quello prima.
-  void _rebuildIconMap() {
+  Future<void> _rebuildIconMap() async {
     // ── Non nella schermata di accesso ──────────────────────────────────
     //
     // Lì il conto era «Icone classiche pronte: 0/76 da hicolor»: settantasei
@@ -573,7 +828,9 @@ class WebSocketServer {
     // funzionare, solo per chi non doveva.
     if (Ambiente.eGreeter) return;
 
-    _iconMap = resolveMinervaIcons(_iconResolver);
+    // In un altro Isolate: a disco freddo costava 1,4 s di ciclo fermo
+    // (`ipc.icons.ready`, 18 ottobre). Vedi `IconResolver.fuoriDalCiclo`.
+    _iconMap = await _iconResolver.fuoriDalCiclo(_iconeMinervaInCopia);
     print(
       '[MINERVA][MATRIX][INFO] Icone classiche pronte: '
       '${_iconMap.length}/${minervaIconNames.length} da "${_iconResolver.activeTheme}"',
@@ -588,6 +845,18 @@ class WebSocketServer {
   /// cambia il tema delle icone. Era scritto solo nel primo, ed è questo che
   /// faceva restare la dock con le icone di prima — vedi
   /// `_applyIconThemeFromSettings()`.
+  /// `_allAppsPayload` con le icone già cercate fuori dal ciclo: è questa da
+  /// usare. Al saluto della shell (`rescan_apps`) la risoluzione delle icone
+  /// sul filo principale fermava il demone 4 s a disco freddo, e la richiesta
+  /// di accesso del greeter aspettava dietro (login v24, 18 ottobre).
+  Future<List<Map<String, dynamic>>> _allAppsPronto() async {
+    final nomi = _iconResolver.ignoti([for (final app in _appScanner.apps) app.icon]);
+    if (nomi.isNotEmpty) {
+      await _iconResolver.fuoriDalCiclo(IconResolver.risolviNomi, nomi);
+    }
+    return _allAppsPayload;
+  }
+
   List<Map<String, dynamic>> get _allAppsPayload => [
     for (final app in _appScanner.apps)
       {
@@ -640,7 +909,11 @@ class WebSocketServer {
   /// Se è cambiato davvero, si rifà la mappa e la si manda a TUTTI — non solo
   /// a chi ha toccato l'interruttore, che è l'unico processo che non ha
   /// bisogno di essere avvisato.
-  void _applyIconThemeFromSettings() {
+  /// Numero dell'ultima richiesta di cambio: due cambi ravvicinati non devono
+  /// finire con la risposta del primo che arriva dopo quella del secondo.
+  int _cambioIconeNumero = 0;
+
+  Future<void> _applyIconThemeFromSettings() async {
     // Due cose possono essere cambiate, e tutte e due cambiano le icone: il
     // tema scelto, e il COLORE DI FONDO dell'interfaccia. Il secondo non è
     // ovvio — si sceglie «Rosa» pensando ai pannelli — ma i temi di icone
@@ -658,7 +931,10 @@ class WebSocketServer {
     if (!cambiatoTema && !cambiatoSfondo) {
       return;
     }
-    _rebuildIconMap();
+    final numero = ++_cambioIconeNumero;
+    await _rebuildIconMap();
+    final pronte = await _allAppsPronto();
+    if (numero != _cambioIconeNumero) return;
 
     // ── Due elenchi, non uno ────────────────────────────────────────────
     //
@@ -674,9 +950,8 @@ class WebSocketServer {
     // shell, e la dock resta identica. Non era la dock a non ascoltare: erano
     // i percorsi dei programmi a non essere mai stati ricalcolati, perché li
     // si risolveva soltanto rispondendo a `get_all_apps`.
-    final apps = _allAppsPayload;
     _aTutti({'event': 'icons', 'payload': _iconPayload});
-    _aTutti({'event': 'all_apps', 'payload': apps});
+    _aTutti({'event': 'all_apps', 'payload': pronte});
   }
 
   // ignore: prefer_initializing_formals
@@ -707,7 +982,10 @@ class WebSocketServer {
   final String? _fileSegreto;
 
   /// Avvia il server e si mette in ascolto degli eventi del bus per inoltrarli ai client.
-  Future<void> start() async {
+  Future<void> start({void Function(String)? traceStartup}) async {
+    if (_closing) throw StateError('Server IPC già in arresto');
+    traceStartup?.call('ipc.start.begin');
+    if (traceStartup != null) _tracciaAzioni.start();
     try {
       // Prima di accettare chiunque: il tema di icone scelto dall'utente e la
       // traduzione delle nostre icone in quel tema. Il primo client riceve la
@@ -721,7 +999,8 @@ class WebSocketServer {
         ),
       );
       _iconResolver.setTheme(_settingsApi.getString('icons.theme', ''));
-      _rebuildIconMap();
+      await _rebuildIconMap();
+      traceStartup?.call('ipc.icons.ready');
 
       // ── La porta ────────────────────────────────────────────────────
       //
@@ -735,22 +1014,27 @@ class WebSocketServer {
       // numero. Chi deve trovarci non indovina — la porta scelta finisce nel
       // file del canale, e le finestre leggono di lì.
       _server = await _ascolta();
+      traceStartup?.call('ipc.socket.bound');
 
       print('[MINERVA][IPC][OK] Server in ascolto su $_percorsoSocket');
 
       // Il segreto DOPO aver preso il socket, perché nel file ci va anche il
       // percorso; e prima di accettare chiunque, perché un demone che ascolta
       // e non ha ancora una parola d'ordine è un demone che non la chiede.
-      _segreto = await CanaleSegreto.scriviNuovo(
+      final pubblicazione = await CanaleSegreto.pubblicaNuovo(
         percorsoFile: _fileSegreto,
         socket: _percorsoSocket,
       );
+      _pubblicazioneCanale = pubblicazione;
+      _segreto = pubblicazione.segreto;
+      traceStartup?.call('ipc.token.published');
       print(
         '[MINERVA][IPC][OK] Indirizzo del canale in '
-        '${CanaleSegreto.scrittoIn} (sessione «${CanaleSegreto.sessione()}»)',
+        '${pubblicazione.percorso} (sessione «${CanaleSegreto.sessione()}»)',
       );
 
       _server!.listen(_handleNewClient);
+      traceStartup?.call('ipc.listener.registered');
 
       // Ascolta tutti gli eventi del bus e li trasmette ai client interessati
       //
@@ -767,7 +1051,7 @@ class WebSocketServer {
       _eventBusSubscription = _eventBus.stream.listen((event) {
         try {
           if (event.type == 'settings_changed') {
-            _applyIconThemeFromSettings();
+            unawaited(_applyIconThemeFromSettings());
             _controller.applica();
           }
           _broadcastEvent(event);
@@ -789,7 +1073,9 @@ class WebSocketServer {
         _aTutti({'event': 'liquid_update', 'payload': state},
             solo: (client) => client.isSubscribed('liquid_update'));
       });
+      traceStartup?.call('ipc.update.begin');
       await _liquidUpdate.init();
+      traceStartup?.call('ipc.update.ready');
       if (Platform.environment['MINERVA_PROVA'] != '1') {
         _liquidUpdate.startAutomatic();
       }
@@ -800,6 +1086,7 @@ class WebSocketServer {
         }, solo: (c) => c.isSubscribed('controller_state'));
       });
       unawaited(_controller.start());
+      traceStartup?.call('ipc.controller.dispatched');
 
       _transferSubscription = _fileService.progress.listen((job) {
         _aTutti({'event': 'fs_job', 'payload': job});
@@ -818,6 +1105,14 @@ class WebSocketServer {
       _statoMonitorSub = _finestre.monitor.listen((json) {
         _aTutti({'event': 'monitors_state', 'payload': json});
       });
+      // Non nella schermata di accesso, che non ha un gestore file, e non
+      // nelle prove, che non devono montare i dispositivi di chi le lancia.
+      if ((Platform.environment['GREETD_SOCK'] ?? '').isEmpty &&
+          Platform.environment['MINERVA_PROVA'] != '1') {
+        _arrivoSub = _arrivo.cambi.listen((_) => unawaited(_dispositiviCambiati()));
+        unawaited(_arrivo.start().then((_) => _dispositiviCambiati()));
+      }
+      traceStartup?.call('ipc.subscriptions.ready');
     } catch (e) {
       // Senza canale il demone non serve a niente: la shell non lo trova, e
       // ogni finestra mostra i valori di fabbrica fingendo siano quelli di chi
@@ -973,6 +1268,11 @@ class WebSocketServer {
   }
 
   void _handleNewClient(Socket socket) {
+    // Il kernel può avere già accodato un'accettazione quando close parte.
+    if (_closing) {
+      socket.destroy();
+      return;
+    }
     final client = WebSocketClientConnection(socket);
     // Se muore da sé — una finestra uccisa con `kill -9`, o sparita insieme al
     // compositore — se ne accorge la connessione, e da lì l'elenco. Prima
@@ -997,7 +1297,7 @@ class WebSocketServer {
     // connessione aperta per sempre — un modo silenzioso di riempire il
     // demone di connessioni finché non ne accetta più, cioè finché la barra
     // che si riavvia non riesce più a rientrare.
-    Timer(const Duration(seconds: 5), () {
+    _salutiInAttesa[client] = Timer(const Duration(seconds: 5), () {
       if (!client.autenticato && _clients.contains(client)) {
         print(
           '[MINERVA][IPC][ATTENZIONE] Un client non ha detto la parola '
@@ -1093,16 +1393,14 @@ class WebSocketServer {
   void _rigaArrivata(WebSocketClientConnection client, List<int> byte) {
     // Chi è già stato tolto — un saluto sbagliato, una riga di troppo — non
     // viene più servito, nemmeno per le righe arrivate nello stesso pezzo.
-    if (!_clients.contains(client)) return;
+    if (_closing || !_clients.contains(client)) return;
     final String riga;
     try {
       riga = utf8.decode(byte);
-    } on FormatException catch (e) {
-      // Come prima, quando era il flusso a rompersi: chi manda byte che non
-      // sono UTF-8 non sta parlando il nostro protocollo.
+    } on FormatException {
+      // L'eccezione può contenere byte della richiesta: non stamparli.
       print(
-        '[MINERVA][IPC][ERRORE] Un client ha mandato una riga che non è '
-        'UTF-8: $e',
+        '[MINERVA][IPC][ERRORE] Riga UTF-8 non valida: connessione chiusa.',
       );
       _removeClient(client);
       return;
@@ -1137,7 +1435,19 @@ class WebSocketServer {
 
   /// La parola d'ordine è giusta: da qui in poi il client è uno di noi, e
   /// riceve quello che riceveva prima appena connesso.
+  void _rifiutaClient(WebSocketClientConnection client) {
+    // Non stampare action o eccezioni del parser prima del saluto: sono
+    // contenuto arbitrario e possono includere segreti di un client guasto.
+    print('[MINERVA][IPC][ATTENZIONE] Richiesta non autenticata: connessione chiusa.');
+    client.send({
+      'event': 'ciao',
+      'payload': {'ok': false, 'errore': "parola d'ordine mancante o errata"},
+    });
+    _removeClient(client);
+  }
+
   void _saluta(WebSocketClientConnection client) {
+    _salutiInAttesa.remove(client)?.cancel();
     client.autenticato = true;
     client.send({
       'event': 'ciao',
@@ -1184,8 +1494,9 @@ class WebSocketServer {
   }
 
   void _removeClient(WebSocketClientConnection client) {
+    _salutiInAttesa.remove(client)?.cancel();
+    if (!_clients.remove(client)) return;
     _desktopLauncher.forget(client);
-    _clients.remove(client);
     client.close();
     print(
       '[MINERVA][IPC][INFO] Client disconnesso (Totale connessi: ${_clients.length})',
@@ -1199,6 +1510,9 @@ class WebSocketServer {
     // leggere `/proc` ogni due secondi per il resto della sessione.
     if (_iscrittiProcessi.remove(client)) _processi.disiscrivi();
     if (_iscrittiMacchina.remove(client)) _processi.disiscriviMacchina();
+    // L'equalizzatore: una shell che se ne va non manda `unsubscribe_spettro`,
+    // e `parec` resterebbe a leggere l'audio per niente.
+    _spettroLascia(client);
     // Lo stesso per l'audio: le Impostazioni chiuse non mandano
     // `unsubscribe_audio`.
     _audioSeNonServe();
@@ -1310,9 +1624,18 @@ class WebSocketServer {
     // il catch non la vede. Resta `null` solo se è il `jsonDecode` a fallire,
     // cioè se non era nemmeno un messaggio.
     Object? msgAzione;
+    Object? msgId;
     try {
-      final Map<String, dynamic> msg = jsonDecode(rawData);
+      final decoded = jsonDecode(rawData);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Il messaggio deve essere un oggetto');
+      }
+      final msg = decoded;
+      msgId = msg['id'];
       final action = msg['action'];
+      if (action is! String || action.isEmpty || action.length > 128) {
+        throw const FormatException('Nome azione non valido');
+      }
       msgAzione = action;
 
       // ── Il cancello ───────────────────────────────────────────────────
@@ -1323,26 +1646,15 @@ class WebSocketServer {
       // dimenticanza non si vede: l'azione funziona, semplicemente funziona
       // anche per chi non doveva.
       if (!client.autenticato) {
-        if (action == 'ciao' &&
-            CanaleSegreto.combacia(_segreto, msg['segreto'] as String?)) {
+        if (action == 'ciao' && msg['segreto'] is String &&
+            CanaleSegreto.combacia(_segreto, msg['segreto'] as String)) {
           _saluta(client);
           return;
         }
         // Non si dice se la parola d'ordine era sbagliata o se mancava, e non
         // si lascia la connessione aperta per riprovare: chi ce l'ha la dice
         // al primo colpo, chi non ce l'ha non deve poterla cercare.
-        print(
-          '[MINERVA][IPC][ATTENZIONE] Rifiutato un client senza parola '
-          "d'ordine (azione «$action»).",
-        );
-        client.send({
-          'event': 'ciao',
-          'payload': {
-            'ok': false,
-            'errore': "parola d'ordine mancante o errata",
-          },
-        });
-        _removeClient(client);
+        _rifiutaClient(client);
         return;
       }
 
@@ -1363,26 +1675,57 @@ class WebSocketServer {
       //
       // Chi non manda un `id` non ne riceve uno: la shell di oggi non lo usa
       // e le sue risposte restano identiche a prima.
+      //
+      // Diagnostica d'avvio: solo il NOME dell'azione, mai i parametri, e solo
+      // nei primi dieci secondi. Vedi `_sorvegliaCiclo` in `minerva_core.dart`.
+      final traccia = _tracciaAzioni.isRunning &&
+          _tracciaAzioni.elapsedMilliseconds < 10000 &&
+          RegExp(r'^[a-z][a-z0-9_]{0,63}$').hasMatch(action);
+      final inizio = DateTime.now().millisecondsSinceEpoch;
+      if (traccia) {
+        print('[LIQUID][STARTUP] pid=$pid stage=ipc.received action=$action '
+            'realtime_ms=$inizio');
+      }
       await runZoned(
         () => _eseguiAzione(client, action, msg),
         zoneValues: {_chiaveId: msg['id'], _chiaveCliente: client},
       );
-    } catch (e) {
-      print(
-        '[MINERVA][IPC][ERRORE] Errore nel processare messaggio del client: $e',
-      );
-      // ── E lo si dice a chi ha chiesto ─────────────────────────────────
-      //
-      // Fino al 7 settembre 2026 qui c'era solo la riga qui sopra. Se una
-      // qualunque delle azioni scoppiava a metà — un `as String?` su un numero
-      // basta — chi aveva mandato il messaggio restava ad aspettare per
-      // sempre, e il canale RESTAVA VIVO: il difetto non si vedeva nemmeno.
-      //
-      // Un `client.send` dentro un `catch` non può a sua volta far cadere il
-      // messaggio d'errore, o si torna al silenzio da un'altra porta.
+      if (traccia) {
+        final durata = DateTime.now().millisecondsSinceEpoch - inizio;
+        if (durata > 100) {
+          print('[LIQUID][STARTUP] pid=$pid stage=ipc.slow action=$action '
+              'duration_ms=$durata');
+        }
+      }
+    } catch (e, stack) {
+      if (!client.autenticato) {
+        _rifiutaClient(client);
+        return;
+      }
+      // FormatException.toString può includere lo stralcio JSON originale;
+      // anche eccezioni di servizi possono incorporare parametri riservati.
+      // Tipo e stack degli errori inattesi restano disponibili senza payload.
+      final safeAction = msgAzione is String &&
+              RegExp(r'^[a-z][a-z0-9_]{0,63}$').hasMatch(msgAzione)
+          ? msgAzione : 'non-valida';
+      final osCode = e is FileSystemException ? e.osError?.errorCode
+          : e is SocketException ? e.osError?.errorCode : null;
+      print('[MINERVA][IPC][ERRORE] Richiesta fallita: azione=$safeAction tipo=${e.runtimeType}'
+          '${osCode == null ? '' : ' errno=$osCode'}');
+      final invalid = e is FormatException || e is TypeError || e is ArgumentError;
+      if (!invalid) print(stack);
+      final reason = e is FormatException
+          ? 'Messaggio JSON o struttura non validi'
+          : invalid ? 'Parametri della richiesta non validi'
+                    : 'Operazione non riuscita; consultare il registro del servizio';
       try {
-        _nonSonoRiuscito(client, msgAzione, '$e');
-      } catch (_) {}
+        // L'await del gestore ha lasciato la sua zona. Ricreare il contesto
+        // della richiesta per correlare anche gli errori, non solo i successi.
+        runZoned(() => _nonSonoRiuscito(client, msgAzione, reason),
+            zoneValues: {_chiaveId: msgId, _chiaveCliente: client});
+      } catch (sendError) {
+        print('[MINERVA][IPC][ERRORE] Risposta di errore non inviata (${sendError.runtimeType}).');
+      }
     }
   }
 
@@ -1439,7 +1782,7 @@ class WebSocketServer {
         'payload': {'request': request, 'path': path, 'ok': true},
       });
       await _appUsageTracker.recordLaunch(launch.app.id);
-      _aTutti({'event': 'all_apps', 'payload': _allAppsPayload});
+      _aTutti({'event': 'all_apps', 'payload': await _allAppsPronto()});
     } catch (error) {
       // No token in diagnostics. No launch on parse/consent/file errors.
       if (_clients.contains(client)) {
@@ -1502,7 +1845,15 @@ class WebSocketServer {
           final vuoleTerminale =
               app?.needsTerminal == true || msg['terminal'] == true;
           final newWindow = msg['intent'] == 'new-window';
-          final selectedExec = newWindow && app != null && app.nuovaFinestra.isNotEmpty ? app.nuovaFinestra : exec;
+          // Un'app del catalogo parte col SUO comando, letto qui dal file
+          // .desktop, non con quello che il client ha mandato insieme all'id:
+          // `sh -c` su una stringa ricevuta è fiducia che non serve, e un
+          // dato poco affidabile finito in `exec` (un risultato di ricerca,
+          // un .desktop scaricato) sarebbe stato eseguito (19 ottobre).
+          // Senza id resta il comando ricevuto: la palette lancia comandi.
+          final selectedExec = app == null
+              ? exec
+              : newWindow && app.nuovaFinestra.isNotEmpty ? app.nuovaFinestra : app.exec;
           final comando = vuoleTerminale ? dentroUnTerminale(selectedExec) : selectedExec;
           final activationToken = msg['activationToken'];
           final launchEnvironment = <String,String>{};
@@ -1525,7 +1876,7 @@ class WebSocketServer {
             // lancio sono quello che ordina «Frequenti» e «Adesso, di
             // solito». Un lancio è un evento raro: il costo è niente, e
             // senza il menù restava fermo ai conti dell'avvio.
-            _aTutti({'event': 'all_apps', 'payload': _allAppsPayload});
+            _aTutti({'event': 'all_apps', 'payload': await _allAppsPronto()});
           }
         }
         break;
@@ -1558,6 +1909,12 @@ class WebSocketServer {
       // `subscribe` e `unsubscribe` non sono un vezzo: il servizio legge
       // `/proc` solo mentre qualcuno guarda, e senza la disiscrizione
       // resterebbe acceso per tutta la sessione dopo la prima apertura.
+      case 'subscribe_spettro':
+        _spettroIscrivi(client);
+        break;
+      case 'unsubscribe_spettro':
+        _spettroLascia(client);
+        break;
       case 'subscribe_processes':
         // L'evento `processes` NON sta fra quelli inoltrati di default, ed è
         // voluto: è il più pesante che il demone produca — cinquanta
@@ -1867,13 +2224,13 @@ class WebSocketServer {
         {
           final via = _foto.scartoDoppioni(
             msg['tieni'] as String?,
-            (msg['butta'] as List?)?.cast<String>(),
+            _stringhe(msg['butta']),
           );
           if (via['ok'] != true) {
             client.send({'event': 'foto_doppioni_scarta', 'payload': via});
             break;
           }
-          final buttate = (via['butta'] as List).cast<String>();
+          final buttate = _stringhe(via['butta'])!;
           final r = await _fileService.trash(buttate);
           _foto.indice.dimenticaSpariti(buttate);
           client.send({
@@ -2001,11 +2358,12 @@ class WebSocketServer {
         // applicazioni: rileggerlo e tenersi le categorie di prima vorrebbe
         // dire non vedere mai un programma appena installato.
         _categorieRicordate.dimentica();
-        _aTutti({'event': 'all_apps', 'payload': _allAppsPayload});
+        _aTutti({'event': 'all_apps', 'payload': await _allAppsPronto()});
         break;
 
       case 'get_all_apps':
-        client.send({'event': 'all_apps', 'payload': _allAppsPayload});
+        final elenco = await _allAppsPronto();
+        if (_clients.contains(client)) client.send({'event': 'all_apps', 'payload': elenco});
         break;
 
       // ── Gestore file ──────────────────────────────────────────────────
@@ -2042,7 +2400,7 @@ class WebSocketServer {
 
       case 'fs_transfer':
         {
-          final sources = (msg['sources'] as List?)?.cast<String>() ?? [];
+          final sources = _stringhe(msg['sources']) ?? [];
           final destination = msg['destination'];
           if (sources.isNotEmpty && destination is String) {
             await _fileService.startTransfer(
@@ -2118,7 +2476,7 @@ class WebSocketServer {
 
       case 'fs_delete':
         {
-          final paths = (msg['paths'] as List?)?.cast<String>() ?? [];
+          final paths = _stringhe(msg['paths']) ?? [];
           if (paths.isNotEmpty) {
             final r = await _fileService.eliminaDefinitivamente(paths);
             client.send({'event': 'fs_result', 'payload': r});
@@ -2144,7 +2502,7 @@ class WebSocketServer {
 
       case 'fs_trash':
         {
-          final paths = (msg['paths'] as List?)?.cast<String>() ?? [];
+          final paths = _stringhe(msg['paths']) ?? [];
           if (paths.isNotEmpty) {
             final r = await _fileService.trash(paths);
             // Una foto del catalogo buttata non deve restare nella galleria
@@ -2228,6 +2586,17 @@ class WebSocketServer {
             'payload': {'fonti': _notizie.elencoFonti(lingua, spente)},
           });
         }
+        break;
+
+      case 'media_tv':
+      case 'media_tv_canale':
+      case 'media_cerca':
+      case 'media_scarica':
+      case 'media_annulla':
+      case 'media_pulisci':
+      case 'media_lavori':
+      case 'media_libreria':
+        await _richiestaMedia(client, action as String, msg);
         break;
 
       case 'radio_cerca':
@@ -2353,7 +2722,7 @@ class WebSocketServer {
       // ── Formattare un disco ───────────────────────────────────────────
       case 'fs_conflitti':
         {
-          final sources = (msg['sources'] as List?)?.cast<String>() ?? [];
+          final sources = _stringhe(msg['sources']) ?? [];
           final destination = msg['destination'];
           client.send({
             'event': 'fs_conflitti',
@@ -2507,7 +2876,7 @@ class WebSocketServer {
 
       case 'fs_trash_restore':
         {
-          final paths = (msg['paths'] as List?)?.cast<String>() ?? [];
+          final paths = _stringhe(msg['paths']) ?? [];
           if (paths.isNotEmpty) {
             final r = await _fileService.restoreFromTrash(paths);
             client.send({'event': 'fs_result', 'payload': r});
@@ -2530,7 +2899,7 @@ class WebSocketServer {
       // finita la roba.
       case 'fs_compress':
         {
-          final paths = (msg['paths'] as List?)?.cast<String>() ?? [];
+          final paths = _stringhe(msg['paths']) ?? [];
           if (paths.isNotEmpty) {
             final r = await _archivi.comprimi(
               paths,
@@ -2644,7 +3013,7 @@ class WebSocketServer {
       case 'condivisione_invia':
         {
           final dove = msg['dove'];
-          final file = (msg['paths'] as List?)?.cast<String>() ?? [];
+          final file = _stringhe(msg['paths']) ?? [];
           final r = dove is String && dove.isNotEmpty
               ? await _condivisione.invia(
                   dove,
@@ -3211,7 +3580,7 @@ class WebSocketServer {
       // sta fuori dalla tua cartella lo lascia dov'è e lo dice: passerà
       // dall'aiutante di root, che ha un elenco chiuso di verbi.
       case 'manutenzione_pulisci':
-        final quali = (msg['ids'] as List?)?.cast<String>() ?? const <String>[];
+        final quali = _stringhe(msg['ids']) ?? const <String>[];
         final esitoPulizia = await Pulitore(
           // Quello che sta fuori dalla tua cartella passa dall'aiutante di
           // root, che ha un elenco chiuso di verbi. Il pulitore non sa
@@ -3273,7 +3642,7 @@ class WebSocketServer {
       // rifiuta qualunque percorso che lascerebbe un gruppo senza copie.
       case 'manutenzione_doppioni_cestina':
         final quali =
-            (msg['percorsi'] as List?)?.cast<String>() ?? const <String>[];
+            _stringhe(msg['percorsi']) ?? const <String>[];
         final vaglio = await Setaccio(
           escluse: await _escluse.leggi(),
         ).daButtare(quali);
@@ -3284,7 +3653,7 @@ class WebSocketServer {
           });
           break;
         }
-        final via = (vaglio['via'] as List).cast<String>();
+        final via = _stringhe(vaglio['via'])!;
         var liberati = 0;
         for (final p in via) {
           try {
@@ -3945,6 +4314,7 @@ class WebSocketServer {
             // Il pannello si ridisegna da sé: lo stato che aveva in mano è
             // vecchio di un istante, e un gruppo può averne cambiati altri
             // (scegliere il browser per «pagine web» tocca anche http).
+            if (_closing) break;
             client.send({
               'event': 'mime_categories',
               'payload': {
@@ -3952,6 +4322,8 @@ class WebSocketServer {
                 'famiglie': MimeService.famiglie,
               },
             });
+          } else {
+            throw const FormatException('Campi della richiesta MIME non validi');
           }
         }
         break;
@@ -3969,6 +4341,7 @@ class WebSocketServer {
             // delle Impostazioni già aperta continuava a mostrare la scelta
             // di prima, e chi guardava concludeva che non fosse successo
             // niente.
+            if (_closing) break;
             client.send({
               'event': 'mime_categories',
               'payload': {
@@ -3976,6 +4349,8 @@ class WebSocketServer {
                 'famiglie': MimeService.famiglie,
               },
             });
+          } else {
+            throw const FormatException('Campi della richiesta MIME non validi');
           }
         }
         break;
@@ -3988,6 +4363,7 @@ class WebSocketServer {
               'event': 'fs_result',
               'payload': await _mime.forgetDefault(mime),
             });
+            if (_closing) break;
             client.send({
               'event': 'mime_categories',
               'payload': {
@@ -3995,6 +4371,8 @@ class WebSocketServer {
                 'famiglie': MimeService.famiglie,
               },
             });
+          } else {
+            throw const FormatException('Campi della richiesta MIME non validi');
           }
         }
         break;
@@ -4002,7 +4380,7 @@ class WebSocketServer {
       case 'open_with':
         {
           final appId = msg['appId'];
-          final paths = (msg['paths'] as List?)?.cast<String>() ?? [];
+          final paths = _stringhe(msg['paths']) ?? [];
           if (appId is String && paths.isNotEmpty) {
             final r = await _mime.openWith(appId, paths);
             client.send({'event': 'fs_result', 'payload': r});
@@ -4017,7 +4395,7 @@ class WebSocketServer {
           // invece di lanciare `xdg-open` e sperare. È la differenza fra
           // «non c'è un programma per questo tipo» e un doppio clic che
           // non fa niente senza spiegazione.
-          final paths = (msg['paths'] as List?)?.cast<String>() ?? [];
+          final paths = _stringhe(msg['paths']) ?? [];
           if (paths.isNotEmpty) {
             final mime = await _mime.detect(paths.first);
             final appId = await _mime.defaultFor(mime);
@@ -4055,9 +4433,7 @@ class WebSocketServer {
       // sapere che nessuno risponderà.
       default:
         print(
-          '[MINERVA][IPC][WARN] Azione sconosciuta: "$action". '
-          'Il messaggio è arrivato ma nessuno lo gestisce — '
-          'shell e demone non combaciano.',
+          '[MINERVA][IPC][WARN] Azione non supportata: verificare compatibilità shell/demone.',
         );
         _nonSonoRiuscito(client, action, 'azione sconosciuta');
         break;
@@ -4159,7 +4535,35 @@ class WebSocketServer {
     _aTutti(payload, solo: (c) => c.isSubscribed(event.type));
   }
 
-  Future<void> stop() async {
+  /// Chiude l'ingresso prima che il core distrugga le dipendenze. Non è un
+  /// drain delle operazioni già entrate nei loro handler: quelle conservano
+  /// i rispettivi contratti di completamento/cancellazione.
+  Future<void> quiesce() {
+    if (_listenerClosed != null) return _listenerClosed!;
+    _closing = true;
+    _mime.quiesce();
+    _listenerClosed = _server?.close() ?? Future<void>.value();
+    for (final client in _clients.toList()) {
+      _removeClient(client);
+    }
+    for (final timer in _salutiInAttesa.values) {
+      timer.cancel();
+    }
+    _salutiInAttesa.clear();
+    return _listenerClosed!;
+  }
+
+  Future<void> stop() async => await (_stopFuture ??= _stopServices());
+
+  Future<void> _stopServices() async {
+    await quiesce();
+    await _tv.chiudi();
+    await _subSpettro?.cancel();
+    await _spettro.chiudi();
+    await _mediaYt.chiudi();
+    await _mediaDownloads?.chiudi();
+    await _mediaSub?.cancel();
+    await _mime.dispose();
     await _liquidUpdateSub?.cancel();
     await _liquidUpdate.close();
     await _systemAudioSub?.cancel();
@@ -4168,25 +4572,19 @@ class WebSocketServer {
     await _controller.close();
     await _eventBusSubscription?.cancel();
     await _transferSubscription?.cancel();
+    await _arrivoSub?.cancel();
+    await _arrivo.stop();
     await _statoFinestreSub?.cancel();
     await _statoMonitorSub?.cancel();
     await _greetdConversation.close();
-    // Fermare le nuove connessioni prima di chiudere quelle esistenti.
-    // La chiusura dei socket può rimuovere client tramite le loro callback.
-    await _server?.close();
-    for (final client in _clients.toList()) {
-      client.close();
-    }
-    _clients.clear();
-    // Il socket è un file e non sparisce da solo quando il processo finisce:
-    // se lo si lascia per terra, il prossimo avvio deve prima capire se è di
-    // qualcuno (vedi `_ascolta`). Chiudendo per bene si evita di fargli fare
-    // quella domanda.
+    // ServerSocket.close already unlinks its Unix socket. A second, delayed
+    // unlink could remove the path of a newly bound instance instead.
     try {
-      final f = File(_percorsoSocket);
-      if (await f.exists()) await f.delete();
+      await _pubblicazioneCanale?.revoca();
     } catch (_) {
-      // Se non si riesce non è grave: `_ascolta` sa riconoscere un avanzo.
+      // Keep diagnostics free of secret content and never unlink a foreign file
+      // as a fallback after an ownership/read/locking failure.
+      print('[MINERVA][IPC][WARN] Revoca del riferimento canale non completata');
     }
     print('[MINERVA][IPC][INFO] Server spento.');
   }
@@ -4210,6 +4608,7 @@ class WebSocketClientConnection {
   /// nota mai, e per questo resta lì per anni a far credere che ci sia un
   /// canale che non c'è.
   List<String> subscribedEvents = [
+    'media_job',
     'state_changed',
     'settings_changed',
     'keybindings_changed',
@@ -4461,4 +4860,22 @@ class WebSocketClientConnection {
     // finisce mai e la connessione resta nell'elenco.
     _socket.destroy();
   }
+}
+
+/// Per `IconResolver.fuoriDalCiclo`: di primo livello, così l'Isolate copia
+/// solo il risolutore e non il server.
+Map<String, dynamic> _iconeMinervaInCopia(IconResolver r, List<String> _) =>
+    resolveMinervaIcons(r);
+
+/// Un elenco di stringhe dal client, controllato TUTTO prima di usarlo.
+///
+/// Era `.cast<String>()`, che è pigro: il tipo di ogni elemento si controlla
+/// solo quando lo si legge. `fs_delete` con `["/a", "/b", 5]` cancellava `/a`
+/// e `/b` e poi falliva sul 5: un'operazione fatta a metà e un errore
+/// generico (fuzzing del demone, 19 ottobre). `List<String>.from` fallisce
+/// subito, prima che si tocchi qualunque cosa. `null` resta `null`.
+List<String>? _stringhe(Object? v) {
+  if (v == null) return null;
+  if (v is! List) throw ArgumentError('serve un elenco di stringhe');
+  return List<String>.from(v);
 }

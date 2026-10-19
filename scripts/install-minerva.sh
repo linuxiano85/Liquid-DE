@@ -85,6 +85,12 @@ PKGS=(
     # aperto». Il `-ffmpeg` è il backend: senza, il lettore si apre e non
     # riproduce niente, che è peggio.
     qt6-multimedia qt6-multimedia-ffmpeg
+    # Media: `mpv` (con libmpv) riproduce dentro la finestra video, stream e
+    # canali TV; `yt-dlp` cerca e scarica da YouTube, anche playlist intere;
+    # `ffmpeg` unisce audio e video, converte in mp3/m4a/opus e mette la
+    # copertina. Prima Media usava un `yt-dlp` installato a mano in pipx: su
+    # un altro computer non c'era, e nessuno lo aggiornava (18 ottobre 2026).
+    mpv yt-dlp ffmpeg
     # Backend
     dart greetd
     # Servizi usati dai widget della barra
@@ -132,20 +138,31 @@ if ! command -v ksecretd >/dev/null 2>&1 &&
     PKGS+=(gnome-keyring)
 fi
 
+# Scansione e installazione condividono la stessa verifica: un guasto del
+# database non significa che le dipendenze siano presenti. Nessun privilegio
+# viene richiesto finché esito ed elenco non sono coerenti.
+command -v pacman >/dev/null 2>&1 || { c_err "Serve pacman (Arch o derivata)."; exit 1; }
+ESITO=0
+MANCANTI=$(pacman -T "${PKGS[@]}" 2>/dev/null) || ESITO=$?
+if [[ ( $ESITO != 0 && $ESITO != 127 ) ||
+      ( $ESITO == 0 && -n $MANCANTI ) ||
+      ( $ESITO == 127 && -z $MANCANTI ) ]]; then
+    c_err "Non riesco a controllare le dipendenze con pacman (esito $ESITO)."
+    exit 1
+fi
+
 # La scansione è priva di effetti e legge l'elenco usato davvero qui sotto.
 if [[ ${1:-} == --scan ]]; then
-    command -v pacman >/dev/null 2>&1 || { c_err "Serve pacman (Arch o derivata)."; exit 1; }
-    ESITO=0
-    MANCANTI=$(pacman -T "${PKGS[@]}" 2>/dev/null) || ESITO=$?
-    if [[ ${ESITO:-0} != 0 && ${ESITO:-0} != 127 ]]; then
-        c_err "Non riesco a controllare le dipendenze con pacman."
-        exit 1
-    fi
     printf 'total\t%s\n' "${#PKGS[@]}"
     while IFS= read -r pacchetto; do
         [[ -z $pacchetto ]] || printf 'missing\t%s\n' "$pacchetto"
     done <<< "$MANCANTI"
     exit 0
+fi
+
+if [[ ! -r "$MINERVA_DIR/config/mimeapps/liquidde-mimeapps.list" ]]; then
+    c_err "Manca la configurazione delle applicazioni predefinite di Liquid."
+    exit 1
 fi
 
 c_head "Dipendenze"
@@ -157,7 +174,6 @@ c_head "Dipendenze"
 # completo — un database appena scaricato con librerie vecchie — qui non
 # c'è: `pacman -T` guarda cosa manca col database che c'è già, e se manca
 # qualcosa lo si installa senza scaricarne uno nuovo (`-S`, non `-Sy`).
-MANCANTI=$(pacman -T "${PKGS[@]}" 2>/dev/null || true)
 if [ -z "$MANCANTI" ]; then
     c_ok "c'è già tutto: niente da installare"
 elif sudo pacman -S --needed --noconfirm $MANCANTI; then
@@ -190,6 +206,13 @@ sudo mv -f /usr/local/bin/minerva-pam.new /usr/local/bin/minerva-pam
 bash "$MINERVA_DIR/scripts/costruisci-window-identity.sh" || {
     c_err "Build del modulo identità finestre fallita."
     exit 1
+}
+# Il lettore di Media (mpv dentro la finestra, MPRIS, ascolto da YouTube).
+# Non lo compilava nessuno: su un PC nuovo Media restava su Qt Multimedia,
+# senza YouTube né comandi nella barra (19 ottobre). Se fallisce si va
+# avanti: Media funziona lo stesso, con meno.
+bash "$MINERVA_DIR/scripts/costruisci-mpv.sh" || {
+    c_warn "Build del lettore mpv di Media fallita: Media userà Qt Multimedia."
 }
 bash "$MINERVA_DIR/scripts/costruisci-tiled-headers.sh" || {
     c_err "Build delle intestazioni adattive GTK fallita."
@@ -585,53 +608,15 @@ c_ok "«Non spegnere lo schermo» dei programmi arriva al compositore"
 
 gtk-update-icon-cache -f -t "$PREFISSO/share/icons/hicolor" >/dev/null 2>&1 || true
 
-# ── Chi apre le immagini ──────────────────────────────────────────────────
+# ── Chi apre le immagini, i video e la musica ─────────────────────────────
 #
-# Dichiarare i tipi nel `.desktop` mette Anteprima fra le SCELTE POSSIBILI;
-# essere quella predefinita è un'altra cosa e va detta, altrimenti in una
-# sessione Minerva un doppio clic su una fotografia continua ad aprire il
-# visualizzatore di un altro ambiente.
-#
-# Si scrive, e si dice ad alta voce che è stato scritto. Installare un ambiente
-# desktop VUOL DIRE anche questo: chi resta il predefinito è una scelta
-# dell'ambiente, non un dettaglio. Quasi sempre la riga che si sostituisce non
-# l'ha scritta l'utente ma il gestore file di un altro ambiente, la prima volta
-# che ci ha aperto una fotografia.
-#
-# Si toccano solo i formati che sappiamo davvero disegnare, e nessun formato
-# vettoriale o di macchina fotografica: quelli restano a chi li faceva.
-# Anche i video: dal 6 ottobre 2026 si guardano in Anteprima, scorrendo
-# insieme alle fotografie della stessa cartella (deciso con il manutentore: «ognuno
-# il suo mestiere»). Media resta il lettore della musica; per un video lo si
-# sceglie con «Apri con» quando servono playlist, taglio o sottotitoli.
-for tipo in image/png image/jpeg image/gif image/bmp image/webp image/tiff \
-            video/mp4 video/webm video/x-matroska video/quicktime \
-            video/x-msvideo video/mpeg video/ogg video/3gpp; do
-    xdg-mime default minerva-viewer.desktop "$tipo" 2>/dev/null || true
-done
-c_ok "Anteprima è il visualizzatore predefinito di immagini e video"
-c_info "per tornare indietro: xdg-mime default <programma>.desktop image/jpeg"
-
-# ── Chi apre audio e video ────────────────────────────────────────────────
-#
-# Stessa scelta e stessa ragione, con una storia in più che vale la pena
-# ricordare. Fino al 23 agosto 2026 questi sette tipi audio li dichiaravano
-# DUE programmi di Minerva: il lettore e «Suoneria», un editor di suonerie in
-# PyQt6. Due programmi che dicono «apro io» vuol dire che a decidere è
-# l'ordine dentro `mimeapps.list`, cioè il caso.
-#
-# E il caso aveva scelto la Suoneria, perché era l'unica delle due nel menu:
-# il lettore vero non era in questo script e non veniva installato affatto.
-# Suoneria è in `.attic/2026-08-23-suoneria/`, con il perché per esteso.
-#
-# Un tipo dichiarato da due nostri programmi è un difetto, non una comodità:
-# quando succede se ne toglie uno.
-for tipo in audio/mpeg audio/x-wav audio/wav audio/mp4 audio/aac audio/flac \
-            audio/ogg; do
-    xdg-mime default minerva-media.desktop "$tipo" 2>/dev/null || true
-done
-c_ok "Media è il lettore predefinito della musica"
-c_info "per tornare indietro: xdg-mime default <programma>.desktop audio/mpeg"
+# Proposte della sessione Liquid, sotto le scelte personali e amministrative.
+# XDG_CURRENT_DESKTOP=LiquidDE:Minerva seleziona questo file soltanto qui;
+# KDE e gli altri desktop conservano i propri predefiniti. Non riscrivere
+# ~/.config/mimeapps.list e non indovinare quali scelte precedenti ripristinare.
+install -Dm644 "$MINERVA_DIR/config/mimeapps/liquidde-mimeapps.list" \
+    "$APPLICAZIONI/liquidde-mimeapps.list"
+c_ok "Anteprima e Media proposti in Liquid, rispettando le scelte personali"
 
 # Il PATH qui non conta: è la sessione di Liquid DE a mettere il prefisso in
 # testa (`start-minerva-wayland.sh`), e fuori dalla sessione i comandi
@@ -741,7 +726,7 @@ ALL_OK=1
 # Minerva gira sul suo compositore e quel pacchetto va tolto: lasciarlo qui
 # vorrebbe dire che il giorno del distacco l'installatore diventa rosso proprio
 # perché il distacco è riuscito.
-for bin in qs dart cliphist wl-copy brightnessctl nmcli pactl bluetoothctl alacritty; do
+for bin in qs dart cliphist wl-copy brightnessctl nmcli pactl bluetoothctl alacritty mpv yt-dlp ffmpeg; do
     if command -v "$bin" &>/dev/null; then
         c_ok "$bin"
     else

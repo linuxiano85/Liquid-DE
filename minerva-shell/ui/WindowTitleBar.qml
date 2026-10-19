@@ -73,6 +73,12 @@ Item {
     /// copie in corso da annullare, le Impostazioni no.
     signal closeRequested()
 
+    /// Vera quando «riduci» lo decide la finestra: Minerva Media con la
+    /// musica in corso va nella barra di sistema invece che fra le finestre
+    /// ridotte. Le altre finestre non la toccano.
+    property bool minimizzaDaSe: false
+    signal minimizzaRichiesto()
+
     /// Vero mentre questa è la finestra con cui si sta lavorando.
     ///
     /// Lo chiede alla finestra che la contiene, non a chi la usa:
@@ -313,7 +319,7 @@ Item {
         maximized: bar.maximized
         fullscreen: bar.aTuttoSchermo
 
-        onMinimizeRequested: bar.minimizza()
+        onMinimizeRequested: bar.minimizzaDaSe ? bar.minimizzaRichiesto() : bar.minimizza()
         onMaximizeRequested: bar.ingrandisci()
         onFullscreenRequested: bar.schermoIntero()
         onCloseRequested: bar.closeRequested()

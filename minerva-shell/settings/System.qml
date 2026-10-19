@@ -1199,7 +1199,7 @@ FloatingWindow {
             case "dataora":  return "sections/DataOra.qml";
             case "accesso-facile": return "sections/Accessibilita.qml";
             case "defaults": return "sections/Defaults.qml";
-            case "avvio":    return "sections/Avvio.qml";
+            case "avvio":    return settings.stileWindows ? "windows/Avvio.qml" : "sections/Avvio.qml";
             case "account":  return "sections/Account.qml";
             case "utente":   return "sections/Utente.qml";
             case "accesso":  return "sections/Accesso.qml";

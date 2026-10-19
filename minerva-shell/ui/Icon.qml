@@ -310,7 +310,7 @@ Item {
         "cpu":       "M8 8h8v8H8z M4.5 10h3 M4.5 14h3 M16.5 10h3 M16.5 14h3 M10 4.5v3 M14 4.5v3 M10 16.5v3 M14 16.5v3",
         // ── I quattro dei widget della barra ─────────────────────────────
         //
-        // il manutentore, 14 settembre 2026: «quelli sulla barra sono confusionari
+        // Il manutentore, 14 settembre 2026: «quelli sulla barra sono confusionari
         // perché non hanno un simbolo per capire che valori monitorano».
         // Tre numeri in fila — «6 % · 21 % · 49°» — non dicono di cosa.
         //
@@ -462,7 +462,7 @@ Item {
         // riaprendo la finestra spariscono, che è il modo lungo per dire che
         // sono pixel e non oggetti.
         //
-        // il manutentore, quel giorno: «oltre al fatto che compaiono tutti quei segni
+        // Il manutentore, quel giorno: «oltre al fatto che compaiono tutti quei segni
         // + sovrapposti per un certo tot di secondi non ben definiti non mi fa
         // cambiare sezione, opzione specifica o chiudere impostazioni».
         //

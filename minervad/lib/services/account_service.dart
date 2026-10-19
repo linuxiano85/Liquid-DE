@@ -162,7 +162,7 @@ class AccountService {
       case 'kdrive':
         // ── Il numero non si chiede ──────────────────────────────────────
         //
-        // il manutentore, 25 agosto 2026: «il mio account chiede solo email e
+        // Il manutentore, 25 agosto 2026: «il mio account chiede solo email e
         // password e non un codice». Aveva ragione, e il modulo aveva torto:
         // il server WebDAV di Infomaniak risponde sulla radice, senza numero,
         // e i kDrive dell'account li elenca da sé. Il numero resta accettato
