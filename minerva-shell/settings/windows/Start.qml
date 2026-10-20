@@ -181,7 +181,7 @@ PaginaWindows {
         TendinaWindows {
             objectName: "startTipo"
             valore: Core.Ipc.get("windows11.menu", "windows11")
-            voci: [ { "valore": "windows11", "testo": "Windows" }, { "valore": "liquid", "testo": "Liquid" } ]
+            voci: [ { "valore": "windows11", "testo": "Familiare" }, { "valore": "liquid", "testo": "Liquid" } ]
             onScelto: function(v) { Core.Ipc.setSetting("windows11.menu", v); }
         }
     }

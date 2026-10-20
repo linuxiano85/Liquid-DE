@@ -28,8 +28,8 @@ PaginaWindows {
     }
     SchedaImpostazione {
         titolo: W.Style.label("File recenti nel menu Start", "Recent files in Start")
-        descrizione: W.Style.label("Mostra i file consigliati nel menu del preset Windows.",
-                                   "Show recommended files in the Windows preset menu.")
+        descrizione: W.Style.label("Mostra i file consigliati nel menu del preset Familiare.",
+                                   "Show recommended files in the Familiare preset menu.")
         icona: "document"
         S.ToggleSwitch {
             objectName: "privacyFileRecenti"

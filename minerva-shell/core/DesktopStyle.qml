@@ -49,11 +49,11 @@ QtObject {
         },
         {
             "id": "windows",
-            "nome": "Windows 11",
+            "nome": "Familiare",
             "breve": preset.it ? "Barra centrata e Start" : "Centred taskbar and Start",
             "descrizione": preset.it
-                ? "Windows 11 classico: barra centrata, Start, ricerca, notifiche e impostazioni rapide. Le preferenze sono salvate solo in questo stile."
-                : "Classic Windows 11: centred taskbar, Start, search, notifications and quick settings. Preferences are saved for this style."
+                ? "Familiare: barra centrata, Start, ricerca, notifiche e impostazioni rapide. Le preferenze sono salvate solo in questo stile."
+                : "Familiare: centred taskbar, Start, search, notifications and quick settings. Preferences are saved for this style."
         },
         {
             "id": "libero",

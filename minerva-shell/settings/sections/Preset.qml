@@ -10,7 +10,7 @@ import "../../windows11" as Windows11
 //
 // ── Perché è una pagina sua (11 ottobre 2026) ────────────────────────────
 //
-// il manutentore: «impostazioni per ogni preset grafica come Windows», «c'è il
+// Giacomo: «impostazioni per ogni preset grafica come Windows», «c'è il
 // chaos». La scelta dello stile stava in cima ad Aspetto, come una tendina
 // fra tante, e le opzioni di Windows 11 in fondo alla stessa pagina. Ma il
 // preset non è un'opzione dell'aspetto: decide quali opzioni esistono.
@@ -154,7 +154,7 @@ Page {
         objectName: "windowsAppearance"
         preset: ["windows"]
         apertaDiSerie: true
-        heading: "Windows 11"
+        heading: "Familiare"
         note: page.it ? "Scegli il menu e il tema della barra. Le modifiche valgono solo per questo preset, compresi effetti e tiling." : "Choose the taskbar menu and theme. Changes apply only to this preset, including effects and tiling."
         S.SettingRow {
             width: parent.width
@@ -163,13 +163,13 @@ Page {
             control: S.ChoicePicker {
                 objectName: "windowsMenuChoice"
                 value: Core.Ipc.get("windows11.menu", "windows11")
-                options: [{value:"windows11",label:"Windows 11"},{value:"liquid",label:"Liquid"}]
+                options: [{value:"windows11",label:"Familiare"},{value:"liquid",label:"Liquid"}]
                 onPicked: function(v) {Core.Ipc.setSetting("windows11.menu",v);}
             }
         }
         S.SettingRow {
             width: parent.width
-            label: page.it ? "Tema del desktop Windows" : "Windows desktop theme"
+            label: page.it ? "Tema del desktop" : "Desktop theme"
             controlWidth: 280
             control: S.ChoicePicker {
                 objectName: "windowsThemeChoice"
@@ -180,7 +180,7 @@ Page {
         }
         S.SettingRow {
             width:parent.width
-            label:page.it ? "Sfondo Windows":"Windows wallpaper"
+            label:page.it ? "Sfondo del desktop":"Desktop wallpaper"
             controlWidth:460
             control:S.ChoicePicker {
                 value:Core.Ipc.get("windows11.wallpaper","auto")
@@ -189,7 +189,7 @@ Page {
             }
         }
         Text {
-            text: page.it ? "Colore d'accento Windows" : "Windows accent color"
+            text: page.it ? "Colore d'accento" : "Accent color"
             color: Theme.Colors.text
             font.family: Theme.Typography.fontDisplay
             font.pixelSize: Theme.Typography.sizeSM
@@ -256,8 +256,8 @@ Page {
             width: parent.width
             label: page.it ? "Barra e pannelli di vetro" : "Glass taskbar and panels"
             description: page.it
-                ? "Come l'Acrylic di Windows 11: la barra, il calendario, le impostazioni rapide e i Widget lasciano intravedere lo sfondo, sfocato. Le finestre restano piene. Si spegne da solo col risparmio energetico."
-                : "Like Windows 11 Acrylic: the taskbar, calendar, quick settings and Widgets show the wallpaper through, blurred. Windows stay solid. Turns itself off in power saving."
+                ? "La traslucenza della barra: la barra, il calendario, le impostazioni rapide e i Widget lasciano intravedere lo sfondo, sfocato. Le finestre restano piene. Si spegne da solo col risparmio energetico."
+                : "Taskbar translucency: the taskbar, calendar, quick settings and Widgets show the wallpaper through, blurred. Windows stay solid. Turns itself off in power saving."
             control: S.ToggleSwitch {
                 objectName: "windowsAcrylic"
                 checked: Core.Ipc.get("windows11.acrylic", true)
@@ -266,7 +266,7 @@ Page {
         }
         S.SettingRow {
             width:parent.width
-            label:page.it ? "Icona tiling nella barra Windows":"Tiling icon on the Windows taskbar"
+            label:page.it ? "Icona tiling nella barra":"Tiling icon on the taskbar"
             control:S.ToggleSwitch {
                 checked:Core.Ipc.get("windows11.showTilingButton",false)
                 onToggled:function(v){Core.Ipc.setSetting("windows11.showTilingButton",v);}
@@ -275,7 +275,7 @@ Page {
         S.SettingRow {
             width: parent.width
             label: page.it ? "Documenti consigliati" : "Recommended documents"
-            description: page.it ? "Mostra nello Start Windows i documenti locali aperti di recente." : "Show recently opened local documents in Windows Start."
+            description: page.it ? "Mostra in Start i documenti locali aperti di recente." : "Show recently opened local documents in Start."
             control: S.ToggleSwitch {
                 checked: Core.Ipc.get("windows11.recommendations",true)
                 onToggled: function(v) {Core.Ipc.setSetting("windows11.recommendations",v);}
