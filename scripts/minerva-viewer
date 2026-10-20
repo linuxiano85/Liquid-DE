@@ -13,7 +13,7 @@ set -e
 # trova la cartella del progetto ovunque sia.
 SELF=$(readlink -f "$0")
 ROOT=$(dirname "$(dirname "$SELF")")
-CONFIG="$ROOT/minerva-shell/viewer.qml"
+CONFIG="$ROOT/minerva-shell/viewer-avvio.qml"
 
 if [ ! -f "$CONFIG" ]; then
     echo "minerva-viewer: non trovo $CONFIG" >&2

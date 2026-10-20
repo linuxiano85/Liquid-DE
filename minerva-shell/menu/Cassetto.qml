@@ -8,7 +8,7 @@ import "../ui" as Ui
 
 // ── Il Cassetto degli appunti ────────────────────────────────────────────
 //
-// Il manutentore, 24 settembre 2026: «Gli appunti dove li vogliamo mettere?». Nel
+// il manutentore, 24 settembre 2026: «Gli appunti dove li vogliamo mettere?». Nel
 // Cassetto: esce dal bordo destro dello schermo quando ci si SPINGE contro
 // il puntatore (`Core.Compositore.bordo`; una sosta non basta, perché lì si
 // va a prendere la barra di scorrimento), o con Super+V.

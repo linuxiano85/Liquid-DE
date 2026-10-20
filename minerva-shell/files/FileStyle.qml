@@ -28,6 +28,7 @@ QtObject {
     readonly property color edge: windows ? Windows.Style.edge : Theme.Colors.edge
     readonly property color edgeAccent: windows ? Windows.Style.accentIndicator : Theme.Colors.edgeAccent
     readonly property color hover: windows ? Windows.Style.hover : Theme.Colors.hover
+    readonly property color pressed: windows ? Windows.Style.pressed : Theme.Colors.pressed
     readonly property color selected: windows ? Qt.alpha(accent, dark ? 0.28 : 0.14) : Theme.Colors.selected
     readonly property color danger: Theme.Colors.danger
     readonly property color warning: Theme.Colors.warning

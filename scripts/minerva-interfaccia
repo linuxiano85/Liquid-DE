@@ -166,24 +166,32 @@ trap riavvia USR1
 
 # ── Come disegna la shell ──────────────────────────────────────────────────
 #
-# Col processore, come le sei app: il perché, i numeri e cosa si perde stanno
-# in `scripts/minerva-ambiente-app`. Qui il conto è questo — la shell nasce a
-# 202 MB di memoria privata, più del doppio di qualunque app, e non si spegne
-# mai; il motore grafico ne vale circa 38.
+# Con la scheda video (OpenGL), dal 19 ottobre 2026. Prima era col processore
+# (`QT_QUICK_BACKEND=software`), scelta del 23 settembre fatta guardando solo
+# memoria e avvio: un errore, perché nessuno aveva misurato i fotogrammi.
 #
-# Si può fare perché in tutta la shell non c'è un solo `layer.effect` né un
-# `QtQuick.Effects`: quelli stanno solo in `greeter/` e `blocco/`, che sono
-# altri due programmi e restano sulla scheda video.
+# Misurato il 19 ottobre su questa macchina (RX 580, schermo a 179,998 Hz),
+# finestra di prova con un'animazione:
 #
-# La via di fuga è una variabile NOSTRA e non `QT_QUICK_BACKEND` vuota: con
-# `${QT_QUICK_BACKEND:=software}` una variabile vuota conta come non
-# impostata, quindi «svuotarla» non riporterebbe la scheda video — riporterebbe
-# esattamente qui. Per una prova sulla scheda video:
+#                   fotogrammi in 5 s   memoria privata   CPU da ferma
+#   software          313 (62,6 fps)        9,5 MB          0
+#   OpenGL            900 (180 fps)        24,0 MB          0
 #
-#     MINERVA_SHELL_GPU=1 minerva-interfaccia
+# Il disegno software di Qt usa il ciclo «basic», che va a tempo di timer e
+# non segue lo schermo: a 180 Hz la shell disegnava un fotogramma ogni tre,
+# fuori passo. Era la lentezza «tre volte KDE». `QSG_RENDER_LOOP=threaded`
+# sul software non basta: ~150 fps e timer QML indietro del 18 %.
 #
-# e chi la vuole indietro per sempre toglie queste righe.
-if [ -z "${MINERVA_SHELL_GPU:-}" ]; then
+# Il costo vero di OpenGL è +14,5 MB privati (non i 38 di RSS citati prima,
+# che sono librerie condivise) e più CPU solo mentre qualcosa si muove.
+#
+# Da qui non si esporta più QT_QUICK_BACKEND: la shell lo passava a tutto
+# quello che lancia, e un'app Qt di terzi con un video non mostrava niente.
+# Per tornare al processore (prova o scheda video guasta):
+#
+#     MINERVA_SHELL_SOFTWARE=1 minerva-interfaccia
+unset QT_QUICK_BACKEND
+if [ -n "${MINERVA_SHELL_SOFTWARE:-}" ]; then
     QT_QUICK_BACKEND=software
     export QT_QUICK_BACKEND
 fi
@@ -191,8 +199,12 @@ fi
 echo "[MINERVA][SHELL] Guardiano avviato (pid $$)." >> "$REGISTRO"
 
 while :; do
-    "$ROOT/scripts/minerva-quickshell" -p "$ROOT/minerva-shell/shell.qml" >> "$REGISTRO" 2>&1 &
+    # `shell-avvio.qml` carica `shell.qml` come file locale: Qt ne tiene in cache
+    # la compilazione (primo stato 672 → 246 ms nel banco, 19 ottobre 2026).
+    "$ROOT/scripts/minerva-quickshell" -p "$ROOT/minerva-shell/shell-avvio.qml" >> "$REGISTRO" 2>&1 &
     figlio=$!
+    # STA-002: i primi 6 s della shell, per capire dove va il blocco del login.
+    "$ROOT/scripts/minerva-campiona-avvio" "$figlio" "$STATO/avvio-campioni.jsonl" 6 2>/dev/null &
     wait "$figlio"
     esito=$?
     figlio=""

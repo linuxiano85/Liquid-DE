@@ -3,6 +3,7 @@ import 'dart:io';
 import 'power_source.dart';
 
 import '../core/event_bus.dart';
+import 'comando_in_ascolto.dart';
 import 'dbus.dart';
 import 'processo_limitato.dart';
 
@@ -90,6 +91,24 @@ class VoceRfkill {
   return (presente: presente, accesa: accesa);
 }
 
+/// Il blocco del Bluetooth come lo diceva `rfkill list bluetooth | awk`:
+/// «hard» se un adattatore è bloccato dall'interruttore, altrimenti «soft» se
+/// è spento via software, altrimenti "". Letto da sysfs (vedi `_leggiRfkill`)
+/// e non più con tre processi (`sh`, `rfkill`, `awk`) ogni dodici secondi
+/// (20 ottobre 2026).
+String bloccoBluetoothDaRfkill(List<VoceRfkill> voci) {
+  var hard = false;
+  var soft = false;
+  for (final v in voci) {
+    if (v.tipo != 'bluetooth') continue;
+    if (v.hard) hard = true;
+    if (v.soft) soft = true;
+  }
+  if (hard) return 'hard';
+  if (soft) return 'soft';
+  return '';
+}
+
 int potenzaDaProcNetWireless(String testo) {
   for (final riga in testo.split('\n')) {
     final i = riga.indexOf(':');
@@ -107,7 +126,37 @@ class SystemStateService {
   final EventBus _eventBus;
 
   /// [scriviLuce] serve alle prove: di serie è `brightnessctl`.
-  SystemStateService(this._eventBus, {this._scriviLuce});
+  SystemStateService(
+    this._eventBus, {
+    this._scriviLuce,
+    ComandoInAscolto? ascoltoRete,
+    ComandoInAscolto? ascoltoBluetooth,
+  })  : _ascoltoRete = ascoltoRete ??
+            ComandoInAscolto('nmcli', const ['monitor'], segnalaUscita: true),
+        _ascoltoBluetooth = ascoltoBluetooth ??
+            ComandoInAscolto(
+              'gdbus',
+              const ['monitor', '--system', '--dest', 'org.bluez'],
+              segnalaUscita: true,
+              // Solo i segnali, che cominciano col percorso dell'oggetto
+              // (`/org/bluez/hci0: …PropertiesChanged`): le due righe con cui
+              // `gdbus` si presenta non sono cambi.
+              rigaUtile: (riga) => riga.startsWith('/'),
+            );
+
+  // ── Rete e Bluetooth: a eventi, non a giri ───────────────────────────────
+  //
+  // Fino al 20 ottobre 2026 ogni giro di dodici secondi lanciava `nmcli`, la
+  // lettura di BlueZ e `sh`+`rfkill`+`awk`. Adesso `nmcli` e BlueZ si
+  // rileggono solo quando il loro ascoltatore dice che è cambiato qualcosa
+  // (vedi `ComandoInAscolto`), e il blocco del Bluetooth si legge da sysfs.
+  // Se un ascoltatore non c'è o muore, quella parte torna a rileggersi a ogni
+  // giro, come prima: niente stato fermo.
+  final ComandoInAscolto _ascoltoRete;
+  final ComandoInAscolto _ascoltoBluetooth;
+  StreamSubscription<void>? _cambiRete, _cambiBluetooth;
+  bool _chiestaRete = false;
+  bool _chiestoBluetooth = false;
 
   final Future<void> Function(int)? _scriviLuce;
 
@@ -166,15 +215,32 @@ class SystemStateService {
   static const Duration _dopoUnComando = Duration(milliseconds: 900);
 
   Future<void> init() async {
+    _cambiRete = _ascoltoRete.cambi.listen((_) {
+      unawaited(leggi(rete: true, bluetooth: false));
+    });
+    _cambiBluetooth = _ascoltoBluetooth.cambi.listen((_) {
+      unawaited(leggi(rete: false, bluetooth: true));
+    });
+    await Future.wait([_ascoltoRete.start(), _ascoltoBluetooth.start()]);
     await leggi();
-    _slow = Timer.periodic(_riposo, (_) => leggi());
-    print('[MINERVA][SISTEMA][OK] Stato di sistema condiviso, letto ogni '
-        '${_riposo.inSeconds} s per tutte le finestre.');
+    // A ogni giro solo quello che non ha un ascoltatore: batteria, luce e
+    // potenza del Wi-Fi da sysfs, senza processi.
+    _slow = Timer.periodic(
+      _riposo,
+      (_) => leggi(rete: false, bluetooth: false),
+    );
+    print('[MINERVA][SISTEMA][OK] Stato di sistema condiviso: rete '
+        '${_ascoltoRete.acceso ? "ascoltata" : "riletta"}, Bluetooth '
+        '${_ascoltoBluetooth.acceso ? "ascoltato" : "riletto"}, il resto ogni '
+        '${_riposo.inSeconds} s.');
   }
 
   Future<void> dispose() async {
     _slow?.cancel();
     _verify?.cancel();
+    await _cambiRete?.cancel();
+    await _cambiBluetooth?.cancel();
+    await Future.wait([_ascoltoRete.stop(), _ascoltoBluetooth.stop()]);
   }
 
   // ── Lettura ──────────────────────────────────────────────────────────────
@@ -211,7 +277,12 @@ class SystemStateService {
   /// perché lo fosse.
   ///
   /// Ora si segna che va rifatta e si rifà **una volta** alla fine.
-  Future<void> leggi() async {
+  /// Rilegge lo stato. [rete] e [bluetooth] falsi vogliono dire «quelle
+  /// parti le dice già il loro ascoltatore»: si rileggono comunque se
+  /// l'ascoltatore è spento.
+  Future<void> leggi({bool rete = true, bool bluetooth = true}) async {
+    _chiestaRete = _chiestaRete || rete;
+    _chiestoBluetooth = _chiestoBluetooth || bluetooth;
     if (_leggendo) {
       _daRileggere = true;
       return;
@@ -220,12 +291,16 @@ class SystemStateService {
     try {
       do {
         _daRileggere = false;
+        final conNmcli = _chiestaRete || !_ascoltoRete.acceso;
+        final conBluez = _chiestoBluetooth || !_ascoltoBluetooth.acceso;
+        _chiestaRete = false;
+        _chiestoBluetooth = false;
         final prima = state.toString();
         await Future.wait([
           _leggiBatteria(),
           _leggiLuminosita(),
-          _leggiRete(),
-          _leggiBluetooth(),
+          _leggiRete(conNmcli: conNmcli),
+          if (conBluez) _leggiBluetooth(),
         ]);
         // Si annuncia solo se è cambiato qualcosa: svegliare tre processi ogni
         // dodici secondi per dire che è tutto come prima è esattamente lo
@@ -357,10 +432,7 @@ class SystemStateService {
   /// Resta un solo `nmcli`, per i NOMI delle connessioni attive, che
   /// NetworkManager conosce e sysfs no. Lanciato direttamente, senza shell in
   /// mezzo: da sette processi a uno.
-  Future<void> _leggiRete() async {
-    var wired = false, wiredName = '', name = '';
-    var strength = 0;
-
+  Future<String> _leggiConnessioniAttive() async {
     // `LC_ALL=C` non è un vezzo: senza, `nmcli` risponde nella lingua del
     // sistema. Si legge comunque il TIPO (`802-11-wireless`), che è un
     // identificatore e non viene tradotto, ma il resto dell'uscita sì.
@@ -376,6 +448,19 @@ class SystemStateService {
     } catch (_) {
       // nmcli che manca non è un errore: è un computer diverso dal nostro.
     }
+    return attive;
+  }
+
+  /// L'ultima risposta di `nmcli` sulle connessioni attive: fra un cambio e
+  /// l'altro della rete si riusa questa.
+  String _attive = '';
+
+  Future<void> _leggiRete({bool conNmcli = true}) async {
+    var wired = false, wiredName = '', name = '';
+    var strength = 0;
+
+    if (conNmcli) _attive = await _leggiConnessioniAttive();
+    final attive = _attive;
 
     for (final riga in attive.split('\n')) {
       // Il nome può contenere due punti; il tipo no. Si divide una volta sola.
@@ -500,12 +585,7 @@ class SystemStateService {
 
   /// Se l'adattatore è bloccato, e da cosa: `hard` (interruttore fisico),
   /// `soft` (bloccato via software, si sblocca), vuoto se libero.
-  Future<String> _leggiBlocco() async {
-    final out = await _sh('rfkill list bluetooth 2>/dev/null | awk \''
-        '/Hard blocked: yes/{h=1} /Soft blocked: yes/{s=1} '
-        'END{print h ? "hard" : (s ? "soft" : "")}\'');
-    return out.trim();
-  }
+  Future<String> _leggiBlocco() async => bloccoBluetoothDaRfkill(_leggiRfkill());
 
   // ── Comandi ──────────────────────────────────────────────────────────────
   //

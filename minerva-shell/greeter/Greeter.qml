@@ -1019,7 +1019,7 @@ Item {
                 if (!greeter.conSaluto)
                     return intero;
                 // Il nome di battesimo, non quello intero: «Buonasera,
-                // il manutentore Rossi» è un modulo, «Buonasera, Anna» è un
+                // Anna Rossi» è un modulo, «Buonasera, Anna» è un
                 // saluto.
                 var primo = String(intero).split(" ")[0];
                 // Senza nome completo resta quello d'accesso, che è minuscolo:

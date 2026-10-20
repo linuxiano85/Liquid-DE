@@ -20,7 +20,11 @@ Rectangle {
     property string detail: ""
 
     property bool checked: false
-    property color accent: Theme.Colors.accent
+    // Il contenitore può fornire la propria palette senza cambiare il tema
+    // delle altre finestre. I valori predefiniti restano quelli di Liquid.
+    property QtObject palette: Theme.Colors
+    property string fontFamily: Theme.Typography.fontDisplay
+    property color accent: palette.accent
     property bool enabled: true
 
     signal toggled(bool value)
@@ -38,11 +42,11 @@ Rectangle {
     implicitHeight: 62
     radius: Theme.Effects.radiusMD
 
-    color: !enabled ? Theme.Colors.sunken
+    color: !enabled ? palette.sunken
          : checked ? Qt.alpha(accent, 0.20)
-         : mouse.pressed ? Theme.Colors.pressed
-         : mouse.containsMouse ? Theme.Colors.hover
-         : Theme.Colors.raised
+         : mouse.pressed ? palette.pressed
+         : mouse.containsMouse ? palette.hover
+         : palette.raised
 
     border.width: 1
     border.color: checked ? Qt.alpha(accent, 0.45) : "transparent"
@@ -64,7 +68,7 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         width: 21; height: 21
         name: tile.icon
-        color: tile.checked ? tile.accent : Theme.Colors.textFaint
+        color: tile.checked ? tile.accent : tile.palette.textFaint
         Behavior on color { ColorAnimation { duration: Theme.Motion.quick } }
     }
 
@@ -80,8 +84,8 @@ Rectangle {
             width: parent.width
             text: tile.label
             elide: Text.ElideRight
-            color: tile.checked ? Theme.Colors.text : Theme.Colors.textMuted
-            font.family: Theme.Typography.fontDisplay
+            color: tile.checked ? tile.palette.text : tile.palette.textMuted
+            font.family: tile.fontFamily
             font.pixelSize: Theme.Typography.sizeMD
             font.weight: Theme.Typography.weightSemiBold
         }
@@ -91,8 +95,8 @@ Rectangle {
             text: tile.detail
             visible: text !== ""
             elide: Text.ElideRight
-            color: Theme.Colors.textFaint
-            font.family: Theme.Typography.fontDisplay
+            color: tile.palette.textFaint
+            font.family: tile.fontFamily
             font.weight: Theme.Typography.weightRegular
             font.pixelSize: Theme.Typography.sizeXS
         }

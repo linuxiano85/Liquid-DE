@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import '../core/event_bus.dart';
@@ -9,6 +10,10 @@ class PluginManager {
   final EventBus _eventBus;
   final String _pluginsDir;
   final List<Process> _activeProcesses = [];
+  final Set<Future<void>> _starting = {};
+  Future<void>? _initFuture;
+  Future<void>? _disposeFuture;
+  bool _closing = false;
 
   PluginManager(this._eventBus, {String? dir})
       : _pluginsDir = dir ?? MinervaPaths.pluginsDir();
@@ -37,12 +42,18 @@ class PluginManager {
   /// Non creare la cartella non toglie niente: un plugin esiste solo se
   /// qualcuno ce lo mette, e chi ce lo mette la cartella la crea nel farlo.
   /// Una cartella vuota fabbricata a ogni avvio non è mai servita a nessuno.
-  Future<void> init() async {
+  Future<void> init() {
+    if (_closing) return Future<void>.value();
+    return _initFuture ??= _initialize();
+  }
+
+  Future<void> _initialize() async {
     try {
       final dir = Directory(_pluginsDir);
-      if (!await dir.exists()) return;
+      if (!await dir.exists() || _closing) return;
 
       for (final entity in await dir.list().toList()) {
+        if (_closing) break;
         if (entity is Directory) {
           await _loadPluginFromDir(entity);
         }
@@ -54,10 +65,11 @@ class PluginManager {
 
   Future<void> _loadPluginFromDir(Directory dir) async {
     final manifestFile = File('${dir.path}/plugin.json');
-    if (!await manifestFile.exists()) return;
+    if (!await manifestFile.exists() || _closing) return;
 
     try {
       final content = await manifestFile.readAsString();
+      if (_closing) return;
       final Map<String, dynamic> manifest = jsonDecode(content);
 
       final name = manifest['name'] ?? dir.uri.pathSegments.last;
@@ -75,13 +87,22 @@ class PluginManager {
       }
 
       print('[MINERVA][CORE][INFO] Avvio del plugin "$name" in corso...');
-      _runPluginProcess(name, execCmd, dir.path);
+      final pending = _runPluginProcess(name, execCmd, dir.path);
+      _starting.add(pending);
+      // Non rallentare l'avvio della shell aspettando ogni processo, ma
+      // conservare il Future: dispose deve acquisire anche i figli tardivi.
+      unawaited(pending.then<void>((_) {
+        _starting.remove(pending);
+      }, onError: (Object error, StackTrace stack) {
+        _starting.remove(pending);
+        print('[MINERVA][CORE][ERRORE] Avvio plugin non completato: $error');
+      }));
     } catch (e) {
       print('[MINERVA][CORE][ERRORE] Impossibile caricare il plugin da ${dir.path}: $e');
     }
   }
 
-  void _runPluginProcess(String name, String cmd, String workingDir) async {
+  Future<void> _runPluginProcess(String name, String cmd, String workingDir) async {
     final parts = cmd.split(' ');
     final executable = parts.first;
     final arguments = parts.sublist(1);
@@ -135,22 +156,46 @@ class PluginManager {
       process.exitCode.then((code) {
         _activeProcesses.remove(process);
         print('[MINERVA][CORE][WARN] Il plugin "$name" è terminato con codice d\'uscita: $code');
-        _eventBus.publish(MinervaEvent(
-          type: 'plugin_terminated',
-          payload: {'name': name, 'exitCode': code},
-        ));
+        if (!_closing) {
+          _eventBus.publish(MinervaEvent(
+            type: 'plugin_terminated',
+            payload: {'name': name, 'exitCode': code},
+          ));
+        }
       });
     } catch (e) {
       print('[MINERVA][CORE][ERRORE] Impossibile avviare il processo del plugin "$name": $e');
     }
   }
 
-  /// Ferma tutti i processi dei plugin attivi.
-  Future<void> dispose() async {
+  /// Blocca nuovi avvii senza distruggere i processi già acquisiti.
+  void quiesce() { _closing = true; }
+
+  /// Acquisisce gli avvii pendenti e aspetta la terminazione dei figli.
+  Future<void> dispose() {
+    quiesce();
+    return _disposeFuture ??= _finishDispose();
+  }
+
+  Future<void> _finishDispose() async {
     print('[MINERVA][CORE][INFO] Arresto di tutti i plugin attivi in corso...');
-    for (final process in _activeProcesses) {
-      process.kill();
+    await _initFuture;
+    await Future.wait(_starting.toList());
+    // Le notifiche di uscita modificano la lista: lavorare su una copia.
+    await Future.wait(_activeProcesses.toList().map(_stopProcess));
+  }
+
+  Future<void> _stopProcess(Process process) async {
+    process.kill(ProcessSignal.sigterm);
+    try {
+      await process.exitCode.timeout(const Duration(seconds: 1));
+    } on TimeoutException {
+      print('[MINERVA][CORE][WARN] Il plugin PID ${process.pid} non risponde '
+          'a TERM: invio KILL.');
+      process.kill(ProcessSignal.sigkill);
+      // Due secondi complessivi per i PID acquisiti, entro i tre secondi
+      // assegnati dal core alla fase plugin. Se non esce, segnalare l'errore.
+      await process.exitCode.timeout(const Duration(seconds: 1));
     }
-    _activeProcesses.clear();
   }
 }

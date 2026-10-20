@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:minervad/core/minerva_core.dart';
+import 'package:minervad/core/cancellation.dart';
 
 /// L'avvio del demone.
 ///
@@ -14,9 +15,9 @@ import 'package:minervad/core/minerva_core.dart';
 /// niente**. Timer vivi, socket aperti, il file delle impostazioni magari a
 /// metà scrittura.
 ///
-/// I gestori vengono registrati prima dell'avvio. Un segnale attende che
-/// l'avvio termini prima di fermare i servizi, senza sovrapporre start/stop
-/// o dichiarare pronto il demone dopo che ne è stata chiesta la chiusura.
+/// I gestori vengono registrati prima dell'avvio. Un segnale annulla i
+/// passi non ancora iniziati e aspetta le operazioni già accettate, senza
+/// sovrapporre start/stop o dichiarare pronto il demone dopo che ne è stata chiesta la chiusura.
 /// Se l'avvio fallisce, l'uscita resta diversa da zero; il recupero delle
 /// risorse parzialmente inizializzate appartiene al contratto del Core.
 /// ── L'ultima rete, e perché non ingoia tutto ────────────────────────────────
@@ -79,8 +80,6 @@ Future<void> _avvia(List<String> arguments) async {
     if (inChiusura) return;
     inChiusura = true;
     print('\n[MINERVA][DAEMON][INFO] Ricevuto $segnale. Arresto richiesto...');
-    await avvioTerminato.future;
-    if (avvioFallito) exit(1);
     var risultato = 0;
     try {
       await fermaUnaVolta();
@@ -88,6 +87,8 @@ Future<void> _avvia(List<String> arguments) async {
       print('[MINERVA][DAEMON][ERRORE] Arresto non pulito: $e');
       risultato = 1;
     }
+    await avvioTerminato.future;
+    if (avvioFallito) risultato = 1;
     exit(risultato);
   }
 
@@ -100,9 +101,13 @@ Future<void> _avvia(List<String> arguments) async {
   try {
     await core.start();
   } catch (e, dove) {
-    avvioFallito = true;
-    print('[MINERVA][DAEMON][ERRORE] minervad non è riuscito a partire: $e');
-    print(dove);
+    if (e is OperationCancelled && inChiusura) {
+      print('[MINERVA][DAEMON][INFO] Avvio annullato dalla richiesta di arresto.');
+    } else {
+      avvioFallito = true;
+      print('[MINERVA][DAEMON][ERRORE] minervad non è riuscito a partire: $e');
+      print(dove);
+    }
   } finally {
     avvioTerminato.complete();
   }

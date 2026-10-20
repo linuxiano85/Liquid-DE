@@ -3,6 +3,7 @@ import 'dart:ffi';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
+import 'cancellation.dart';
 
 /// Identità e versione osservata, senza atime (la lettura lo può cambiare).
 /// Non è un lock e non certifica l'assenza di scritture successive.
@@ -221,6 +222,19 @@ abstract final class LinuxFiles {
     }
   }
 
+  /// Vero se in questa cartella si possono creare e togliere voci: `w` e
+  /// `x` per l'utente effettivo, seguendo i collegamenti — la stessa domanda
+  /// di `test -w P -a -x P`, senza lanciare un processo (20 ottobre 2026).
+  static bool siPuoCambiare(String path) {
+    final p = _string(path);
+    try {
+      // AT_FDCWD, W_OK | X_OK, AT_EACCESS (UAPI Linux).
+      return _faccessat(-100, p, 2 | 1, 0x200) == 0;
+    } finally {
+      _free(p.cast<Void>());
+    }
+  }
+
   /// Verifica l'elemento stesso, anche un symlink interrotto. Solo ENOENT
   /// prova l'assenza: dart:io type/stat possono nascondere altri errori con
   /// notFound. Non ritentare una cancellazione per disambiguare l'errore.
@@ -352,12 +366,15 @@ abstract final class LinuxFiles {
   /// Ogni open ha un proprio lock anche nello stesso processo. Niente file
   /// laterale prevedibile o attesa bloccante dell'event loop.
   static Future<LinuxDirectoryLease> lockDirectory(Directory directory,
-      {Duration timeout = const Duration(seconds: 2)}) async {
+      {Duration timeout = const Duration(seconds: 2),
+       CancellationToken? cancellation}) async {
     if (Abi.current() != Abi.linuxX64 && Abi.current() != Abi.linuxArm64) {
       throw UnsupportedError('Lock directory: ABI Linux non verificata');
     }
     if (timeout.isNegative) throw ArgumentError.value(timeout, 'timeout');
+    cancellation?.throwIfCancelled();
     final path = await directory.resolveSymbolicLinks();
+    cancellation?.throwIfCancelled();
     final p = _string(path);
     late final int fd;
     try {
@@ -375,6 +392,7 @@ abstract final class LinuxFiles {
     final clock = Stopwatch()..start();
     try {
       while (true) {
+        cancellation?.throwIfCancelled();
         if (_flock(fd, 2 | 4) == 0) { // LOCK_EX | LOCK_NB
           acquired = true;
           return LinuxDirectoryLease._(fd);

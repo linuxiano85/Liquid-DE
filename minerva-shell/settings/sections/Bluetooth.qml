@@ -217,7 +217,7 @@ Page {
     // tastiera né schermo». Va bene per cuffie e mouse. **Un telefono no**:
     // Android pretende che si confronti un codice a sei cifre, e rifiuta.
     //
-    // Il manutentore, 18 agosto 2026: «non riesco ad accoppiare il mio Redmi Note 12
+    // il manutentore, 18 agosto 2026: «non riesco ad accoppiare il mio Redmi Note 12
     // Pro Plus 5G». Era esattamente quel caso.
     //
     // Adesso l'accoppiamento lo tiene il DEMONE

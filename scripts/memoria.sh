@@ -70,8 +70,8 @@ etichetta() {  # nome leggibile di un pid, distinguendo shell e app di Minerva
     if [ "$c" = qs ]; then
         local riga; riga=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null)
         case "$riga" in
-            *shell.qml*) echo "shell di Minerva";      return 0;;
-            *)           echo "app Minerva: $(basename "$(echo "$riga" | grep -oE '[^ ]+\.qml' | tail -1)" .qml)"; return 0;;
+            *shell.qml*|*shell-avvio.qml*) echo "shell di Minerva"; return 0;;
+            *)           echo "app Minerva: $(basename "$(echo "$riga" | grep -oE '[^ ]+\.qml' | tail -1)" .qml | sed 's/-avvio$//')"; return 0;;
         esac
     fi
     echo "$c"

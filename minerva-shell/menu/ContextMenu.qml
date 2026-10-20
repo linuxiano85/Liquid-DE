@@ -363,7 +363,6 @@ PanelWindow {
         if (action === "__customize") {
             branches = [];
             customizing = true;
-            customInline.forceActiveFocus();
             return ;
         }
         close();
@@ -1038,147 +1037,159 @@ PanelWindow {
 
     }
 
-    Rectangle {
-        id: customization
+    // Il pannello serve soltanto quando si personalizza un menu. Ogni
+    // finestra contiene più menu: non costruire i controlli nascosti all'avvio.
+    Loader {
+        id: customizationLoader
+        anchors.fill: parent
+        active: menu.customizing
+        onLoaded: item.focusFirst()
+        sourceComponent: Component {
+            Rectangle {
+                id: customization
+                function focusFirst() { customInline.forceActiveFocus(); }
 
-        objectName: "contextCustomize"
-        visible: menu.customizing
-        width: Math.min(420, menu.width - 16)
-        height: Math.min(520, menu.height - 16)
-        anchors.centerIn: parent
-        radius: 8
-        color: Windows11.Style.surface
-        border.color: Windows11.Style.edge
+                objectName: "contextCustomize"
+                visible: menu.customizing
+                width: Math.min(420, menu.width - 16)
+                height: Math.min(520, menu.height - 16)
+                anchors.centerIn: parent
+                radius: 8
+                color: Windows11.Style.surface
+                border.color: Windows11.Style.edge
 
-        Windows11.Shadow {
-            surface: customization
-        }
-
-        MouseArea {
-            anchors.fill: parent
-        }
-
-        Flickable {
-            id: customScroll
-
-            anchors.fill: parent
-            anchors.margins: 16
-            anchors.rightMargin: 32
-            anchors.bottomMargin: 66
-            contentWidth: width
-            contentHeight: customColumn.implicitHeight
-            clip: true
-
-            Column {
-                id: customColumn
-
-                width: customScroll.width
-                spacing: 8
-
-                Text {
-                    text: Windows11.Style.label("Personalizza menu", "Customize menu")
-                    color: Windows11.Style.text
-                    font.family: Windows11.Style.font
-                    font.pixelSize: 20
+                Windows11.Shadow {
+                    surface: customization
                 }
 
-                Controls.CheckBox {
-                    id: customInline
+                MouseArea {
+                    anchors.fill: parent
+                }
 
-                    palette.text: Windows11.Style.text
-                    palette.highlight: Windows11.Style.accent
-                    font.family: Windows11.Style.font
-                    objectName: "contextCustomize-inline"
-                    width: parent.width
-                    text: Windows11.Style.label("Comandi principali come testo", "Main commands as text")
-                    checked: menu.inlineCommands
-                    onToggled: {
-                        Core.Ipc.setSetting("windows11.contextInline", checked);
-                        menu.rebuild();
+                Flickable {
+                    id: customScroll
+
+                    anchors.fill: parent
+                    anchors.margins: 16
+                    anchors.rightMargin: 32
+                    anchors.bottomMargin: 66
+                    contentWidth: width
+                    contentHeight: customColumn.implicitHeight
+                    clip: true
+
+                    Column {
+                        id: customColumn
+
+                        width: customScroll.width
+                        spacing: 8
+
+                        Text {
+                            text: Windows11.Style.label("Personalizza menu", "Customize menu")
+                            color: Windows11.Style.text
+                            font.family: Windows11.Style.font
+                            font.pixelSize: 20
+                        }
+
+                        Controls.CheckBox {
+                            id: customInline
+
+                            palette.text: Windows11.Style.text
+                            palette.highlight: Windows11.Style.accent
+                            font.family: Windows11.Style.font
+                            objectName: "contextCustomize-inline"
+                            width: parent.width
+                            text: Windows11.Style.label("Comandi principali come testo", "Main commands as text")
+                            checked: menu.inlineCommands
+                            onToggled: {
+                                Core.Ipc.setSetting("windows11.contextInline", checked);
+                                menu.rebuild();
+                            }
+                        }
+
+                        Controls.CheckBox {
+                            palette.text: Windows11.Style.text
+                            palette.highlight: Windows11.Style.accent
+                            font.family: Windows11.Style.font
+                            objectName: "contextCustomize-properties"
+                            width: parent.width
+                            text: Windows11.Style.label("Proprietà in fondo", "Properties at the bottom")
+                            checked: menu.propertiesLast
+                            onToggled: {
+                                Core.Ipc.setSetting("windows11.contextPropertiesLast", checked);
+                                menu.rebuild();
+                            }
+                        }
+
+                        Controls.CheckBox {
+                            palette.text: Windows11.Style.text
+                            palette.highlight: Windows11.Style.accent
+                            font.family: Windows11.Style.font
+                            objectName: "contextCustomize-extensions"
+                            width: parent.width
+                            text: Windows11.Style.label("Mostra altre azioni", "Show other actions")
+                            checked: menu.extensionsVisible
+                            onToggled: {
+                                Core.Ipc.setSetting("windows11.contextExtensions", checked);
+                                menu.rebuild();
+                            }
+                        }
+
+                        Repeater {
+                            model: menu.originalItems.filter(function(item) {
+                                return !!item.action;
+                            })
+
+                            delegate: Controls.CheckBox {
+                                required property var modelData
+
+                                palette.text: Windows11.Style.text
+                                palette.highlight: Windows11.Style.accent
+                                font.family: Windows11.Style.font
+                                objectName: "contextCustomize-action-" + modelData.action
+                                width: customColumn.width
+                                text: modelData.label
+                                checked: menu.hiddenActions.indexOf(modelData.action) < 0
+                                onToggled: menu.toggleAction(modelData.action, checked)
+                            }
+
+                        }
+
+                    }
+
+                }
+
+                Windows11.Button {
+                    objectName: "contextCustomize-done"
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.margins: 16
+                    text: Windows11.Style.label("Fine", "Done")
+                    onClicked: {
+                        menu.customizing = false;
+                        keyCatcher.forceActiveFocus();
                     }
                 }
 
-                Controls.CheckBox {
-                    palette.text: Windows11.Style.text
-                    palette.highlight: Windows11.Style.accent
-                    font.family: Windows11.Style.font
-                    objectName: "contextCustomize-properties"
-                    width: parent.width
-                    text: Windows11.Style.label("Proprietà in fondo", "Properties at the bottom")
-                    checked: menu.propertiesLast
-                    onToggled: {
-                        Core.Ipc.setSetting("windows11.contextPropertiesLast", checked);
-                        menu.rebuild();
-                    }
+                Ui.Scorrimento {
+                    bersaglio: customScroll
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
                 }
 
-                Controls.CheckBox {
-                    palette.text: Windows11.Style.text
-                    palette.highlight: Windows11.Style.accent
-                    font.family: Windows11.Style.font
-                    objectName: "contextCustomize-extensions"
-                    width: parent.width
-                    text: Windows11.Style.label("Mostra altre azioni", "Show other actions")
-                    checked: menu.extensionsVisible
-                    onToggled: {
-                        Core.Ipc.setSetting("windows11.contextExtensions", checked);
-                        menu.rebuild();
+                Shortcut {
+                    sequence: "Escape"
+                    enabled: menu.visible && menu.customizing
+                    onActivated: {
+                        menu.customizing = false;
+                        keyCatcher.forceActiveFocus();
                     }
-                }
-
-                Repeater {
-                    model: menu.originalItems.filter(function(item) {
-                        return !!item.action;
-                    })
-
-                    delegate: Controls.CheckBox {
-                        required property var modelData
-
-                        palette.text: Windows11.Style.text
-                        palette.highlight: Windows11.Style.accent
-                        font.family: Windows11.Style.font
-                        objectName: "contextCustomize-action-" + modelData.action
-                        width: customColumn.width
-                        text: modelData.label
-                        checked: menu.hiddenActions.indexOf(modelData.action) < 0
-                        onToggled: menu.toggleAction(modelData.action, checked)
-                    }
-
                 }
 
             }
 
         }
-
-        Windows11.Button {
-            objectName: "contextCustomize-done"
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.margins: 16
-            text: Windows11.Style.label("Fine", "Done")
-            onClicked: {
-                menu.customizing = false;
-                keyCatcher.forceActiveFocus();
-            }
-        }
-
-        Ui.Scorrimento {
-            bersaglio: customScroll
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-        }
-
-        Shortcut {
-            sequence: "Escape"
-            enabled: menu.visible && menu.customizing
-            onActivated: {
-                menu.customizing = false;
-                keyCatcher.forceActiveFocus();
-            }
-        }
-
     }
 
 }

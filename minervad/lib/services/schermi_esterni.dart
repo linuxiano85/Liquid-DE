@@ -106,7 +106,7 @@ class SchermiEsterni {
 
   // ── E poi si chiede a ciascuno se parla anche DLNA ──────────────────────
   //
-  // Il manutentore, 3 settembre 2026: «la cucina ha tizen os ed è samsung». Un
+  // il manutentore, 3 settembre 2026: «la cucina ha tizen os ed è samsung». Un
   // Samsung Tizen non parla Chromecast: si annuncia via AirPlay (che vuole un
   // accoppiamento in stile HomeKit) e, in silenzio, espone un renderer DLNA
   // su una porta che nessuno annuncia. Senza questo giro, l'unico televisore

@@ -95,7 +95,7 @@ RIPOSO_SECONDI = 120
 SCELTO, ANNULLATO, ALTRO = 0, 1, 2
 
 QUI = os.path.dirname(os.path.realpath(__file__))
-SHELL_QML = os.path.join(os.path.dirname(QUI), "minerva-shell", "shell.qml")
+SHELL_QML = os.path.join(os.path.dirname(QUI), "minerva-shell", "shell-avvio.qml")
 
 
 def in_liquid() -> bool:

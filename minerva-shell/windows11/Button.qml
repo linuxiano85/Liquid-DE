@@ -62,25 +62,33 @@ FocusScope {
         anchors.verticalCenter: root.aSinistra ? parent.verticalCenter : undefined
         spacing: 10
         Glyph { visible: root.icon !== "" && !root.avatar; width: root.glyphSize; height: root.glyphSize; name: root.icon; color: root.foreground; alwaysDrawn: true }
-        Item {
-            visible: root.avatar
+        // L'avatar (il piede dello Start) solo se serve. Prima ogni pulsante
+        // creava il suo ritratto tondo, con un Canvas, anche senza avatar:
+        // 171 all'apertura del gestore file (profilo del 20 ottobre 2026).
+        Loader {
+            active: root.avatar
+            visible: active
             width: 28
             height: 28
             anchors.verticalCenter: parent.verticalCenter
-            Rectangle {
-                anchors.fill: parent
-                radius: width / 2
-                visible: !foto.pronto
-                color: Qt.alpha(Style.accent, 0.25)
-                Text {
-                    anchors.centerIn: parent
-                    text: root.text.charAt(0).toUpperCase()
-                    color: Style.text
-                    font.family: Style.font
-                    font.pixelSize: 13
+            sourceComponent: Component {
+                Item {
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: width / 2
+                        visible: !foto.pronto
+                        color: Qt.alpha(Style.accent, 0.25)
+                        Text {
+                            anchors.centerIn: parent
+                            text: root.text.charAt(0).toUpperCase()
+                            color: Style.text
+                            font.family: Style.font
+                            font.pixelSize: 13
+                        }
+                    }
+                    Ui.RitrattoTondo { id: foto; anchors.fill: parent; fonte: root.ritratto }
                 }
             }
-            Ui.RitrattoTondo { id: foto; anchors.fill: parent; fonte: root.avatar ? root.ritratto : "" }
         }
         Text {
             id: caption

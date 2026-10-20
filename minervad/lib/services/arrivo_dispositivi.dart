@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'comando_in_ascolto.dart';
+
 /// Un telefono o una chiavetta attaccati adesso: si aprono da soli.
 ///
 /// ── Perché esiste ────────────────────────────────────────────────────────
@@ -34,52 +36,20 @@ class ArrivoDispositivi {
   /// si riattacca, e gvfs scrive più righe di fila: si aspetta che si calmi.
   final Duration attesa;
 
-  final _cambi = StreamController<void>.broadcast();
+  /// Il ciclo di vita di `gio mount -o` sta in [ComandoInAscolto], lo stesso
+  /// che ascolta la rete e il Bluetooth (20 ottobre 2026).
+  late final ComandoInAscolto _ascolto = ComandoInAscolto(
+    gio,
+    const ['mount', '-o'],
+    attesa: attesa,
+    rigaUtile: rigaDiCambio,
+  );
 
   /// Un segnale per ogni gruppo di cambiamenti. Si rilegge lo stato con
   /// [leggiVolumi] e si chiede a [nuovi] cosa è comparso.
-  Stream<void> get cambi => _cambi.stream;
+  Stream<void> get cambi => _ascolto.cambi;
 
-  Process? _monitor;
-  Timer? _calma;
-  bool _fermo = false;
-  int _ripartenze = 0;
-
-  static const Map<String, String> _ambiente = {'LC_ALL': 'C', 'LANG': 'C'};
-
-  Future<void> start() async {
-    if (_fermo || _monitor != null) return;
-    try {
-      final p = await Process.start(gio, ['mount', '-o'],
-          environment: _ambiente);
-      _monitor = p;
-      p.stdout
-          .transform(const Utf8Decoder(allowMalformed: true))
-          .transform(const LineSplitter())
-          .listen(_riga, onError: (Object _) {});
-      p.stderr.drain<void>().catchError((Object _) {});
-      unawaited(p.exitCode.then((_) {
-        _monitor = null;
-        // gvfs riavviato, sessione D-Bus caduta: si riprova, ma non
-        // all'infinito — un `gio` che muore subito non deve diventare un
-        // processo lanciato ogni cinque secondi per tutta la sessione.
-        if (!_fermo && _ripartenze < 5) {
-          _ripartenze++;
-          Timer(const Duration(seconds: 5), start);
-        }
-      }));
-    } on ProcessException catch (e) {
-      print('[MINERVA][DISPOSITIVI][WARN] gio mount -o non parte: ${e.message}');
-    }
-  }
-
-  void _riga(String riga) {
-    if (!rigaDiCambio(riga)) return;
-    _calma?.cancel();
-    _calma = Timer(attesa, () {
-      if (!_cambi.isClosed) _cambi.add(null);
-    });
-  }
+  Future<void> start() => _ascolto.start();
 
   /// `Volume added:      'realme Phone'`, `Mount removed: …`, `Drive
   /// connected: …`. Le righe sotto (rientrate) sono i dettagli: non servono,
@@ -88,13 +58,7 @@ class ArrivoDispositivi {
         r'^(Volume|Mount|Drive) (added|removed|changed|connected|disconnected)',
       ).hasMatch(riga);
 
-  Future<void> stop() async {
-    _fermo = true;
-    _calma?.cancel();
-    _monitor?.kill();
-    _monitor = null;
-    await _cambi.close();
-  }
+  Future<void> stop() => _ascolto.stop();
 
   // ── Una finestra per disco ────────────────────────────────────────────
   //

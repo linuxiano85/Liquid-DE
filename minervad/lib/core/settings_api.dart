@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'event_bus.dart';
+import 'cancellation.dart';
 import 'minerva_paths.dart';
 import 'linux_files.dart';
 import 'desktop_profiles.dart';
@@ -41,17 +42,24 @@ class SettingsApi {
   Map<String, dynamic> get settings => _settings;
 
   /// Inizializza le impostazioni caricando il file e avviando il watcher.
-  Future<void> init() {
+  Future<void> init({CancellationToken? cancellation}) {
     if (_closing) return Future<void>.error(StateError('Servizio impostazioni chiuso'));
-    return _initializing ??= _initialize().whenComplete(() => _initializing = null);
+    return _initializing ??= _initialize(cancellation).whenComplete(() {
+      _initializing = null;
+    });
   }
 
-  Future<void> _initialize() async {
+  Future<void> _initialize(CancellationToken? cancellation) async {
+    cancellation?.throwIfCancelled();
     await File(_configPath).parent.create(recursive: true);
-    final lease = await _takeWriteLock();
+    cancellation?.throwIfCancelled();
+    final lease = await _takeWriteLock(cancellation: cancellation);
     try {
+      cancellation?.throwIfCancelled();
       final file = File(_configPath);
-      if (!await file.exists()) {
+      final exists = await file.exists();
+      cancellation?.throwIfCancelled();
+      if (!exists) {
         _settings = defaultSettings();
         await _write();
         print(
@@ -59,6 +67,7 @@ class SettingsApi {
         );
       } else {
         await _loadSettings();
+        cancellation?.throwIfCancelled();
         // Un file scritto da una versione precedente può non avere le chiavi
         // nuove: le aggiungiamo senza toccare le scelte già fatte dall'utente.
         // Prima si pota, poi si riempie: al contrario, una chiave sconosciuta
@@ -72,21 +81,25 @@ class SettingsApi {
         }
       }
 
+      // Le scritture già iniziate completano l'operazione atomica; prima
+      // di avviare un'altra migrazione si osserva l'annullamento.
+      cancellation?.throwIfCancelled();
       final beforeProfiles = jsonEncode(_settings);
       _profiles.normalize(_settings);
       if (beforeProfiles != jsonEncode(_settings)) await _write();
     } finally {
       lease.release();
     }
+    cancellation?.throwIfCancelled();
     _startWatcher();
   }
 
-  Future<LinuxDirectoryLease> _takeWriteLock() async {
+  Future<LinuxDirectoryLease> _takeWriteLock({CancellationToken? cancellation}) async {
     final logical = File(_configPath);
     final target = await FileSystemEntity.type(_configPath, followLinks: false)
             == FileSystemEntityType.link
         ? File(await logical.resolveSymbolicLinks()) : logical;
-    return LinuxFiles.lockDirectory(target.parent);
+    return LinuxFiles.lockDirectory(target.parent, cancellation: cancellation);
   }
 
   Future<void> _loadSettings() async {
@@ -1051,7 +1064,7 @@ class SettingsApi {
       'windowOpacity': 0.88,
       // ── Il tasto che riavvia la scrivania ──────────────────────────
       //
-      // Il manutentore, 2 settembre 2026: «mettiamo un tasto disattivabile
+      // il manutentore, 2 settembre 2026: «mettiamo un tasto disattivabile
       // accanto al meteo dove posso riavviare la shell».
       //
       // Acceso di suo: chi sta costruendo Minerva la ricarica dieci volte
@@ -1245,7 +1258,7 @@ class SettingsApi {
       'listaFinestre': false,
       // ── I valori di sistema nella barra ──────────────────────────
       //
-      // Il manutentore, 9 settembre 2026: «dei widget sia sulla barra». Gli
+      // il manutentore, 9 settembre 2026: «dei widget sia sulla barra». Gli
       // stessi tipi della scrivania (`desktop.widgets`), ma qui basta il
       // nome: sulla barra non c'è niente da posizionare né da
       // ridimensionare, c'è solo l'ordine.
@@ -1302,7 +1315,7 @@ class SettingsApi {
       // nulla è il difetto che questo progetto si è messo per iscritto di
       // non commettere — e stava nel nostro pannello.
       //
-      // Il manutentore, 2 settembre 2026: «ci vorrebbero delle impostazioni per
+      // il manutentore, 2 settembre 2026: «ci vorrebbero delle impostazioni per
       // mettere nessun effetto o blur o vetro e queste impostazioni si
       // dovrebbero applicare alle finestre e in blur o vetro dovrebbero
       // far vedere un solo corpo trasparente [...] la barra e la finestra
@@ -1354,7 +1367,7 @@ class SettingsApi {
       'cornice': 'spento',
       // ── Il bordo colorato: spessore, colori, finestre spente ───────
       //
-      // Il manutentore, 9 settembre 2026: «voglio poter regolare lo spessore del
+      // il manutentore, 9 settembre 2026: «voglio poter regolare lo spessore del
       // colore intorno alla finestra attiva [...] e vorrei anche
       // l'effetto rgb come una strip led e possibilità di scegliere i
       // colori che si alterneranno».
@@ -1375,7 +1388,7 @@ class SettingsApi {
       'cornicePeriodo': 8000,
       // ── Quanto tremano le finestre ──────────────────────────────
       //
-      // Il manutentore, 10 settembre 2026: «voglio le finestre tremolanti».
+      // il manutentore, 10 settembre 2026: «voglio le finestre tremolanti».
       //
       // Zero spento, uno normale, tre il massimo. Trascinando, la
       // finestra resta un po' indietro rispetto al dito; al rilascio
@@ -1574,7 +1587,7 @@ class SettingsApi {
       // ordina: 'name', 'type', 'size', 'modified'.
       // ── I widget della scrivania ──────────────────────────────────
       //
-      // Il manutentore, 9 settembre 2026: «vorrei avere dei widget sul desktop
+      // il manutentore, 9 settembre 2026: «vorrei avere dei widget sul desktop
       // per vedere i valori di sistema [...] ridimensionabili
       // direttamente da desktop e possono anche essere bloccati e
       // diventare parte dello sfondo».
@@ -1708,7 +1721,7 @@ class SettingsApi {
       'clock24': true,
       // Le cose in più della schermata di accesso (23 settembre 2026):
       // il meteo sotto la data (solo se la sessione ne ha uno acceso),
-      // «Buonasera, il manutentore» al posto del nome secco, e batteria e
+      // «Buonasera, Anna» al posto del nome secco, e batteria e
       // tastiera nell'angolo. Il meteo mostra la città: si spegne qui.
       'meteo': true,
       'saluto': true,
@@ -1999,7 +2012,11 @@ class SettingsApi {
       } catch (e) {
         // Il Future di init conserva l'errore per il suo chiamante. La pulizia
         // deve comunque arrivare alla coda, senza stampare payload di errore.
-        print('[MINERVA][CORE][WARN] Arresto dopo inizializzazione fallita (${e.runtimeType}).');
+        if (e is OperationCancelled) {
+          print('[MINERVA][CORE][INFO] Inizializzazione impostazioni annullata.');
+        } else {
+          print('[MINERVA][CORE][WARN] Arresto dopo inizializzazione fallita (${e.runtimeType}).');
+        }
       }
     }
     await _coda;

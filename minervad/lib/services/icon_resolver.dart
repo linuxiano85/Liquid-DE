@@ -569,7 +569,7 @@ class IconResolver {
 
   // ── Le nostre app seguono il tema ──────────────────────────────────────
   //
-  // Il manutentore, 11 ottobre 2026: cambiando il tema delle icone, le nostre app
+  // il manutentore, 11 ottobre 2026: cambiando il tema delle icone, le nostre app
   // restavano con le loro. Si chiamano `minerva-files`, `minerva-media`…, e
   // nessun tema ha quei nomi: si trovavano sempre in hicolor, dove le mette
   // l'installatore. Ora per ognuna si chiede prima al tema scelto (e ai temi

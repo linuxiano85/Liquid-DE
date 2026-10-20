@@ -6,7 +6,6 @@ import "../core" as Core
 import "../ui" as Ui
 import "../menu"
 import Minerva.WindowIdentity 1.0 as Native
-import "../printing" as Print
 import "../printing/Documents.js" as PrintDocuments
 
 // FileManager — Il gestore file di Minerva.
@@ -24,12 +23,44 @@ import "../printing/Documents.js" as PrintDocuments
 FloatingWindow {
     id: manager
     property var printWindow: null
-    Component {id:printComponent;Print.PrintDialog {}}
+    property var printComponent: null
+    property string printRequestedPath: ""
+    Connections {
+        target: manager.printComponent
+        function onStatusChanged() { manager.finishPrintRequest(); }
+    }
+    function finishPrintRequest() {
+        if (printRequestedPath === "" || !printComponent
+                || printComponent.status === Component.Loading)
+            return;
+        var requested = printRequestedPath;
+        printRequestedPath = "";
+        if (printComponent.status === Component.Ready && !printWindow)
+            printWindow = printComponent.createObject(manager);
+        if (!printWindow) {
+            console.error("[MINERVA][FILES] Dialogo di stampa non disponibile: "
+                          + printComponent.errorString());
+            printComponent.destroy();
+            printComponent = null;
+            Core.Notifications.daMinerva(
+                Core.Strings.lang === "it" ? "Stampa non disponibile" : "Printing unavailable",
+                Core.Strings.lang === "it" ? "Impossibile aprire il dialogo di stampa. Riprova."
+                                          : "Could not open the print dialog. Please try again.");
+            return;
+        }
+        printWindow.open(requested, manager.contentItem.Window.window);
+    }
     function printSelected() {
         var paths=operands();
         if(paths.length!==1 || selectedDirectory() || !PrintDocuments.canPrint(paths[0]))return;
-        if(!printWindow)printWindow=printComponent.createObject(manager);
-        printWindow.open(paths[0],manager.contentItem.Window.window);
+        if (printRequestedPath !== "") return;
+        printRequestedPath = paths[0];
+        // Il dialogo importa anche le Impostazioni: caricarlo soltanto quando
+        // serve e conservare il documento scelto durante il caricamento.
+        if (!printComponent)
+            printComponent = Qt.createComponent(Qt.resolvedUrl("../printing/PrintDialog.qml"),
+                                               Component.Asynchronous, manager);
+        finishPrintRequest();
     }
     property string activationToken: ""
     Native.WindowIdentity {item:manager.contentItem;activationToken:manager.activationToken}
@@ -617,7 +648,7 @@ FloatingWindow {
         // facendo doppio clic su un lanciatore di un proprio progetto. Quindi
         // si chiede, invece di indovinare in una direzione o nell'altra.
         if (manager.eseguibileDi(path)) {
-            apriCon.apri(path, true);
+            manager._dialogo(apriCon).apri(path, true);
             return;
         }
         Core.Ipc.openDefault([path]);
@@ -635,7 +666,7 @@ FloatingWindow {
             // poteva né aprire, né assegnare, né eseguire. Vedi
             // `ui/ApriCon.qml`.
             if (paths.length > 0)
-                apriCon.apri(paths[0], manager.eseguibileDi(paths[0]));
+                manager._dialogo(apriCon).apri(paths[0], manager.eseguibileDi(paths[0]));
         }
     }
 
@@ -687,20 +718,47 @@ FloatingWindow {
 
     // ── «Con che cosa lo apro?» ──────────────────────────────────────────
 
-    Ui.ApriCon {
+    // ── I dialoghi si creano alla prima apertura ─────────────────────────
+    //
+    // «Apri con», «Condividi» e «Connetti a un server» nascevano con la
+    // finestra, nascosti: ~150 oggetti ad ogni apertura del gestore file per
+    // dialoghi che quasi sempre nessuno apre (profilo del 20 ottobre 2026).
+    // Ora un Loader spento; al primo uso si accende e resta acceso, così il
+    // dialogo conserva quello che aveva come prima.
+    function _dialogo(caricatore) {
+        caricatore.active = true;
+        return caricatore.item;
+    }
+
+    Loader {
         id: apriCon
-        onEseguiRichiesto: function (percorso) {
-            manager.eseguiNelTerminale(percorso);
-        }
-        onEseguibileRichiesto: function (percorso) {
-            manager.rendiEseguibile(percorso);
+        anchors.fill: parent
+        // Lo `z` del dialogo vale dentro il Loader: quello che conta fra i
+        // figli della finestra è questo (in `ApriCon.qml` è 40).
+        z: 40
+        active: false
+        sourceComponent: Component {
+            Ui.ApriCon {
+                onEseguiRichiesto: function (percorso) {
+                    manager.eseguiNelTerminale(percorso);
+                }
+                onEseguibileRichiesto: function (percorso) {
+                    manager.rendiEseguibile(percorso);
+                }
+            }
         }
     }
 
     // ── «Mandalo fuori di qui»: Bluetooth, posta ─────────────────────────
 
-    Ui.Condividi {
+    Loader {
         id: condividi
+        anchors.fill: parent
+        z: 40
+        active: false
+        sourceComponent: Component {
+            Ui.Condividi {}
+        }
     }
 
     /// Lo avvia in un terminale, e il terminale RESTA APERTO.
@@ -978,7 +1036,7 @@ FloatingWindow {
     /// e una risposta che si legge invece di un tasto che non fa niente.
     // ── La modalità amministratore ───────────────────────────────────────
     //
-    // Il manutentore, 23 agosto 2026: «nel file manager, se entro nelle cartelle di
+    // il manutentore, 23 agosto 2026: «nel file manager, se entro nelle cartelle di
     // root, non posso usare una modalità amministratore come fa Linux Mint,
     // per poter eliminare qualsiasi file di root come se fossi un utente
     // root».
@@ -1423,7 +1481,7 @@ FloatingWindow {
         var n = manager.current ? manager.current.operands().length : 0;
         // ── Dove non si può scrivere, non si offre di scrivere ───────────
         //
-        // Il manutentore, 18 agosto 2026: «se clicco su sistema posso cancellare
+        // il manutentore, 18 agosto 2026: «se clicco su sistema posso cancellare
         // qualsiasi file di sistema… non c'è nessuna protezione». Cancellare
         // non si poteva davvero, ma «Nuova cartella» e «Nuovo documento»
         // stavano lì a colori pieni sopra `/usr`, e il rifiuto arrivava solo
@@ -1433,7 +1491,7 @@ FloatingWindow {
         // ── E la modalità amministratore riapre quello che i permessi
         //    avevano chiuso ─────────────────────────────────────────────
         //
-        // Il manutentore, 2 settembre 2026: «non vedo opzioni come sposta nel cestino
+        // il manutentore, 2 settembre 2026: «non vedo opzioni come sposta nel cestino
         // o altre cose utili» — parlando della modalità amministratore.
         //
         // La causa non era una voce dimenticata: erano TUTTE le voci di
@@ -1462,7 +1520,7 @@ FloatingWindow {
 
         // ── Dentro il cestino la barra dice un'altra cosa ────────────────
         //
-        // Il manutentore, 23 agosto 2026: «entrando nel cestino, un tasto nella barra
+        // il manutentore, 23 agosto 2026: «entrando nel cestino, un tasto nella barra
         // degli strumenti che compaia quando si è nel cestino per svuotarlo».
         //
         // «Svuota il cestino» c'era solo nel tasto destro, ed è l'unico posto
@@ -2371,7 +2429,7 @@ FloatingWindow {
                               + Files.reteMancano.map(function (p) { return p.replace(/^gvfs-/, ""); })
                                                    .join(Core.Strings.lang === "it" ? " e " : " and ")
                             : ""
-                    onChosen: collegaServer.apri()
+                    onChosen: manager._dialogo(collegaServer).apri()
                 }
             }
         }
@@ -2802,7 +2860,7 @@ FloatingWindow {
         // ── E la modalità amministratore riapre quello che i permessi
         //    avevano chiuso ─────────────────────────────────────────────
         //
-        // Il manutentore, 2 settembre 2026: «non vedo opzioni come sposta nel cestino
+        // il manutentore, 2 settembre 2026: «non vedo opzioni come sposta nel cestino
         // o altre cose utili» — parlando della modalità amministratore.
         //
         // La causa non era una voce dimenticata: erano TUTTE le voci di
@@ -2862,7 +2920,7 @@ FloatingWindow {
         }
         // ── Quello che si fa a qualcosa, e quello che si fa a un posto ──
         //
-        // Il manutentore, 16 agosto 2026: «anche se clicco dove non c'è nessun file o
+        // il manutentore, 16 agosto 2026: «anche se clicco dove non c'è nessun file o
         // cartella esce scritto taglia, copia, e dovrebbe essere presente solo
         // se clicco su file».
         //
@@ -2932,7 +2990,7 @@ FloatingWindow {
             items.push({ "separator": true });
             // ── Le due voci non sono la stessa cosa ─────────────────────
             //
-            // Il manutentore, 18 agosto 2026: «per impostare lo sfondo devo copiare
+            // il manutentore, 18 agosto 2026: «per impostare lo sfondo devo copiare
             // il percorso dal file manager e incollarlo in impostazioni».
             // Aveva ragione, e la voce che c'era non lo tradiva: è lo sfondo
             // di QUESTA cartella, che è una decorazione del gestore file.
@@ -3202,7 +3260,7 @@ FloatingWindow {
 
     // ── Trascinare e lasciare ────────────────────────────────────────────
     //
-    // Il manutentore, 12 agosto 2026: «voglio poter trascinare qualsiasi cosa come in
+    // il manutentore, 12 agosto 2026: «voglio poter trascinare qualsiasi cosa come in
     // KDE, e lasciando mi chiede se copiare o spostare».
     //
     // Si CHIEDE, e non si indovina. Il gesto è lo stesso per due esiti molto
@@ -4119,7 +4177,7 @@ FloatingWindow {
             return;
         // Le Proprietà erano il ripiego: adesso c'è una finestra che fa
         // proprio questo, e che sa anche eseguire.
-        apriCon.apri(ops[0], manager.eseguibileDi(ops[0]));
+        manager._dialogo(apriCon).apri(ops[0], manager.eseguibileDi(ops[0]));
     }
 
     /// «Condividi…»: manda quel che è selezionato fuori da questo computer.
@@ -4129,7 +4187,7 @@ FloatingWindow {
         var ops = manager.operands();
         if (ops.length === 0)
             return;
-        condividi.apri(ops);
+        manager._dialogo(condividi).apri(ops);
     }
 
     // ── La tavolozza degli sfondi ────────────────────────────────────────
@@ -4144,175 +4202,182 @@ FloatingWindow {
     // ruota infinita si sceglie male e si perde tempo; davanti a dieci tinte
     // già scelte si sceglie in un secondo. Chi vuole qualcosa di preciso mette
     // un'immagine, che è il quarto modo e sta nel menù del tasto destro.
-    Rectangle {
+    // Il Loader crea il pannello alla richiesta e gli assegna tutta la superficie.
+    Loader {
         id: tavolozza
         anchors.fill: parent
-        color: FileStyle.scrim
-        visible: false
+        active: false
+        function apri() { active = true; }
+        sourceComponent: Component {
+            Rectangle {
+                id: tavolozzaPanel
+                anchors.fill: parent
+                color: FileStyle.scrim
+                visible: true
 
-        function apri() { tavolozza.visible = true; }
+                readonly property var tinte: [
+                    "#7C93C3", "#6FB3A8", "#8FBF7F", "#D6C06A", "#D9915B",
+                    "#CE7B7B", "#B87BB0", "#8B7BC7", "#8A9299", "#6E6E6E"
+                ]
+                readonly property var motivi: [
+                    ["music", "#8B7BC7"], ["document", "#7C93C3"],
+                    ["image", "#6FB3A8"], ["video", "#CE7B7B"],
+                    ["star", "#D6C06A"], ["globe", "#8FBF7F"],
+                    ["code", "#B87BB0"], ["archive", "#D9915B"],
+                    ["cpu", "#8A9299"], ["clock", "#6FB3A8"]
+                ]
 
-        readonly property var tinte: [
-            "#7C93C3", "#6FB3A8", "#8FBF7F", "#D6C06A", "#D9915B",
-            "#CE7B7B", "#B87BB0", "#8B7BC7", "#8A9299", "#6E6E6E"
-        ]
-        readonly property var motivi: [
-            ["music", "#8B7BC7"], ["document", "#7C93C3"],
-            ["image", "#6FB3A8"], ["video", "#CE7B7B"],
-            ["star", "#D6C06A"], ["globe", "#8FBF7F"],
-            ["code", "#B87BB0"], ["archive", "#D9915B"],
-            ["cpu", "#8A9299"], ["clock", "#6FB3A8"]
-        ]
-
-        function scegli(a) {
-            manager.mettiSfondo(a);
-            tavolozza.visible = false;
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            onClicked: tavolozza.visible = false
-        }
-
-        Rectangle {
-            anchors.centerIn: parent
-            width: 452
-            height: colonna.implicitHeight + Theme.Effects.space5 * 2
-            radius: Theme.Effects.radiusMD
-            color: FileStyle.panel
-            border.width: 1
-            border.color: FileStyle.edge
-
-            MouseArea { anchors.fill: parent }
-
-            Column {
-                id: colonna
-                anchors.centerIn: parent
-                width: parent.width - Theme.Effects.space5 * 2
-                spacing: Theme.Effects.space3
-
-                Text {
-                    text: Core.Strings.lang === "it" ? "Sfondo della cartella"
-                                                     : "Folder background"
-                    color: FileStyle.text
-                    font.family: FileStyle.font
-                    font.pixelSize: Theme.Typography.sizeMD
+                function scegli(a) {
+                    manager.mettiSfondo(a);
+                    tavolozza.active = false;
                 }
 
-                Repeater {
-                    model: [
-                        { "modo": "tinta", "it": "Parete",  "en": "Wall" },
-                        { "modo": "vetro", "it": "Vetro",   "en": "Glass" },
-                        { "modo": "motivo","it": "Motivo",  "en": "Pattern" }
-                    ]
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: tavolozza.active = false
+                }
 
-                    delegate: Column {
-                        id: riga
-                        required property var modelData
-                        spacing: Theme.Effects.space1
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 452
+                    height: colonna.implicitHeight + Theme.Effects.space5 * 2
+                    radius: Theme.Effects.radiusMD
+                    color: FileStyle.panel
+                    border.width: 1
+                    border.color: FileStyle.edge
+
+                    MouseArea { anchors.fill: parent }
+
+                    Column {
+                        id: colonna
+                        anchors.centerIn: parent
+                        width: parent.width - Theme.Effects.space5 * 2
+                        spacing: Theme.Effects.space3
 
                         Text {
-                            text: Core.Strings.lang === "it" ? riga.modelData.it
-                                                             : riga.modelData.en
-                            color: FileStyle.textFaint
+                            text: Core.Strings.lang === "it" ? "Sfondo della cartella"
+                                                             : "Folder background"
+                            color: FileStyle.text
                             font.family: FileStyle.font
-                            font.pixelSize: Theme.Typography.sizeXS
+                            font.pixelSize: Theme.Typography.sizeMD
                         }
 
-                        Grid {
-                            columns: 10
-                            spacing: Theme.Effects.space1
+                        Repeater {
+                            model: [
+                                { "modo": "tinta", "it": "Parete",  "en": "Wall" },
+                                { "modo": "vetro", "it": "Vetro",   "en": "Glass" },
+                                { "modo": "motivo","it": "Motivo",  "en": "Pattern" }
+                            ]
 
-                            Repeater {
-                                model: riga.modelData.modo === "motivo"
-                                       ? tavolozza.motivi : tavolozza.tinte
+                            delegate: Column {
+                                id: riga
+                                required property var modelData
+                                spacing: Theme.Effects.space1
 
-                                delegate: Rectangle {
-                                    id: cella
-                                    required property var modelData
-                                    readonly property bool eMotivo:
-                                        riga.modelData.modo === "motivo"
-                                    readonly property color tinta:
-                                        cella.eMotivo ? cella.modelData[1]
-                                                      : cella.modelData
+                                Text {
+                                    text: Core.Strings.lang === "it" ? riga.modelData.it
+                                                                     : riga.modelData.en
+                                    color: FileStyle.textFaint
+                                    font.family: FileStyle.font
+                                    font.pixelSize: Theme.Typography.sizeXS
+                                }
 
-                                    width: 36
-                                    height: 30
-                                    radius: Theme.Effects.radiusXS
-                                    clip: true
-                                    border.width: cellaMouse.containsMouse ? 2 : 0
-                                    border.color: FileStyle.text
-                                    // Il campione mostra quello che si otterrà:
-                                    // pieno per la parete, sfumato per il vetro,
-                                    // con l'icona per il motivo. Un campione che
-                                    // non somiglia al risultato è una bugia
-                                    // grande quanto è comodo il pulsante.
-                                    color: riga.modelData.modo === "vetro"
-                                           ? "transparent"
-                                           : Qt.tint(FileStyle.base,
-                                                     Qt.alpha(cella.tinta,
-                                                              cella.eMotivo ? 0.34 : 0.55))
-                                    gradient: riga.modelData.modo === "vetro"
-                                              ? sfumatura : null
+                                Grid {
+                                    columns: 10
+                                    spacing: Theme.Effects.space1
 
-                                    Gradient {
-                                        id: sfumatura
-                                        GradientStop { position: 0.0; color: Qt.alpha(cella.tinta, 0.55) }
-                                        GradientStop { position: 1.0; color: Qt.alpha(cella.tinta, 0.05) }
-                                    }
+                                    Repeater {
+                                        model: riga.modelData.modo === "motivo"
+                                               ? tavolozzaPanel.motivi : tavolozzaPanel.tinte
 
-                                    Ui.Icon {
-                                        visible: cella.eMotivo
-                                        anchors.centerIn: parent
-                                        width: 17; height: 17
-                                        name: cella.eMotivo ? cella.modelData[0] : "folder"
-                                        // Il nostro tracciato, sempre: qui il colore lo scegliamo noi, e
-                                        // un'icona del tema di sistema arriva già colorata e lo ignora.
-                                        alwaysDrawn: true
-                                        color: Qt.lighter(cella.tinta, 1.5)
-                                        opacity: 0.85
-                                    }
+                                        delegate: Rectangle {
+                                            id: cella
+                                            required property var modelData
+                                            readonly property bool eMotivo:
+                                                riga.modelData.modo === "motivo"
+                                            readonly property color tinta:
+                                                cella.eMotivo ? cella.modelData[1]
+                                                              : cella.modelData
 
-                                    MouseArea {
-                                        id: cellaMouse
-                                        anchors.fill: parent
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: tavolozza.scegli(
-                                            cella.eMotivo
-                                            ? { "tipo": "motivo",
-                                                "icona": cella.modelData[0],
-                                                "valore": cella.modelData[1] }
-                                            : { "tipo": riga.modelData.modo,
-                                                "valore": cella.tinta })
+                                            width: 36
+                                            height: 30
+                                            radius: Theme.Effects.radiusXS
+                                            clip: true
+                                            border.width: cellaMouse.containsMouse ? 2 : 0
+                                            border.color: FileStyle.text
+                                            // Il campione mostra quello che si otterrà:
+                                            // pieno per la parete, sfumato per il vetro,
+                                            // con l'icona per il motivo. Un campione che
+                                            // non somiglia al risultato è una bugia
+                                            // grande quanto è comodo il pulsante.
+                                            color: riga.modelData.modo === "vetro"
+                                                   ? "transparent"
+                                                   : Qt.tint(FileStyle.base,
+                                                             Qt.alpha(cella.tinta,
+                                                                      cella.eMotivo ? 0.34 : 0.55))
+                                            gradient: riga.modelData.modo === "vetro"
+                                                      ? sfumatura : null
+
+                                            Gradient {
+                                                id: sfumatura
+                                                GradientStop { position: 0.0; color: Qt.alpha(cella.tinta, 0.55) }
+                                                GradientStop { position: 1.0; color: Qt.alpha(cella.tinta, 0.05) }
+                                            }
+
+                                            Ui.Icon {
+                                                visible: cella.eMotivo
+                                                anchors.centerIn: parent
+                                                width: 17; height: 17
+                                                name: cella.eMotivo ? cella.modelData[0] : "folder"
+                                                // Il nostro tracciato, sempre: qui il colore lo scegliamo noi, e
+                                                // un'icona del tema di sistema arriva già colorata e lo ignora.
+                                                alwaysDrawn: true
+                                                color: Qt.lighter(cella.tinta, 1.5)
+                                                opacity: 0.85
+                                            }
+
+                                            MouseArea {
+                                                id: cellaMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: tavolozzaPanel.scegli(
+                                                    cella.eMotivo
+                                                    ? { "tipo": "motivo",
+                                                        "icona": cella.modelData[0],
+                                                        "valore": cella.modelData[1] }
+                                                    : { "tipo": riga.modelData.modo,
+                                                        "valore": cella.tinta })
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                }
 
-                Text {
-                    id: niente
-                    anchors.right: parent.right
-                    // «Nessuno sfondo» toglie ANCHE il motivo automatico: chi
-                    // lo preme sta dicendo «voglio questa cartella nuda», e
-                    // ridargliela colorata al prossimo giro sarebbe non averlo
-                    // ascoltato.
-                    text: Core.Strings.lang === "it" ? "Nessuno sfondo"
-                                                     : "No background"
-                    color: nienteMouse.containsMouse ? FileStyle.text
-                                                     : FileStyle.textMuted
-                    font.family: FileStyle.font
-                    font.pixelSize: Theme.Typography.sizeSM
+                        Text {
+                            id: niente
+                            anchors.right: parent.right
+                            // «Nessuno sfondo» toglie ANCHE il motivo automatico: chi
+                            // lo preme sta dicendo «voglio questa cartella nuda», e
+                            // ridargliela colorata al prossimo giro sarebbe non averlo
+                            // ascoltato.
+                            text: Core.Strings.lang === "it" ? "Nessuno sfondo"
+                                                             : "No background"
+                            color: nienteMouse.containsMouse ? FileStyle.text
+                                                             : FileStyle.textMuted
+                            font.family: FileStyle.font
+                            font.pixelSize: Theme.Typography.sizeSM
 
-                    MouseArea {
-                        id: nienteMouse
-                        anchors.fill: parent
-                        anchors.margins: -Theme.Effects.space2
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: tavolozza.scegli({ "tipo": "niente" })
+                            MouseArea {
+                                id: nienteMouse
+                                anchors.fill: parent
+                                anchors.margins: -Theme.Effects.space2
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: tavolozzaPanel.scegli({ "tipo": "niente" })
+                            }
+                        }
                     }
                 }
             }
@@ -4328,94 +4393,103 @@ FloatingWindow {
     // Stanno nel demone e non nella finestra: due finestre del gestore file
     // sono due processi, e un'impostazione che vale in una e non nell'altra è
     // peggio di un'impostazione che non c'è.
-    Rectangle {
+    // Il Loader crea il pannello alla richiesta e gli assegna tutta la superficie.
+    Loader {
         id: impostazioni
         anchors.fill: parent
-        color: FileStyle.scrim
-        visible: false
+        active: false
+        function apri() { active = true; }
+        sourceComponent: Component {
+            Rectangle {
+                id: impostazioniPanel
+                anchors.fill: parent
+                color: FileStyle.scrim
+                visible: true
 
-        function apri() { impostazioni.visible = true; }
-
-        MouseArea {
-            anchors.fill: parent
-            onClicked: impostazioni.visible = false
-        }
-
-        Rectangle {
-            anchors.centerIn: parent
-            width: 448
-            height: elenco.implicitHeight + Theme.Effects.space5 * 2
-            radius: Theme.Effects.radiusMD
-            color: FileStyle.panel
-            border.width: 1
-            border.color: FileStyle.edge
-
-            MouseArea { anchors.fill: parent }
-
-            Column {
-                id: elenco
-                anchors.centerIn: parent
-                width: parent.width - Theme.Effects.space5 * 2
-                spacing: Theme.Effects.space2
-
-                Text {
-                    text: Core.Strings.lang === "it" ? "Impostazioni"
-                                                     : "Settings"
-                    color: FileStyle.text
-                    font.family: FileStyle.font
-                    font.pixelSize: Theme.Typography.sizeMD
-                    bottomPadding: Theme.Effects.space1
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: impostazioni.active = false
                 }
 
-                Repeater {
-                    model: {
-                        var it = Core.Strings.lang === "it";
-                        return [
-                            { "chiave": "files.sfondiAutomatici", "icona": "image",
-                              "titolo": it ? "Sfondi automatici" : "Automatic backgrounds",
-                              "detta": it ? "Musica, Documenti e le altre cartelle note si riconoscono da lontano"
-                                          : "Music, Documents and the other known folders stand out",
-                              "serie": true },
-                            { "chiave": "files.clicSingolo", "icona": "cursor",
-                              "titolo": it ? "Un clic solo per aprire" : "Single click to open",
-                              "detta": it ? "Invece di due" : "Instead of two",
-                              "serie": false },
-                            { "chiave": "files.caselleSelezione", "icona": "check",
-                              "titolo": it ? "Caselle di selezione" : "Selection checkboxes",
-                              "detta": it ? "Seleziona più file senza tenere premuto Ctrl"
-                                          : "Select multiple files without holding Ctrl",
-                              "serie": false },
-                            { "chiave": "files.anteprime", "icona": "image",
-                              "titolo": it ? "Anteprime delle immagini" : "Image previews",
-                              "detta": it ? "Da spegnere su cartelle enormi di foto su un disco lento"
-                                          : "Turn off for huge photo folders on a slow disk",
-                              "serie": true },
-                            { "chiave": "files.confermaCestino", "icona": "trash",
-                              "titolo": it ? "Chiedi prima di cestinare" : "Ask before binning",
-                              "detta": it ? "Il cestino è già una rete: la domanda si può togliere"
-                                          : "The bin is already a net: the question can go",
-                              "serie": true },
-                            // Il numero sta scritto nella riga sotto perché è
-                            // il solo modo di scegliere davvero: un
-                            // interruttore che dice «più veloce» e non dice
-                            // «131 MB» non è una scelta, è una spinta.
-                            { "chiave": "files.tieniAcceso", "icona": "window",
-                              "titolo": it ? "Tienilo pronto" : "Keep it ready",
-                              "detta": it ? "Si apre subito invece che in un secondo. Costa 131 MB di memoria, sempre"
-                                          : "Opens at once instead of in a second. Costs 131 MB of memory, always",
-                              "serie": true }
-                        ];
-                    }
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 448
+                    height: elenco.implicitHeight + Theme.Effects.space5 * 2
+                    radius: Theme.Effects.radiusMD
+                    color: FileStyle.panel
+                    border.width: 1
+                    border.color: FileStyle.edge
 
-                    delegate: Ui.ToggleTile {
-                        required property var modelData
-                        width: elenco.width
-                        icon: modelData.icona
-                        label: modelData.titolo
-                        detail: modelData.detta
-                        checked: Core.Ipc.get(modelData.chiave, modelData.serie)
-                        onToggled: function (v) {
-                            Core.Ipc.setSetting(modelData.chiave, v);
+                    MouseArea { anchors.fill: parent }
+
+                    Column {
+                        id: elenco
+                        anchors.centerIn: parent
+                        width: parent.width - Theme.Effects.space5 * 2
+                        spacing: Theme.Effects.space2
+
+                        Text {
+                            text: Core.Strings.lang === "it" ? "Impostazioni"
+                                                             : "Settings"
+                            color: FileStyle.text
+                            font.family: FileStyle.font
+                            font.pixelSize: Theme.Typography.sizeMD
+                            bottomPadding: Theme.Effects.space1
+                        }
+
+                        Repeater {
+                            model: {
+                                var it = Core.Strings.lang === "it";
+                                return [
+                                    { "chiave": "files.sfondiAutomatici", "icona": "image",
+                                      "titolo": it ? "Sfondi automatici" : "Automatic backgrounds",
+                                      "detta": it ? "Musica, Documenti e le altre cartelle note si riconoscono da lontano"
+                                                  : "Music, Documents and the other known folders stand out",
+                                      "serie": true },
+                                    { "chiave": "files.clicSingolo", "icona": "cursor",
+                                      "titolo": it ? "Un clic solo per aprire" : "Single click to open",
+                                      "detta": it ? "Invece di due" : "Instead of two",
+                                      "serie": false },
+                                    { "chiave": "files.caselleSelezione", "icona": "check",
+                                      "titolo": it ? "Caselle di selezione" : "Selection checkboxes",
+                                      "detta": it ? "Seleziona più file senza tenere premuto Ctrl"
+                                                  : "Select multiple files without holding Ctrl",
+                                      "serie": false },
+                                    { "chiave": "files.anteprime", "icona": "image",
+                                      "titolo": it ? "Anteprime delle immagini" : "Image previews",
+                                      "detta": it ? "Da spegnere su cartelle enormi di foto su un disco lento"
+                                                  : "Turn off for huge photo folders on a slow disk",
+                                      "serie": true },
+                                    { "chiave": "files.confermaCestino", "icona": "trash",
+                                      "titolo": it ? "Chiedi prima di cestinare" : "Ask before binning",
+                                      "detta": it ? "Il cestino è già una rete: la domanda si può togliere"
+                                                  : "The bin is already a net: the question can go",
+                                      "serie": true },
+                                    // Il numero sta scritto nella riga sotto perché è
+                                    // il solo modo di scegliere davvero: un
+                                    // interruttore che dice «più veloce» e non dice
+                                    // «131 MB» non è una scelta, è una spinta.
+                                    { "chiave": "files.tieniAcceso", "icona": "window",
+                                      "titolo": it ? "Tienilo pronto" : "Keep it ready",
+                                      "detta": it ? "Si apre subito invece che in un secondo. Costa 131 MB di memoria, sempre"
+                                                  : "Opens at once instead of in a second. Costs 131 MB of memory, always",
+                                      "serie": true }
+                                ];
+                            }
+
+                            delegate: Ui.ToggleTile {
+                                required property var modelData
+                                width: elenco.width
+                                palette: FileStyle
+                                fontFamily: FileStyle.font
+                                icon: modelData.icona
+                                label: modelData.titolo
+                                detail: modelData.detta
+                                checked: Core.Ipc.get(modelData.chiave, modelData.serie)
+                                onToggled: function (v) {
+                                    Core.Ipc.setSetting(modelData.chiave, v);
+                                }
+                            }
                         }
                     }
                 }
@@ -4646,13 +4720,18 @@ FloatingWindow {
 
     // ── Connetti a un server ─────────────────────────────────────────────
 
-    Collega {
+    Loader {
         id: collegaServer
         anchors.fill: parent
         z: 50
-        onCollegato: function (percorso) {
-            if (manager.current)
-                manager.current.navigate(percorso);
+        active: false
+        sourceComponent: Component {
+            Collega {
+                onCollegato: function (percorso) {
+                    if (manager.current)
+                        manager.current.navigate(percorso);
+                }
+            }
         }
     }
 

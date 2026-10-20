@@ -187,7 +187,7 @@ class GitHubMotore {
 
   // ── Entrare senza incollare niente: il «device flow» ───────────────────
   //
-  // Il manutentore, 8 settembre 2026: «invece di aprire il browser e incollare… lo
+  // il manutentore, 8 settembre 2026: «invece di aprire il browser e incollare… lo
   // fa Antigravity, VS Code e tanti altri. Perché non noi? Siamo di serie B?».
   //
   // Aveva ragione, e il gesto che criticava è finito male dieci minuti dopo:

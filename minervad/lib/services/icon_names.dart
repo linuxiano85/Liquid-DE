@@ -180,6 +180,7 @@ const Map<String, List<String>> minervaIconNames = {
   'image': ['image-x-generic'],
   'music': ['audio-x-generic'],
   'video': ['video-x-generic'],
+  'sottotitoli': ['media-view-subtitles-symbolic', 'media-view-subtitles'],
   'document': ['text-x-generic'],
   // I tipi di file. Ogni tema curato ne ha un disegno proprio: chiedere
   // «text-x-generic» per tutti vorrebbe dire buttarlo via.

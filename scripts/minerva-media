@@ -9,7 +9,7 @@ set -e
 # ── 1. Dov'è Minerva ────────────────────────────────────────────────────────
 SELF=$(readlink -f "$0")
 ROOT=$(dirname "$(dirname "$SELF")")
-CONFIG="$ROOT/minerva-shell/minervamedia.qml"
+CONFIG="$ROOT/minerva-shell/minervamedia-avvio.qml"
 
 if [ ! -f "$CONFIG" ]; then
     echo "minerva-media: non trovo $CONFIG" >&2

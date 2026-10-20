@@ -37,6 +37,11 @@ Item {
         : (qt.error !== MediaPlayer.NoError ? qt.errorString : "")
     /// Il decodificatore hardware in uso («vaapi»), vuoto se nessuno.
     readonly property string decodificatore: _mpv ? _mpv.hardwareDecoder : ""
+    /// Le tracce del file (`track-list` di mpv: id, type, lang, title,
+    /// selected…). Con Qt Multimedia nessuna.
+    readonly property var tracce: _mpv ? _mpv.tracks : []
+    /// Il testo del sottotitolo sullo schermo adesso, vuoto se nessuno.
+    readonly property string testoSottotitolo: _mpv ? _mpv.subtitleText : ""
 
     /// Il brano è arrivato in fondo da sé.
     signal finito()
@@ -44,6 +49,8 @@ Item {
     function play() { _vuoleSuonare = true; if (_mpv) _mpv.play(); else qt.play(); }
     function pause() { _vuoleSuonare = false; if (_mpv) _mpv.pause(); else qt.pause(); }
     function stop() { _vuoleSuonare = false; if (_mpv) _mpv.stop(); else qt.stop(); }
+    /// La traccia di sottotitoli da mostrare: -1 nessuna.
+    function scegliSottotitoli(id) { if (_mpv) _mpv.selectSubtitleTrack(id); }
     function seek(ms) {
         ms = Math.max(0, Math.round(ms));
         if (_mpv) _mpv.seek(ms); else qt.position = ms;

@@ -362,7 +362,7 @@ FloatingWindow {
     // stesso per il file da tagliare. Il nostro selettore esisteva già —
     // `ui/Scegli.qml`, quello della Custodia — e non lo usava nessuno.
     //
-    // Il manutentore, 4 settembre 2026: «rendi tutti i passaggi a portata di click».
+    // il manutentore, 4 settembre 2026: «rendi tutti i passaggi a portata di click».
     property string _scopoScelta: ""
 
     function scegli(scopo, titolo, daDove) {
@@ -2432,6 +2432,9 @@ FloatingWindow {
             inPip: pip.attivo
             sorgente: finestra._tvSorgente + 1
             sorgenti: finestra._tvSorgenti.length
+            tracce: finestra.tvInOnda !== "" ? player.tracce : []
+            testoSottotitolo: finestra.tvInOnda !== "" ? player.testoSottotitolo : ""
+            onSottotitoliScelti: function (id) { player.scegliSottotitoli(id); }
             onGuarda: function (canale) { finestra.riproduciTv(canale); }
             onPienoRichiesto: finestra.alternaPalcoPieno()
             onPipRichiesto: pip.attivo ? finestra.chiudiPip() : finestra.apriPip()

@@ -340,7 +340,7 @@ Item {
 
     // ── Trascinare ───────────────────────────────────────────────────────
     //
-    // Il manutentore, 12 agosto 2026: «voglio poter trascinare qualsiasi cosa come in
+    // il manutentore, 12 agosto 2026: «voglio poter trascinare qualsiasi cosa come in
     // KDE, e lasciando mi chiede se copiare o spostare».
     //
     // Il trascinamento è quello VERO del sistema (`Drag.Automatic`): esce dalla
@@ -578,6 +578,9 @@ Item {
     }
 
     function reload() {
+        // Prima del saluto onConnectedChanged richiederà il percorso attuale.
+        // Accodarlo anche qui produce due elenchi per la stessa apertura.
+        if (!Core.Ipc.connected || pane.path === "") return;
         Core.Ipc.fsList(pane.path, pane.showHidden, pane.paneId);
     }
 
@@ -1405,7 +1408,7 @@ Item {
         // modalità amministratore, dentro una cartella non scrivibile, erano
         // veri entrambi.
         //
-        // Il manutentore, guardandolo: «viene coperto dalla scritta amministratore e
+        // il manutentore, guardandolo: «viene coperto dalla scritta amministratore e
         // quindi non si capisce cosa c'è scritto». È la stessa famiglia delle
         // due «cartella vuota» sovrapposte: due oggetti validi, nessun errore
         // da nessuna parte, e si vede solo guardando lo schermo.
@@ -1795,7 +1798,7 @@ Item {
         // toglie la presa del mouse, e quella perdita le arriva come
         // `onCanceled` — cioè uguale a un'interruzione.
         //
-        // Il manutentore, 7 settembre 2026: «perché ancora non trascina i file?».
+        // il manutentore, 7 settembre 2026: «perché ancora non trascina i file?».
         // Il registro diceva, due righe di fila:
         //
         //     [TR] acceso
@@ -2349,21 +2352,31 @@ Item {
                 }
 
                 // Un video si distingue da una foto: il triangolo del «play».
-                Ui.Icon {
+                //
+                // In un Loader, come la freccia qui sotto: un'icona nascosta
+                // si crea lo stesso (~80 µs, con dentro un'immagine e una
+                // forma), un Loader spento ~6 µs. Misurato il 20 ottobre
+                // 2026: ogni cambio di cartella creava più di sette icone per
+                // casella, quasi tutte invisibili.
+                Loader {
                     anchors.centerIn: preview
                     width: Math.max(14, Math.min(34, parent.width * 0.26))
                     height: width
-                    visible: preview.visible && Files.eVideo(cell.modelData.name)
-                    name: "play"
-                    thickness: 2
-                    color: "white"
-                    opacity: 0.9
+                    active: preview.visible && Files.eVideo(cell.modelData.name)
+                    sourceComponent: Component {
+                        Ui.Icon {
+                            name: "play"
+                            thickness: 2
+                            color: "white"
+                            opacity: 0.9
+                        }
+                    }
                 }
 
                 // Il collegamento si vede: una freccina in basso a sinistra,
                 // come su qualunque sistema dal 1995. Senza, un collegamento
                 // rotto sembra un file che non si apre.
-                Ui.Icon {
+                Loader {
                     anchors.left: parent.left
                     anchors.bottom: parent.bottom
                     // Un contrassegno, non un disegno. Legata solo alla misura
@@ -2374,11 +2387,15 @@ Item {
                     // massimo oltre il quale smette di essere un contrassegno.
                     width: Math.max(9, Math.min(22, parent.width * 0.28))
                     height: width
-                    visible: cell.modelData.isLink === true
-                    name: "back"
-                    thickness: 2.4
-                    rotation: 180
-                    color: FileStyle.accentAlt
+                    active: cell.modelData.isLink === true
+                    sourceComponent: Component {
+                        Ui.Icon {
+                            name: "back"
+                            thickness: 2.4
+                            rotation: 180
+                            color: FileStyle.accentAlt
+                        }
+                    }
                 }
             }
 
@@ -2606,42 +2623,52 @@ Item {
                 }
             }
 
-            Rectangle {
-                // La casella modifica la selezione del riquadro, la stessa di
-                // tastiera e rettangolo. Non apre il file neppure con doppio clic.
-                objectName: "fileCheck-" + cell.modelData.name
-                visible: Core.Ipc.get("files.caselleSelezione", false)
+            // La casella di selezione si crea solo se è accesa (di serie no).
+            // Prima ogni casella del gestore file costruiva rettangolo, spunta,
+            // area del mouse e accessibilità anche a opzione spenta, cioè quasi
+            // sempre (20 ottobre 2026: fra le prime righe del profilo di un
+            // cambio di cartella).
+            Loader {
+                active: Core.Ipc.get("files.caselleSelezione", false)
                 z: 2
                 x: cell.gridMode ? pane.gridPadding + 4 : 6
                 y: cell.gridMode ? pane.gridPadding + 4 : (cell.height - height) / 2
                 width: 18
                 height: 18
-                radius: 4
-                color: cell.selected ? FileStyle.accent : FileStyle.raised
-                border.width: 1
-                border.color: cell.selected ? FileStyle.accent : FileStyle.textMuted
-                Accessible.role: Accessible.CheckBox
-                Accessible.name: cell.modelData.name
-                Accessible.checked: cell.selected
+                sourceComponent: Component {
+                    Rectangle {
+                        // La casella modifica la selezione del riquadro, la stessa di
+                        // tastiera e rettangolo. Non apre il file neppure con doppio clic.
+                        objectName: "fileCheck-" + cell.modelData.name
+                        anchors.fill: parent
+                        radius: 4
+                        color: cell.selected ? FileStyle.accent : FileStyle.raised
+                        border.width: 1
+                        border.color: cell.selected ? FileStyle.accent : FileStyle.textMuted
+                        Accessible.role: Accessible.CheckBox
+                        Accessible.name: cell.modelData.name
+                        Accessible.checked: cell.selected
 
-                Ui.Icon {
-                    anchors.centerIn: parent
-                    width: 12
-                    height: 12
-                    visible: cell.selected
-                    name: "check"
-                    alwaysDrawn: true
-                    color: FileStyle.textOnAccent
-                }
+                        Ui.Icon {
+                            anchors.centerIn: parent
+                            width: 12
+                            height: 12
+                            visible: cell.selected
+                            name: "check"
+                            alwaysDrawn: true
+                            color: FileStyle.textOnAccent
+                        }
 
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        pane.activated();
-                        pane.focusContents();
-                        pane.toggleSelection(cell.modelData.path);
-                        pane.cursor = cell.index;
-                        pane.anchorIndex = cell.index;
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                pane.activated();
+                                pane.focusContents();
+                                pane.toggleSelection(cell.modelData.path);
+                                pane.cursor = cell.index;
+                                pane.anchorIndex = cell.index;
+                            }
+                        }
                     }
                 }
             }

@@ -149,7 +149,7 @@ Column {
     // collegato: mostrava «per mandare su GitHub serve una chiave» a uno che
     // era entrato dieci minuti prima.
     //
-    // Il manutentore, quel giorno: «nell'app non vedo se ho effettuato l'accesso, non
+    // il manutentore, quel giorno: «nell'app non vedo se ho effettuato l'accesso, non
     // dà nessuna informazione». Uno stato che c'è e non si vede è come non
     // averlo — ed è la stessa famiglia di difetti che questo progetto passa le
     // giornate a togliere.
@@ -559,7 +559,7 @@ Column {
 
                 // ── La strada nuova: entra e basta ───────────────────
                 //
-                // Il manutentore, 8 settembre 2026: «lo fa Antigravity, VS Code e
+                // il manutentore, 8 settembre 2026: «lo fa Antigravity, VS Code e
                 // tanti altri. Perché non noi? Siamo di serie B?». Aveva
                 // ragione, e dieci minuti dopo il gesto che criticava è finito
                 // male: il gettone appena creato è stato incollato dentro una

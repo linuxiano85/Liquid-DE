@@ -6,7 +6,7 @@ import "." as Ui
 // StatoSchermata — La riga in alto delle schermate di accesso e di blocco:
 // il meteo al centro, tastiera e batteria a destra.
 //
-// Il manutentore, 23 settembre 2026: «il meteo lo metterei in alto centrato come le
+// il manutentore, 23 settembre 2026: «il meteo lo metterei in alto centrato come le
 // icone IT e batteria, alla stessa altezza». È una riga sola e non due pezzi
 // sparsi perché le due schermate si vedono una dopo l'altra, e devono dire le
 // stesse cose negli stessi posti.

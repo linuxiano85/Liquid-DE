@@ -134,6 +134,7 @@ class ControllerService {
   final changes = StreamController<Map<String, dynamic>>.broadcast();
 
   Process? _ascolto;
+  Future<void>? _monitorStart, _startFuture, _closeFuture;
   Timer? _presto, _riprova, _ronda;
   bool _avviato = false, _chiuso = false, _ancora = false;
 
@@ -165,8 +166,12 @@ class ControllerService {
   bool _inGioco = false;
   Timer? _guardaGioco;
 
-  Future<void> start() async {
-    if (_avviato || _chiuso) return;
+  Future<void> start() {
+    if (_chiuso) return Future<void>.value();
+    return _startFuture ??= _start();
+  }
+
+  Future<void> _start() async {
     _avviato = true;
     _ascolta();
     // ── La ronda ────────────────────────────────────────────────────────
@@ -217,51 +222,72 @@ class ControllerService {
     if (_avviato && !_chiuso) _subito();
   }
 
-  Future<void> close() async {
+  Future<void> close() {
     _chiuso = true;
     _presto?.cancel();
     _riprova?.cancel();
     _ronda?.cancel();
     _guardaGioco?.cancel();
-    _ascolto?.kill();
-    _ascolto = null;
+    return _closeFuture ??= _close();
+  }
+
+  Future<void> _close() async {
+    // Process.start può essere ancora pendente: acquisire prima il figlio.
+    await _monitorStart;
+    final monitor = _ascolto;
+    if (monitor != null) {
+      monitor.kill(ProcessSignal.sigterm);
+      try {
+        await monitor.exitCode.timeout(const Duration(seconds: 1));
+      } on TimeoutException {
+        monitor.kill(ProcessSignal.sigkill);
+        await monitor.exitCode.timeout(const Duration(seconds: 1));
+      }
+    }
+    // Un giro già accettato conserva la sua durata; non dichiararlo finito.
+    await _startFuture;
+    await _inCorso;
     await changes.close();
   }
 
   // ── L'ascolto ───────────────────────────────────────────────────────────
 
   void _ascolta() {
-    if (_chiuso) return;
-    Process.start('udevadm', [
-      'monitor',
-      '--udev',
-      '--subsystem-match=input',
-    ]).then(
-      (p) {
-        if (_chiuso) {
-          p.kill();
-          return;
+    if (_chiuso || _monitorStart != null || _ascolto != null) return;
+    final pending = _avviaMonitor();
+    _monitorStart = pending;
+    unawaited(pending.then((_) {
+      _monitorStart = null;
+    }));
+  }
+
+  Future<void> _avviaMonitor() async {
+    try {
+      final p = await Process.start('udevadm', [
+        'monitor',
+        '--udev',
+        '--subsystem-match=input',
+      ]);
+      // Anche dopo close: la pulizia attende questo Future e possiede il PID.
+      _ascolto = p;
+      p.stdout.listen((_) => _subito(), onError: (Object _) {});
+      p.stderr.listen((_) {}, onError: (Object _) {});
+      unawaited(p.exitCode.then((_) {
+        if (identical(_ascolto, p)) _ascolto = null;
+        if (!_chiuso) {
+          _riprova = Timer(const Duration(seconds: 5), _ascolta);
         }
-        _ascolto = p;
-        p.stdout.listen((_) => _subito(), onError: (Object _) {});
-        p.stderr.listen((_) {}, onError: (Object _) {});
-        p.exitCode.then((_) {
-          _ascolto = null;
-          if (!_chiuso) {
-            _riprova = Timer(const Duration(seconds: 5), _ascolta);
-          }
-        });
-      },
-      onError: (Object e) {
-        print('[MINERVA][CONTROLLER] udevadm non parte: $e');
-        if (!_chiuso) _riprova = Timer(const Duration(seconds: 30), _ascolta);
-      },
-    );
+      }));
+    } catch (e) {
+      print('[MINERVA][CONTROLLER] udevadm non parte: $e');
+      if (!_chiuso) _riprova = Timer(const Duration(seconds: 30), _ascolta);
+    }
   }
 
   /// Un pad che si accende manda una decina di eventi in mezzo secondo
   /// (il pad, il touchpad, i sensori di movimento): si aspetta che taccia.
   void _subito() {
+    if (_chiuso) return;
     _presto?.cancel();
     _presto = Timer(const Duration(milliseconds: 700), () => _aggiorna());
   }
@@ -269,6 +295,7 @@ class ControllerService {
   // ── Il giro ─────────────────────────────────────────────────────────────
 
   Future<void> _aggiorna() {
+    if (_chiuso) return Future<void>.value();
     final inCorso = _inCorso;
     if (inCorso != null) {
       // Un cambio arrivato durante il giro: se ne fa un altro alla fine, e
@@ -296,8 +323,10 @@ class ControllerService {
 
   Future<void> _unGiro() async {
     final pad = await inventario();
+    if (_chiuso) return;
     final installato = File(programma).existsSync();
     final acceso = installato && await Dbus.ceIlServizio(servizio);
+    if (_chiuso) return;
     var compositi = acceso ? await _compositi() : <_Composito>[];
     if (acceso && await _decidi(pad, compositi)) {
       compositi = await _compositi();

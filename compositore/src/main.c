@@ -696,6 +696,9 @@ struct minerva {
 		PRESA_RIDIMENSIONA,
 	} presa;
 	struct finestra *presa_di;
+	/// Quando si è annunciata l'ultima «mossa» durante una presa: vedi
+	/// `presa_annuncia`.
+	uint64_t presa_annuncio_ms;
 	/// Dove stava il puntatore quando si è premuto, e dov'era la finestra.
 	double presa_x, presa_y;
 	struct wlr_box presa_box;
@@ -742,7 +745,7 @@ struct minerva {
 
 	// ── La cornice attorno alla finestra attiva ──────────────────────────
 	//
-	// Il manutentore, 3 settembre 2026: «se voglio che il colore intorno diventi tipo
+	// il manutentore, 3 settembre 2026: «se voglio che il colore intorno diventi tipo
 	// rgb e cambi colore costantemente oppure che giri sempre come una
 	// striscia led?».
 	//
@@ -767,7 +770,7 @@ struct minerva {
 
 	// ── I colori che si alternano ───────────────────────────────────────
 	//
-	// Il manutentore, 9 settembre 2026: «vorrei anche l'effetto rgb come una strip
+	// il manutentore, 9 settembre 2026: «vorrei anche l'effetto rgb come una strip
 	// led e possibilità di scegliere i colori che si alterneranno».
 	//
 	// Zero colori vuol dire lo SPETTRO intero, che è come la cornice è nata e
@@ -824,7 +827,7 @@ struct minerva {
 
 	// ── L'effetto sulle finestre: un corpo solo ─────────────────────────
 	//
-	// Il manutentore, 2 settembre 2026: «non abbiamo il blur e ci vorrebbero delle
+	// il manutentore, 2 settembre 2026: «non abbiamo il blur e ci vorrebbero delle
 	// impostazioni per mettere nessun effetto o blur o vetro [...] e in blur
 	// o vetro dovrebbero far vedere un solo corpo trasparente o blur come un
 	// unico corpo la barra e la finestra senza stacchi».
@@ -1073,6 +1076,9 @@ struct finestra {
     uint64_t birth;
     uint64_t tiling_focus_recency;
     bool preview_dirty;
+    // Cambiata dall'ultima foto mentre nessuno guardava le anteprime: si
+    // rifotografa quando sparisce dallo schermo (vedi `anteprima_nascosta`).
+    bool preview_vecchia;
     bool launch_assigned;
 	bool attention;
 	int64_t tiling_col;
@@ -1327,6 +1333,7 @@ static int tiling_disposizione(struct minerva *m,int desk) {
 }
 static void anteprima_dimentica(struct finestra *);
 static void anteprima_segnala(struct finestra *);
+static void anteprima_nascosta(struct finestra *);
 static void fuoco_in_direzione(struct minerva *, const char *);
 static void finestra_schermo_intero(struct finestra *,bool);
 static void tiling_queue(struct minerva *);
@@ -2178,7 +2185,7 @@ static void disponi(struct minerva *m, struct wlr_output *out) {
 
 // ── La tastiera ai pannelli che l'hanno chiesta ──────────────────────────
 //
-// Il manutentore, 6 settembre 2026: «il nostro polkit o come si chiama, quando fa
+// il manutentore, 6 settembre 2026: «il nostro polkit o come si chiama, quando fa
 // apparire richiesta di password di root non prende il focus e quindi bisogna
 // spostare il mouse, cliccare sopra e inserire la password».
 //
@@ -2422,7 +2429,7 @@ static void puntatore_ricalcola(struct minerva *m) {
 
 // ── Chi tiene sveglio lo schermo ──────────────────────────────────────────
 //
-// Il manutentore, 29 settembre 2026: «la CPU a riposo è sempre sul 4 %». Il
+// il manutentore, 29 settembre 2026: «la CPU a riposo è sempre sul 4 %». Il
 // compositore presentava 11 fotogrammi al secondo con nessuno che toccava
 // niente, e non c'era modo di sapere CHI li chiedeva: ogni fotogramma nasce
 // da una superficie che manda un aggiornamento, ma il nome di quella
@@ -3594,6 +3601,8 @@ static void finestra_mostra_o_nascondi(struct finestra *f) {
 	wlr_scene_node_set_enabled(&f->cornice->node, visible);
 	if (visible && !was_visible)
 		anteprima_segnala(f);
+	if (was_visible && !visible)
+		anteprima_nascosta(f);
 	// Un film ridotto, o lasciato su un'altra scrivania, non frena più — e
 	// nemmeno il suo inibitore, se ne ha uno (`inibitori_visibili`): per
 	// questo si riguarda sempre, non solo per lo schermo intero.
@@ -4114,7 +4123,7 @@ static void finestra_appare(struct finestra *f) {
 
 	// ── Quello che aveva già chiesto prima di comparire ──────────────────
 	//
-	// Il manutentore, 5 settembre 2026: «tomb raider installato quando lo avvio non
+	// il manutentore, 5 settembre 2026: «tomb raider installato quando lo avvio non
 	// si avvia a schermo intero ma ho la dock e la barra in alto».
 	//
 	// Un programma che vuole nascere a schermo intero lo chiede **prima di
@@ -4482,7 +4491,7 @@ static void chiede_ridimensiona(struct wl_listener *l, void *dati) {
 
 // ── I menù ────────────────────────────────────────────────────────────────
 //
-// Il manutentore, 6 settembre 2026: «sui browser almeno, e non so se altrove, abbiamo
+// il manutentore, 6 settembre 2026: «sui browser almeno, e non so se altrove, abbiamo
 // lo stesso problema: se clicco il tasto destro vale come sinistro. Ho testato
 // su chrome e firefox e confermo».
 //
@@ -5658,7 +5667,7 @@ static void aggancia_attiva(struct minerva *m, const char *dove) {
 
 	// ── Dallo schermo intero, prima si esce ──────────────────────────────
 	//
-	// Il manutentore, 25 settembre 2026: «quando passo una finestra a schermo
+	// il manutentore, 25 settembre 2026: «quando passo una finestra a schermo
 	// intero e premo poi Super+freccia giù la finestra perde la barra del
 	// titolo». Super+↓ la RIDUCEVA restando a schermo intero: tornava senza
 	// barra e senza un modo evidente di uscirne. Adesso Super+↓ esce dallo
@@ -7280,7 +7289,7 @@ static bool respiro_avvia(struct finestra *f, int tipo) {
 
 // ── Il respiro della chiusura ────────────────────────────────────────────
 //
-// Il manutentore, 27 settembre 2026, vedendo il respiro: «l'animazione in apertura
+// il manutentore, 27 settembre 2026, vedendo il respiro: «l'animazione in apertura
 // nelle app, ma in chiusura? nulla». Il perché: quando un programma chiude,
 // la sua immagine se ne va con lui, e non c'è niente da animare.
 //
@@ -7589,6 +7598,23 @@ static void presa_stacca(struct minerva *m, struct finestra *f) {
 	m->presa_y = m->cursore->y;
 }
 
+// ── La finestra si muove sotto il dito: lo si dice, senza esagerare ──────
+//
+// Fino al 20 ottobre 2026 durante il trascinamento non si annunciava niente,
+// e il demone, per far seguire le barre del titolo, rileggeva l'elenco delle
+// finestre ogni 60 ms mentre qualcosa si muoveva e ogni 1,5 s per sempre,
+// anche a scrivania ferma, solo per accorgersi che un trascinamento era
+// cominciato. Adesso lo dice il compositore, che lo sa: al massimo un
+// annuncio ogni 50 ms, e solo durante la presa. A riposo nessuno deve più
+// svegliarsi per controllare.
+static void presa_annuncia(struct minerva *m, struct finestra *f) {
+	uint64_t adesso = ora_ms();
+	if (adesso - m->presa_annuncio_ms < 50)
+		return;
+	m->presa_annuncio_ms = adesso;
+	annuncia(m, "mossa", f);
+}
+
 static bool presa_avanti(struct minerva *m) {
 	if (m->presa == PRESA_NIENTE || m->presa_di == NULL)
 		return false;
@@ -7618,7 +7644,7 @@ static bool presa_avanti(struct minerva *m) {
 		//
 		// ── E lo stesso per una AGGANCIATA ───────────────────────────
 		//
-		// Il manutentore, 7 settembre 2026: «staccala e vedi che si riaggancia da
+		// il manutentore, 7 settembre 2026: «staccala e vedi che si riaggancia da
 		// sola, e non riesco a ridimensionarla se non la voglio più a metà
 		// schermo: sono costretto a fare un altro snap per rimpicciolirla».
 		//
@@ -7637,6 +7663,7 @@ static bool presa_avanti(struct minerva *m) {
 		int y = (int)(m->presa_box.y + dy);
 		trattieni(f, &x, &y);
 		finestra_muovi(f, x, y);
+		presa_annuncia(m, f);
         if(f->tiling_saved) {
             struct wlr_output *output=wlr_output_layout_output_at(m->schermi,m->cursore->x,m->cursore->y);
             struct finestra *target=tiling_drop_target(m,f,output);
@@ -7722,12 +7749,13 @@ static bool presa_avanti(struct minerva *m) {
 	}
 
 	finestra_posiziona(f, n.x, n.y, n.width, n.height);
+	presa_annuncia(m, f);
 	return true;
 }
 
 // ── La riva riservata ────────────────────────────────────────────────────
 //
-// Il manutentore, 25 settembre 2026: «se ho una app a schermo intero compaiono le
+// il manutentore, 25 settembre 2026: «se ho una app a schermo intero compaiono le
 // isole passandoci sopra». Con una finestra che riempie lo schermo —
 // ingrandita o a schermo intero — la riva non si muove da sola: angoli,
 // bordi e spinte rispondono solo mentre Super è tenuto giù. È la prima
@@ -8304,7 +8332,7 @@ static void cursore_rilasciato(struct minerva *m,
 			// lasciata la mano, e si spostava solo quando il programma
 			// finiva di ridisegnarsi.
 			//
-			// Il manutentore, 7 settembre 2026: «lo snap non è istantaneo, la
+			// il manutentore, 7 settembre 2026: «lo snap non è istantaneo, la
 			// posizioni come vuoi e lasci e passa più di mezzo secondo e
 			// poi si posiziona come voglio».
 			//
@@ -8741,7 +8769,7 @@ static void cursore_richiesto(struct wl_listener *l, void *dati) {
 //
 // ── Il sintomo, che sembrava tutt'altro ──────────────────────────────────
 //
-// Il manutentore, 5 settembre 2026: «il puntatore quando sono su youtube non posso
+// il manutentore, 5 settembre 2026: «il puntatore quando sono su youtube non posso
 // vederlo se passo su un video, e anche su altre finestre come questo
 // terminale».
 //
@@ -9777,7 +9805,7 @@ static void monitor_transaction_removed(struct minerva *m, struct wlr_output *ou
 //                 piccolo, se ce l'ha; altrimenti tiene il suo e il più
 //                 grande mostra un bordo vuoto a destra e in basso.
 //
-// Il manutentore, 22 settembre 2026: «sotto i monitor le opzioni duplica, solo
+// il manutentore, 22 settembre 2026: «sotto i monitor le opzioni duplica, solo
 // monitor 1 o 2 o solo pc e estendi». La versione precedente aveva lasciato fuori la
 // duplicazione apposta; entra qui con la stessa transazione degli altri due.
 
@@ -11283,6 +11311,28 @@ void minerva_comando(struct minerva *m, const char *riga,
 		snprintf(risposta, n, "no riga vuota");
 		return;
 	}
+    // «anteprime-guardate si|no»: se qualcuno sta guardando le miniature.
+    // Un verbo a sé e non «anteprime guardate»: un compositore di prima
+    // leggerebbe «guardate» come «no» e le spegnerebbe del tutto.
+    // «capacita»: che cosa sa fare questo compositore, per chi deve decidere
+    // se affidarsi ai suoi annunci. Un compositore che non conosce il verbo
+    // risponde «sconosciuto», e chi chiede tiene il comportamento di prima.
+    //   mossa-in-presa       annuncia «mossa» anche durante il trascinamento
+    //   anteprime-guardate   capisce il verbo omonimo
+    if (!strcmp(verbo,"capacita")) {
+        snprintf(risposta,n,"ok mossa-in-presa anteprime-guardate");
+        return;
+    }
+    if (!strcmp(verbo,"anteprime-guardate")) {
+        char *v=parola(&resto);
+        if(!v) {
+            snprintf(risposta,n,"ok %s",anteprime_guardate ? "si":"no");
+            return;
+        }
+        anteprime_guarda(m,parola_vera(v));
+        snprintf(risposta,n,"ok");
+        return;
+    }
     if (!strcmp(verbo,"anteprime")) {
         char *v=parola(&resto);
         if(v) {anteprime_enable(m,parola_vera(v));snprintf(risposta,n,"ok");}
@@ -13208,7 +13258,7 @@ int main(int argc, char *argv[]) {
 	//
 	// ── Il colore va PREMOLTIPLICATO ─────────────────────────────────────
 	//
-	// Il manutentore, 7 settembre 2026: «quel blu che compare come dimostrazione è
+	// il manutentore, 7 settembre 2026: «quel blu che compare come dimostrazione è
 	// troppo forte e lo vorrei un pochino più trasparente e meno forte come
 	// intensità».
 	//

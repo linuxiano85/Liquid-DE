@@ -379,7 +379,7 @@ Item {
 
         // ── Ricarica la scrivania ────────────────────────────────────
         //
-        // Il manutentore, 2 settembre 2026: «mettiamo un tasto disattivabile accanto
+        // il manutentore, 2 settembre 2026: «mettiamo un tasto disattivabile accanto
         // al meteo dove posso riavviare la shell».
         //
         // ── Ricarica, non riavvia, e la differenza si vede ───────────────

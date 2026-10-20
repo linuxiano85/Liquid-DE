@@ -20,7 +20,10 @@ set -e
 # un pezzo.
 SELF=$(readlink -f "$0")
 ROOT=$(dirname "$(dirname "$SELF")")
-CONFIG="$ROOT/minerva-shell/filemanager.qml"
+# L'ingresso che carica `filemanager.qml` come file locale, perché Qt ne
+# tenga in cache la compilazione: vedi `minerva-shell/filemanager-avvio.qml`
+# (apertura a freddo da ~750 a ~380 ms, 19 ottobre 2026).
+CONFIG="$ROOT/minerva-shell/filemanager-avvio.qml"
 LAUNCH_TOKEN="${XDG_ACTIVATION_TOKEN:-${MINERVA_FILES_ACTIVATION_TOKEN:-}}"
 
 if [ ! -f "$CONFIG" ]; then

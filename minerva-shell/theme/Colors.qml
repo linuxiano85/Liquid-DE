@@ -78,7 +78,7 @@ QtObject {
 
     // ── Il settimo tema è tuo ────────────────────────────────────────────
     //
-    // Il manutentore, 3 settembre 2026: «se voglio il colore delle finestre rosa i
+    // il manutentore, 3 settembre 2026: «se voglio il colore delle finestre rosa i
     // caratteri viola e altre cose stravaganti?».
     //
     // I sei qui sopra sono scelte fatte da noi: una tinta e un verso che si

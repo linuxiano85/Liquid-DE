@@ -42,7 +42,7 @@ PanelWindow {
 
     // ── A scomparsa ──────────────────────────────────────────────────────
     //
-    // Il manutentore, 25 settembre 2026: «l'isola alta centrale la vorrei a
+    // il manutentore, 25 settembre 2026: «l'isola alta centrale la vorrei a
     // scomparsa, e passando sulla parte alta deve ricomparire, così
     // recuperiamo spazio». Di serie sta nascosta oltre il bordo e non
     // riserva la fascia: le finestre arrivano fino in cima. Scende con una

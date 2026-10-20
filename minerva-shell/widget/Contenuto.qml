@@ -1,4 +1,6 @@
 import QtQuick
+import QtQuick.Window
+import Quickshell
 import "../theme" as Theme
 import "../core" as Core
 
@@ -90,13 +92,11 @@ Item {
     readonly property var _lingua: Core.Strings.lang === "it"
                                    ? Qt.locale("it_IT") : Qt.locale("en_GB")
 
-    property var _adesso: new Date()
-    property Timer _minuto: Timer {
-        interval: 20000
-        running: contenuto.tipo === "orologio"
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: contenuto._adesso = new Date()
+    property var _adesso: contenuto._minuto ? contenuto._minuto.date : new Date()
+    property SystemClock _minuto: SystemClock {
+        precision: SystemClock.Minutes
+        enabled: contenuto.tipo === "orologio" && contenuto.visible
+                 && (!contenuto.Window.window || contenuto.Window.window.visible)
     }
 
     /// Il simbolo, per dove il nome non ci sta: la barra.

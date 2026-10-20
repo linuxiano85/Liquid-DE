@@ -112,57 +112,21 @@ class FileService {
   /// restituisce un errore descritto, che la shell può mostrare al posto di
   /// una finestra vuota e inspiegabile.
   Future<Map<String, dynamic>> list(String path, {bool showHidden = false}) async {
-    final dir = Directory(path);
-    if (!await dir.exists()) {
-      return {'path': path, 'error': 'Cartella inesistente', 'entries': []};
+    // ── In un isolate, con le chiamate sincrone ──────────────────────────
+    //
+    // Si leggeva una voce alla volta con `await e.stat()`: un viaggio fino al
+    // filo dell'I/O e ritorno per ogni file. Misurato il 20 ottobre 2026 su
+    // 1000 file: 28–57 ms così, 8–19 ms con `listSync`/`statSync`, che è quello
+    // che consiglia anche il linter di Dart (`avoid_slow_async_io`). Dentro
+    // `Isolate.run` costa uguale e una cartella enorme non ferma il demone.
+    final letto = await Isolate.run(() => _elencaCartella(path, showHidden));
+    if (letto.errore != null) {
+      return {'path': path, 'error': letto.errore, 'entries': []};
     }
+    final entries = letto.voci;
 
-    final entries = <Map<String, dynamic>>[];
-    try {
-      await for (final e in dir.list(followLinks: false)) {
-        final name = e.path.split(Platform.pathSeparator).last;
-        if (!showHidden && name.startsWith('.')) continue;
-
-        FileStat st;
-        try {
-          st = await e.stat();
-        } catch (_) {
-          continue; // voce sparita mentre elencavamo: non è un errore
-        }
-
-        final isDir = st.type == FileSystemEntityType.directory;
-        entries.add({
-          'name': name,
-          'path': e.path,
-          'isDir': isDir,
-          'isLink': e is Link,
-          'size': isDir ? 0 : st.size,
-          'modified': st.modified.millisecondsSinceEpoch,
-          'mode': st.modeString(),
-          // «Estrai qui» compare solo su un archivio, e la voce del menu si
-          // decide qui e non nell'interfaccia: l'elenco delle estensioni sta
-          // in un posto solo (`ArchiveService`), o prima o poi le due copie
-          // si allontanano e il gestore file offre di estrarre un `.7z` che
-          // il demone non sa aprire.
-          'archive': !isDir && ArchiveService.eArchivio(name),
-        });
-      }
-    } on FileSystemException catch (err) {
-      return {
-        'path': path,
-        'error': err.osError?.message ?? 'Accesso negato',
-        'entries': [],
-      };
-    }
-
-    // Cartelle prima, poi per nome senza distinzione di maiuscole: è l'ordine
-    // che chiunque si aspetta e non va spiegato.
-    entries.sort((a, b) {
-      if (a['isDir'] != b['isDir']) return a['isDir'] ? -1 : 1;
-      return (a['name'] as String)
-          .toLowerCase()
-          .compareTo((b['name'] as String).toLowerCase());
-    });
+    // L'ordine (cartelle prima, poi nome senza maiuscole) lo dà già
+    // `_elencaCartella`, nell'isolate: vedi lì.
 
     // ── Si DICE com'è ordinato ─────────────────────────────────────────
     //
@@ -182,7 +146,7 @@ class FileService {
       'ordinatoAlContrario': false,
       // ── Se questa cartella si può cambiare ──────────────────────────
       //
-      // Il manutentore, 18 agosto 2026: «se clicco su sistema posso cancellare
+      // il manutentore, 18 agosto 2026: «se clicco su sistema posso cancellare
       // qualsiasi file di sistema come se fossero nella mia home, non c'è
       // nessuna protezione dalla cancellazione».
       //
@@ -493,13 +457,10 @@ class FileService {
   /// ed è esattamente il caso di `/usr` e `/etc`.
   Future<bool> _siPuoCambiare(String path) async {
     try {
-      final r = await eseguiLimitato('test', ['-w', path, '-a', '-x', path],
-          limite: const Duration(seconds: 2));
-      if (r.scaduto) return true; // lo stesso dubbio del `catch` qui sotto
-      return r.codice == 0;
+      return LinuxFiles.siPuoCambiare(path);
     } catch (_) {
       // Nel dubbio si dice di sì: l'alternativa è un gestore file che si
-      // rifiuta di lavorare perché non è riuscito a lanciare `test`.
+      // rifiuta di lavorare perché non è riuscito a chiederlo.
       return true;
     }
   }
@@ -911,7 +872,12 @@ class FileService {
       String? origine;
       if (await scheda.exists()) {
         try {
-          for (final riga in await scheda.readAsLines()) {
+          final righe = await scheda.readAsLines();
+          if (righe.isEmpty || righe.first != '[Trash Info]') {
+            falliti.add('$nome (scheda del cestino non valida)');
+            continue;
+          }
+          for (final riga in righe) {
             if (riga.startsWith('Path=')) {
               origine = Uri.decodeFull(riga.substring(5).trim());
               break;
@@ -927,9 +893,28 @@ class FileService {
         continue;
       }
 
+      // Trash Specification §6: Path relativo è riferito alla directory
+      // che contiene Trash, mai alla directory di lavoro del demone.
+      // Non può contenere componenti «..», neppure codificati con percentuali.
+      // https://specifications.freedesktop.org/trash/1.0/
+      if (origine.contains('\u0000')) {
+        falliti.add('$nome (percorso originale non valido)');
+        continue;
+      }
+      if (!origine.startsWith('/')) {
+        final componenti = origine.split('/');
+        final puliti = componenti.where((p) => p.isNotEmpty && p != '.').toList();
+        if (componenti.contains('..') || puliti.isEmpty) {
+          falliti.add('$nome (percorso originale non valido)');
+          continue;
+        }
+        final base = Directory(radiceCestino).absolute.parent.path;
+        origine = '$base/${puliti.join('/')}';
+      }
+
       // La cartella di partenza può non esistere più: si rifà, o il
       // ripristino fallirebbe per un motivo che non è colpa di nessuno.
-      final genitore = origine.substring(0, origine.lastIndexOf('/'));
+      final genitore = _genitoreDi(origine);
       try {
         await Directory(genitore).create(recursive: true);
       } catch (_) {
@@ -2424,4 +2409,65 @@ class TransferJob {
         if (recoveryPaths.isNotEmpty) 'recoveryPaths': List<String>.from(recoveryPaths),
         if (isFinished) 'fatti': fatti,
       };
+}
+
+/// Quello che `FileService.list` legge dentro l'isolate: le voci, o il
+/// motivo per cui non si è potuto.
+class _CartellaLetta {
+  const _CartellaLetta(this.voci, this.errore);
+  final List<Map<String, dynamic>> voci;
+  final String? errore;
+}
+
+_CartellaLetta _elencaCartella(String path, bool showHidden) {
+  final dir = Directory(path);
+  if (!dir.existsSync()) return const _CartellaLetta([], 'Cartella inesistente');
+  final entries = <Map<String, dynamic>>[];
+  try {
+    for (final e in dir.listSync(followLinks: false)) {
+      final name = e.path.split(Platform.pathSeparator).last;
+      if (!showHidden && name.startsWith('.')) continue;
+
+      FileStat st;
+      try {
+        st = e.statSync();
+      } catch (_) {
+        continue; // voce sparita mentre elencavamo: non è un errore
+      }
+
+      final isDir = st.type == FileSystemEntityType.directory;
+      entries.add({
+        'name': name,
+        'path': e.path,
+        'isDir': isDir,
+        'isLink': e is Link,
+        'size': isDir ? 0 : st.size,
+        'modified': st.modified.millisecondsSinceEpoch,
+        'mode': st.modeString(),
+        // «Estrai qui» compare solo su un archivio, e la voce del menu si
+        // decide qui e non nell'interfaccia: l'elenco delle estensioni sta
+        // in un posto solo (`ArchiveService`), o prima o poi le due copie
+        // si allontanano e il gestore file offre di estrarre un `.7z` che
+        // il demone non sa aprire.
+        'archive': !isDir && ArchiveService.eArchivio(name),
+      });
+    }
+  } on FileSystemException catch (err) {
+    return _CartellaLetta(const [], err.osError?.message ?? 'Accesso negato');
+  }
+  // Cartelle prima, poi per nome senza distinzione di maiuscole: è l'ordine
+  // che chiunque si aspetta e non va spiegato.
+  //
+  // Qui nell'isolate e con la chiave in minuscolo calcolata una volta per
+  // voce: il confronto la ricalcolava a ogni coppia, ~20 000 stringhe nuove
+  // per 1000 file sul filo del demone (20 ottobre 2026).
+  final chiavi = [for (final e in entries) (e['name'] as String).toLowerCase()];
+  final ordine = List<int>.generate(entries.length, (i) => i);
+  ordine.sort((a, b) {
+    final da = entries[a]['isDir'] as bool;
+    final db = entries[b]['isDir'] as bool;
+    if (da != db) return da ? -1 : 1;
+    return chiavi[a].compareTo(chiavi[b]);
+  });
+  return _CartellaLetta([for (final i in ordine) entries[i]], null);
 }

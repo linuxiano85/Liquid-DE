@@ -72,7 +72,7 @@ case "${XDG_CURRENT_DESKTOP:-}" in
     *) sistema "$@" ;;
 esac
 
-SHELL_QML="$(dirname "$QUI")/minerva-shell/shell.qml"
+SHELL_QML="$(dirname "$QUI")/minerva-shell/shell-avvio.qml"
 RISPOSTA=$(timeout 3 qs ipc -p "$SHELL_QML" call minerva apri "$percorso" 2>/dev/null)
 [ "$RISPOSTA" = "ok" ] && exit 0
 # Senza shell che risponda si fa come prima: meglio la strada generica che

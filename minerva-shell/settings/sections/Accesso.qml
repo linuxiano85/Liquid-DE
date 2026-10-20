@@ -205,7 +205,7 @@ Page {
 
     // ── Chi ti apre la porta ─────────────────────────────────────────────
     //
-    // Il manutentore, 23 agosto 2026: «voglio un'impostazione per impostare il login
+    // il manutentore, 23 agosto 2026: «voglio un'impostazione per impostare il login
     // manager predefinito, nel caso in cui io voglia quello di kde o cosmic o
     // gnome o altri».
     //
@@ -416,7 +416,7 @@ Page {
             // Qui c'era una casella e basta, con sotto la spiegazione di quali
             // cartelle sono leggibili da tutti — cioè si chiedeva di scrivere
             // `/usr/share/backgrounds/…` a mano SAPENDO già il percorso.
-            // Il manutentore, 5 settembre 2026: «ci sono parti delle impostazioni dove
+            // il manutentore, 5 settembre 2026: «ci sono parti delle impostazioni dove
             // devi incollare il percorso e a me non piace perché voglio
             // semplicità».
             control: S.SceltaPercorso {
@@ -692,7 +692,7 @@ Page {
             // pagina — sfondo, sfocatura, velo, ora — perché `configura`
             // chiama anche `copia_impostazioni`.
             //
-            // Il manutentore, 6 settembre 2026: «quando clicco su uno sfondo e clicco
+            // il manutentore, 6 settembre 2026: «quando clicco su uno sfondo e clicco
             // su anteprima dovrei vederlo giusto? o devo prima cliccare su
             // applica?». La domanda nasce da qui: il pulsante che serviva
             // c'era, e diceva di riguardare un'altra cosa.

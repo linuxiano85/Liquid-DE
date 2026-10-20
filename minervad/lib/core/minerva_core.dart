@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'event_bus.dart';
+import 'cancellation.dart';
 import 'state_manager.dart';
 import 'minerva_paths.dart';
 import 'settings_api.dart';
@@ -49,6 +50,11 @@ class MinervaCore {
   StreamSubscription? _compositorEventSubscription;
   StreamSubscription? _keybindSubscription;
   StreamSubscription? _settingsSubscription;
+  Future<void>? _startFuture;
+  Future<void>? _stopFuture;
+  Future<void>? _shutdownFuture;
+  final _startupCancellation = CancellationToken();
+  Timer? _startupProbe;
 
   MinervaCore() {
     stateManager = StateManager(eventBus);
@@ -98,7 +104,35 @@ class MinervaCore {
   }
 
   /// Avvia tutti i servizi nell'ordine corretto.
-  Future<void> start() async {
+  Future<void> start() {
+    if (_stopFuture != null || _shutdownFuture != null) {
+      return Future<void>.error(StateError('Core già in arresto'));
+    }
+    return _startFuture ??= _startWithCleanup();
+  }
+
+  Future<void> _startWithCleanup() async {
+    try {
+      await _startServices();
+    } catch (error, stack) {
+      if (error is OperationCancelled) {
+        print('[MINERVA][CORE][INFO] Avvio annullato: chiudo le risorse acquisite.');
+      } else {
+        print('[MINERVA][CORE][WARN] Avvio incompleto: chiudo le risorse acquisite.');
+      }
+      try {
+        await _stopResourcesOnce();
+      } catch (cleanupError) {
+        // Le fasi hanno già registrato gli errori; non perdere la causa
+        // originale dell'avvio dietro a un eventuale errore di pulizia.
+        print('[MINERVA][CORE][ERRORE] Pulizia dopo avvio fallito non completa '
+            '(${cleanupError.runtimeType}).');
+      }
+      Error.throwWithStackTrace(error, stack);
+    }
+  }
+
+  Future<void> _startServices() async {
     // Opt-in: tempi del percorso reale senza loggare impostazioni, comandi
     // o credenziali. Stopwatch è monotono e locale a questo avvio del core;
     // questi valori non misurano da soli autenticazione o presentazione GPU.
@@ -108,8 +142,14 @@ class MinervaCore {
       startupClock.start();
       _sorvegliaCiclo(startupClock);
     }
+    final failStage = Platform.environment['MINERVA_PROVA'] == '1'
+        ? Platform.environment['MINERVA_PROVA_AVVIO_FALLISCI'] : null;
     var previousStageUs = 0;
     void stage(String name) {
+      // Fault injection esclusivamente nel banco privato, mai dal solo
+      // flag di diagnostica usato nella sessione o nel greeter.
+      if (failStage == name) throw StateError('Avvio interrotto dal banco');
+      _startupCancellation.throwIfCancelled();
       if (!traceStartup) return;
       final now = startupClock.elapsedMicroseconds;
       print('[LIQUID][STARTUP] pid=$pid stage=$name elapsed_us=$now '
@@ -124,11 +164,12 @@ class MinervaCore {
     // 0. Al primo avvio si parte dalle impostazioni di Minerva, se ci sono:
     // copiate, non spostate. Dal secondo avvio questa riga non fa nulla.
     await MinervaPaths.importaDaMinerva('settings.json');
+    _startupCancellation.throwIfCancelled();
     await MinervaPaths.importaDaMinerva('app_usage.json');
     stage('preferences.imported');
 
     // 1. Carica Impostazioni e Tracker
-    await settingsApi.init();
+    await settingsApi.init(cancellation: _startupCancellation);
     stage('settings.loaded');
     await appUsageTracker.init();
     stage('usage.loaded');
@@ -221,7 +262,8 @@ class MinervaCore {
     _allineaSegnalibri();
 
     // 4. Avvia il server WebSocket IPC
-    await webSocketServer.start(traceStartup: traceStartup ? stage : null);
+    await webSocketServer.start(traceStartup: traceStartup ? stage : null,
+        cancellation: _startupCancellation);
     // The listener is registered earlier inside start; this marks its return,
     // including service initialization and work interleaved during awaits.
     stage('ipc.start.returned');
@@ -241,7 +283,8 @@ class MinervaCore {
   /// teneva fermo il demone, e da fuori non si vede che cosa.
   void _sorvegliaCiclo(Stopwatch orologio) {
     var ultimo = orologio.elapsedMilliseconds;
-    Timer.periodic(const Duration(milliseconds: 50), (t) {
+    _startupProbe?.cancel();
+    _startupProbe = Timer.periodic(const Duration(milliseconds: 50), (t) {
       final ora = orologio.elapsedMilliseconds;
       final buco = ora - ultimo;
       ultimo = ora;
@@ -301,7 +344,32 @@ class MinervaCore {
   /// periodici (uno ogni 12 secondi, l'altro ogni 2 mentre il monitor è
   /// aperto) restavano vivi dopo un arresto che si dichiarava «pulito». In
   /// `--test-start` era abbastanza a tenere in piedi il processo.
-  Future<void> stop() async {
+  Future<void> stop() {
+    _blockAdmissions();
+    return _shutdownFuture ??= _stopAfterStartup();
+  }
+
+  void _blockAdmissions() {
+    _startupCancellation.cancel();
+    webSocketServer.blockAdmission();
+    pluginManager.quiesce();
+    _startupProbe?.cancel();
+  }
+
+  Future<void> _stopAfterStartup() async {
+    try { await _startFuture; } catch (_) {
+      // start conserva la propria eccezione. La pulizia usa un Future
+      // distinto per evitare un ciclo start -> stop -> start.
+    }
+    await _stopResourcesOnce();
+  }
+
+  Future<void> _stopResourcesOnce() {
+    _blockAdmissions();
+    return _stopFuture ??= _stopServices();
+  }
+
+  Future<void> _stopServices() async {
     print('[MINERVA][CORE][INFO] Arresto in corso...');
     final sw = Stopwatch()..start();
 

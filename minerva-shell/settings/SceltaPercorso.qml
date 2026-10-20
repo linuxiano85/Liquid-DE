@@ -8,7 +8,7 @@ import "." as S
 //
 // ── Perché esiste ─────────────────────────────────────────────────────────
 //
-// Il manutentore, 5 settembre 2026: «qualsiasi opzione dove c'è la scelta del
+// il manutentore, 5 settembre 2026: «qualsiasi opzione dove c'è la scelta del
 // percorso o del file globalmente nelle impostazioni deve avere una selezione
 // che si apre il mini file manager come la scelta della cartella in aspetto
 // […] ci sono parti delle impostazioni dove devi incollare il percorso e a me

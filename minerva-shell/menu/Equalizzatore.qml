@@ -4,7 +4,7 @@ import "../core" as Core
 
 // Equalizzatore — Le barre della musica nella barra Liquid.
 //
-// Il manutentore, 18 ottobre 2026: «in liquid vorrei poter vedere l'effetto onde o
+// il manutentore, 18 ottobre 2026: «in liquid vorrei poter vedere l'effetto onde o
 // effetto equalizzatore nella barra dove sta il calendario con il titolo di
 // quello che sta riproducendo. Pensa tu a qualcosa di straordinario.»
 //

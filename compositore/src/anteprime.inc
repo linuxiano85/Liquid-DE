@@ -20,6 +20,18 @@ static uint64_t anteprime_ultima;
 static uint64_t anteprime_generation;
 static uint64_t anteprime_capture_max_us,anteprime_capture_count,anteprime_warm_ticks;
 static bool anteprime_enabled;
+// ── Fotografare solo quando serve ─────────────────────────────────────────
+//
+// Fino al 19 ottobre 2026 ogni finestra che cambiava (un video, un terminale,
+// un browser) veniva rifotografata ogni 2 s anche se nessuno guardava le
+// miniature: dal vivo 1370 catture in ~1 h 40, fino a 9 ms fermi sul filo
+// del compositore ciascuna. Ora, finché la shell dice che nessuno le guarda,
+// una finestra Wayland che ha già una foto non si rifotografa a ogni
+// cambio: si segna «vecchia» e si rifotografa quando sparisce dallo schermo
+// (cambio scrivania, riduzione), che è il momento in cui la sua foto serve.
+// Le X11 restano come prima: nascoste non si possono fotografare.
+// Di serie vale «guardate»: una shell che non lo dice si comporta come prima.
+static bool anteprime_guardate=true;
 static struct wl_event_source *anteprime_timer;
 static bool anteprime_timer_armed;
 static uint64_t anteprime_timer_due;
@@ -332,9 +344,39 @@ static int anteprima_tick(void *data) {
     anteprima_pianifica(m);
     return 0;
 }
+static bool anteprima_ha_foto(struct finestra *f) {
+    for(int i=0;i<ANTEPRIME_MAX;i++)
+        if(anteprime[i].window==(uintptr_t)f && anteprime[i].birth==f->birth)
+            return true;
+    return false;
+}
 static void anteprima_segnala(struct finestra *f) {
+    if(!anteprime_guardate && f->razza==FINESTRA_XDG && anteprima_ha_foto(f)) {
+        f->preview_vecchia=true;
+        return;
+    }
     f->preview_dirty=true;
     anteprima_pianifica(f->m);
+}
+static void anteprima_nascosta(struct finestra *f) {
+    if(!f->preview_vecchia)
+        return;
+    f->preview_vecchia=false;
+    f->preview_dirty=true;
+    anteprima_pianifica(f->m);
+}
+static void anteprime_guarda(struct minerva *m,bool guardate) {
+    anteprime_guardate=guardate;
+    if(!guardate)
+        return;
+    struct finestra *f;
+    wl_list_for_each(f,&m->finestre_elenco,link) {
+        if(f->preview_vecchia) {
+            f->preview_vecchia=false;
+            f->preview_dirty=true;
+        }
+    }
+    anteprima_pianifica(m);
 }
 static void anteprime_enable(struct minerva *m,bool enabled) {
     anteprime_enabled=enabled;

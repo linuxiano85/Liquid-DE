@@ -38,6 +38,10 @@ Item {
     /// Quale delle sorgenti del canale sta provando il lettore (da 1).
     property int sorgente: 0
     property int sorgenti: 0
+    /// Le tracce del canale nel lettore (`PlayerBackend.tracce`).
+    property var tracce: []
+    /// Il sottotitolo da mostrare adesso.
+    property string testoSottotitolo: ""
 
     /// Dove il lettore appoggia il video quando si guarda la TV.
     readonly property alias schermo: schermoTv
@@ -47,6 +51,8 @@ Item {
     signal pienoRichiesto()
     signal pipRichiesto()
     signal pausaRichiesta()
+    /// Mostrare la traccia di sottotitoli [id] del lettore (-1: nessuna).
+    signal sottotitoliScelti(int id)
 
     readonly property bool it: Core.Strings.lang === "it"
 
@@ -75,6 +81,78 @@ Item {
         return pagina.preferiti.filter(function (c) {
             return t === "" || String(c.nome).toLowerCase().indexOf(t) >= 0;
         });
+    }
+
+    // ── I sottotitoli ────────────────────────────────────────────────────
+    //
+    // «Automatici» (la scelta che resta): se il canale ha una traccia nella
+    // lingua voluta si prende quella, altrimenti la prima che c'è. Una
+    // traccia scelta a mano vale solo per questo canale.
+
+    /// "auto" o "spenti", ricordato fra un avvio e l'altro.
+    property string modoSottotitoli: Core.Ipc.get("media.tvSottotitoli", "spenti")
+    /// La lingua dei sottotitoli: quella scelta, altrimenti quella del sistema.
+    readonly property string linguaVoluta:
+        Core.Ipc.get("media.sottotitoliLingua", "") || Qt.locale().name.split("_")[0]
+
+    readonly property var tracceSottotitoli: pagina.tracce.filter(function (t) {
+        return t.type === "sub";
+    })
+    readonly property int sottotitoloScelto: {
+        for (var i = 0; i < pagina.tracceSottotitoli.length; i++)
+            if (pagina.tracceSottotitoli[i].selected)
+                return pagina.tracceSottotitoli[i].id;
+        return -1;
+    }
+
+    // mpv dice la lingua delle tracce in ISO 639-2 («tur», «ita»), il
+    // sistema in ISO 639-1 («tr», «it»).
+    readonly property var _lingue3: ({
+        "ar": ["ara"], "de": ["deu", "ger"], "el": ["ell", "gre"], "en": ["eng"],
+        "es": ["spa"], "fr": ["fra", "fre"], "it": ["ita"], "ja": ["jpn"],
+        "nl": ["nld", "dut"], "pl": ["pol"], "pt": ["por"], "ro": ["ron", "rum"],
+        "ru": ["rus"], "tr": ["tur"], "uk": ["ukr"], "zh": ["zho", "chi"]
+    })
+    function stessaLingua(traccia, lingua) {
+        var l = String(traccia || "").toLowerCase().split(/[-_]/)[0];
+        return l !== "" && (l === lingua || (pagina._lingue3[lingua] || []).indexOf(l) >= 0);
+    }
+
+    function _tracciaAutomatica() {
+        var t = pagina.tracceSottotitoli;
+        for (var i = 0; i < t.length; i++)
+            if (pagina.stessaLingua(t[i].lang, pagina.linguaVoluta))
+                return t[i].id;
+        return t.length > 0 ? t[0].id : -1;
+    }
+
+    function scegliModoSottotitoli(modo) {
+        pagina.modoSottotitoli = modo;
+        Core.Ipc.setSetting("media.tvSottotitoli", modo);
+        pagina.sottotitoliScelti(modo === "auto" ? pagina._tracciaAutomatica() : -1);
+    }
+
+    // Le tracce arrivano dopo il canale, e un canale nuovo le cambia tutte.
+    onTracceSottotitoliChanged: {
+        if (pagina.modoSottotitoli !== "auto")
+            return;
+        var id = pagina._tracciaAutomatica();
+        if (id !== pagina.sottotitoloScelto)
+            pagina.sottotitoliScelti(id);
+    }
+
+    function nomeTraccia(t) {
+        var parti = [];
+        if (t.lang) {
+            var nome = Qt.locale(String(t.lang)).nativeLanguageName;
+            parti.push(nome !== "" ? nome : String(t.lang));
+        }
+        if (t.title)
+            parti.push(String(t.title));
+        if (String(t.codec || "").indexOf("eia_608") === 0)
+            parti.push("CC");
+        return parti.length > 0 ? parti.join(" · ")
+                                : (pagina.it ? "Traccia " : "Track ") + t.id;
     }
 
     // ── Il catalogo ──────────────────────────────────────────────────────
@@ -513,7 +591,129 @@ Item {
             }
         }
 
-        // I comandi: il nome del canale e tre tasti, che si ritirano da soli.
+        // Il sottotitolo: in basso, sopra i comandi quando ci sono.
+        Rectangle {
+            id: riquadroSottotitolo
+            anchors { horizontalCenter: parent.horizontalCenter
+                      bottom: parent.bottom
+                      bottomMargin: comandiTv.visible && comandiTv.opacity > 0
+                                    ? comandiTv.height + Theme.Effects.space1
+                                    : parent.height * 0.06 }
+            Behavior on anchors.bottomMargin { NumberAnimation { duration: 220 } }
+            width: testoSottotitolo.implicitWidth + 2 * Theme.Effects.space3
+            height: testoSottotitolo.implicitHeight + Theme.Effects.space2
+            radius: Theme.Effects.radiusSM
+            color: Qt.rgba(0, 0, 0, 0.55)
+            visible: pagina.modoSottotitoli !== "spenti" && pagina.testoSottotitolo !== ""
+                     && pagina.suona && !pagina.inPip
+            Text {
+                id: testoSottotitolo
+                anchors.centerIn: parent
+                width: Math.min(implicitWidth, palco.width * 0.86)
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                maximumLineCount: 3
+                text: pagina.testoSottotitolo
+                textFormat: Text.PlainText
+                font { family: Theme.Typography.fontDisplay
+                       pixelSize: Math.max(Theme.Typography.sizeMD, Math.round(palco.height / 22))
+                       weight: Theme.Typography.weightSemiBold }
+                color: "white"
+                style: Text.Outline
+                styleColor: Qt.rgba(0, 0, 0, 0.8)
+            }
+        }
+
+        // La scelta dei sottotitoli, sopra il suo tasto.
+        Rectangle {
+            id: sceltaSottotitoli
+            property bool aperta: false
+            visible: aperta && comandiTv.visible
+            anchors { right: parent.right; rightMargin: Theme.Effects.space3
+                      bottom: comandiTv.top }
+            width: Math.min(280, palco.width - 2 * Theme.Effects.space3)
+            height: colonnaScelte.implicitHeight + 2 * Theme.Effects.space1
+            radius: Theme.Effects.radiusMD
+            color: Qt.rgba(0.08, 0.08, 0.1, 0.92)
+            onVisibleChanged: if (visible) comandiTv.sveglia()
+
+            Column {
+                id: colonnaScelte
+                anchors { left: parent.left; right: parent.right; top: parent.top
+                          margins: Theme.Effects.space1 }
+                Repeater {
+                    model: {
+                        var righe = [
+                            { modo: "spenti", id: -1,
+                              nome: pagina.it ? "Spenti" : "Off" },
+                            { modo: "auto", id: -1,
+                              nome: pagina.it ? "Automatici" : "Automatic" }
+                        ];
+                        for (var i = 0; i < pagina.tracceSottotitoli.length; i++) {
+                            var t = pagina.tracceSottotitoli[i];
+                            righe.push({ modo: "traccia", id: t.id, nome: pagina.nomeTraccia(t) });
+                        }
+                        return righe;
+                    }
+                    delegate: Rectangle {
+                        id: rigaScelta
+                        required property var modelData
+                        readonly property bool attiva: modelData.modo === "traccia"
+                            ? pagina.modoSottotitoli === "traccia" && pagina.sottotitoloScelto === modelData.id
+                            : pagina.modoSottotitoli === modelData.modo
+                        width: colonnaScelte.width
+                        height: 34
+                        radius: Theme.Effects.radiusSM
+                        color: presaRiga.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                        Ui.Icon {
+                            id: spuntaRiga
+                            anchors { left: parent.left; leftMargin: Theme.Effects.space2
+                                      verticalCenter: parent.verticalCenter }
+                            width: 14; height: 14
+                            name: "check"
+                            color: "white"
+                            visible: rigaScelta.attiva
+                        }
+                        Text {
+                            anchors { left: spuntaRiga.right; leftMargin: Theme.Effects.space2
+                                      right: parent.right; rightMargin: Theme.Effects.space2
+                                      verticalCenter: parent.verticalCenter }
+                            text: rigaScelta.modelData.nome
+                            elide: Text.ElideRight
+                            font { family: Theme.Typography.fontDisplay; pixelSize: Theme.Typography.sizeSM }
+                            color: "white"
+                        }
+                        MouseArea {
+                            id: presaRiga
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: {
+                                sceltaSottotitoli.aperta = false;
+                                if (rigaScelta.modelData.modo === "traccia") {
+                                    pagina.modoSottotitoli = "traccia";
+                                    pagina.sottotitoliScelti(rigaScelta.modelData.id);
+                                } else {
+                                    pagina.scegliModoSottotitoli(rigaScelta.modelData.modo);
+                                }
+                            }
+                        }
+                    }
+                }
+                Text {
+                    width: colonnaScelte.width
+                    visible: pagina.tracceSottotitoli.length === 0
+                    leftPadding: Theme.Effects.space2; rightPadding: Theme.Effects.space2
+                    topPadding: 4; bottomPadding: 6
+                    wrapMode: Text.WordWrap
+                    text: pagina.it ? "Questo canale non trasmette sottotitoli."
+                                    : "This channel carries no subtitles."
+                    font { family: Theme.Typography.fontDisplay; pixelSize: Theme.Typography.sizeXS }
+                    color: Qt.rgba(1, 1, 1, 0.6)
+                }
+            }
+        }
+
+        // I comandi: il nome del canale e quattro tasti, che si ritirano da soli.
         Rectangle {
             id: comandiTv
             anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
@@ -527,7 +727,8 @@ Item {
             }
             property bool svegli: true
             function sveglia() { svegli = true; riposo.restart(); }
-            Timer { id: riposo; interval: 3000; onTriggered: comandiTv.svegli = presaComandi.containsMouse }
+            Timer { id: riposo; interval: 3000
+                    onTriggered: comandiTv.svegli = presaComandi.containsMouse || sceltaSottotitoli.aperta }
 
             MouseArea { id: presaComandi; anchors.fill: parent; hoverEnabled: true
                         acceptedButtons: Qt.NoButton; onEntered: comandiTv.sveglia() }
@@ -549,6 +750,7 @@ Item {
                 spacing: 4
                 Repeater {
                     model: [
+                        { cosa: "sottotitoli", icona: "sottotitoli" },
                         { cosa: "pausa", icona: pagina.suona ? "pause" : "play" },
                         { cosa: "pip", icona: "window" },
                         { cosa: "pieno", icona: pagina.pieno ? "collapse" : "expand" }
@@ -559,7 +761,10 @@ Item {
                         width: 38; height: 38
                         radius: 19
                         color: presaTastoTv.pressed ? Qt.rgba(1, 1, 1, 0.3)
-                             : presaTastoTv.containsMouse ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
+                             : presaTastoTv.containsMouse
+                               || (tastoTv.modelData.cosa === "sottotitoli"
+                                   && (sceltaSottotitoli.aperta || pagina.modoSottotitoli !== "spenti"))
+                               ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
                         Ui.Icon {
                             anchors.centerIn: parent
                             width: 18; height: 18
@@ -572,7 +777,9 @@ Item {
                             hoverEnabled: true
                             onClicked: {
                                 comandiTv.sveglia();
-                                if (tastoTv.modelData.cosa === "pausa") pagina.pausaRichiesta();
+                                if (tastoTv.modelData.cosa === "sottotitoli")
+                                    sceltaSottotitoli.aperta = !sceltaSottotitoli.aperta;
+                                else if (tastoTv.modelData.cosa === "pausa") pagina.pausaRichiesta();
                                 else if (tastoTv.modelData.cosa === "pip") pagina.pipRichiesto();
                                 else pagina.pienoRichiesto();
                             }

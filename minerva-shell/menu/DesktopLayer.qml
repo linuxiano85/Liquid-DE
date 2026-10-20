@@ -141,8 +141,11 @@ PanelWindow {
     // «Mai stato usato» sta nel demone e non in una proprietà: una proprietà
     // nasce col processo, e il suggerimento sarebbe tornato a ogni riavvio
     // della shell anche a chi il menu lo usa da settimane.
-    property bool hintVisible: Core.Ipc.get("general.beginnerMode", true)
-                               && !Core.Ipc.get("desktop.menuUsed", false)
+    /// Chi ospita la scrivania può toglierlo (la barra Windows non lo vuole).
+    property bool senzaSuggerimento: false
+    readonly property bool hintVisible: !desktop.senzaSuggerimento
+                                        && Core.Ipc.get("general.beginnerMode", true)
+                                        && !Core.Ipc.get("desktop.menuUsed", false)
 
     Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter

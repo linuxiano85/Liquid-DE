@@ -787,7 +787,7 @@ class FucinaService {
 
   // ── Su misura del tuo uso: il profilo AutoFDO ────────────────────────
   //
-  // Il manutentore, 1° ottobre 2026: kernel «su misura del PC, con le ultime
+  // il manutentore, 1° ottobre 2026: kernel «su misura del PC, con le ultime
   // tecnologie di compilazione». La più su misura di tutte è AutoFDO
   // (Linux 6.13, Clang 17+; llvm-profgen per la conversione dal LLVM 19):
   // Clang ottimizza il kernel sapendo quali rami prende davvero sul TUO

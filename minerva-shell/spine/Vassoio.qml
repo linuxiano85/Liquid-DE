@@ -9,7 +9,7 @@ import "../menu" as Menu
 //
 // ── Perché esiste ────────────────────────────────────────────────────────
 //
-// Il manutentore, 12 agosto 2026: «una volta che premi sulla finestra per chiuderla
+// il manutentore, 12 agosto 2026: «una volta che premi sulla finestra per chiuderla
 // dovrebbe rimanere in tray, cosa che non abbiamo».
 //
 // Non era una mancanza estetica. Antigravity, alla chiusura della finestra,

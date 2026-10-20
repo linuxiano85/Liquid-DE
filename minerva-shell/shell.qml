@@ -169,7 +169,7 @@ ShellRoot {
 
     // ── Le animazioni della SHELL, che l'interruttore non toccava ────────
     //
-    // Il manutentore, 19 agosto 2026: spegnere le animazioni «non porta a nessun
+    // il manutentore, 19 agosto 2026: spegnere le animazioni «non porta a nessun
     // cambiamento». Era vero: `Compositore.animazioni()` spegne quelle del
     // COMPOSITORE — finestre che si aprono, cambio scrivania — mentre i
     // pannelli, la dock e i menu li anima la shell con le durate di
@@ -846,7 +846,7 @@ ShellRoot {
 
     // ── La riva riservata ────────────────────────────────────────────────
     //
-    // Il manutentore, 25 settembre 2026: «se ho una app a schermo intero compaiono
+    // il manutentore, 25 settembre 2026: «se ho una app a schermo intero compaiono
     // le isole passandoci sopra [...] per abilitarli magari possiamo usare
     // un tasto per dargli il consenso a comparire tenendo premuto». Con una
     // finestra che riempie lo schermo (ingrandita o a schermo intero, nella
@@ -1821,7 +1821,11 @@ ShellRoot {
             screen: modelData
             Component.onCompleted: Core.Ipc.tracciaAvvio("desktop.created")
             cartella: root.desktopPath
-            hintVisible:!root.barraWindows && Core.Ipc.get("general.beginnerMode",true)
+            // Con la barra Windows il suggerimento non c'è. Il resto della regola
+            // (principiante, menu mai usato) sta in DesktopLayer: qui prima la si
+            // riscriveva senza «menu mai usato», e con Mac e Minerva la riga non
+            // spariva più (il manutentore, 20 ottobre 2026).
+            senzaSuggerimento: root.barraWindows
             onRightClicked: function(x, y) {
                 // Il punto si ricorda: «Disposizione icone…» apre un secondo
                 // menu, e deve nascere dove è nato il primo.
@@ -2177,7 +2181,7 @@ ShellRoot {
 
         // ── «Lascia perdere» vale per un po' ─────────────────────────────
         //
-        // Il manutentore, 11 ottobre 2026: dalla pagina di Minecraft, Chrome chiede
+        // il manutentore, 11 ottobre 2026: dalla pagina di Minecraft, Chrome chiede
         // di aprire un link `minecraft:`; nessuno lo sa aprire, «Lascia
         // perdere» chiude, e Chrome lo richiede subito: la finestrella
         // sembrava non chiudersi, e per toglierla bisognava chiudere Chrome.
@@ -3484,7 +3488,7 @@ ShellRoot {
     // funzionava, ed è per questo che sembrava a intermittenza: funziona
     // finché non esci.
     //
-    // Il manutentore, 7 settembre 2026: «ho disconnesso la sessione e al nuovo
+    // il manutentore, 7 settembre 2026: «ho disconnesso la sessione e al nuovo
     // accesso non lo fa ancora, nemmeno ingrandire il puntatore». Misurato:
     // `cursorSize` 32 nelle impostazioni, 22 pixel chiari di puntatore sullo
     // schermo — cioè il 24 di ripiego.

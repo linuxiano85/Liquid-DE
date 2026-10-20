@@ -7,8 +7,21 @@ QtObject {
     property var imageBirths: ({})
     readonly property bool enabled:Ipc.get("windows.workspacePhotographs",true)===true
     onEnabledChanged:configure()
+    onActiveChanged:configure()
     function clear() {images={};imageBirths={};}
-    function configure() {if(Compositore.canaleAperto && Compositore.scrivania) Compositore._nostro("anteprime",[enabled ? "si":"no"]);if(!enabled) {clear();pending=[];}else if(active) refill();}
+    // «anteprime-guardate»: finché nessuna vista mostra le miniature, il
+    // compositore non rifotografa a ogni cambio una finestra che ha già la sua
+    // foto, ma solo quando sparisce dallo schermo (19 ottobre 2026: dal vivo
+    // 1370 catture in ~1 h 40, fino a 9 ms fermi ciascuna). Un compositore
+    // più vecchio non conosce il verbo e risponde «sconosciuto»: nessun danno.
+    function configure() {
+        if(Compositore.canaleAperto && Compositore.scrivania) {
+            Compositore._nostro("anteprime",[enabled ? "si":"no"]);
+            Compositore._nostro("anteprime-guardate",[active ? "si":"no"]);
+        }
+        if(!enabled) {clear();pending=[];}
+        else if(active) refill();
+    }
     Component.onCompleted:configure()
     function accept(entry) {
         if(!enabled || !entry || !entry.id || !entry.path) return;

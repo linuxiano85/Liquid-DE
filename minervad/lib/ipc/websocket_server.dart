@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
 import '../core/event_bus.dart';
+import '../core/cancellation.dart';
 import '../core/state_manager.dart';
 import '../core/ricorda_un_po.dart';
 import '../services/arrivo_dispositivi.dart';
@@ -594,6 +595,7 @@ class WebSocketServer {
   /// appena arrivato: montato una volta, e una finestra sulla sua cartella.
   /// Se non si apre, lo si dice con una notifica e col motivo.
   Future<void> _dispositiviCambiati() async {
+    _luoghiRemoti.dimentica();
     final String testo;
     try {
       final r = await Process.run(_arrivo.gio, ['mount', '-l', '-i'],
@@ -784,7 +786,10 @@ class WebSocketServer {
 
   ServerSocket? _server;
   bool _closing = false;
+  Future<void>? _startFuture;
+  Future<void>? _quiesceFuture;
   Future<void>? _listenerClosed;
+  Future<void>? _cleanupFuture;
   Future<void>? _stopFuture;
 
   /// La parola d'ordine del canale, nuova a ogni avvio. Vedi
@@ -951,7 +956,7 @@ class WebSocketServer {
     // i percorsi dei programmi a non essere mai stati ricalcolati, perché li
     // si risolveva soltanto rispondendo a `get_all_apps`.
     _aTutti({'event': 'icons', 'payload': _iconPayload});
-    _aTutti({'event': 'all_apps', 'payload': pronte});
+    _mandaAppATutti(pronte);
   }
 
   // ignore: prefer_initializing_formals
@@ -982,9 +987,45 @@ class WebSocketServer {
   final String? _fileSegreto;
 
   /// Avvia il server e si mette in ascolto degli eventi del bus per inoltrarli ai client.
-  Future<void> start({void Function(String)? traceStartup}) async {
-    if (_closing) throw StateError('Server IPC già in arresto');
-    traceStartup?.call('ipc.start.begin');
+  Future<void> start({
+    void Function(String)? traceStartup,
+    CancellationToken? cancellation,
+  }) {
+    if (_closing) {
+      return Future<void>.error(StateError('Server IPC già in arresto'));
+    }
+    // Pubblica il Future prima dei callback, che possono richiedere stop().
+    return _startFuture ??= Future<void>.microtask(() async {
+      try {
+        await _startServices(traceStartup, cancellation);
+      } catch (error, stack) {
+        blockAdmission();
+        try {
+          await _cleanupOnce();
+        } catch (cleanupError) {
+          print('[MINERVA][IPC][WARN] Pulizia avvio fallito: $cleanupError');
+        }
+        Error.throwWithStackTrace(error, stack);
+      }
+    });
+  }
+
+  Future<void> _startServices(
+    void Function(String)? traceStartup,
+    CancellationToken? cancellation,
+  ) async {
+    void check() {
+      cancellation?.throwIfCancelled();
+      if (_closing) throw OperationCancelled();
+    }
+
+    void stage(String name) {
+      check();
+      traceStartup?.call(name);
+      check();
+    }
+
+    stage('ipc.start.begin');
     if (traceStartup != null) _tracciaAzioni.start();
     try {
       // Prima di accettare chiunque: il tema di icone scelto dall'utente e la
@@ -1000,7 +1041,7 @@ class WebSocketServer {
       );
       _iconResolver.setTheme(_settingsApi.getString('icons.theme', ''));
       await _rebuildIconMap();
-      traceStartup?.call('ipc.icons.ready');
+      stage('ipc.icons.ready');
 
       // ── La porta ────────────────────────────────────────────────────
       //
@@ -1014,7 +1055,7 @@ class WebSocketServer {
       // numero. Chi deve trovarci non indovina — la porta scelta finisce nel
       // file del canale, e le finestre leggono di lì.
       _server = await _ascolta();
-      traceStartup?.call('ipc.socket.bound');
+      stage('ipc.socket.bound');
 
       print('[MINERVA][IPC][OK] Server in ascolto su $_percorsoSocket');
 
@@ -1027,14 +1068,14 @@ class WebSocketServer {
       );
       _pubblicazioneCanale = pubblicazione;
       _segreto = pubblicazione.segreto;
-      traceStartup?.call('ipc.token.published');
+      stage('ipc.token.published');
       print(
         '[MINERVA][IPC][OK] Indirizzo del canale in '
         '${pubblicazione.percorso} (sessione «${CanaleSegreto.sessione()}»)',
       );
 
       _server!.listen(_handleNewClient);
-      traceStartup?.call('ipc.listener.registered');
+      stage('ipc.listener.registered');
 
       // Ascolta tutti gli eventi del bus e li trasmette ai client interessati
       //
@@ -1073,9 +1114,9 @@ class WebSocketServer {
         _aTutti({'event': 'liquid_update', 'payload': state},
             solo: (client) => client.isSubscribed('liquid_update'));
       });
-      traceStartup?.call('ipc.update.begin');
+      stage('ipc.update.begin');
       await _liquidUpdate.init();
-      traceStartup?.call('ipc.update.ready');
+      stage('ipc.update.ready');
       if (Platform.environment['MINERVA_PROVA'] != '1') {
         _liquidUpdate.startAutomatic();
       }
@@ -1086,7 +1127,7 @@ class WebSocketServer {
         }, solo: (c) => c.isSubscribed('controller_state'));
       });
       unawaited(_controller.start());
-      traceStartup?.call('ipc.controller.dispatched');
+      stage('ipc.controller.dispatched');
 
       _transferSubscription = _fileService.progress.listen((job) {
         _aTutti({'event': 'fs_job', 'payload': job});
@@ -1110,10 +1151,14 @@ class WebSocketServer {
       if ((Platform.environment['GREETD_SOCK'] ?? '').isEmpty &&
           Platform.environment['MINERVA_PROVA'] != '1') {
         _arrivoSub = _arrivo.cambi.listen((_) => unawaited(_dispositiviCambiati()));
+        // Col monitor acceso l'elenco dei luoghi remoti si rilegge solo ai
+        // suoi segnali: vedi `LuoghiRemoti.ricorda`.
+        _luoghiRemoti.ricorda = true;
         unawaited(_arrivo.start().then((_) => _dispositiviCambiati()));
       }
-      traceStartup?.call('ipc.subscriptions.ready');
+      stage('ipc.subscriptions.ready');
     } catch (e) {
+      if (e is OperationCancelled) rethrow;
       // Senza canale il demone non serve a niente: la shell non lo trova, e
       // ogni finestra mostra i valori di fabbrica fingendo siano quelli di chi
       // guarda. Prima si scriveva una riga di registro e si restava vivi — ed
@@ -1782,7 +1827,7 @@ class WebSocketServer {
         'payload': {'request': request, 'path': path, 'ok': true},
       });
       await _appUsageTracker.recordLaunch(launch.app.id);
-      _aTutti({'event': 'all_apps', 'payload': await _allAppsPronto()});
+      _mandaAppATutti(await _allAppsPronto());
     } catch (error) {
       // No token in diagnostics. No launch on parse/consent/file errors.
       if (_clients.contains(client)) {
@@ -1876,7 +1921,7 @@ class WebSocketServer {
             // lancio sono quello che ordina «Frequenti» e «Adesso, di
             // solito». Un lancio è un evento raro: il costo è niente, e
             // senza il menù restava fermo ai conti dell'avvio.
-            _aTutti({'event': 'all_apps', 'payload': await _allAppsPronto()});
+            _mandaAppATutti(await _allAppsPronto());
           }
         }
         break;
@@ -2358,7 +2403,18 @@ class WebSocketServer {
         // applicazioni: rileggerlo e tenersi le categorie di prima vorrebbe
         // dire non vedere mai un programma appena installato.
         _categorieRicordate.dimentica();
-        _aTutti({'event': 'all_apps', 'payload': await _allAppsPronto()});
+        {
+          // A tutti solo se l'elenco è cambiato davvero (un programma
+          // installato o tolto): altrimenti risponde a chi l'ha chiesto. Fino
+          // al 19 ottobre 2026 ogni rilettura lo rimandava intero a ogni
+          // processo di Minerva, che lo rileggeva e ricostruiva i suoi menu.
+          final elenco = await _allAppsPronto();
+          if (jsonEncode(elenco) != _ultimeAppMandate) {
+            _mandaAppATutti(elenco);
+          } else if (_clients.contains(client)) {
+            client.send({'event': 'all_apps', 'payload': elenco});
+          }
+        }
         break;
 
       case 'get_all_apps':
@@ -2809,7 +2865,7 @@ class WebSocketServer {
       case 'fs_rinomina_molti':
         {
           final coppie =
-              (msg['coppie'] as List?)?.whereType<Map>().toList() ?? [];
+              _coppieDiPercorsi(msg['coppie']) ?? [];
           if (coppie.isNotEmpty) {
             final r = await _fileService.rinominaMolti(coppie);
             client.send({'event': 'fs_result', 'payload': r});
@@ -2820,7 +2876,7 @@ class WebSocketServer {
       case 'fs_symlink':
         {
           final paths =
-              (msg['paths'] as List?)?.whereType<String>().toList() ?? [];
+              _percorsiAssoluti(msg['paths']) ?? [];
           final prefisso = '${msg['prefisso'] ?? ''}'.replaceAll('/', '');
           if (paths.isNotEmpty) {
             final r = await _fileService.collega(paths, prefisso);
@@ -2866,7 +2922,7 @@ class WebSocketServer {
       case 'fs_rimetti':
         {
           final coppie =
-              (msg['coppie'] as List?)?.whereType<Map>().toList() ?? [];
+              _coppieDiPercorsi(msg['coppie']) ?? [];
           if (coppie.isNotEmpty) {
             final r = await _fileService.rimetti(coppie);
             client.send({'event': 'fs_result', 'payload': r});
@@ -4229,7 +4285,7 @@ class WebSocketServer {
         {
           final op = msg['op'];
           final args =
-              (msg['args'] as List?)?.whereType<String>().toList() ?? const [];
+              _stringhe(msg['args']) ?? const [];
           // Solo i verbi che cambiano una cartella. Fino al 30 settembre 2026
           // da qui passava QUALUNQUE verbo dell'aiutante — anche `scrivi`,
           // che senza contenuto sullo standard input svuotava il file da
@@ -4501,6 +4557,15 @@ class WebSocketServer {
   /// convertito in JSON una volta per finestra aperta. Con l'elenco dei
   /// processi — 59 KB, fra 1,3 e 8,9 ms — bastavano tre finestre per passare i
   /// venti millisecondi, e in quel tempo il demone non risponde a nessuno.
+  /// L'elenco delle app così come è stato mandato a tutti l'ultima volta:
+  /// `rescan_apps` lo confronta per non rimandarlo identico (19 ottobre 2026).
+  String? _ultimeAppMandate;
+
+  void _mandaAppATutti(List<dynamic> elenco) {
+    _ultimeAppMandate = jsonEncode(elenco);
+    _aTutti({'event': 'all_apps', 'payload': elenco});
+  }
+
   void _aTutti(
     Map<String, dynamic> data, {
     bool Function(WebSocketClientConnection)? solo,
@@ -4535,13 +4600,31 @@ class WebSocketServer {
     _aTutti(payload, solo: (c) => c.isSubscribed(event.type));
   }
 
-  /// Chiude l'ingresso prima che il core distrugga le dipendenze. Non è un
-  /// drain delle operazioni già entrate nei loro handler: quelle conservano
-  /// i rispettivi contratti di completamento/cancellazione.
-  Future<void> quiesce() {
-    if (_listenerClosed != null) return _listenerClosed!;
+  /// Revoca l'ammissione senza chiudere un socket il cui bind è pendente.
+  /// La chiusura fisica segue la conclusione dello startup.
+  void blockAdmission() {
     _closing = true;
     _mime.quiesce();
+  }
+
+  /// Chiude l'ingresso prima che il Core distrugga le dipendenze. Non è un
+  /// drain degli handler già entrati, che conservano i rispettivi contratti.
+  Future<void> quiesce() {
+    blockAdmission();
+    return _quiesceFuture ??= _quiesceAfterStartup();
+  }
+
+  Future<void> _quiesceAfterStartup() async {
+    try {
+      await _startFuture;
+    } catch (_) {
+      // L'errore originale resta nel Future di start().
+    }
+    await _closeListener();
+  }
+
+  Future<void> _closeListener() {
+    if (_listenerClosed != null) return _listenerClosed!;
     _listenerClosed = _server?.close() ?? Future<void>.value();
     for (final client in _clients.toList()) {
       _removeClient(client);
@@ -4553,10 +4636,21 @@ class WebSocketServer {
     return _listenerClosed!;
   }
 
-  Future<void> stop() async => await (_stopFuture ??= _stopServices());
+  Future<void> stop() {
+    blockAdmission();
+    return _stopFuture ??= _stopAfterStartup();
+  }
+
+  Future<void> _stopAfterStartup() async {
+    await quiesce();
+    await _cleanupOnce();
+  }
+
+  Future<void> _cleanupOnce() => _cleanupFuture ??= _stopServices();
 
   Future<void> _stopServices() async {
-    await quiesce();
+    // Anche il fallimento di start arriva qui: non attendere il suo Future.
+    await _closeListener();
     await _tv.chiudi();
     await _subSpettro?.cancel();
     await _spettro.chiudi();
@@ -4878,4 +4972,35 @@ List<String>? _stringhe(Object? v) {
   if (v == null) return null;
   if (v is! List) throw ArgumentError('serve un elenco di stringhe');
   return List<String>.from(v);
+}
+
+/// Valida tutte le coppie prima che una rinomina o un annullamento inizi.
+/// Non scartare elementi con whereType e non convertire numeri o oggetti
+/// in nomi di file: la richiesta deve essere valida nella sua interezza.
+List<Map<String, String>>? _coppieDiPercorsi(Object? valore) {
+  if (valore == null) return null;
+  if (valore is! List) throw ArgumentError('serve un elenco di coppie');
+  final coppie = <Map<String, String>>[];
+  for (final coppia in valore) {
+    if (coppia is! Map) throw ArgumentError('coppia non valida');
+    final da = coppia['da'];
+    final a = coppia['a'];
+    if (da is! String || a is! String ||
+        !da.startsWith('/') || !a.startsWith('/') ||
+        da.contains('\u0000') || a.contains('\u0000')) {
+      throw ArgumentError('servono due percorsi assoluti');
+    }
+    coppie.add({'da': da, 'a': a});
+  }
+  return coppie;
+}
+
+/// Un elenco di percorsi non può contenere nomi relativi o byte zero.
+List<String>? _percorsiAssoluti(Object? valore) {
+  final percorsi = _stringhe(valore);
+  if (percorsi != null && percorsi.any(
+      (p) => !p.startsWith('/') || p.contains('\u0000'))) {
+    throw ArgumentError('servono percorsi assoluti');
+  }
+  return percorsi;
 }

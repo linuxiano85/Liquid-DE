@@ -1,4 +1,6 @@
 import QtQuick
+import QtQuick.Window
+import Quickshell
 import "../theme" as Theme
 import "../core" as Core
 
@@ -59,10 +61,14 @@ Row {
     /// si legge in dodici ore non aveva nessun posto dove dirlo.
     readonly property bool ore24: Core.Ipc.get("clock.format24", true)
     onOre24Changed: refresh()
+    readonly property string language: Core.Strings.lang
+    onLanguageChanged: refresh()
 
     function refresh() {
-        var now = new Date();
-        var locale = Core.Strings.lang === "it" ? Qt.locale("it_IT") : Qt.locale("en_GB");
+        // SystemClock può anticipare di poco il confine del minuto: usare
+        // la sua data evita di rileggere ancora il minuto precedente.
+        var now = cluster._clock ? cluster._clock.date : new Date();
+        var locale = cluster.language === "it" ? Qt.locale("it_IT") : Qt.locale("en_GB");
         cluster.timeText = now.toLocaleTimeString(
             locale, cluster.ore24 ? "HH:mm" : "h:mm AP");
         cluster.dateText = now.toLocaleDateString(locale, "ddd d MMM");
@@ -70,17 +76,10 @@ Row {
 
     Component.onCompleted: refresh()
 
-    Timer {
-        // Allineato al minuto: aggiornare ogni secondo un orologio che mostra
-        // i minuti significa svegliare la GPU sessanta volte per nulla.
-        interval: 1000
-        running: true
-        repeat: true
-        onTriggered: {
-            var now = new Date();
-            if (now.getSeconds() === 0 || cluster.timeText === "")
-                cluster.refresh();
-        }
+    property SystemClock _clock: SystemClock {
+        precision: SystemClock.Minutes
+        enabled: cluster.visible && (!cluster.Window.window || cluster.Window.window.visible)
+        onDateChanged: cluster.refresh()
     }
 
     Text {

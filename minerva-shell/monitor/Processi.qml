@@ -113,7 +113,7 @@ Item {
 
     // ── Una lista che si aggiorna SUL POSTO ──────────────────────────────
     //
-    // Il manutentore, 28 settembre 2026: «se voglio scrollare tutti i processi non
+    // il manutentore, 28 settembre 2026: «se voglio scrollare tutti i processi non
     // si può fermare l'aggiornarsi della lista […] tornando sempre in cima».
     // La lista riceveva `righe`, un elenco JavaScript nuovo ogni due secondi:
     // per Qt è un modello diverso, e un modello diverso vuol dire buttare

@@ -3,7 +3,7 @@
 
 // I colori di Windows 11, presi dal sorgente e non a occhio.
 //
-// Il manutentore, 11 ottobre 2026: «i colori delle schede non sono coerenti, in
+// il manutentore, 11 ottobre 2026: «i colori delle schede non sono coerenti, in
 // Windows sono leggermente in blur: cerca l'esatta combinazione che si adatti
 // a tutte le combinazioni di colori di Windows, anche per il colore manuale».
 //

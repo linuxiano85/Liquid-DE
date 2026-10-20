@@ -156,7 +156,11 @@ String _pulisci(String s) {
 /// e gli altri stanno nella stessa cartella e non contengono quel nome, ma un
 /// domani un percorso più lungo potrebbe.
 const _finestreMinerva = {
+  // Dal 19 ottobre 2026 le app si lanciano dagli ingressi `*-avvio.qml`, che
+  // caricano il file vero come file locale (cache della compilazione).
+  'filemanager-avvio.qml': 'Il gestore file di Minerva',
   'filemanager.qml': 'Il gestore file di Minerva',
+  'settings-avvio.qml': 'Le impostazioni di Minerva',
   'settings.qml': 'Le impostazioni di Minerva',
   // ── Un processo per quattro programmi ──────────────────────────────────
   //
@@ -168,11 +172,15 @@ const _finestreMinerva = {
   // peggio che dirle tutte. Chi guarda Attività per capire chi consuma trova
   // comunque il nome giusto: `app.qml` era l'unica riga che mancava, e prima
   // compariva come «qs», che è il nome di nessuno.
+  'app-avvio.qml': 'Le app di Minerva: calcolatrice, editor, anteprima, attività',
   'app.qml': 'Le app di Minerva: calcolatrice, editor, anteprima, attività',
+  'minervamedia-avvio.qml': 'Il lettore multimediale di Minerva',
   'minervamedia.qml': 'Il lettore multimediale di Minerva',
+  'viewer-avvio.qml': 'Anteprima: le immagini',
   'viewer.qml': 'Anteprima: le immagini',
   'blocco.qml': 'La schermata di blocco',
   'greeter.qml': 'La schermata di accesso',
+  'shell-avvio.qml': 'La scrivania: barra, dock, menu e finestre di Minerva',
   'shell.qml': 'La scrivania: barra, dock, menu e finestre di Minerva',
 };
 

@@ -519,6 +519,9 @@ QtObject {
     }
 
     function refresh() {
+        // La riconnessione rilegge tutto: non accodare le stesse letture
+        // durante la costruzione della finestra prima dell'autenticazione.
+        if (!Core.Ipc.connected) return;
         Core.Ipc.fsPlaces();
         Core.Ipc.fsVolumes();
         Core.Ipc.fsRemoti();
@@ -543,11 +546,12 @@ QtObject {
         interval: 8000
         repeat: true
         running: Core.Ipc.connected && files.watchers > 0
-        onTriggered: {
-            Core.Ipc.fsVolumes();
-            // Un telefono attaccato adesso deve comparire come una chiavetta.
-            Core.Ipc.fsRemoti();
-        }
+        // Solo i dischi (10 ms, e tengono aggiornato lo spazio libero). I
+        // luoghi remoti e i telefoni non si chiedono più qui: costavano
+        // ~520 ms di `gio` a ogni giro, e il demone li manda già da solo a
+        // ogni cambio che vede `gio mount -o` (`_dispositiviCambiati`,
+        // 19 ottobre 2026).
+        onTriggered: Core.Ipc.fsVolumes()
     }
 
     // ── Appunti dei file ─────────────────────────────────────────────────

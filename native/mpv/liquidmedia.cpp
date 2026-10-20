@@ -382,9 +382,11 @@ class MpvPlayer : public QObject {
   Q_PROPERTY(QString hardwareDecoder READ hardwareDecoder NOTIFY
                  hardwareDecoderChanged)
   Q_PROPERTY(QVariantList tracks READ tracks NOTIFY tracksChanged)
+  Q_PROPERTY(
+      QString subtitleText READ subtitleText NOTIFY subtitleTextChanged)
   std::shared_ptr<MpvSession> m_session = std::make_shared<MpvSession>();
   QUrl m_source;
-  QString m_error, m_hwdec;
+  QString m_error, m_hwdec, m_subtitle;
   QVariantList m_tracks;
   qint64 m_position = 0, m_duration = 0;
   double m_volume = 100;
@@ -448,6 +450,12 @@ public:
         {"hwdec", "auto-safe"},
         {"ytdl", "yes"},
         {"script-opts", "ytdl_hook-ytdl_path=/usr/bin/yt-dlp"},
+        // Closed captions carried inside the video (CEA-608/708, common on
+        // broadcast TV) become a subtitle track like any other.
+        {"sub-create-cc-track", "yes"},
+        // The shell draws the subtitle text itself (`subtitleText`), with the
+        // same box it uses for the generated ones.
+        {"sub-visibility", "no"},
     };
     for (const auto &option : options) {
       const int result = mpv_set_option_string(h, option.first, option.second);
@@ -475,7 +483,7 @@ public:
         {"pause", MPV_FORMAT_FLAG},      {"idle-active", MPV_FORMAT_FLAG},
         {"seekable", MPV_FORMAT_FLAG},   {"volume", MPV_FORMAT_DOUBLE},
         {"mute", MPV_FORMAT_FLAG},       {"hwdec-current", MPV_FORMAT_STRING},
-        {"track-list", MPV_FORMAT_NODE}};
+        {"track-list", MPV_FORMAT_NODE}, {"sub-text", MPV_FORMAT_STRING}};
     for (const auto &property : properties)
       error(mpv_observe_property(h, 0, property.name, property.format));
     m_session->events.target = this;
@@ -531,6 +539,7 @@ public:
   QString errorString() const { return m_error; }
   QString hardwareDecoder() const { return m_hwdec; }
   QVariantList tracks() const { return m_tracks; }
+  QString subtitleText() const { return m_subtitle; }
   void setSource(const QUrl &url) {
     if (!m_ready || (url == m_source && m_error.isEmpty()))
       return;
@@ -679,9 +688,21 @@ public slots:
       if (event->event_id != MPV_EVENT_PROPERTY_CHANGE)
         continue;
       auto *p = static_cast<mpv_event_property *>(event->data);
+      const QByteArray name(p->name);
+      if (name == "sub-text") {
+        // No data: no subtitle on screen right now.
+        const QString text =
+            p->data && p->format == MPV_FORMAT_STRING
+                ? QString::fromUtf8(*static_cast<char **>(p->data))
+                : QString();
+        if (text != m_subtitle) {
+          m_subtitle = text;
+          emit subtitleTextChanged();
+        }
+        continue;
+      }
       if (!p->data)
         continue;
-      const QByteArray name(p->name);
       if (p->format == MPV_FORMAT_DOUBLE) {
         const double value = *static_cast<double *>(p->data);
         if (!std::isfinite(value))
@@ -748,6 +769,7 @@ signals:
   void errorChanged();
   void hardwareDecoderChanged();
   void tracksChanged();
+  void subtitleTextChanged();
   void ended();
   void surfaceAvailable();
 };

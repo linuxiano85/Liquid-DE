@@ -11,7 +11,7 @@ import "../theme" as Theme
 //
 // ── Perché il segno è fatto di RETTANGOLI e non di `Shape` ─────────────────
 //
-// Il manutentore, 9 settembre 2026: «electron builder e pip e pacchetti già
+// il manutentore, 9 settembre 2026: «electron builder e pip e pacchetti già
 // installati una volta cliccato lasciano residui di spunte sul grafico», e
 // poco dopo: «miniature e cache addirittura risultano passare attraverso il
 // grafico, facendo scroll su e giù si muovono su e giù dentro al grafico».

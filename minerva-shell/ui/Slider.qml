@@ -102,7 +102,7 @@ Item {
             // una barra che si allunga non dichiara sporco quello che si e'
             // lasciata dietro.
             //
-            // Il manutentore, 5 settembre 2026: «vedo un difetto estetico in
+            // il manutentore, 5 settembre 2026: «vedo un difetto estetico in
             // impostazioni […] ci sono anche delle freccette nere al centro
             // insomma e' pieno di artefatti». La ricetta esatta e'
             // «Alimentazione, scorri, Audio», e per trovarla e' servito

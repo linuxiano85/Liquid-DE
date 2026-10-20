@@ -9,7 +9,7 @@ set -e
 SELF=$(readlink -f "$0")
 ROOT=$(dirname "$(dirname "$SELF")")
 
-CONFIG="$ROOT/minerva-shell/app.qml"
+CONFIG="$ROOT/minerva-shell/app-avvio.qml"
 QUALE=calcolatrice
 DORMIENTE=MINERVA_CALCOLATRICE_DORMIENTE
 TARGET=""

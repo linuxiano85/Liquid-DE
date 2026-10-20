@@ -48,17 +48,23 @@ Item {
         cache: true
     }
 
-    Ui.Icon {
+    // In un Loader: compare solo sulle cartelle speciali disegnate dal tema,
+    // e un'icona nascosta si crea lo stesso (vedi il «play» in `Pane.qml`).
+    Loader {
         anchors.horizontalCenter: parent.horizontalCenter
         y: parent.height * 0.5
         width: parent.width * 0.32
         height: width
-        visible: icon.artwork && icon.folderMark !== "" && picture.status === Image.Ready
-        name: icon.folderMark
-        alwaysDrawn: true
-        thickness: 2.3
-        color: "#91600e"
-        rotation: icon.name === "cartella-scaricati" ? -90 : 0
+        active: icon.artwork && icon.folderMark !== "" && picture.status === Image.Ready
+        sourceComponent: Component {
+            Ui.Icon {
+                name: icon.folderMark
+                alwaysDrawn: true
+                thickness: 2.3
+                color: "#91600e"
+                rotation: icon.name === "cartella-scaricati" ? -90 : 0
+            }
+        }
     }
 
 }

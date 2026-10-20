@@ -10,7 +10,7 @@ import "../ui" as Ui
 //
 // ── Da dove nasce ──────────────────────────────────────────────────────────
 //
-// Il manutentore, 8 settembre 2026: «vorrei un nostro software che pulisca per bene
+// il manutentore, 8 settembre 2026: «vorrei un nostro software che pulisca per bene
 // il pc e controlli dipendenze non necessarie, lingue non necessarie, con la
 // nostra interfaccia», e come modello Stacer, che è abbandonato da anni.
 //
@@ -72,7 +72,7 @@ FloatingWindow {
 
     // ── Le scie, e il pennello che le cancella ───────────────────────────
     //
-    // Il manutentore, 9 settembre 2026: «electron builder e pip e pacchetti già
+    // il manutentore, 9 settembre 2026: «electron builder e pip e pacchetti già
     // installati una volta cliccato lasciano residui di spunte sul grafico
     // [...] lo abbiamo già affrontato in impostazioni questo problema dei
     // residui».
@@ -236,7 +236,7 @@ FloatingWindow {
 
     // ── Una mappa NUOVA ogni volta, e non è pignoleria ───────────────────
     //
-    // Il manutentore, 9 settembre 2026: «non riesco a selezionare una singola voce
+    // il manutentore, 9 settembre 2026: «non riesco a selezionare una singola voce
     // ad esempio se non voglio cancellare tutto».
     //
     // Era questo. Il codice prendeva `finestra.scelte`, ci scriveva dentro e
@@ -633,7 +633,7 @@ FloatingWindow {
         // ── «Rileggi», scritto ──────────────────────────────────────────
         //
         // Era un quadratino da 36 pixel con dentro una freccia circolare:
-        // Il manutentore, «quel tasto per aggiornare è minuscolo». Un'icona da sola
+        // il manutentore, «quel tasto per aggiornare è minuscolo». Un'icona da sola
         // costringe a indovinare o a scoprirlo passandoci sopra, e in una
         // finestra che si apre due volte al mese non lo impara nessuno.
         Pulsante {
@@ -650,7 +650,7 @@ FloatingWindow {
 
     // ── Il quadro in cima STA FERMO, e non è una scelta di gusto ─────────
     //
-    // Il manutentore, 9 settembre 2026: «il grafico a torta scendendo nella pagina
+    // il manutentore, 9 settembre 2026: «il grafico a torta scendendo nella pagina
     // rimane impresso a schermo un residuo e fa schifo».
     //
     // È il difetto di famiglia del disegno col processore, quello scritto in
@@ -670,7 +670,7 @@ FloatingWindow {
         visible: finestra.pagina === "spazio"
         // ── E le spunte che passavano DENTRO l'anello ────────────────────
         //
-        // Il manutentore, 9 settembre 2026: «miniature e cache addirittura risultano
+        // il manutentore, 9 settembre 2026: «miniature e cache addirittura risultano
         // passare attraverso il grafico, facendo scroll su e giù si muovono
         // su e giù dentro al grafico».
         //
@@ -849,7 +849,7 @@ FloatingWindow {
 
             // ── Quando non c'è niente ───────────────────────────────────
             //
-            // Il manutentore, 9 settembre 2026, dopo aver pulito quasi tutto:
+            // il manutentore, 9 settembre 2026, dopo aver pulito quasi tutto:
             // «quando non c'è niente da pulire deve uscire scritto solamente
             // "Niente da pulire" invece delle selezioni».
             //

@@ -91,6 +91,25 @@ class LuoghiRemoti {
 
   static const Duration _attesaCollega = Duration(seconds: 60);
 
+  // ── L'ultimo elenco, finché niente cambia ──────────────────────────────
+  //
+  // `gio mount -l -i` costa ~520 ms ogni volta (misurato il 19 ottobre 2026:
+  // è quasi tutto l'avvio di `gio` e la sua domanda ai monitor di gvfs). Lo
+  // chiedevano ogni gestore file aperto ogni otto secondi e ogni finestra che
+  // si apre. Quando il demone tiene acceso `gio mount -o`
+  // (`ArrivoDispositivi`), ogni volume o montaggio che compare o sparisce
+  // arriva da lì: l'elenco si rilegge solo allora, e nel frattempo si
+  // risponde con quello ricordato. Senza il monitor (prove, accesso) non si
+  // ricorda niente e ogni domanda rilegge, come prima.
+
+  /// Lo accende chi ha acceso il monitor dei dispositivi.
+  bool ricorda = false;
+
+  Future<Map<String, dynamic>>? _ricordato;
+
+  /// Da chiamare a ogni cambio segnalato dal monitor.
+  void dimentica() => _ricordato = null;
+
   // ── Indirizzi ──────────────────────────────────────────────────────────
 
   /// Porta quello che si scrive nella casella a un indirizzo che `gio`
@@ -142,8 +161,9 @@ class LuoghiRemoti {
   static String tipoDi(String uri) {
     final schema = _schemaDi(uri);
     if (const {'mtp', 'gphoto2', 'afc'}.contains(schema)) return 'telefono';
-    if (schema == 'smb' || schema == 'nfs' || schema == 'afp')
+    if (schema == 'smb' || schema == 'nfs' || schema == 'afp') {
       return 'condivisa';
+    }
     return 'server';
   }
 
@@ -154,7 +174,22 @@ class LuoghiRemoti {
   /// Torna anche i protocolli che questa macchina sa aprire e i pacchetti
   /// che mancano per gli altri: un telefono che non compare perché manca
   /// `gvfs-mtp` deve dirlo, non sembrare rotto.
-  Future<Map<String, dynamic>> elenco() async {
+  Future<Map<String, dynamic>> elenco() {
+    if (!ricorda) return _leggiElenco();
+    // Anche le domande che arrivano insieme aspettano la stessa lettura.
+    final ricordato = _ricordato ??= _leggiElenco();
+    // Un elenco con un errore non si tiene: alla prossima si riprova.
+    ricordato.then((e) {
+      if ('${e['error'] ?? ''}'.isNotEmpty && identical(_ricordato, ricordato)) {
+        _ricordato = null;
+      }
+    }, onError: (Object _) {
+      if (identical(_ricordato, ricordato)) _ricordato = null;
+    });
+    return ricordato;
+  }
+
+  Future<Map<String, dynamic>> _leggiElenco() async {
     final protocolli = await _protocolliInstallati();
     final mancano = <String>{};
     for (final schema in const ['smb', 'mtp', 'gphoto2']) {
@@ -270,8 +305,9 @@ class LuoghiRemoti {
     try {
       await for (final f in Directory(cartellaProtocolli).list()) {
         final nome = f.uri.pathSegments.last;
-        if (nome.endsWith('.mount'))
+        if (nome.endsWith('.mount')) {
           fuori.add(nome.substring(0, nome.length - 6));
+        }
       }
     } on FileSystemException {
       // Niente gvfs: nessun protocollo.
@@ -341,6 +377,9 @@ class LuoghiRemoti {
       // Con la freccia `remove` restituirebbe questo stesso Future, e
       // `whenComplete` lo aspetterebbe: non finirebbe mai.
       _collegamentiInCorso.remove(chiave);
+      // Chi chiede l'elenco subito dopo deve vedere il luogo appena aperto,
+      // anche prima che arrivi la riga del monitor.
+      dimentica();
     });
     _collegamentiInCorso[chiave] = nuovo;
     return nuovo;
@@ -544,6 +583,14 @@ class LuoghiRemoti {
     if (valido == null || valido != uri) {
       return {'ok': false, 'error': 'Indirizzo non valido.'};
     }
+    try {
+      return await _scollega(uri);
+    } finally {
+      dimentica();
+    }
+  }
+
+  Future<Map<String, dynamic>> _scollega(String uri) async {
     try {
       final r = await eseguiLimitato(
         gio,

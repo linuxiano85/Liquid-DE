@@ -489,7 +489,7 @@ PanelWindow {
 
         // ── Il tasto destro sulla barra ──────────────────────────────────
         //
-        // Il manutentore, 9 settembre 2026: «tranne il caso in cui io decida di
+        // il manutentore, 9 settembre 2026: «tranne il caso in cui io decida di
         // sbloccarli via tasto destro sulla barra e cliccare personalizza
         // desktop».
         //

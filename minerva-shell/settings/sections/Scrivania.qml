@@ -572,7 +572,7 @@ Page {
 
         // ── Una sola immagine, presa dove sta ────────────────────────────
         //
-        // Il manutentore, 18 agosto 2026: «per impostare lo sfondo devo copiare il
+        // il manutentore, 18 agosto 2026: «per impostare lo sfondo devo copiare il
         // percorso dal file manager e incollarlo in impostazioni».
         //
         // Il selettore per farlo esisteva da giorni — `SelettoreImmagine`,
@@ -1357,7 +1357,7 @@ Page {
                         // si rincorrono, e la pagina resta VUOTA — titolo,
                         // sottotitolo, e sotto niente, con «possible
                         // QQuickItem::polish() loop» nel registro a ripetizione.
-                        // Il manutentore, 13 settembre 2026: «la sezione desktop è
+                        // il manutentore, 13 settembre 2026: «la sezione desktop è
                         // vuota e non posso aggiungere o rimuovere widget».
                         S.ChoicePicker {
                             width: 200

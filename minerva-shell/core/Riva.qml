@@ -4,7 +4,7 @@ import "." as Core
 
 // Riva — che cosa fa ogni angolo e ogni bordo, e com'è la molla.
 //
-// Il manutentore, 25 settembre 2026: «massima flessibilità: tutto deve essere
+// il manutentore, 25 settembre 2026: «massima flessibilità: tutto deve essere
 // facilmente personalizzabile». La Riva (angoli, bordi, Isola) nasce con
 // le scelte della simulazione, ma ogni scelta è un'impostazione: qui ci
 // sono il catalogo delle azioni e le scelte correnti, lette in un posto

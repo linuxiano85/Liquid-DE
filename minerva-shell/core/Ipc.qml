@@ -2367,9 +2367,19 @@ QtObject {
                     // icone costruita per quell'elenco ha tenuto fermo il demone
                     // 4 s a disco freddo, e la richiesta a greetd aspettava
                     // dietro. Era tutto il ritardo del campo password.
+                    //
+                    // Rilegge i `.desktop` solo la scrivania. Le app (gestore
+                    // file, impostazioni…) chiedono l'elenco che il demone ha
+                    // già: fino al 19 ottobre 2026 ognuna, all'apertura, faceva
+                    // riscandire tutto e rimandare l'elenco intero a ogni
+                    // processo, proprio mentre si apriva una finestra.
                     var greetd = Quickshell.env("GREETD_SOCK");
-                    if (greetd === null || greetd === undefined || String(greetd) === "")
-                        ipc.rescanApps();
+                    if (greetd === null || greetd === undefined || String(greetd) === "") {
+                        if (Compositore.scrivania)
+                            ipc.rescanApps();
+                        else
+                            ipc.requestAllApps();
+                    }
                     ipc._eraConnesso = true;
                 } else {
                     // Il segreto che avevamo in mano non vale più: quasi

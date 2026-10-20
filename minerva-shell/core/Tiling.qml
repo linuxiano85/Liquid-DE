@@ -13,7 +13,16 @@ QtObject {
     readonly property var workspaceLayouts: Ipc.get("windows.workspaceLayouts", ["eredita","eredita","eredita","eredita","eredita","eredita","eredita","eredita","eredita","eredita"])
     readonly property var workspaceNames: Ipc.get("windows.workspaceNames", ["","","","","","","","","",""])
     readonly property bool recentWorkspacesFirst: Ipc.get("windows.workspaceRecentFirst",true)===true
-    readonly property var recentWorkspaces: Ipc.get("windows.workspaceRecentOrder",[1,2,3,4,5,6,7,8,9,10])
+    // ── L'ordine delle scrivanie usate: in memoria, salvato con calma ─────
+    //
+    // Fino al 19 ottobre 2026 ogni cambio di scrivania lo scriveva nelle
+    // impostazioni: per il demone una transazione con fsync, e 59 KB di
+    // impostazioni rimandati a ogni processo di Minerva, a ogni cambio. Ora la
+    // shell lo tiene qui e lo salva dopo 30 s di calma (o alla chiusura): la
+    // Panoramica lo vede subito, e il disco e gli altri processi una volta.
+    readonly property var _recentiSalvate: Ipc.get("windows.workspaceRecentOrder",[1,2,3,4,5,6,7,8,9,10])
+    property var _recentiQui: null
+    readonly property var recentWorkspaces: _recentiQui !== null ? _recentiQui : _recentiSalvate
     function rememberWorkspace() {
         if(!Compositore.scrivania || !Ipc.impostazioniArrivate) return;
         var number=Compositore.scrivaniaAttiva;
@@ -21,8 +30,15 @@ QtObject {
         var list=[number];
         for(var n of recentWorkspaces) if(n!==number && list.indexOf(n)<0 && n>=1 && n<=10) list.push(n);
         for(var i=1;i<=10;i++) if(list.indexOf(i)<0) list.push(i);
-        Ipc.setSetting("windows.workspaceRecentOrder",list);
+        _recentiQui=list;
+        salvaRecenti.restart();
     }
+    function _salvaRecenti() {
+        if(_recentiQui !== null && JSON.stringify(_recentiQui) !== JSON.stringify(_recentiSalvate))
+            Ipc.setSetting("windows.workspaceRecentOrder",_recentiQui);
+    }
+    property Timer salvaRecenti: Timer { interval: 30000; onTriggered: tiling._salvaRecenti() }
+    Component.onDestruction: _salvaRecenti()
     readonly property var previousLayouts: Ipc.get("windows.workspaceLastLayouts", ["uguale","uguale","uguale","uguale","uguale","uguale","uguale","uguale","uguale","uguale"])
     readonly property string defaultLayout: String(Ipc.get("windows.tilingLayout", "uguale"))
     readonly property string layout: {

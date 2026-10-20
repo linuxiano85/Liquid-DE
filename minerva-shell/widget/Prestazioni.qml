@@ -4,7 +4,7 @@ import "../core" as Core
 
 // Prestazioni — Il tabellone di come sta lavorando il computer.
 //
-// Il manutentore, 14 settembre 2026: «uno per le prestazioni che si vedano le varie
+// il manutentore, 14 settembre 2026: «uno per le prestazioni che si vedano le varie
 // misurazioni». In cima il processore, grande, con i core e il carico; poi
 // memoria, GPU, temperatura, disco e rete, ognuna col suo simbolo, la sua
 // barra e una parola — «basso», «medio», «alto» — che dice se preoccuparsi;

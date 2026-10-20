@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""Campiona i primi secondi di vita della shell (STA-002).
+
+    minerva-campiona-avvio PID FILE [SECONDI]
+    minerva-campiona-avvio --riassunto FILE shell.log
+
+Al login la shell resta ferma 2,5 s, mentre un riavvio a cache vuote ne costa
+0,9 (misurato il 20 ottobre 2026). La differenza non si riproduce fuori dal
+login, quindi si misura lì: ogni 50 ms si leggono da /proc i tempi della
+shell e la pressione di tutto il sistema.
+
+  · schedstat del filo principale: tempo sulla CPU e tempo in coda (pronto ma
+    senza CPU); il suo stato «D» vuol dire in attesa del disco;
+  · CPU di tutto il processo, per vedere i fili di disegno e di caricamento;
+  · io del processo: byte letti davvero dal disco;
+  · /proc/pressure/{cpu,io}: quanto aspettava tutto il sistema;
+  · solo mentre il filo principale è in «D»: la funzione del kernel su cui
+    dorme (wchan) e gli altri processi del sistema in «D». Il login del 20
+    ottobre ha mostrato 2,5 s di «D» senza CPU né byte letti: serve sapere
+    su cosa aspetta e chi tiene occupato il disco.
+
+Ogni riga è un JSON con l'ora in ms, la stessa di `timestamp_ms` dei
+marcatori [LIQUID][SHELL-STARTUP], così i due registri si allineano. Finisce da
+solo dopo SECONDI (6) o quando la shell muore, e non cambia nulla della shell.
+"""
+import json
+import os
+import sys
+import time
+
+
+def leggi(percorso):
+    try:
+        with open(percorso) as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def pressione(nome):
+    testo = leggi(f'/proc/pressure/{nome}')
+    if not testo:
+        return None
+    # La riga «some» ha `total=` in microsecondi, cumulativo: basta quello.
+    for riga in testo.splitlines():
+        if riga.startswith('some'):
+            return int(riga.rsplit('total=', 1)[1])
+    return None
+
+
+def principale(pid):
+    """Filo principale (quello dei QML) e CPU di tutto il processo.
+
+    Leggere tutti i ~40 fili di quickshell costava il 7 % di un core: troppo
+    per un login che si vuole misurare, non rallentare.
+    """
+    stat = leggi(f'/proc/{pid}/stat')
+    sched = leggi(f'/proc/{pid}/task/{pid}/schedstat')
+    if not stat or not sched:
+        return None
+    campi = stat[stat.rindex(')') + 2:].split()
+    cpu_ns, coda_ns, _ = sched.split()
+    # stato, cpu e coda del filo principale (µs), cpu del processo (tick)
+    return [campi[0], int(cpu_ns) // 1000, int(coda_ns) // 1000,
+            int(campi[11]) + int(campi[12])]
+
+
+def bloccati(proprio):
+    """Processi in «D» oltre alla shell, come [nome, wchan].
+
+    Si leggono solo i /proc/N/stat dei processi (non dei fili), e solo mentre
+    la shell è in «D»: fuori dal blocco non costa nulla.
+    """
+    elenco = []
+    for voce in os.listdir('/proc'):
+        if not voce.isdigit() or voce == proprio:
+            continue
+        stat = leggi(f'/proc/{voce}/stat')
+        if not stat:
+            continue
+        chiusa = stat.rindex(')')
+        if stat[chiusa + 2] != 'D':
+            continue
+        elenco.append([stat[stat.index('(') + 1:chiusa],
+                       leggi(f'/proc/{voce}/wchan') or '?'])
+    return elenco
+
+
+def riassunto(campioni, registro):
+    """Tempi del filo principale fra un marcatore e il successivo."""
+    import re
+    righe = [json.loads(r) for r in open(campioni) if r.strip()]
+    if not righe:
+        return 1
+    marcatori = []
+    for r in open(registro, errors='replace'):
+        m = re.search(r'stage=(\S+) clock=realtime timestamp_ms=(\d+)', r)
+        if m and m.group(1) != 'ui.tick':
+            marcatori.append((int(m.group(2)), m.group(1)))
+    soglie = [(righe[0]['ms'], 'inizio campioni')] + \
+        [x for x in marcatori if righe[0]['ms'] <= x[0] <= righe[-1]['ms']] + \
+        [(righe[-1]['ms'], 'fine campioni')]
+
+    def vicino(ms):
+        return min(righe, key=lambda r: abs(r['ms'] - ms))
+
+    print(f'{"intervallo":<44}{"ms":>6}{"cpu":>7}{"coda":>7}{"tutti":>7}{"disco D":>8}'
+          f'{"MB letti":>9}{"psi cpu":>8}{"psi io":>8}')
+    for (a, na), (b, nb) in zip(soglie, soglie[1:]):
+        ra, rb = vicino(a), vicino(b)
+        if rb is ra:
+            continue
+        fa, fb = ra['qs'], rb['qs']
+        d = sum(1 for r in righe if ra['ms'] <= r['ms'] < rb['ms']
+                and r['qs'][0] == 'D')
+        mb = ((rb['letti'] or 0) - (ra['letti'] or 0)) / 1e6
+        pc = ((rb['psi_cpu_us'] or 0) - (ra['psi_cpu_us'] or 0)) // 1000
+        pi = ((rb['psi_io_us'] or 0) - (ra['psi_io_us'] or 0)) // 1000
+        print(f'{na[:20] + " → " + nb[:20]:<44}{rb["ms"] - ra["ms"]:>6}'
+              f'{(fb[1] - fa[1]) // 1000:>7}{(fb[2] - fa[2]) // 1000:>7}'
+              f'{(fb[3] - fa[3]) * 10:>7}'
+              f'{d * 50:>8}{mb:>9.1f}{pc:>8}{pi:>8}')
+    from collections import Counter
+    attese = Counter(r['wchan'] for r in righe if r.get('wchan'))
+    altri = Counter(f'{n} ({w})' for r in righe for n, w in r.get('altri_d', []))
+    if attese:
+        print('\nil filo principale in «D» dormiva su:', ', '.join(
+            f'{w} ×{n}' for w, n in attese.most_common(5)))
+    if altri:
+        print('altri processi in «D» negli stessi campioni:', ', '.join(
+            f'{w} ×{n}' for w, n in altri.most_common(8)))
+    print('cpu e coda: ms del filo principale; tutti: ms di CPU dell\'intero processo'
+          ' (tick da 10 ms); disco D: ms (campioni ×50) in attesa'
+          ' del disco; psi: ms in cui almeno un processo del sistema aspettava.')
+    return 0
+
+
+def main():
+    if sys.argv[1:2] == ['--riassunto'] and len(sys.argv) == 4:
+        return riassunto(sys.argv[2], sys.argv[3])
+    if len(sys.argv) < 3:
+        print(__doc__.strip().splitlines()[2], file=sys.stderr)
+        return 2
+    pid, uscita = sys.argv[1], sys.argv[2]
+    durata = float(sys.argv[3]) if len(sys.argv) > 3 else 6.0
+    fine = time.monotonic() + durata
+    with open(uscita, 'w') as f:
+        while time.monotonic() < fine:
+            t = principale(pid)
+            if t is None:
+                break
+            io = leggi(f'/proc/{pid}/io') or ''
+            letti = next((int(r.split()[1]) for r in io.splitlines()
+                          if r.startswith('read_bytes:')), None)
+            riga = {
+                'ms': time.time_ns() // 1_000_000,
+                'qs': t,
+                'letti': letti,
+                'psi_cpu_us': pressione('cpu'),
+                'psi_io_us': pressione('io'),
+            }
+            if t[0] == 'D':
+                riga['wchan'] = leggi(f'/proc/{pid}/task/{pid}/wchan')
+                riga['altri_d'] = bloccati(pid)
+            f.write(json.dumps(riga, separators=(',', ':')) + '\n')
+            time.sleep(0.05)
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

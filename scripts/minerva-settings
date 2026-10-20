@@ -15,7 +15,7 @@ set -e
 
 SELF=$(readlink -f "$0")
 ROOT=$(dirname "$(dirname "$SELF")")
-CONFIG="$ROOT/minerva-shell/settings.qml"
+CONFIG="$ROOT/minerva-shell/settings-avvio.qml"
 
 if [ ! -f "$CONFIG" ]; then
     echo "minerva-settings: non trovo $CONFIG" >&2

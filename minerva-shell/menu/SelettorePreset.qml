@@ -10,7 +10,7 @@ import "../ui" as Ui
 //
 // ── Perché esiste ──────────────────────────────────────────────────────────
 //
-// Il manutentore, 11 ottobre 2026: «un layout switcher che possa fare cambiare
+// il manutentore, 11 ottobre 2026: «un layout switcher che possa fare cambiare
 // velocemente preset da Linux a Windows… una combinazione tasti per vedere
 // una finestra come isola, e sceglierlo sia da tastiera che con il mouse». Il
 // cambio c'era solo in Impostazioni → Aspetto, tre clic e una finestra da

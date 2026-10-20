@@ -44,7 +44,7 @@ fi
 
 # I registri sono di questa sessione: vedi `scripts/minerva-posti.sh`.
 . "$MINERVA_DIR/scripts/minerva-posti.sh"
-SHELL_QML="$MINERVA_DIR/minerva-shell/shell.qml"
+SHELL_QML="$MINERVA_DIR/minerva-shell/shell-avvio.qml"
 MODE="${1:-shell}"
 
 say() { printf '\033[36m·\033[0m %s\n' "$1"; }
@@ -115,7 +115,7 @@ fi
 # uccidere) quello sbagliato chiuderebbe la finestra di chi sta copiando file.
 LIVE_PID=""
 for p in $(ps -eo pid,stat,cmd --no-headers \
-           | awk '$2 !~ /Z/ && /[q]s -p/ && /shell\.qml/ {print $1}'); do
+           | awk '$2 !~ /Z/ && /[q]s -p/ && /shell(-avvio)?\.qml/ {print $1}'); do
     di_prova "$p" || { LIVE_PID=$p; break; }
 done
 
@@ -177,14 +177,14 @@ if [ -n "$LIVE_PID" ] && kill -0 "$LIVE_PID" 2>/dev/null; then
     fi
 else
     say "non risponde, la riavvio"
-    for p in $(ps -eo pid,stat,cmd --no-headers | awk '$2 !~ /Z/ && /[q]s -p/ && /shell\.qml/ {print $1}'); do
+    for p in $(ps -eo pid,stat,cmd --no-headers | awk '$2 !~ /Z/ && /[q]s -p/ && /shell(-avvio)?\.qml/ {print $1}'); do
         di_prova "$p" || kill "$p" 2>/dev/null
     done
     sleep 1
     LOG="$STATO/shell.log"
     come_la_sessione nohup qs -p "$SHELL_QML" >>"$LOG" 2>&1 &
     sleep 3
-    if ps -eo pid,stat,cmd --no-headers | awk '$2 !~ /Z/ && /[q]s -p/ && /shell\.qml/' | grep -q .; then
+    if ps -eo pid,stat,cmd --no-headers | awk '$2 !~ /Z/ && /[q]s -p/ && /shell(-avvio)?\.qml/' | grep -q .; then
         ok "shell riavviata"
     else
         bad "shell non partita — guarda $STATO/session.log"

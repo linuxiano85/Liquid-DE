@@ -745,7 +745,7 @@ Singleton {
     // «Ingrandisci» qui è GEOMETRIA — `Windows.maximize` ridimensiona e
     // sposta, e il plugin fa lo stesso conto. Una finestra nel modo 1 del
     // compositore si prende l'ingresso e lascia le altre disegnate e mute:
-    // Il manutentore, 12 agosto 2026, «è diventata una finestra fantasma». Il
+    // il manutentore, 12 agosto 2026, «è diventata una finestra fantasma». Il
     // colpevole era proprio quel comando, dentro il plugin.
     //
     // Una porta che offre un attrezzo che non va usato è una porta che invita

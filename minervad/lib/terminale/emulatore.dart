@@ -3,7 +3,7 @@
 //
 // ── Perché è nostro ────────────────────────────────────────────────────────
 //
-// Il manutentore, 14 settembre 2026, scegliendo: «Nostro, in Dart». Le alternative
+// il manutentore, 14 settembre 2026, scegliendo: «Nostro, in Dart». Le alternative
 // erano `xterm.dart` (dipende da Flutter, che il demone non ha) e `libvterm`
 // (C, un'altra lingua per un'app sola). Un emulatore è un automa ben
 // descritto — quello di Paul Williams, lo stesso di xterm e di tutti gli

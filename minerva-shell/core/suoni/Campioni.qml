@@ -49,6 +49,17 @@ QtObject {
     /// `Sounds`, che sa risolverlo da `Quickshell.shellDir`.
     property string cartella: ""
 
+    /// Il file di un campione, o "" finché la cartella non è arrivata.
+    ///
+    /// L'oggetto nasce prima che `Sounds.qml` gli leghi la cartella: senza
+    /// questa guardia ogni SoundEffect partiva con un nome relativo
+    /// («volume-01.wav»), cercato accanto a questo file, e il registro diceva
+    /// «Error decoding …/core/suoni/volume-01.wav» a ogni avvio (visto il 20
+    /// ottobre 2026, dopo il passaggio a `shell-avvio.qml`).
+    function file(nome) {
+        return campioni.cartella === "" ? "" : campioni.cartella + nome;
+    }
+
     /// Quanto forte, da 0 a 1. `Sounds` lo tiene legato al suo `level`.
     property real livello: 0.4
 
@@ -60,29 +71,28 @@ QtObject {
         model: 11
         delegate: SoundEffect {
             required property int index
-            source: campioni.cartella + "volume-"
-                    + (index < 10 ? "0" + index : index) + ".wav"
+            source: campioni.file("volume-" + (index < 10 ? "0" + index : index) + ".wav")
             volume: campioni.livello
         }
     }
 
     property SoundEffect notifica: SoundEffect {
-        source: campioni.cartella + "notification.wav"
+        source: campioni.file("notification.wav")
         volume: campioni.livello
     }
 
     property SoundEffect limite: SoundEffect {
-        source: campioni.cartella + "volume-limit.wav"
+        source: campioni.file("volume-limit.wav")
         volume: campioni.livello
     }
 
     property SoundEffect muteOn: SoundEffect {
-        source: campioni.cartella + "mute-on.wav"
+        source: campioni.file("mute-on.wav")
         volume: campioni.livello
     }
 
     property SoundEffect muteOff: SoundEffect {
-        source: campioni.cartella + "mute-off.wav"
+        source: campioni.file("mute-off.wav")
         volume: campioni.livello
     }
 }

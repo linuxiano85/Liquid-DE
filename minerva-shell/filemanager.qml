@@ -21,14 +21,16 @@
 //    altro programma — e un'applicazione vera si deve poter avviare da sola,
 //    senza che ci sia una shell in ascolto.
 //
-// Si avvia così, ed è quello che fa lo script `minerva-files`:
+// Si avvia così, ed è quello che fa lo script `minerva-files` (dal 19 ottobre
+// 2026 attraverso `filemanager-avvio.qml`, che carica questo file come file
+// locale perché Qt ne tenga in cache la compilazione):
 //
 //     MINERVA_FILES_PATH=/home/tizio/Immagini \
-//         qs -d -p .../minerva-shell/filemanager.qml
+//         qs -d -p .../minerva-shell/filemanager-avvio.qml
 //
 // e chi è già aperto si comanda così:
 //
-//     qs ipc -p .../minerva-shell/filemanager.qml call files open /tmp
+//     qs ipc -p .../minerva-shell/filemanager-avvio.qml call files open /tmp
 //
 // Quello che la shell e il gestore file continuano a condividere è il DEMONE:
 // le impostazioni, l'elenco dei dischi, le copie in corso stanno lì e sono le
