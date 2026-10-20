@@ -433,6 +433,25 @@ class SettingsApi {
   /// ricrea da zero ogni volta, e qui si guarda a ogni scrittura.
   static final Map<String, dynamic> _fabbrica = defaultSettings();
 
+  static bool _preferenzeTema(dynamic value) {
+    const keys = {
+      'desktop.wallpaperMode', 'desktop.wallpaper', 'desktop.wallpaperFolder',
+      'desktop.wallpaperColor', 'desktop.wallpaperFit', 'desktop.rotateMinutes',
+      'desktop.rotateRandom', 'windows11.wallpaper', 'windows11.themeApp',
+    };
+    if (value is! Map || value.length != keys.length ||
+        !keys.every(value.containsKey)) return false;
+    for (final key in keys) {
+      final v = value[key];
+      if (!_conforme(key, _fabbricaA(key.split('.')), v)) return false;
+      if ((key == 'desktop.wallpaper' || key == 'desktop.wallpaperFolder') &&
+          (v is! String || v.length > 4096 || v.contains('\u0000'))) return false;
+      if (key == 'desktop.rotateMinutes' &&
+          (v is! num || !v.isFinite || v < 0)) return false;
+    }
+    return true;
+  }
+
   /// Il valore ha la forma di quello di fabbrica?
   ///
   /// [fabbrica] è `null` sotto una mappa libera (lì comanda l'utente) e per le
@@ -621,7 +640,8 @@ class SettingsApi {
               t['nome'] is String && (t['nome'] as String).isNotEmpty && (t['nome'] as String).length <= 64 &&
               t['sfondo'] is String && (t['sfondo'] as String).length <= 4096 &&
               ['light', 'dark'].contains(t['tema']) &&
-              t['accento'] is String && RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(t['accento'] as String));
+              t['accento'] is String && RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(t['accento'] as String) &&
+              (!t.containsKey('preferenze') || _preferenzeTema(t['preferenze'])));
     if (percorso == 'desktop.wallpaperMode')
       return ['minerva', 'image', 'folder', 'color'].contains(valore);
     if (percorso == 'desktop.wallpaperFit')

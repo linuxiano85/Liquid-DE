@@ -125,7 +125,7 @@ PaginaWindows {
                             anchors.margins: 3
                             radius: 4
                             clip: true
-                            color: "#202020"
+                            color: riquadro.modelData.base || "#202020"
                             Image {
                                 anchors.fill: parent
                                 visible: riquadro.modelData.sfondo !== ""
