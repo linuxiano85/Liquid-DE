@@ -31,15 +31,28 @@ PaginaWindows {
     function applica(t) { catalogo.applica(t); }
     function salva() { catalogo.salva(); }
 
-    // ── L'anteprima e le quattro voci ──
+    // Anteprima e collegamenti restano affiancati dove c’è spazio; nelle
+    // finestre strette si dispongono sotto, senza tagliare le destinazioni.
     Item {
+        id: testataTema
+        objectName: "temaTestata"
         width: parent.width
-        height: 188
-        AnteprimaDesktop { width: 336; height: 188 }
+        readonly property bool affiancata: width >= 563
+        height: Math.max(anteprimaTema.height, collegamenti.y + collegamenti.height,
+                         salvaTema.visible ? salvaTema.y + salvaTema.height : 0,
+                         limiteTema.visible ? limiteTema.y + limiteTema.height : 0)
+        AnteprimaDesktop {
+            id: anteprimaTema
+            objectName: "temaAnteprima"
+            width: Math.min(336, parent.width)
+            height: width * 188 / 336
+        }
         Grid {
-            x: 355
-            y: -8
-            columns: 2
+            id: collegamenti
+            x: testataTema.affiancata ? 355 : 0
+            y: testataTema.affiancata ? -8 : anteprimaTema.height + 16
+            width: Math.min(416, testataTema.width - x)
+            columns: width >= 360 ? 2 : 1
             Repeater {
                 model: [
                     { "icona": "immagine", "titolo": pagina.tt("sfondo"), "valore": String(Core.Wallpaper.current).replace(/^.*\//, "").replace(/\.[a-z]+$/, ""), "pagina": "w-sfondo" },
@@ -49,33 +62,65 @@ PaginaWindows {
                 ]
                 delegate: Rectangle {
                     id: voce
+                    objectName: "temaCollegamento-" + (modelData.pagina || modelData.liquid)
                     required property var modelData
-                    width: 208
+                    width: Math.min(208, collegamenti.width / collegamenti.columns)
                     height: 54
                     radius: 4
                     color: presa.containsMouse ? W.Style.hover : "transparent"
+                    activeFocusOnTab: true
+                    border.width: activeFocus ? 2 : 0
+                    border.color: W.Style.accent
+                    Accessible.role: Accessible.Link
+                    Accessible.name: modelData.titolo
+                    Accessible.description: modelData.valore
+                    Accessible.onPressAction: voce.attiva()
+                    function attiva() {
+                        if (pagina.finestra) pagina.finestra.apriWindows(modelData.pagina || modelData.liquid);
+                    }
+                    Keys.onReturnPressed: function(event) { if (!event.isAutoRepeat) voce.attiva(); }
+                    Keys.onSpacePressed: function(event) { if (!event.isAutoRepeat) voce.attiva(); }
                     W.Glyph { x: 14; y: 8; width: 20; height: 20; name: voce.modelData.icona; color: W.Style.text }
                     Column {
                         x: 48; y: 7
-                        Text { text: voce.modelData.titolo; color: W.Style.text; font.family: W.Style.font; font.pixelSize: 14 }
-                        Text { width: 150; elide: Text.ElideRight; text: voce.modelData.valore; color: W.Style.muted; font.family: W.Style.font; font.pixelSize: 14 }
+                        width: Math.max(0, parent.width - x - 10)
+                        Text { width: parent.width; elide: Text.ElideRight; text: voce.modelData.titolo; color: W.Style.text; font.family: W.Style.font; font.pixelSize: 14 }
+                        Text { width: parent.width; elide: Text.ElideRight; text: voce.modelData.valore; color: W.Style.muted; font.family: W.Style.font; font.pixelSize: 14 }
                     }
                     MouseArea {
                         id: presa
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: if (pagina.finestra) pagina.finestra.apriWindows(voce.modelData.pagina || voce.modelData.liquid)
+                        onClicked: { voce.forceActiveFocus(Qt.MouseFocusReason); voce.attiva(); }
                     }
                 }
             }
         }
         PulsanteWindows {
+            id: salvaTema
             objectName: "salvaTema"
-            x: 367
-            y: 103
+            readonly property bool limite: (Core.Ipc.get("windows11.temi", []) || []).length >= 20
+            visible: Core.DesktopStyle.attuale === "windows"
+            enabled: Core.Ipc.impostazioniArrivate && !limite
+            x: testataTema.affiancata ? collegamenti.x + 12 : 0
+            y: collegamenti.y + collegamenti.height + 3
             testo: pagina.tt("salva")
+            Accessible.description: limiteTema.text
             onPremuto: pagina.salva()
+        }
+        Text {
+            id: limiteTema
+            objectName: "temaLimiteSalvataggi"
+            visible: salvaTema.visible && salvaTema.limite
+            x: salvaTema.x
+            y: salvaTema.y + salvaTema.height + 8
+            width: Math.max(0, testataTema.width - x)
+            text: pagina.it ? "Puoi salvare al massimo 20 temi." : "You can save up to 20 themes."
+            wrapMode: Text.Wrap
+            color: W.Style.muted
+            font.family: W.Style.font
+            font.pixelSize: 12
         }
     }
     Item { width: 1; height: 21 }
