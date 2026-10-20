@@ -129,7 +129,7 @@ PaginaWindows {
             GrigliaColori {
                 id: recentiGriglia
                 x: 59; y: 38
-                width: 9 * 53
+                width: Math.min(9 * 53, Math.max(0, parent.width - x - 16))
                 colori: pagina.recenti
                 scelto: pagina.accento
                 onPreso: function (c) { pagina.scegliAccento(c); }
@@ -144,7 +144,7 @@ PaginaWindows {
                 id: windowsGriglia
                 objectName: "coloriWindows"
                 x: 59; y: 38
-                width: 9 * 53
+                width: Math.min(9 * 53, Math.max(0, parent.width - x - 16))
                 colori: Dati.coloriWindows
                 scelto: pagina.accento
                 onPreso: function (c) { pagina.scegliAccento(c); }
@@ -188,6 +188,7 @@ PaginaWindows {
 
     ScegliColoreWindows {
         id: sceltaColore
+        titolo: pagina.lingua === "it" ? "Scegli un colore principale personalizzato" : "Choose a custom accent color"
         parent: pagina
         onConfermato: function (c) { pagina.scegliAccento(c.toString()); }
     }

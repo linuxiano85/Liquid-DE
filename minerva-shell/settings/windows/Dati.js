@@ -92,7 +92,7 @@ var testi = {
         "colorePrincipale": "Colore principale",
         "automatico": "Automatico", "manuale": "Manuale",
         "coloriRecenti": "Colori recenti",
-        "coloriWindows": "Colori di Windows",
+        "coloriWindows": "Colori di Liquid",
         "accentoStart": "Mostra il colore principale su Start e sulla barra delle applicazioni",
         "soloScura": "Questa impostazione è disponibile solo nella modalità scura di Windows.",
         "accentoBarre": "Mostra il colore principale sulle barre dei titoli e sui bordi delle finestre",
@@ -195,7 +195,7 @@ var testi = {
         "automatico": "Automatic",
         "manuale": "Manual",
         "coloriRecenti": "Recent colors",
-        "coloriWindows": "Windows colors",
+        "coloriWindows": "Liquid colors",
         "accentoStart": "Show accent color on Start and taskbar",
         "soloScura": "This setting is only available in Windows dark mode.",
         "accentoBarre": "Show accent color on title bars and window borders",
@@ -256,7 +256,7 @@ var personalizzazione = [
     { "id": "caratteri", "icona": "caratteri" }
 ];
 
-/// I 48 «Colori di Windows», con i nomi che Windows legge allo schermo.
+/// I 48 «Colori di Liquid», con i nomi che Windows legge allo schermo.
 /// Valori misurati sui pixel della pagina Colori.
 var coloriWindows = [
     ["#FFB900", "Giallo oro"], ["#FF8C00", "Oro"], ["#F7630C", "Arancione brillante"],

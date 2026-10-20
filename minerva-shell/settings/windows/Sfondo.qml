@@ -266,6 +266,7 @@ PaginaWindows {
             titolo: pagina.tt("coloriPersonalizzati")
             PulsanteWindows {
                 testo: pagina.tt("visualizzaColori")
+                objectName: "visualizzaColoriSfondo"
                 onPremuto: sceltaColore.apri(Core.Wallpaper.colore)
             }
         }
