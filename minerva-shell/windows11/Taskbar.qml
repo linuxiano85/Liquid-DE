@@ -293,7 +293,9 @@ PanelWindow {
     }}
     Rectangle {
         id:strip;objectName:"windowsTaskbarStrip";x:0;y:bar.height-48;width:bar.width;height:48;color:Style.barra
-        Image {anchors.fill:parent;source:Core.Vetro.percorso!=="" ? "file://"+Core.Vetro.percorso:"";asynchronous:true;fillMode:Image.PreserveAspectCrop;opacity:Style.dark ? .08:.12;sourceSize.width:Math.ceil(width);sourceSize.height:48}
+        // Il materiale nativo usa già lo sfondo reale. Il vecchio filtro
+        // serve solo al ripiego traslucido, mai agli stati opachi.
+        Image {anchors.fill:parent;source:Style.acrylic && !Style.acrylicVero && Core.Vetro.percorso!=="" ? "file://"+Core.Vetro.percorso:"";asynchronous:true;fillMode:Image.PreserveAspectCrop;opacity:Style.dark ? .08:.12;sourceSize.width:Math.ceil(width);sourceSize.height:48}
         Rectangle {height:1;width:parent.width;color:Style.dark ? "#35ffffff":"#aaFFFFFF"}
         Connections {target:strip.Window.window;ignoreUnknownSignals:true;function onFrameSwapped(){if(bar._paintStarted>=0){bar.lastOpenMs=Date.now()-bar._paintStarted;bar._paintStarted=-1;}}}
         MouseArea {anchors.fill:parent;acceptedButtons:Qt.RightButton;onClicked:{bar.close();taskbarMenu.openAtCursor([{label:Style.label("Gestione attività","Task Manager"),icon:"monitor",action:"monitor"},{separator:true},{label:Style.label("Impostazioni della barra delle applicazioni","Taskbar settings"),icon:"settings",action:"taskbar-settings"}]);}}
