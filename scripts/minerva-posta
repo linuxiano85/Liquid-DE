@@ -1,0 +1,15 @@
+#!/bin/sh
+# Collega il client QML esistente al menu e ai collegamenti mailto.
+set -eu
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+MINERVA_POSTA_APRI=${1:-}
+case "$MINERVA_POSTA_APRI" in
+    ''|[mM][aA][iI][lL][tT][oO]:*) ;;
+    *) echo 'minerva-posta: è supportato un indirizzo mailto.' >&2; exit 64 ;;
+esac
+CONFIG="$ROOT/minerva-shell/posta.qml"
+[ -r "$CONFIG" ] || { echo "minerva-posta: manca $CONFIG" >&2; exit 1; }
+export MINERVA_POSTA_APRI
+. "$ROOT/scripts/minerva-ambiente-app"
+minerva_avvia_app posta qs -d -p "$CONFIG"

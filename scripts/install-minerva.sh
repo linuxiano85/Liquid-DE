@@ -11,7 +11,14 @@ MINERVA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 c_ok()   { printf '\033[1;32m  ✔\033[0m %s\n' "$*"; }
 c_info() { printf '\033[1;36m  ➜\033[0m %s\n' "$*"; }
-c_warn() { printf '\033[1;33m  ⚠\033[0m %s\n' "$*"; }
+INSTALL_WARNINGS=()
+c_warn() {
+    INSTALL_WARNINGS+=("$*")
+    if [[ ${MINERVA_INSTALL_GUI:-0} == 1 ]]; then
+        printf '@@MINERVA_WARNING@@%s\n' "$*"
+    fi
+    printf '\033[1;33m  ⚠\033[0m %s\n' "$*"
+}
 c_err()  { printf '\033[1;31m  ✘\033[0m %s\n' "$*"; }
 # La GUI usa gli stessi pacchetti e lo stesso installatore del terminale.
 # Gli eventi hanno un prefisso distinto dal normale registro leggibile.
@@ -194,16 +201,20 @@ printf '%s\n' "${PKGS[@]}" > "$MANIFESTO"
 sudo install -Dm644 "$MANIFESTO" /usr/local/share/liquid-de/required-packages.txt
 rm -f -- "$MANIFESTO"
 
+c_head "Verifica dei programmi installati"
+for bin in qs dart cliphist wl-copy brightnessctl nmcli pactl bluetoothctl alacritty mpv yt-dlp ffmpeg greetd; do
+    if ! command -v "$bin" >/dev/null 2>&1; then
+        c_err "$bin non disponibile dopo l’installazione delle dipendenze."
+        exit 1
+    fi
+done
+
 # Compilare prima di configurare la sessione: gli errori devono essere visibili.
 c_head "Compositore Minerva e prove automatiche"
 "$MINERVA_DIR/compositore/costruisci.sh" || {
     c_err "Build/verifica del compositore fallita."
     exit 1
 }
-# Percorso fisso usato dal blocco: eseguibile root-owned, senza setuid.
-# La rinomina permette l'aggiornamento anche con una verifica ancora in corso.
-sudo install -Dm755 "$CARTELLA_BIN/minerva-pam" /usr/local/bin/minerva-pam.new
-sudo mv -f /usr/local/bin/minerva-pam.new /usr/local/bin/minerva-pam
 bash "$MINERVA_DIR/scripts/costruisci-window-identity.sh" || {
     c_err "Build del modulo identità finestre fallita."
     exit 1
@@ -213,7 +224,11 @@ bash "$MINERVA_DIR/scripts/costruisci-window-identity.sh" || {
 # senza YouTube né comandi nella barra (19 ottobre). Se fallisce si va
 # avanti: Media funziona lo stesso, con meno.
 bash "$MINERVA_DIR/scripts/costruisci-mpv.sh" || {
-    c_warn "Build del lettore mpv di Media fallita: Media userà Qt Multimedia."
+    if [[ -f "$MINERVA_DIR/minerva-shell/native/Liquid/Media/libliquidmedia.so" ]]; then
+        c_warn "Modulo mpv non aggiornato: resta la versione precedente; verificarne la compatibilità."
+    else
+        c_warn "Build del lettore mpv di Media fallita: Media userà Qt Multimedia."
+    fi
 }
 bash "$MINERVA_DIR/scripts/costruisci-tiled-headers.sh" || {
     c_err "Build delle intestazioni adattive GTK fallita."
@@ -283,11 +298,89 @@ fi
 # 2026 i sorgenti sono stati spostati da Scaricati a Documenti e nessuna app
 # di Minerva si apriva più. Si fa PRIMA di registrare la sessione: una voce
 # di accesso che punta a una radice ancora vuota è una sessione che non parte.
+# ── L'agente delle password ───────────────────────────────────────────────
+#
+# È nostro: `permessi/`, in C, sopra `libpolkit-agent-1`. Si compila qui
+# perché è l'unico pezzo compilato oltre al compositore, e chi installa
+# Minerva non deve sapere che esiste una cartella in più da costruire a mano.
+#
+# La compilazione è obbligatoria: una macchina pulita potrebbe non avere
+# nessun agente alternativo per le richieste di autorizzazione.
+c_head "Agente delle password"
+"$MINERVA_DIR/permessi/costruisci.sh" || {
+    c_err "Compilazione dell'agente delle password fallita."
+    exit 1
+}
+c_ok "minerva-polkit compilato e installato"
+
+# Tutti i binari obbligatori devono esistere prima di pubblicare la sessione.
+for bin in minerva-wayland minerva-cattura minerva-pty minerva-pam minerva-polkit; do
+    if [[ ! -x "$CARTELLA_BIN/$bin" ]]; then
+        c_err "$bin non disponibile dopo la compilazione: sessione non registrata."
+        exit 1
+    fi
+done
+
 c_head "Radice di Liquid DE"
 if "$MINERVA_DIR/scripts/minerva-installa-radice"; then
     c_ok "Liquid DE gira da $CARTELLA_RADICE: i sorgenti si possono spostare"
 else
     c_err "Non riesco a copiare Liquid DE in $CARTELLA_RADICE."
+    exit 1
+fi
+
+# Percorso fisso usato dal blocco: eseguibile root-owned, senza setuid.
+# La rinomina permette l'aggiornamento anche con una verifica ancora in corso.
+sudo install -Dm755 "$CARTELLA_BIN/minerva-pam" /usr/local/bin/minerva-pam.new
+sudo mv -f /usr/local/bin/minerva-pam.new /usr/local/bin/minerva-pam
+
+# ── Il file PAM del blocco schermo ─────────────────────────────────────────
+#
+# `scripts/minerva-blocca` chiede a PAM se la password è giusta, e PAM vuole
+# sapere COME chiederlo: è il file `/etc/pam.d/liquid-de`. Senza, il blocco non
+# parte proprio — di proposito, perché un blocco che non riesce a verificare
+# niente è un computer perso, non un computer protetto.
+#
+# Il contenuto sta in `config/pam/liquid-de`, commentato riga per riga: niente
+# `nullok`, `nodelay` (la pausa fra i tentativi la fa la schermata, meglio),
+# e soglie di faillock generose perché quelle di sistema — 3 tentativi e 10
+# minuti, con un contatore condiviso col login — chiudono fuori chi sbaglia a
+# digitare e chi fa girare le prove automatiche.
+#
+# Si CONFRONTA e si aggiorna: prima bastava che il file esistesse, e chi aveva
+# installato Minerva a luglio si teneva per sempre la versione di allora.
+#
+# Il servizio PAM è obbligatorio anche su una macchina senza altri desktop.
+c_head "Blocco schermo"
+if cmp -s "$MINERVA_DIR/config/pam/liquid-de" /etc/pam.d/liquid-de; then
+    c_ok "/etc/pam.d/liquid-de gia aggiornato"
+elif sudo install -Dm644 "$MINERVA_DIR/config/pam/liquid-de" /etc/pam.d/liquid-de \
+        >/dev/null 2>&1; then
+    c_ok "/etc/pam.d/liquid-de installato"
+else
+    c_err "Impossibile installare /etc/pam.d/liquid-de: blocco schermo non pronto."
+    exit 1
+fi
+
+
+# ── La schermata di accesso di Minerva, pronta da scegliere ─────────────
+#
+# Impostazioni → Accesso → «Cambia gestore di accessi» passa da
+# `/usr/local/bin/minerva-greetd` (di root, non scrivibile da te: `pkexec`
+# non deve mai eseguire uno script della cartella di casa). Quella copia la fa
+# `minerva-greetd installa`, e qui non lo faceva nessuno: il pulsante «Cambia»
+# restava senza effetto (il manutentore, 6 ottobre 2026). `installa` copia e scrive
+# la configurazione e basta — chi ti fa entrare resta quello di adesso.
+if command -v greetd >/dev/null 2>&1; then
+    if sudo "$CARTELLA_RADICE/scripts/minerva-greetd" installa; then
+        c_ok "schermata di accesso di Minerva pronta (si sceglie in Impostazioni → Accesso)"
+    else
+        c_err "schermata di accesso di Minerva non installata: si riprova con"
+        c_info "    sudo $CARTELLA_RADICE/scripts/minerva-greetd installa"
+        exit 1
+    fi
+else
+    c_err "greetd non è disponibile dopo l'installazione delle dipendenze"
     exit 1
 fi
 
@@ -310,8 +403,8 @@ c_head "Registrazione della sessione «Liquid DE» nel display manager"
 # voce nella schermata di accesso c'è, e chi la sceglie senza aver costruito
 # il compositore trova scritto nel registro della sessione cosa lanciare.
 # Meglio una voce che spiega di una voce che non c'è.
-sed "s|@MINERVA_DIR@|$CARTELLA_RADICE|g" \
-    "$MINERVA_DIR/scripts/minerva-session-wayland" \
+python3 "$MINERVA_DIR/scripts/liquid-session-bridge.py" \
+    "$MINERVA_DIR/scripts/minerva-session-wayland" "$CARTELLA_RADICE" \
     | sudo install -Dm755 /dev/stdin /usr/local/bin/liquid-de-sessione
 c_ok "/usr/local/bin/liquid-de-sessione installato ($CARTELLA_RADICE)"
 
@@ -325,8 +418,8 @@ c_ok "/usr/local/bin/liquid-de-sessione installato ($CARTELLA_RADICE)"
 # Si installa sempre e per prima, e non è un dettaglio d'ordine: una via di
 # ritorno che si installa dopo la cosa da cui deve proteggere è una via di
 # ritorno che manca proprio nel giro in cui serve.
-sed "s|@MINERVA_DIR@|$CARTELLA_RADICE|g" \
-    "$MINERVA_DIR/scripts/minerva-session-recupero" \
+python3 "$MINERVA_DIR/scripts/liquid-session-bridge.py" \
+    "$MINERVA_DIR/scripts/minerva-session-recupero" "$CARTELLA_RADICE" \
     | sudo install -Dm755 /dev/stdin /usr/local/bin/liquid-de-recupero
 c_ok "/usr/local/bin/liquid-de-recupero installato ($CARTELLA_RADICE)"
 
@@ -518,10 +611,8 @@ mkdir -p "$ICONE"
 # mancava: il lettore multimediale esisteva, funzionava, si poteva avviare da
 # terminale — e non compariva nel menu di nessuno. Un programma che non è nel
 # menu non esiste, e infatti l'MP3 continuava ad aprirlo un'altra cosa.
-for app in minerva-files minerva-settings minerva-monitor minerva-viewer \
-           minerva-editor minerva-calcolatrice minerva-media minerva-custodia \
-           minerva-manutenzione minerva-terminale minerva-fucina \
-           minerva-posta minerva-documenti; do
+while IFS= read -r app || [[ -n "$app" ]]; do
+    case "$app" in ''|\#*) continue ;; esac
     # Un collegamento alla RADICE INSTALLATA, non ai sorgenti: fino al 4
     # ottobre 2026 puntava al progetto, e spostando il progetto tutti questi
     # comandi sono diventati collegamenti rotti in un colpo solo.
@@ -529,7 +620,7 @@ for app in minerva-files minerva-settings minerva-monitor minerva-viewer \
     install -Dm644 "$MINERVA_DIR/desktop/$app.desktop" "$APPLICAZIONI/$app.desktop"
     install -Dm644 "$MINERVA_DIR/assets/icons/$app.svg" "$ICONE/$app.svg"
     c_ok "$app installato"
-done
+done < "$MINERVA_DIR/config/liquid-install-apps.list"
 # ── Le app ritirate ──────────────────────────────────────────────────────
 #
 # `minerva-fucina2` era la Fucina nuova finché conviveva con la vecchia: dal
@@ -627,7 +718,7 @@ c_ok "Anteprima e Media proposti in Liquid, rispettando le scelte personali"
 # usa Avahi. Non attiviamo saned: non serve esporre lo scanner sulla rete.
 for servizio in cups.socket avahi-daemon.service; do
     sudo systemctl enable --now "$servizio" \
-        || c_info "Attiva $servizio per la stampa e la ricerca delle stampanti"
+        || c_warn "$servizio non attivo: stampa o ricerca delle stampanti potrebbero non essere disponibili"
 done
 
 # ── 3a-bis. Priorità di scheduling, dove c'è ananicy ──────────────────────
@@ -656,6 +747,8 @@ if systemctl cat inputplumber.service >/dev/null 2>&1; then
     sudo systemctl enable --now inputplumber.service >/dev/null 2>&1 \
         && c_ok "InputPlumber acceso: i pad valgono in tutti i giochi" \
         || c_warn "InputPlumber non parte: i pad restano quelli grezzi"
+else
+    c_warn "Unità InputPlumber assente: gestione unificata dei controller non disponibile."
 fi
 # I colori della barra luminosa dei pad PlayStation: il demone li cambia
 # (blu a riposo, bianco quando un gioco usa il pad), ma di serie i LED li
@@ -672,49 +765,6 @@ if ! pacman -Q steam-devices >/dev/null 2>&1 \
     sudo pacman -S --needed --noconfirm steam-devices >/dev/null 2>&1 \
         && c_ok "regole udev dei pad di Steam installate" || true
 fi
-
-# ── Il file PAM del blocco schermo ─────────────────────────────────────────
-#
-# `scripts/minerva-blocca` chiede a PAM se la password è giusta, e PAM vuole
-# sapere COME chiederlo: è il file `/etc/pam.d/liquid-de`. Senza, il blocco non
-# parte proprio — di proposito, perché un blocco che non riesce a verificare
-# niente è un computer perso, non un computer protetto.
-#
-# Il contenuto sta in `config/pam/liquid-de`, commentato riga per riga: niente
-# `nullok`, `nodelay` (la pausa fra i tentativi la fa la schermata, meglio),
-# e soglie di faillock generose perché quelle di sistema — 3 tentativi e 10
-# minuti, con un contatore condiviso col login — chiudono fuori chi sbaglia a
-# digitare e chi fa girare le prove automatiche.
-#
-# Si CONFRONTA e si aggiorna: prima bastava che il file esistesse, e chi aveva
-# installato Minerva a luglio si teneva per sempre la versione di allora.
-#
-# Il servizio PAM è obbligatorio anche su una macchina senza altri desktop.
-c_head "Blocco schermo"
-if cmp -s "$MINERVA_DIR/config/pam/liquid-de" /etc/pam.d/liquid-de; then
-    c_ok "/etc/pam.d/liquid-de gia aggiornato"
-elif sudo install -Dm644 "$MINERVA_DIR/config/pam/liquid-de" /etc/pam.d/liquid-de \
-        >/dev/null 2>&1; then
-    c_ok "/etc/pam.d/liquid-de installato"
-else
-    c_err "Impossibile installare /etc/pam.d/liquid-de: blocco schermo non pronto."
-    exit 1
-fi
-
-# ── L'agente delle password ───────────────────────────────────────────────
-#
-# È nostro: `permessi/`, in C, sopra `libpolkit-agent-1`. Si compila qui
-# perché è l'unico pezzo compilato oltre al compositore, e chi installa
-# Minerva non deve sapere che esiste una cartella in più da costruire a mano.
-#
-# La compilazione è obbligatoria: una macchina pulita potrebbe non avere
-# nessun agente alternativo per le richieste di autorizzazione.
-c_head "Agente delle password"
-"$MINERVA_DIR/permessi/costruisci.sh" || {
-    c_err "Compilazione dell'agente delle password fallita."
-    exit 1
-}
-c_ok "minerva-polkit compilato e installato"
 
 # ── 5. Verifica finale ────────────────────────────────────────────────────
 c_head "Verifica"
@@ -755,30 +805,18 @@ for bin in minerva-wayland minerva-cattura minerva-pty minerva-pam minerva-polki
     fi
 done
 
-# ── La schermata di accesso di Minerva, pronta da scegliere ─────────────
-#
-# Impostazioni → Accesso → «Cambia gestore di accessi» passa da
-# `/usr/local/bin/minerva-greetd` (di root, non scrivibile da te: `pkexec`
-# non deve mai eseguire uno script della cartella di casa). Quella copia la fa
-# `minerva-greetd installa`, e qui non lo faceva nessuno: il pulsante «Cambia»
-# restava senza effetto (il manutentore, 6 ottobre 2026). `installa` copia e scrive
-# la configurazione e basta — chi ti fa entrare resta quello di adesso.
-if command -v greetd >/dev/null 2>&1; then
-    if sudo "$CARTELLA_RADICE/scripts/minerva-greetd" installa; then
-        c_ok "schermata di accesso di Minerva pronta (si sceglie in Impostazioni → Accesso)"
-    else
-        c_err "schermata di accesso di Minerva non installata: si riprova con"
-        c_info "    sudo $CARTELLA_RADICE/scripts/minerva-greetd installa"
-        ALL_OK=0
-    fi
-else
-    c_err "greetd non è disponibile dopo l'installazione delle dipendenze"
-    ALL_OK=0
-fi
 
 echo
 if [[ $ALL_OK -eq 1 ]]; then
-    c_ok "Installazione completata. Esci e scegli «Liquid DE» nel display manager,"
+    if (( ${#INSTALL_WARNINGS[@]} > 0 )); then
+        c_info "Installazione completata con limitazioni (${#INSTALL_WARNINGS[@]}):"
+        for avviso in "${INSTALL_WARNINGS[@]}"; do
+            printf '  - %s\n' "$avviso"
+        done
+    else
+        c_ok "Installazione completata."
+    fi
+    c_info "Esci e scegli «Liquid DE» nel display manager,"
     c_ok "oppure, con le prove accanto (Liquid_test), la sessione annidata:"
     c_ok "    ../Liquid_test/compositore/prova-annidata.sh"
 else

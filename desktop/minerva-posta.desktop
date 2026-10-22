@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Posta
+Name[en]=Mail
+GenericName=Client di posta
+GenericName[en]=Mail Client
+Comment=Leggi e scrivi la tua posta in Liquid DE
+Comment[en]=Read and compose mail in Liquid DE
+Exec=minerva-posta %u
+Icon=minerva-posta
+StartupWMClass=minerva-posta
+Terminal=false
+StartupNotify=false
+Categories=Network;Email;
+MimeType=x-scheme-handler/mailto;
+Keywords=posta;email;mail;

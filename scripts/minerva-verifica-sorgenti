@@ -1,20 +1,50 @@
 #!/bin/sh
-# Controllo senza privilegi: un archivio incompleto non deve cambiare il sistema.
+# Nessuna modifica del sistema prima di avere tutti gli ingressi necessari.
 set -eu
 ROOT=$(dirname "$(dirname "$(readlink -f "$0")")")
 errore=0
-for file in minervad/pubspec.yaml minervad/bin/minervad.dart \
-    minervad/bin/terminale.dart posta/daemon/pubspec.yaml \
-    posta/daemon/pubspec.lock posta/daemon/bin/liquid_maild.dart \
-    posta/daemon/lib/liquid_maild.dart compositore/meson.build \
-    compositore/subprojects/wlroots/meson.build minerva-shell/installer.qml \
-    native/quickshell/source.json scripts/minerva-compila-posta; do
-    if [ ! -r "$ROOT/$file" ]; then
-        printf 'Sorgenti incompleti: manca %s\n' "$file" >&2
+richiedi() {
+    if [ ! -r "$ROOT/$1" ]; then
+        printf 'Sorgenti incompleti: manca %s\n' "$1" >&2
         errore=1
     fi
+}
+for manifesto in config/liquid-install-required.list config/liquid-install-apps.list; do
+    richiedi "$manifesto"
 done
+if [ "$errore" = 0 ]; then
+    while IFS= read -r file || [ -n "$file" ]; do
+        case "$file" in ''|\#*) continue ;; esac
+        richiedi "$file"
+    done < "$ROOT/config/liquid-install-required.list"
+    applicazioni=0
+    while IFS= read -r app || [ -n "$app" ]; do
+        case "$app" in
+            ''|\#*) continue ;;
+            *[!a-z0-9-]*)
+                printf 'Nome applicazione non valido nel manifesto: %s\n' "$app" >&2
+                errore=1
+                continue ;;
+        esac
+        applicazioni=$((applicazioni + 1))
+        richiedi "scripts/$app"
+        richiedi "desktop/$app.desktop"
+        richiedi "assets/icons/$app.svg"
+        if [ -r "$ROOT/scripts/$app" ] && [ ! -x "$ROOT/scripts/$app" ]; then
+            printf 'Sorgenti incompleti: scripts/%s non è eseguibile\n' "$app" >&2
+            errore=1
+        fi
+    done < "$ROOT/config/liquid-install-apps.list"
+    if [ "$applicazioni" = 0 ]; then
+        echo 'Manifesto delle applicazioni vuoto.' >&2
+        errore=1
+    fi
+fi
+if [ -r "$ROOT/scripts/minerva-posta-demone" ] && [ ! -x "$ROOT/scripts/minerva-posta-demone" ]; then
+    echo 'Sorgenti incompleti: scripts/minerva-posta-demone non è eseguibile' >&2
+    errore=1
+fi
 if [ "$errore" != 0 ]; then
-    echo 'Scarica nuovamente il progetto completo e riprova. Nessuna modifica eseguita.' >&2
+    echo 'Ripristina i file indicati o scarica il progetto completo. Nessuna modifica eseguita.' >&2
     exit 1
 fi
