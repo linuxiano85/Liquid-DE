@@ -1,0 +1,24 @@
+#!/bin/sh
+# Runs as the dedicated greeter account; uses only root-owned packaged code.
+set -u
+ROOT=/usr/lib/liquid-de
+export PATH="$ROOT/scripts:$ROOT/bin:/usr/bin:/bin"
+export HOME=/var/lib/liquid-de-login/greeter
+export MINERVA_ROOT="$ROOT"
+export MINERVA_DEMONE="$ROOT/minervad/build/minervad"
+export MINERVA_CONFIG_DIR="$HOME"
+export MINERVA_REGISTRI="$HOME"
+export XDG_CACHE_HOME="$HOME/cache"
+export MINERVA_SESSIONE=greeter
+export MINERVA_GREETER=1
+export MINERVA_ESCI_COL_FIGLIO=1
+export QT_QPA_PLATFORM=wayland
+unset LD_LIBRARY_PATH QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH QML2_IMPORT_PATH
+inizio=$(date +%s)
+"$ROOT/bin/minerva-wayland" "$ROOT/scripts/minerva-greeter-sessione"
+esito=$?
+[ "$esito" -eq 0 ] && exit 0
+if [ "$(( $(date +%s) - inizio ))" -lt 15 ]; then
+    exec agreety --cmd /usr/bin/liquid-de-sessione
+fi
+exit "$esito"

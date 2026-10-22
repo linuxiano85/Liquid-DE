@@ -86,6 +86,7 @@ class LiquidUpdateService {
       (DateTime.tryParse(_pauseUntil)?.isAfter(DateTime.now()) ?? false);
   String _path(String revision) =>
       '${downloadDirectory.path}/Liquid-DE-$revision.zip';
+  bool get packageManaged => File('$installRoot/package-install.json').existsSync();
   Map<String, dynamic> get state {
     final revision = _latest['revision'];
     final downloaded =
@@ -95,6 +96,7 @@ class LiquidUpdateService {
               h['revision'] == revision && File(_path(revision)).existsSync(),
         );
     return {
+      'packageManaged': packageManaged,
       'repository': repository,
       'phase': _phase,
       'error': _error,
@@ -144,6 +146,11 @@ class LiquidUpdateService {
 
   Future<void> init() async {
     await _readInstalled();
+    if (packageManaged) {
+      _phase = 'system';
+      _emit();
+      return;
+    }
     try {
       if (await stateFile.exists()) {
         if (await stateFile.length() > 4 * 1024 * 1024) {
@@ -236,6 +243,7 @@ class LiquidUpdateService {
   }
 
   void startAutomatic() {
+    if (packageManaged) return;
     void tick({bool scheduled = false}) {
       final previous = DateTime.tryParse(_checkedAt);
       final due =
@@ -317,8 +325,22 @@ class LiquidUpdateService {
   }
 
   Future<void> check() {
+    if (packageManaged) {
+      _phase = 'system';
+      _emit();
+      return Future.value();
+    }
     if (_closed || _downloading != null) return Future.value();
     return _checking ??= _check().whenComplete(() => _checking = null);
+  }
+
+  Future<void> updatePackages() async {
+    if (!packageManaged) return;
+    await Process.start(
+      '$installRoot/scripts/minerva-terminale',
+      ['-e', '$installRoot/scripts/liquid-package-update'],
+      mode: ProcessStartMode.detached,
+    );
   }
 
   Future<void> _check() async {
@@ -429,7 +451,7 @@ class LiquidUpdateService {
   }
 
   Future<void> download(String revision) {
-    if (_closed ||
+    if (packageManaged || _closed ||
         _checking != null ||
         !validRevision(revision) ||
         revision != _latest['revision']) {

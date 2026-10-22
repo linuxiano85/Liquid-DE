@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+"""Install signed native packages. --plan is read-only and needs no privileges."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
+import urllib.parse
+import urllib.request
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'packaging'))
+from platforms import commands, detect
+
+
+def scan(target):
+    dependencies = json.loads((ROOT / 'packaging/dependencies.json').read_text())['deb']
+    packages = sorted(set(['liquid-de', 'liquid-de-runtime', *dependencies['desktop'], *dependencies['runtime']]))
+    missing = []
+    for package in packages:
+        result = subprocess.run(['dpkg-query', '-W', '-f=${db:Status-Status}', package],
+                                capture_output=True, text=True, check=False)
+        if result.returncode or result.stdout.strip() != 'installed':
+            missing.append(package)
+    return packages, missing
+
+
+def installed_login():
+    result = subprocess.run(['dpkg-query', '-W', '-f=${db:Status-Status}', 'liquid-de-login'],
+                            capture_output=True, text=True, check=False)
+    return result.returncode == 0 and result.stdout.strip() == 'installed'
+
+
+def local_packages(directory, target, include_login=False):
+    found = {}
+    for path in sorted(directory.resolve().glob('*.deb')):
+        control = subprocess.check_output(['dpkg-deb', '-f', str(path)], text=True)
+        fields = dict(line.split(': ', 1) for line in control.splitlines()
+                      if ': ' in line and not line.startswith(' '))
+        name = fields.get('Package')
+        if name not in ('liquid-de', 'liquid-de-runtime', 'liquid-de-login'):
+            raise ValueError('Pacchetto inatteso: ' + path.name)
+        if name in found:
+            raise ValueError('Più versioni dello stesso pacchetto: ' + name)
+        if fields.get('Architecture') != 'amd64' or fields.get('X-Liquid-Target') != target['repository']:
+            raise ValueError('Pacchetto compilato per un’altra piattaforma: ' + path.name)
+        found[name] = (path, fields.get('Version'))
+    required = ['liquid-de', 'liquid-de-runtime'] + (['liquid-de-login'] if include_login else [])
+    if any(name not in found for name in required):
+        raise ValueError('Servono desktop e runtime della stessa build' + (' e il pacchetto login.' if include_login else '.'))
+    if len({found[name][1] for name in required}) != 1:
+        raise ValueError('I pacchetti devono avere la stessa versione')
+    return [str(found[name][0]) for name in required]
+
+
+def install_local(directory, target, include_login):
+    packages = local_packages(directory, target, include_login)
+    if os.geteuid() == 0 or not shutil.which('sudo'):
+        raise ValueError('Eseguire come utente normale con sudo disponibile.')
+    subprocess.run(['sudo', 'apt-get', 'update'], check=True)
+    subprocess.run(['sudo', 'apt-get', '--no-remove', '--reinstall', 'install', *packages], check=True)
+
+
+def repository_config(target):
+    config = json.loads((ROOT / 'packaging/repositories.json').read_text())
+    channel = config.get('channels', {}).get(target['repository'])
+    if not isinstance(channel, dict):
+        raise ValueError('Repository firmato non ancora pubblicato per ' +
+                         target['repository'] + '. Nessuna modifica eseguita.')
+    for field in ('url', 'keyUrl'):
+        url = urllib.parse.urlsplit(channel.get(field, ''))
+        if url.scheme != 'https' or not url.hostname or url.username or url.password or url.query or url.fragment:
+            raise ValueError('Origine repository non valida: ' + field)
+        if not re.fullmatch(r'https://[A-Za-z0-9./:_~-]+', channel[field]):
+            raise ValueError('Caratteri non consentiti nel repository')
+    if not re.fullmatch(r'[0-9a-f]{64}', channel.get('keySha256', '')):
+        raise ValueError('Checksum della chiave mancante')
+    if not re.fullmatch(r'[A-F0-9]{40,64}', channel.get('fingerprint', '')):
+        raise ValueError('Fingerprint della chiave mancante')
+    return channel
+
+
+def install(target, channel, include_login=False):
+    # Only fixed commands and validated repository data cross the privilege boundary.
+    if os.geteuid() == 0:
+        raise ValueError('Avvia il bootstrap come utente normale; userà sudo.')
+    if not shutil.which('sudo') or not shutil.which('gpg'):
+        raise ValueError('Servono sudo e gpg prima di configurare il repository.')
+    tool = 'apt-get'
+    if not shutil.which(tool):
+        raise ValueError('Gestore pacchetti non disponibile: ' + tool)
+    with tempfile.TemporaryDirectory(prefix='liquid-repository-') as temp:
+        folder = Path(temp)
+        key = folder / 'key.asc'
+        with urllib.request.urlopen(channel['keyUrl'], timeout=30) as response:
+            if urllib.parse.urlsplit(response.geturl()).scheme != 'https':
+                raise ValueError('Reindirizzamento chiave non HTTPS')
+            data = response.read(1024 * 1024 + 1)
+        if len(data) > 1024 * 1024 or hashlib.sha256(data).hexdigest() != channel['keySha256']:
+            raise ValueError('Chiave repository diversa da quella registrata')
+        key.write_bytes(data)
+        home = folder / 'gnupg'
+        home.mkdir(mode=0o700)
+        info = subprocess.check_output(['gpg', '--homedir', str(home), '--batch', '--with-colons',
+                                       '--show-keys', str(key)], text=True)
+        fingerprints = [line.split(':')[9] for line in info.splitlines() if line.startswith('fpr:')]
+        if not fingerprints or fingerprints[0] != channel['fingerprint']:
+            raise ValueError('Fingerprint repository non corrispondente')
+
+        def run(*args):
+            subprocess.run(['sudo', *map(str, args)], check=True)
+
+        family = target['family']
+        url = channel['url'].rstrip('/')
+        if family == 'deb':
+            binary = folder / 'liquid-de.gpg'
+            subprocess.run(['gpg', '--homedir', str(home), '--batch', '--dearmor',
+                            '--output', str(binary), str(key)], check=True)
+            source = folder / 'liquid-de.sources'
+            source.write_text('Types: deb\nURIs: ' + url +
+                              '\nSuites: stable\nComponents: main\nArchitectures: amd64\n'
+                              'Signed-By: /usr/share/keyrings/liquid-de.gpg\n')
+            run('install', '-Dm644', binary, '/usr/share/keyrings/liquid-de.gpg')
+            run('install', '-Dm644', source, '/etc/apt/sources.list.d/liquid-de.sources')
+        for command in commands(target, include_login=include_login):
+            run(*command)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--plan', action='store_true')
+    parser.add_argument('--scan', action='store_true', help='Controlla i pacchetti senza modificare il sistema')
+    parser.add_argument('--packages-dir', type=Path, help='Installa i pacchetti candidati locali, prima della pubblicazione')
+    parser.add_argument('--with-login', action='store_true', help='Installa anche Minerva Login senza attivarlo')
+    parser.add_argument('--build-local', action='store_true', help='Compila e installa senza un repository Liquid pubblicato')
+    parser.add_argument('--work-dir', type=Path, help='Directory privata di build, fuori dai sorgenti')
+    parser.add_argument('--jobs', type=int, default=2, help='Processi paralleli della build (di serie 2)')
+    args = parser.parse_args()
+    if args.build_local and args.packages_dir:
+        parser.error('--build-local e --packages-dir sono alternativi')
+    if not 1 <= args.jobs <= 32:
+        parser.error('--jobs deve essere compreso fra 1 e 32')
+    target = detect()
+    if args.scan:
+        packages, missing = scan(target)
+        print('total\t' + str(len(packages)))
+        for package in missing:
+            print('missing\t' + package)
+        return
+    if args.plan:
+        print(json.dumps(target, indent=2))
+        if args.build_local:
+            from local_install import build_plan
+            work = args.work_dir or Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache'))) / 'liquid-de/local-build' / target['repository']
+            selected = build_plan(ROOT, work.resolve(), target, args.jobs, args.with_login)
+        else:
+            selected = commands(target, include_login=args.with_login)
+        for command in selected:
+            print(shlex.join(command if args.build_local else ['sudo', *command]))
+        return
+    include_login = args.with_login or installed_login()
+    if args.build_local:
+        from local_install import install as build_and_install
+        work = args.work_dir or Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache'))) / 'liquid-de/local-build' / target['repository']
+        build_and_install(ROOT, work, target, args.jobs, include_login, install_local)
+        return
+    if args.packages_dir:
+        install_local(args.packages_dir, target, include_login)
+        return
+    channel = repository_config(target)  # Fail before touching system configuration.
+    _, missing = scan(target)
+    if missing:
+        print('Pacchetti mancanti: ' + ', '.join(missing), flush=True)
+    print('Installazione Liquid DE: ' + target['repository'], flush=True)
+    install(target, channel, include_login)
+    print('Liquid DE installato. La sessione sarà disponibile al prossimo accesso; il gestore di accesso attuale resta selezionato.')
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print('Liquid DE: ' + str(error), file=sys.stderr)
+        sys.exit(1)

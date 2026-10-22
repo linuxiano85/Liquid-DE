@@ -148,7 +148,14 @@ class InstallerTests(unittest.TestCase):
     def test_missing_dependency_command_is_caught_before_build(self):
         with tempfile.TemporaryDirectory() as directory:
             f = Fixture(directory)
-            (f.case / 'mockbin/qs').unlink()
+            # The developer machine may have a real qs in /usr/bin. Override
+            # only this lookup so the fixture actually simulates its absence.
+            missing_qs = f.case / 'missing-qs.bash'
+            put(missing_qs, 'command() {\n'
+                '  if [[ $1 == -v && $2 == qs ]]; then return 1; fi\n'
+                '  builtin command "$@"\n'
+                '}\n')
+            f.env['BASH_ENV'] = str(missing_qs)
             self.assertNotEqual(f.run().returncode, 0)
             self.assertFalse(f.registered)
             self.assertFalse(any(x['command'] == 'meson' for x in f.trace()))

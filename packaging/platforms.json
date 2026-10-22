@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "architecture": "x86_64",
+  "targets": {
+    "debian": {"family": "deb", "versions": ["13"]},
+    "ubuntu": {"family": "deb", "versions": ["24.04", "26.04"]},
+    "linuxmint": {"family": "deb", "versions": ["22"], "base": "ubuntu"}
+  },
+  "derivatives": {}
+}

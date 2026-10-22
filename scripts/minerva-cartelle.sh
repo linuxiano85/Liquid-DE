@@ -47,8 +47,14 @@ CARTELLA_CONFIG_DI_PARTENZA="$(_base_xdg XDG_CONFIG_HOME .config)/$LIQUID_NOME"
 # icone). La sessione mette `bin/` in testa al PATH e `share/` in
 # XDG_DATA_DIRS. `MINERVA_BIN` resta per le prove, che possono indicare una
 # build da provare senza installarla.
-PREFISSO="${LIQUID_PREFISSO:-$HOME/.local/opt/$LIQUID_NOME}"
+_liquid_script_root="$(dirname "$(dirname "$(readlink -f "$0")")")"
+if [ -r "$_liquid_script_root/package-install.json" ]; then
+    PREFISSO="$_liquid_script_root"
+else
+    PREFISSO="${LIQUID_PREFISSO:-$HOME/.local/opt/$LIQUID_NOME}"
+fi
 CARTELLA_BIN="${MINERVA_BIN:-$PREFISSO/bin}"
+[ ! -r "$_liquid_script_root/package-install.json" ] || CARTELLA_BIN="$PREFISSO/bin"
 
 # ── La radice installata ───────────────────────────────────────────────────
 #
@@ -59,4 +65,9 @@ CARTELLA_BIN="${MINERVA_BIN:-$PREFISSO/bin}"
 # Scaricati a Documenti, nessuna app di Minerva si apriva più — nemmeno le
 # Impostazioni — e al riavvio non sarebbe partita nemmeno la sessione. I
 # sorgenti adesso sono solo il posto da cui si costruisce.
-CARTELLA_RADICE="${LIQUID_RADICE:-$PREFISSO/radice}"
+if [ -r "$_liquid_script_root/package-install.json" ]; then
+    CARTELLA_RADICE="$_liquid_script_root"
+else
+    CARTELLA_RADICE="${LIQUID_RADICE:-$PREFISSO/radice}"
+fi
+unset _liquid_script_root

@@ -86,9 +86,16 @@ def main():
         '-DCLI11_BUILD_TESTS=OFF', '-DCLI11_BUILD_EXAMPLES=OFF',
         '-DCMAKE_INSTALL_PREFIX=' + str(prefix))
     run('cmake', '--install', work / 'cli-build')
+    package_options = []
+    if os.environ.get('LIQUID_PACKAGE_BUILD') == '1':
+        # cpptrace is absent from some LTS repositories. Journal/core dumps
+        # remain available without fetching an unpinned crash-reporting SDK.
+        package_options = ['-DCRASH_HANDLER=OFF', '-DHYPRLAND=OFF']
     run('cmake', '-S', source, '-B', work / 'build', '-GNinja',
         '-DCMAKE_BUILD_TYPE=RelWithDebInfo', '-DBUILD_TESTING=ON',
-        '-DDISTRIBUTOR=Liquid DE private test', '-DCMAKE_PREFIX_PATH=' + str(prefix))
+        '-DDISTRIBUTOR=Liquid DE', '-DCMAKE_PREFIX_PATH=' + str(prefix) +
+        ((';' + os.environ['CMAKE_PREFIX_PATH']) if os.environ.get('CMAKE_PREFIX_PATH') else ''),
+        *package_options)
     run('cmake', '--build', work / 'build', '-j', args.jobs)
     output = ROOT / 'libexec/quickshell'
     output.mkdir(parents=True, exist_ok=True)

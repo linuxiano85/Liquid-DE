@@ -13,6 +13,16 @@ def runtime():
     root = Path(__file__).resolve().parents[1]
     folder = root / 'libexec/quickshell'
     executable = folder / 'qs'
+    if (root / 'package-install.json').is_file():
+        # Native packages need neither pkg-config nor a fallback to system Qt.
+        metadata = json.loads((folder / 'runtime.json').read_text())
+        private = json.loads((root / 'runtime/runtime.json').read_text())
+        if (metadata.get('schema') != 1 or private.get('schema') != 1
+                or metadata.get('qtVersion') != private.get('qtVersion')
+                or not os.access(executable, os.X_OK)
+                or metadata.get('sha256') != hashlib.sha256(executable.read_bytes()).hexdigest()):
+            raise RuntimeError('Runtime Liquid incompleto: reinstallare liquid-de-runtime e liquid-de.')
+        return str(executable)
     if os.environ.get('MINERVA_QUICKSHELL_SYSTEM') != '1' and executable.is_file():
         try:
             metadata = json.loads((folder / 'runtime.json').read_text())
@@ -39,6 +49,10 @@ def main():
     if sys.argv[1:] == ['--runtime']:
         print(executable)
         return
+    if (Path(__file__).resolve().parents[1] / 'package-install.json').is_file():
+        for key in ('QT_PLUGIN_PATH', 'QT_QPA_PLATFORM_PLUGIN_PATH', 'QML2_IMPORT_PATH', 'LD_LIBRARY_PATH'):
+            os.environ.pop(key, None)
+        os.environ['QML_IMPORT_PATH'] = str(Path(__file__).resolve().parents[1] / 'minerva-shell/native')
     # Gli argomenti rimangono separati: percorsi e opzioni non passano da sh.
     os.execv(executable, [executable, *sys.argv[1:]])
 

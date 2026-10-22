@@ -95,7 +95,6 @@ artifacts/
 
 # Materiale locale conservato in Liquid_test; escluso dalla pubblicazione.
 /audit
-/tests
 /docs/NATIVE-GRAPHICS-PAM.md
 /docs/SHELL-FILE-REVIEW.md
 /docs/SHELL-STABILIZATION.md
@@ -122,7 +121,8 @@ artifacts/
 
 # I collegamenti di sviluppo non entrano nei pacchetti pubblici.
 /audit/
-/tests/
+/tests/*
+!/tests/packaging/
 /minervad/test/
 /assets/marchio/liquid/proposte.png
 /assets/marchio/liquid/proposte.svg
@@ -131,4 +131,3 @@ artifacts/
 /libexec/quickshell/
 
 native/mpv/build/
-

@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+"""Retire only launchers pointing to the old user install, preserving its files."""
+import json
+import os
+from pathlib import Path
+import shutil
+import sys
+import tempfile
+
+
+def migrate(home, root, state):
+    if not (root / 'package-install.json').is_file():
+        return
+    old = home / '.local/opt/liquid-de'
+    marker = state / 'package-migration.json'
+    if marker.exists() or not old.is_dir():
+        return
+    state.mkdir(parents=True, exist_ok=True)
+    # Backups are per-user; never scan or alter another user's HOME as root.
+    backup = Path(tempfile.mkdtemp(prefix='legacy-launchers-', dir=state))
+    moved = []
+    data = Path(os.environ.get('XDG_DATA_HOME') or home / '.local/share')
+    config = Path(os.environ.get('XDG_CONFIG_HOME') or home / '.config')
+    for base in (data / 'applications', config / 'autostart'):
+        for entry in base.glob('*.desktop'):
+            if entry.is_symlink() or not entry.is_file():
+                continue
+            content = entry.read_text(errors='replace')
+            if any(line.startswith(('Exec=', 'TryExec=')) and str(old) in line for line in content.splitlines()):
+                destination = backup / base.name / entry.name
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(entry, destination)
+                moved.append({'from': str(entry), 'backup': str(destination)})
+    marker.write_text(json.dumps({'schema': 1, 'legacyRoot': str(old),
+                                 'launchers': moved, 'backup': str(backup)}, indent=2) + '\n')
+    marker.chmod(0o600)
+
+
+if __name__ == '__main__':
+    if os.geteuid() == 0:
+        print('La migrazione va eseguita come utente normale.', file=sys.stderr)
+        sys.exit(1)
+    migrate(Path.home(), Path(__file__).resolve().parents[1],
+            Path(os.environ.get('XDG_STATE_HOME') or Path.home() / '.local/state') / 'liquid-de')

@@ -2387,6 +2387,9 @@ class WebSocketServer {
       case 'liquid_update_check':
         await _liquidUpdate.check();
         break;
+      case 'liquid_update_package':
+        await _liquidUpdate.updatePackages();
+        break;
       case 'liquid_update_download':
         if (msg['revision'] is String) await _liquidUpdate.download(msg['revision']);
         break;

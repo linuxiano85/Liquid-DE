@@ -1,0 +1,110 @@
+#!/usr/bin/python3 -I
+"""Native-package login manager. Changes apply on the next boot, never now."""
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+ALLOWED = {'greetd.service', 'sddm.service', 'lightdm.service', 'gdm.service',
+           'gdm3.service', 'plasmalogin.service'}
+STATE = Path('/var/lib/liquid-de-login')
+PREVIOUS = STATE / 'previous.json'
+DROPIN = Path('/etc/systemd/system/greetd.service.d/50-liquid-de.conf')
+
+
+def command(*args):
+    subprocess.run(list(args), check=True)
+
+
+def current():
+    path = Path('/etc/systemd/system/display-manager.service')
+    return path.resolve().name if path.is_symlink() or path.exists() else ''
+
+
+def validate(unit):
+    if unit not in ALLOWED:
+        raise ValueError('Gestore di accesso non consentito')
+    subprocess.run(['systemctl', 'cat', unit], stdout=subprocess.DEVNULL, check=True)
+
+
+def prepare():
+    command('systemd-sysusers', '/usr/lib/sysusers.d/liquid-de-login.conf')
+    command('systemd-tmpfiles', '--create', '/usr/lib/tmpfiles.d/liquid-de-login.conf')
+
+
+def configure():
+    prepare()
+    DROPIN.parent.mkdir(parents=True, exist_ok=True)
+    text = '[Service]\nExecStart=\nExecStart=/usr/bin/greetd --config /etc/greetd/liquid-de.toml\n'
+    if DROPIN.exists() and DROPIN.read_text() != text:
+        raise ValueError('Configurazione Liquid modificata: ' + str(DROPIN))
+    DROPIN.write_text(text)
+    DROPIN.chmod(0o644)
+    command('systemctl', 'daemon-reload')
+
+
+def select(unit):
+    validate(unit)
+    previous = current()
+    STATE.mkdir(mode=0o755, parents=True, exist_ok=True)
+    if unit == 'greetd.service':
+        if previous and previous not in ALLOWED:
+            raise ValueError('Impossibile conservare il gestore attuale: ' + previous)
+        # Prepare and validate before disabling any existing manager.
+        configure()
+        if previous != unit or not PREVIOUS.exists():
+            PREVIOUS.write_text(json.dumps({'unit': previous}) + '\n')
+            PREVIOUS.chmod(0o600)
+    if previous == unit:
+        return
+    if previous in ALLOWED:
+        command('systemctl', 'disable', previous)
+    try:
+        command('systemctl', 'enable', '--force', unit)
+    except subprocess.SubprocessError:
+        if previous in ALLOWED:
+            command('systemctl', 'enable', '--force', previous)
+        raise
+    print('Gestore selezionato: ' + unit + '. Avrà effetto al prossimo riavvio.')
+
+
+def main():
+    if os.geteuid() != 0:
+        raise ValueError('Eseguire con sudo o pkexec.')
+    action = sys.argv[1] if len(sys.argv) > 1 else 'aiuto'
+    if action == 'gestore' and len(sys.argv) == 3:
+        select(sys.argv[2])
+    elif action == 'attiva' and len(sys.argv) == 2:
+        select('greetd.service')
+    elif action == 'indietro' and len(sys.argv) == 2:
+        previous = json.loads(PREVIOUS.read_text())['unit']
+        if previous:
+            select(previous)
+        else:
+            command('systemctl', 'disable', 'greetd.service')
+        DROPIN.unlink(missing_ok=True)
+        command('systemctl', 'daemon-reload')
+    elif action == 'rimuovi' and len(sys.argv) == 2:
+        if DROPIN.exists():
+            if current() == 'greetd.service':
+                previous = json.loads(PREVIOUS.read_text())['unit']
+                if previous:
+                    select(previous)
+                else:
+                    command('systemctl', 'disable', 'greetd.service')
+            DROPIN.unlink()
+            command('systemctl', 'daemon-reload')
+    elif action in ('installa', 'configura') and len(sys.argv) == 2:
+        prepare()
+        print('Minerva Login pronto; il gestore attuale resta attivo.')
+    else:
+        raise ValueError('Uso: minerva-greetd installa|configura|attiva|indietro|gestore UNITÀ')
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+        print('Minerva Login: ' + str(error), file=sys.stderr)
+        sys.exit(1)

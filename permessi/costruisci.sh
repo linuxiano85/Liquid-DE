@@ -14,6 +14,10 @@ set -eu
 QUI="$(cd "$(dirname "$0")" && pwd)"
 . "$QUI/../scripts/minerva-cartelle.sh"
 DOVE="$CARTELLA_BIN"
+if [ -n "${DESTDIR:-}" ]; then
+    case "$DESTDIR" in /*) ;; *) echo 'DESTDIR deve essere assoluto' >&2; exit 1 ;; esac
+    DOVE="$DESTDIR/usr/lib/liquid-de/bin"
+fi
 
 if ! pkg-config --exists polkit-agent-1; then
     echo "FERMO: mancano gli header di polkit." >&2
@@ -55,7 +59,7 @@ echo "fatto: $DOVE/minerva-polkit"
 
 # Se ne sta girando uno, il codice nuovo entra al prossimo accesso: si dice
 # adesso, non fra mezz'ora.
-if pgrep -x minerva-polkit >/dev/null 2>&1; then
+if [ -z "${DESTDIR:-}" ] && pgrep -x minerva-polkit >/dev/null 2>&1; then
     echo ""
     echo "NOTA: minerva-polkit sta già girando. Il binario è stato sostituito"
     echo "per rinomina, quindi quel processo continua col codice di prima:"

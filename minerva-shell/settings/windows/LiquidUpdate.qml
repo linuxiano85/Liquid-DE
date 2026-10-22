@@ -56,6 +56,7 @@ PaginaWindows {
     }
     readonly property string titoloStato: {
         if (!Core.Ipc.connected) return tr("Servizio aggiornamenti non disponibile", "Update service unavailable");
+        if (stato.packageManaged) return tr("Aggiornamenti gestiti dal sistema", "Updates managed by the system");
         if (stato.phase === "checking") return tr("Verifica degli aggiornamenti in corso", "Checking for updates");
         if (stato.phase === "downloading") return tr("Download in corso", "Downloading");
         if (stato.phase === "error") return tr("Impossibile completare l’operazione", "Unable to complete the operation");
@@ -112,7 +113,8 @@ PaginaWindows {
             }
             Text {
                 width: parent.width
-                text: pagina.stato.checkedAt ? pagina.tr("Ultima verifica: ", "Last checked: ") + pagina.data(pagina.stato.checkedAt)
+                text: pagina.stato.packageManaged ? pagina.tr("Installa gli aggiornamenti dal gestore pacchetti della distribuzione.", "Install updates using your distribution's package manager.")
+                    : pagina.stato.checkedAt ? pagina.tr("Ultima verifica: ", "Last checked: ") + pagina.data(pagina.stato.checkedAt)
                     : pagina.tr("Gli aggiornamenti del progetto arrivano da GitHub.", "Project updates come from GitHub.")
                 textFormat: Text.PlainText
                 wrapMode: Text.WordWrap
@@ -128,8 +130,8 @@ PaginaWindows {
             y: parent.stretto ? descrizioni.y + descrizioni.implicitHeight + 16 : 38
             accento: true
             enabled: Core.Ipc.connected && !pagina.occupato
-            testo: pagina.tr("Verifica disponibilità aggiornamenti", "Check for updates")
-            onPremuto: pagina.invia("check")
+            testo: pagina.stato.packageManaged ? pagina.tr("Aggiorna dal terminale", "Update in terminal") : pagina.tr("Verifica disponibilità aggiornamenti", "Check for updates")
+            onPremuto: pagina.invia(pagina.stato.packageManaged ? "package" : "check")
         }
     }
     Text {
@@ -261,7 +263,7 @@ PaginaWindows {
         Item { width: 1; height: 8 }
     }
     Text {
-        visible: pagina.vista === ""
+        visible: pagina.vista === "" && !pagina.stato.packageManaged
         text: pagina.tr("Altre opzioni", "More options")
         color: W.Style.text
         font.family: W.Style.font
@@ -270,7 +272,7 @@ PaginaWindows {
         bottomPadding: 8
     }
     SchedaImpostazione {
-        visible: pagina.vista === ""
+        visible: pagina.vista === "" && !pagina.stato.packageManaged
         titolo: pagina.tr("Sospendi aggiornamenti", "Pause updates")
         descrizione: pagina.stato.paused ? pagina.tr("Sospesi fino al ", "Paused until ") + pagina.data(pagina.stato.pauseUntil) : ""
         PulsanteWindows {
