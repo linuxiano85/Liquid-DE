@@ -29,8 +29,16 @@ ShellRoot {
     property string logPath: ""
     property string errorText: ""
     property string resultText: ""
+    property var installWarnings: []
 
     function addLog(line) {
+        var warningPrefix = "@@MINERVA_WARNING@@";
+        if (line.indexOf(warningPrefix) === 0) {
+            var warning = line.substring(warningPrefix.length).trim();
+            if (warning !== "" && app.installWarnings.indexOf(warning) < 0)
+                app.installWarnings = app.installWarnings.concat([warning]);
+            return;
+        }
         if (line.indexOf("@@MINERVA_STAGE@@") === 0) {
             app.stage = line.substring(17).trim();
             return;
@@ -60,6 +68,7 @@ ShellRoot {
         app.step = 2;
         app.stage = "Preparazione dell’installazione";
         app.logText = "";
+        app.installWarnings = [];
         app.logPath = "";
         app.errorText = "";
         installProc.command = [app.rootPath + "/scripts/minerva-install-run"];
@@ -75,12 +84,18 @@ ShellRoot {
         managersProc.running = true;
     }
 
+    function readinessText() {
+        return app.installWarnings.length > 0
+            ? "Liquid DE è installato con limitazioni."
+            : "Liquid DE è pronto.";
+    }
+
     function finishChoice() {
         if (app.selectedManager === "" || app.selectedManager === app.currentManager) {
             console.info("[installer] Gestore di accessi conservato: " + app.currentManager);
             app.resultText = app.currentManager === ""
-                ? "Liquid DE è pronto. Nessun gestore di accessi è stato cambiato."
-                : "Liquid DE è pronto. Il gestore di accessi attuale resta in uso.";
+                ? app.readinessText() + " Nessun gestore di accessi è stato cambiato."
+                : app.readinessText() + " Il gestore di accessi attuale resta in uso.";
             app.step = 4;
             return;
         }
@@ -171,7 +186,7 @@ ShellRoot {
             console.info("[installer] Cambio gestore terminato: codice " + code);
             app.choosing = false;
             if (code === 0) {
-                app.resultText = "Liquid DE è pronto. Il gestore scelto sarà usato dal prossimo riavvio.";
+                app.resultText = app.readinessText() + " Il gestore scelto sarà usato dal prossimo riavvio.";
                 app.step = 4;
             } else if (code !== 126) {
                 app.errorText = app.errorText || "Il gestore non è stato cambiato.";
@@ -365,7 +380,7 @@ ShellRoot {
                           app.step === 1 ? "Prepariamo il sistema" :
                           app.step === 2 ? "Liquid DE prende forma" :
                           app.step === 3 ? "Scegli come entrare" :
-                          app.step === 4 ? "Tutto pronto" : "Serve un intervento"
+                          app.step === 4 ? (app.installWarnings.length > 0 ? "Installato con limitazioni" : "Tutto pronto") : "Serve un intervento"
                     color: app.ink
                     font.family: "Adwaita Sans"
                     font.pixelSize: 29
@@ -384,6 +399,15 @@ ShellRoot {
                     font.pixelSize: 16
                     wrapMode: Text.WordWrap
                     lineHeight: 1.3
+                }
+
+                Text {
+                    visible: (app.step === 3 || app.step === 4) && app.installWarnings.length > 0
+                    width: parent.width
+                    text: "Componenti da verificare:\n• " + app.installWarnings.join("\n• ")
+                    color: "#FFD58A"
+                    font.pixelSize: 14
+                    wrapMode: Text.WordWrap
                 }
 
                 Column {

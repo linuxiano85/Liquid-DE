@@ -1,0 +1,53 @@
+name: Installer regressions
+
+on:
+  pull_request:
+  push:
+    branches: [principale, 'codex/installer-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installer-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  regression-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install test tools
+        run: sudo apt-get update && sudo apt-get install -y rsync desktop-file-utils
+      - name: Verify source completeness
+        run: sh scripts/minerva-verifica-sorgenti
+      - name: Validate shell syntax and desktop entry
+        run: |
+          bash -n scripts/install-minerva.sh scripts/minerva-install-run
+          sh -n scripts/minerva-verifica-sorgenti scripts/minerva-posta scripts/minerva-posta-demone
+          desktop-file-validate desktop/minerva-posta.desktop
+      - name: Installer failure and packaging regressions
+        run: python3 -m unittest discover -s tests/installer -v
+
+  arch-polkit-build:
+    runs-on: ubuntu-24.04
+    container: archlinux:base
+    timeout-minutes: 15
+    steps:
+      - name: Install Arch build dependencies
+        run: pacman -Syu --noconfirm --needed git base-devel meson ninja pkgconf polkit python
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check installation inputs on Arch
+        run: sh scripts/minerva-verifica-sorgenti
+      - name: Compile the real authentication agent
+        env:
+          LIQUID_PREFISSO: /tmp/liquid-polkit-ci
+        run: |
+          sh permessi/costruisci.sh
+          test -x "$LIQUID_PREFISSO/bin/minerva-polkit"

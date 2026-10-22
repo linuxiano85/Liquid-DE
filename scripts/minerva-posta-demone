@@ -1,0 +1,15 @@
+#!/bin/sh
+# Il servizio possiede il lock di istanza; non toccare token o PID altrui.
+set -eu
+SELF=$(readlink -f "$0")
+ROOT=$(dirname "$(dirname "$SELF")")
+BUNDLE="$ROOT/posta/daemon/build/cli/bundle"
+if [ ! -x "$BUNDLE/bin/liquid_maild" ] || [ ! -r "$BUNDLE/lib/libsqlite3.so" ]; then
+    echo 'minerva-posta-demone: bundle Posta incompleto; ripeti l’installazione.' >&2
+    exit 1
+fi
+if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
+    echo 'minerva-posta-demone: XDG_RUNTIME_DIR non impostata.' >&2
+    exit 78
+fi
+exec "$BUNDLE/bin/liquid_maild" "$@"
