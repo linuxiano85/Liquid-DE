@@ -14,6 +14,10 @@ progetto.
 > Liquid DE è in sviluppo attivo. La versione 1.0 è un obiettivo del progetto,
 > non una release già pubblicata. L'installazione guidata è pensata per Arch
 > Linux e derivate con `pacman`.
+>
+> È in preparazione il [supporto Debian, Ubuntu e Mint](docs/installazione-debian.md)
+> tramite pacchetti APT e runtime privato. Il repository pubblico e la prima
+> sessione completa su Mint non sono ancora validati. Fedora seguirà dopo.
 
 ## Il desktop
 

@@ -1,0 +1,84 @@
+{
+  "schema": 1,
+  "qtVersion": "6.10.2",
+  "sources": [
+    {
+      "name": "wayland",
+      "version": "1.24.0",
+      "url": "https://gitlab.freedesktop.org/wayland/wayland/-/releases/1.24.0/downloads/wayland-1.24.0.tar.xz",
+      "sha256": "82892487a01ad67b334eca83b54317a7c86a03a89cfadacfef5211f11a5d0536",
+      "options": [
+        "-Ddocumentation=false",
+        "-Dtests=false"
+      ]
+    },
+    {
+      "name": "wayland-protocols",
+      "version": "1.47",
+      "url": "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/1.47/downloads/wayland-protocols-1.47.tar.xz",
+      "sha256": "5fd4349bcbc9bab9a46f8cf77d1f434296a7a052c87440a094f63fcf62a58e20",
+      "options": [
+        "-Dtests=false"
+      ]
+    },
+    {
+      "name": "libdrm",
+      "version": "2.4.129",
+      "url": "https://dri.freedesktop.org/libdrm/libdrm-2.4.129.tar.xz",
+      "sha256": "5978183f978d697e26a50ba066174964efb0ab97caa1ecaa1b861fbe5ddf77dc",
+      "options": [
+        "-Dtests=false",
+        "-Dman-pages=disabled"
+      ],
+      "licenseFiles": [
+        "data/meson.build"
+      ]
+    },
+    {
+      "name": "libxkbcommon",
+      "version": "1.8.0",
+      "url": "https://codeload.github.com/xkbcommon/libxkbcommon/tar.gz/refs/tags/xkbcommon-1.8.0",
+      "sha256": "025c53032776ed850fbfb92683a703048cd70256df4ac1a1ec41ed3455d5d39c",
+      "options": [
+        "-Denable-docs=false",
+        "-Denable-tools=false",
+        "-Denable-x11=false",
+        "-Denable-xkbregistry=false"
+      ]
+    },
+    {
+      "name": "pixman",
+      "version": "0.46.4",
+      "url": "https://cairographics.org/releases/pixman-0.46.4.tar.xz",
+      "sha512": "83b133e7969ba34f883f4e08dcc5d388c4397f43ce836c191c05945fe77c16ff501d531600780c12678a0d08105828a6bdeff2156b63f9c1a84087bc7f40ae9f",
+      "options": [
+        "-Dtests=disabled",
+        "-Ddemos=disabled"
+      ]
+    },
+    {
+      "name": "libdisplay-info",
+      "version": "0.2.0",
+      "url": "https://gitlab.freedesktop.org/emersion/libdisplay-info/-/releases/0.2.0/downloads/libdisplay-info-0.2.0.tar.xz",
+      "sha256": "5a2f002a16f42dd3540c8846f80a90b8f4bdcd067a94b9d2087bc2feae974176",
+      "options": []
+    },
+    {
+      "name": "qt",
+      "version": "6.10.2",
+      "url": "https://download.qt.io/archive/qt/6.10/6.10.2/single/qt-everywhere-src-6.10.2.tar.xz",
+      "sha256": "c3df0f0e421130cc52ed81cb712358804471ce9bd2a41d97828f9f5b1bf7fed2",
+      "modules": [
+        "qtbase",
+        "qtshadertools",
+        "qtdeclarative",
+        "qtsvg",
+        "qtwayland",
+        "qtmultimedia",
+        "qtimageformats",
+        "qt5compat",
+        "qtwebsockets"
+      ]
+    }
+  ]
+}

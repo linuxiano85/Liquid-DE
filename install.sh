@@ -3,6 +3,14 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Debian-family installations use native packages. Keep the existing Arch
+# source installer until its replacement has been validated separately.
+if [[ ${1:-} == --source ]]; then
+    shift
+elif [[ ${1:-} == --plan || ${1:-} == --scan || -r /etc/debian_version || ! -r /etc/arch-release ]]; then
+    command -v python3 >/dev/null || { echo 'Serve Python 3 per il bootstrap Debian (sudo apt install python3).' >&2; exit 1; }
+    exec python3 "$ROOT/scripts/liquid-package-install" "$@"
+fi
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/liquid-de/installer"
 mkdir -p "$STATE"
 chmod 700 "$STATE"

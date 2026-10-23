@@ -52,12 +52,12 @@ def selected_pages(expression, count):
 
 def qt_application():
     os.environ['QT_QPA_PLATFORM'] = 'offscreen'
-    from PySide6.QtGui import QGuiApplication
+    from liquid_print_qt import QGuiApplication
     return QGuiApplication.instance() or QGuiApplication(['liquid-print-document'])
 
 
 def open_pdf(path):
-    from PySide6.QtPdf import QPdfDocument
+    from liquid_print_qt import QPdfDocument
     pdf = QPdfDocument()
     if pdf.load(str(path)) != QPdfDocument.Error.None_ or not 1 <= pdf.pageCount() <= 20000:
         raise ValueError('unsupported-or-locked-pdf')
@@ -80,8 +80,8 @@ def prepare(source):
         if extension == '.pdf':
             shutil.copyfile(path, output)
         else:
-            from PySide6.QtCore import QMarginsF, QRectF
-            from PySide6.QtGui import QImageReader, QPageLayout, QPageSize, QPainter, QPdfWriter, QTextDocument
+            from liquid_print_qt import QMarginsF, QRectF
+            from liquid_print_qt import QImageReader, QPageLayout, QPageSize, QPainter, QPdfWriter, QTextDocument
             writer = QPdfWriter(str(output))
             writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
             writer.setPageMargins(QMarginsF(10,10,10,10), QPageLayout.Unit.Millimeter)
@@ -142,8 +142,8 @@ def preview(token, page, monochrome=False):
         raise ValueError('invalid-color')
     target = directory/('page-'+str(page)+('-gray' if monochrome else '')+'.png')
     if not target.exists():
-        from PySide6.QtCore import QSize, Qt
-        from PySide6.QtGui import QImage, QPainter
+        from liquid_print_qt import QSize, Qt
+        from liquid_print_qt import QImage, QPainter
         pdf = open_pdf(directory/'document.pdf')
         size = pdf.pagePointSize(page-1)
         ratio = min(1100/size.width(),1100/size.height())
@@ -173,8 +173,8 @@ def number(value,low,high):
 
 
 def scan_preview(item):
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QImage,QImageReader,QPainter,QTransform
+    from liquid_print_qt import Qt
+    from liquid_print_qt import QImage,QImageReader,QPainter,QTransform
     if not isinstance(item,dict) or not isinstance(item.get('path'),str):raise ValueError('invalid-scan-pages')
     source=Path(item['path']).resolve(strict=True)
     if not source.is_file() or source.stat().st_size>512*1024*1024:raise ValueError('unreadable-or-large-file')
@@ -215,8 +215,8 @@ def scan_preview(item):
 
 
 def paint_annotations(painter,items,width,height,resolution):
-    from PySide6.QtCore import QPointF,QRectF,Qt
-    from PySide6.QtGui import QBrush,QColor,QFont,QPen,QPolygonF
+    from liquid_print_qt import QPointF,QRectF,Qt
+    from liquid_print_qt import QBrush,QColor,QFont,QPen,QPolygonF
     if not isinstance(items,list) or len(items)>1000:raise ValueError('invalid-page-edit')
     for item in items:
         if not isinstance(item,dict):raise ValueError('invalid-page-edit')
@@ -260,7 +260,7 @@ def paint_annotations(painter,items,width,height,resolution):
 
 
 def paint_page_annotations(painter,item,width,height,resolution):
-    from PySide6.QtCore import QRectF
+    from liquid_print_qt import QRectF
     painter.save()
     try:
         painter.setClipRect(QRectF(0,0,width,height))
@@ -274,8 +274,8 @@ def paint_page_annotations(painter,item,width,height,resolution):
 
 
 def compose(pages,title='Documento scansionato.pdf'):
-    from PySide6.QtCore import QMarginsF,QRectF,QSizeF
-    from PySide6.QtGui import QImageReader,QPageLayout,QPageSize,QPainter,QPdfWriter,QTransform
+    from liquid_print_qt import QMarginsF,QRectF,QSizeF
+    from liquid_print_qt import QImageReader,QPageLayout,QPageSize,QPainter,QPdfWriter,QTransform
     if not isinstance(pages,list) or not 1<=len(pages)<=1000:raise ValueError('invalid-scan-pages')
     if not isinstance(title,str) or not title or len(title)>255:raise ValueError('invalid-document-title')
     directory=cache_root()/uuid4().hex;directory.mkdir(mode=0o700);output=directory/'document.pdf'

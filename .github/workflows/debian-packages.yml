@@ -1,0 +1,97 @@
+name: Debian packages
+
+on:
+  pull_request:
+    paths: ['packaging/**', 'scripts/**', 'install.sh', 'tests/packaging/**', '.github/workflows/debian-packages.yml']
+  push:
+    branches: [principale, codex/mint-install]
+    paths: ['packaging/**', 'scripts/**', 'install.sh', 'tests/packaging/**', '.github/workflows/debian-packages.yml']
+  workflow_dispatch:
+    inputs:
+      full_build:
+        description: Build the complete private runtime and desktop on all Debian ABI baselines
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install packaging test tools
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev binutils gcc gnupg apt-utils
+      - name: Test distribution detection, runtime isolation and real Debian archives
+        env:
+          LIQUID_REQUIRE_GPG: '1'
+        run: python3 -m unittest discover -s tests/packaging -v
+
+  native-build:
+    if: (github.event_name == 'workflow_dispatch' && inputs.full_build) || (github.event_name == 'push' && github.ref == 'refs/heads/codex/mint-install')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(github.event_name == 'push' && '{"include":[{"image":"ubuntu:24.04","target":"ubuntu-24.04"}]}' || '{"include":[{"image":"ubuntu:24.04","target":"ubuntu-24.04"},{"image":"ubuntu:26.04","target":"ubuntu-26.04"},{"image":"debian:13","target":"debian-13"}]}') }}
+    container: ${{ matrix.image }}
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      TARGET: ${{ matrix.target }}
+      BUILD_ROOT: /tmp/liquid-native
+    steps:
+      - name: Prepare container
+        run: |
+          apt-get update
+          apt-get install -y python3 ca-certificates git
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          read -r -a dependencies <<< "$(python3 packaging/native.py build-dependencies --target "$TARGET")"
+          apt-get install -y "${dependencies[@]}"
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: '3.12.0'
+      - name: Prepare an unprivileged build
+        run: |
+          useradd --create-home builder
+          mkdir -p "$BUILD_ROOT"
+          chown builder:builder "$BUILD_ROOT"
+          runuser -u builder -- python3 packaging/native.py prepare --target "$TARGET" --output "$BUILD_ROOT/source"
+      - name: Compile pinned runtime
+        run: runuser -u builder -- python3 packaging/runtime.py --work-dir "$BUILD_ROOT/runtime-build" --prefix "$BUILD_ROOT/runtime" --jobs 2
+      - name: Compile Liquid and assemble staging tree
+        run: |
+          runuser -u builder -- env "PATH=$PATH" python3 packaging/native.py build --target "$TARGET" --source "$BUILD_ROOT/source" --runtime-prefix "$BUILD_ROOT/runtime" --jobs 2
+          runuser -u builder -- python3 packaging/native.py stage --target "$TARGET" --source "$BUILD_ROOT/source" --runtime-prefix "$BUILD_ROOT/runtime" --destdir "$BUILD_ROOT/stage"
+          runuser -u builder -- python3 packaging/native.py package --target "$TARGET" --destdir "$BUILD_ROOT/stage" --output "$BUILD_ROOT/packages"
+      - name: Validate package dependencies with APT
+        shell: bash
+        run: |
+          apt-get --simulate install "$BUILD_ROOT"/packages/*.deb
+          apt-get install -y "$BUILD_ROOT"/packages/*.deb
+          dpkg --audit
+          /usr/lib/liquid-de/scripts/minerva-quickshell --runtime
+          test -f /usr/share/wayland-sessions/liquid-de.desktop
+      - name: Preserve corresponding sources
+        run: |
+          mkdir -p "$BUILD_ROOT/sources"
+          git archive --format=tar.gz --output="$BUILD_ROOT/sources/liquid-de.tar.gz" HEAD
+          cp "$BUILD_ROOT/runtime-build/downloads/"* "$BUILD_ROOT/sources/"
+          cp "$BUILD_ROOT/source/.quickshell-build/"*.tar.gz "$BUILD_ROOT/sources/"
+          cp packaging/runtime-sources.json "$BUILD_ROOT/sources/"
+      - name: Upload unsigned candidate packages and sources
+        uses: actions/upload-artifact@v4
+        with:
+          name: liquid-de-${{ matrix.target }}-candidate
+          path: |
+            /tmp/liquid-native/packages/
+            /tmp/liquid-native/sources/
+          if-no-files-found: error

@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Update Liquid using the native package manager in an interactive terminal."""
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'packaging'))
+from platforms import commands, detect
+
+if __name__ == '__main__':
+    try:
+        if not (ROOT / 'package-install.json').is_file():
+            raise ValueError('Questa installazione non è gestita da pacchetti.')
+        if os.geteuid() == 0 or not sys.stdin.isatty():
+            raise ValueError('Eseguire come utente normale da un terminale interattivo.')
+        login = subprocess.run(['dpkg-query', '-W', '-f=${db:Status-Status}', 'liquid-de-login'],
+                               text=True, capture_output=True, check=False)
+        include_login = login.returncode == 0 and login.stdout.strip() == 'installed'
+        for command in commands(detect(), 'update', include_login=include_login):
+            subprocess.run(['sudo', *command], check=True)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print('Liquid DE: ' + str(error), file=sys.stderr)
+        sys.exit(1)

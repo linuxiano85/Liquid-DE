@@ -19,6 +19,13 @@ MINERVA_DIR="$(dirname "$(dirname "$SELF")")"
 . "$MINERVA_DIR/scripts/minerva-posti.sh"
 
 export MINERVA_ROOT="$MINERVA_DIR"
+if [ -r "$MINERVA_DIR/package-install.json" ]; then
+    export LIQUID_PREFISSO="$PREFISSO"
+    "$MINERVA_DIR/scripts/liquid-package-migrate" || {
+        echo 'Migrazione dei vecchi avviatori non riuscita: controllare i permessi.' >&2
+        exit 1
+    }
+fi
 
 # ── E `~/.local/bin`, che non c'era ──────────────────────────────────────
 #

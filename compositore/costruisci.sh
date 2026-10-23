@@ -42,6 +42,7 @@ done
 # compositore si compila sulla macchina dove girerà (install-minerva.sh).
 # Per un binario da portare altrove: MINERVA_MARCH=x86-64-v3.
 MARCH="${MINERVA_MARCH:-native}"
+[ -z "${DESTDIR:-}" ] || MARCH="${MINERVA_MARCH:-x86-64}"
 OTTIMIZZA="-Dbuildtype=debugoptimized -Db_lto=true -Dc_args=-march=$MARCH -Dc_link_args=-march=$MARCH"
 # ── Una build fatta da un'altra cartella ─────────────────────────────────
 #
@@ -87,6 +88,18 @@ for nome in minerva-wayland minerva-cattura minerva-pty minerva-pam; do
     fi
 done
 [ "$INSTALLA" -eq 1 ] || exit 0
+
+# Packaging is a plain copy into staging: no inspection of running sessions,
+# HOME changes, or replacement of live binaries.
+if [ -n "${DESTDIR:-}" ]; then
+    case "$DESTDIR" in /*) ;; *) echo 'DESTDIR deve essere assoluto' >&2; exit 1 ;; esac
+    DOVE="$DESTDIR/usr/lib/liquid-de/bin"
+    mkdir -p "$DOVE"
+    for nome in minerva-wayland minerva-cattura minerva-pty minerva-pam; do
+        install -m755 "$BUILD/$nome" "$DOVE/$nome"
+    done
+    exit 0
+fi
 
 SESSIONE_VIVA=""
 for pid in $(pgrep -x minerva-wayland 2>/dev/null || true); do
